@@ -324,6 +324,41 @@ pub struct DunningAction {
     pub outcome: String,
 }
 
+/// One day of KMK 20 late fee on one liability (STORY-07-13).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LateFeeAccrual {
+    pub id: i64,
+    pub site_id: String,
+    pub due_id: String,
+    pub accrual_date: NaiveDate,
+    pub outstanding_principal: Decimal,
+    pub segment_start: NaiveDate,
+    pub segment_base: Decimal,
+    pub cumulative_fee: Decimal,
+    pub daily_amount: Decimal,
+}
+
+/// A liability whose stored late fee differs from its evaluation for the day.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LateFeeMismatch {
+    pub due_id: String,
+    pub unit_id: String,
+    pub period: String,
+    pub stored_fee: Decimal,
+    pub evaluated_fee: Decimal,
+    pub difference: Decimal,
+}
+
+/// Result of the late-fee reconciliation check of one site.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LateFeeReconciliation {
+    pub site_id: String,
+    pub as_of: NaiveDate,
+    pub liabilities_checked: usize,
+    pub consistent: bool,
+    pub mismatches: Vec<LateFeeMismatch>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DunningRunRequest {
     #[serde(default)]

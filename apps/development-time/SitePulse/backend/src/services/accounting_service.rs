@@ -16,6 +16,7 @@ use crate::domain::tax_id::TaxId;
 use crate::domain::TrIban;
 use crate::finance_book::col;
 use crate::models::*;
+use crate::services::dues_calculation_service::DuesCalculationService;
 use crate::services::finance_common::*;
 use crate::services::receipt_document::{try_amount, DocSection, DocTable, TextDocument};
 use crate::state::{AppState, AppStateInner};
@@ -65,6 +66,19 @@ fn credited_total(inner: &AppStateInner, due_id: &str) -> (Decimal, Decimal) {
         })
 }
 
+fn penalty_entry(d: &DuesLiability, date: NaiveDate, amount: Decimal) -> Entry {
+    Entry {
+        date,
+        source: "PENALTY",
+        reference: d.id.clone(),
+        description: format!("KMK 20 gecikme tazminatı · {}", d.period),
+        lines: vec![
+            Posting::debit(de::DUES_RECEIVABLE, amount),
+            Posting::credit(de::PENALTY_REVENUE, amount),
+        ],
+    }
+}
+
 /// Every journal entry of the site, in date order.
 fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
     let mut out = Vec::new();
@@ -98,18 +112,32 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
                 ],
             });
         }
-        let penalty = d.delay_penalty + waived + fee_reversed;
-        if penalty > Decimal::ZERO {
-            out.push(Entry {
-                date: d.penalty_accrued_through.unwrap_or(today).max(d.due_date),
-                source: "PENALTY",
-                reference: d.id.clone(),
-                description: format!("KMK 20 gecikme tazminatı · {}", d.period),
-                lines: vec![
-                    Posting::debit(de::DUES_RECEIVABLE, penalty),
-                    Posting::credit(de::PENALTY_REVENUE, penalty),
-                ],
-            });
+        // STORY-07-13: each day's accrued late fee is booked on that day (the daily
+        // job's rows); what is stored beyond them (payment-day segments, fees from
+        // before the job existed) is booked on the accrual date, and what the
+        // evaluation for today adds beyond the stored fee is booked today, so the
+        // receivable agrees with the dashboard before the day's job has run.
+        let mut booked = Decimal::ZERO;
+        for a in inner
+            .finance
+            .late_fee_accruals
+            .iter()
+            .filter(|a| a.due_id == d.id && a.daily_amount > Decimal::ZERO)
+        {
+            booked += a.daily_amount;
+            out.push(penalty_entry(d, a.accrual_date, a.daily_amount));
+        }
+        let stored_rest = d.delay_penalty + waived + fee_reversed - booked;
+        if stored_rest > Decimal::ZERO {
+            let date = d.penalty_accrued_through.unwrap_or(today).max(d.due_date);
+            out.push(penalty_entry(d, date, stored_rest));
+        }
+        let live_rest = DuesCalculationService::new()
+            .calculate_delay_penalty((*d).clone(), today)
+            .delay_penalty
+            - d.delay_penalty;
+        if live_rest > Decimal::ZERO {
+            out.push(penalty_entry(d, today.max(d.due_date), live_rest));
         }
         paid_on_dues += d.paid_principal + d.paid_penalty;
     }
