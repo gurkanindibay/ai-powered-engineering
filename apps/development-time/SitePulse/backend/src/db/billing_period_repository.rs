@@ -65,7 +65,7 @@ impl BillingPeriodRepository {
         .await
         .map_err(|e| FinanceError::Unavailable(e.to_string()))?;
         tx.execute(
-            "INSERT INTO audit_events (request_id,actor_kind,actor_id,actor_role,site_id,action,resource_type,resource_id,outcome,changes) VALUES ($1,'USER',$2,$3,$4,'DUES_PERIOD_CLOSED','dues_period',$5,'SUCCESS',jsonb_build_object('period_key',$6,'snapshot_version',$7))",
+            "INSERT INTO audit_events (request_id,actor_kind,actor_id,actor_role,site_id,action,resource_type,resource_id,outcome,changes) VALUES ($1,'USER',$2,$3,$4,'DUES_PERIOD_CLOSED','dues_period',$5,'SUCCESS',jsonb_build_object('period_key',$6::text,'snapshot_version',$7::int))",
             &[&request_id,&caller.user_id,&caller.role.as_str(),&site,&snapshot.period_id,&snapshot.period_key,&snapshot.snapshot_version],
         )
         .await
@@ -134,7 +134,7 @@ impl BillingPeriodRepository {
             .map_err(|e| FinanceError::Unavailable(e.to_string()))?;
         let id: i64 = row.get(0);
         tx.execute(
-            "INSERT INTO audit_events (request_id,actor_kind,actor_id,actor_role,site_id,action,resource_type,resource_id,outcome,changes) VALUES ($1,'USER',$2,$3,$4,'DUES_PERIOD_REOPEN_REQUESTED','dues_period',$5,'SUCCESS',jsonb_build_object('reason',$6))",
+            "INSERT INTO audit_events (request_id,actor_kind,actor_id,actor_role,site_id,action,resource_type,resource_id,outcome,changes) VALUES ($1,'USER',$2,$3,$4,'DUES_PERIOD_REOPEN_REQUESTED','dues_period',$5,'SUCCESS',jsonb_build_object('reason',$6::text))",
             &[&audit_request_id,&caller.user_id,&caller.role.as_str(),&site,&period_id,&request.reason],
         )
         .await
@@ -198,7 +198,7 @@ impl BillingPeriodRepository {
             }
         }
         tx.execute(
-            "INSERT INTO audit_events (request_id,actor_kind,actor_id,actor_role,site_id,action,resource_type,resource_id,outcome,changes) VALUES ($1,'USER',$2,$3,$4,'DUES_PERIOD_REOPEN_DECIDED','dues_period_reopen_request',$5,'SUCCESS',jsonb_build_object('approved',$6,'period_id',$7))",
+            "INSERT INTO audit_events (request_id,actor_kind,actor_id,actor_role,site_id,action,resource_type,resource_id,outcome,changes) VALUES ($1,'USER',$2,$3,$4,'DUES_PERIOD_REOPEN_DECIDED','dues_period_reopen_request',$5,'SUCCESS',jsonb_build_object('approved',$6::boolean,'period_id',$7::text))",
             &[&audit_request_id,&caller.user_id,&caller.role.as_str(),&site,&request.id,&approve,&request.period_id],
         )
         .await
