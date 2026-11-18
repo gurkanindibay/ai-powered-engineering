@@ -169,10 +169,16 @@ pub async fn apply_accrual_correction(
                 .query_one(
                     r#"
                     INSERT INTO dues_liabilities
-                        (unit_id, period, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type)
-                    VALUES ($1, $2, $3, $4, 'PENDING', 0, $5, $6)
+                        (unit_id, period, period_key, dues_period_id, principal_amount, due_date,
+                         status, delay_penalty, debtor_type, expense_type)
+                    VALUES ($1, $2,
+                            (SELECT period_key FROM dues_liabilities WHERE id = $7),
+                            (SELECT dues_period_id FROM dues_liabilities WHERE id = $7),
+                            $3, $4, 'PENDING', 0, $5, $6)
                     RETURNING id
                     "#,
+                    // The replacement keeps the original's canonical period (STORY-07-08),
+                    // so the period-key duplicate guard covers it too.
                     &[
                         &unit,
                         &r.period,
@@ -180,6 +186,7 @@ pub async fn apply_accrual_correction(
                         &r.due_date,
                         &r.debtor_type,
                         &r.expense_type,
+                        &due,
                     ],
                 )
                 .await?;

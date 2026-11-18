@@ -46,6 +46,14 @@ def test_epic07_rust_linked_scenarios() -> None:
 
 
 @pytest.mark.epic_07
+@pytest.mark.covers("SC-07-08-01")
+@pytest.mark.covers("SC-07-08-02")
+@pytest.mark.covers("SC-07-08-04")
+def test_epic07_billing_period_linked_scenarios() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "billing_period_tests"], BACKEND)
+
+
+@pytest.mark.epic_07
 @pytest.mark.covers("SC-07-11-01")
 @pytest.mark.covers("SC-07-11-02")
 @pytest.mark.covers("SC-07-11-03")

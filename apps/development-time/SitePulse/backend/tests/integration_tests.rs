@@ -1729,12 +1729,17 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
     );
 
     // 2. New monthly dues period arrives: "Ekim 2026" (₺1400.00)
+    let not_yet_due = Utc::now().date_naive() + chrono::Days::new(30);
+    let accrued_label =
+        sitepulse_backend::domain::billing_period::BillingPeriod::of_date(not_yet_due).label();
     let accrue_req = AccrueDuesPeriodRequest {
         site_id: "site-1".to_string(),
-        period: "Ekim 2026".to_string(),
+        // The canonical month of the due date (STORY-07-08).
+        period: sitepulse_backend::domain::billing_period::BillingPeriod::of_date(not_yet_due)
+            .key(),
         amount: Decimal::from_str_exact("1400.00").unwrap(),
         // Not yet due by the real clock, so the offset is exactly the principal.
-        due_date: Utc::now().date_naive() + chrono::Days::new(30),
+        due_date: not_yet_due,
     };
 
     let (accrue_status, axum::Json(accrue_res)) = sitepulse_backend::handlers::accrue_monthly_dues(
@@ -1774,7 +1779,11 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
         Decimal::from_str_exact("60.67").unwrap()
     );
 
-    let oct_due = dash.dues.iter().find(|d| d.period == "Ekim 2026").unwrap();
+    let oct_due = dash
+        .dues
+        .iter()
+        .find(|d| d.period == accrued_label)
+        .unwrap();
     assert_eq!(oct_due.status, "PAID");
 
     // 4. Verify transaction history records the automatic advance offset!
@@ -1789,7 +1798,7 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
     );
     assert_eq!(
         offset_tx.subtitle,
-        "Ekim 2026 aidatı avans bakiyenizden otomatik mahsup edildi"
+        format!("{accrued_label} aidatı avans bakiyenizden otomatik mahsup edildi")
     );
     assert!(offset_tx.is_credit);
 }

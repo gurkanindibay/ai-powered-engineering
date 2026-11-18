@@ -117,6 +117,7 @@ routes! {
     get "/api/v1/dues/periods" => handlers::list_dues_periods, Require(LedgerManageAll);
     post "/api/v1/dues/periods" => handlers::create_dues_period, Require(LedgerManageAll);
     post "/api/v1/dues/accrue-period" => handlers::accrue_monthly_dues, Require(LedgerManageAll);
+    get "/api/v1/dues/accrual-runs" => handlers::list_accrual_runs, Require(LedgerManageAll);
     post "/api/v1/payments/record" => handlers::record_homeowner_payment, Require(PaymentRecordManual);
     post "/api/v1/payments/match-all" => handlers::match_all_homeowner_payments, Require(PaymentRecordManual);
     get "/api/v1/payments/homeowner-records" => handlers::get_homeowner_payments, Require(LedgerManageAll);

@@ -29,6 +29,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             db::upgrade_legacy_password_hashes(p).await?;
             db::ensure_bootstrap_admin(p).await?;
         }
+        if let Err(e) = db::warn_unresolved_period_labels(p).await {
+            tracing::warn!("Could not read dues_period_migration_issues: {}", e);
+        }
         // Loaded outside the global lock and swapped in (lock-lint).
         state.reload_from_db().await?;
     }

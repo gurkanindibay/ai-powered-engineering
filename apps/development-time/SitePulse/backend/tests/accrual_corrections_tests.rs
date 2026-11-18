@@ -605,6 +605,17 @@ async fn corrections_round_trip_through_postgresql() {
         .await
         .unwrap()
         .unwrap();
+    // Give the original a canonical period key (STORY-07-08) so the re-issue can be
+    // checked to carry it over. The scratch label is unique per run, so is the key.
+    pool.get()
+        .await
+        .unwrap()
+        .execute(
+            "UPDATE dues_liabilities SET period_key = period WHERE id = $1",
+            &[&to_cancel.id.parse::<i64>().unwrap()],
+        )
+        .await
+        .unwrap();
     // A cancelled period can be re-issued: the duplicate guard ignores cancelled rows.
     let corrections = CorrectionService::new(&state);
     let requested = corrections
@@ -624,6 +635,18 @@ async fn corrections_round_trip_through_postgresql() {
         .await
         .unwrap();
     let replacement_id = approved.replacement_due_id.clone().expect("replacement");
+    let carried_key: Option<String> = pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT period_key FROM dues_liabilities WHERE id = $1",
+            &[&replacement_id.parse::<i64>().unwrap()],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(carried_key.as_deref(), Some(period.as_str()), "re-issue keeps the period key");
 
     let credited = corrections
         .request(
