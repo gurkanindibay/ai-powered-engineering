@@ -331,51 +331,86 @@ pub async fn start_automated_dues_accrual_scheduler(state: AppState) {
     }
 }
 
+/// Sites whose local calendar day differs from the day their job last ran, with
+/// that local day. Each site rolls over at its own midnight, not at UTC midnight.
+pub fn sites_due_today(
+    sites: &[(String, String)],
+    now: chrono::DateTime<Utc>,
+    last_run: &std::collections::HashMap<String, NaiveDate>,
+) -> Vec<(String, NaiveDate)> {
+    sites
+        .iter()
+        .map(|(id, tz)| (id.clone(), site_local_date(tz, now)))
+        .filter(|(id, day)| last_run.get(id) != Some(day))
+        .collect()
+}
+
+async fn site_timezones(state: &AppState) -> Vec<(String, String)> {
+    let inner = state.inner.read().await;
+    inner
+        .sites
+        .iter()
+        .map(|s| (s.id.clone(), s.timezone.clone()))
+        .collect()
+}
+
 /// Daily debt aging snapshot worker (O-8, regulatory report F17): once per
-/// calendar day (UTC) it writes every site's aging report to
+/// site-local calendar day it writes the site's aging report to
 /// `debt_aging_snapshots`, so collection trends survive restarts.
 pub async fn start_debt_aging_snapshot_worker(state: AppState) {
     let mut ticker = tokio::time::interval(Duration::from_secs(3600));
-    let mut last_day: Option<NaiveDate> = None;
+    let mut last_run: std::collections::HashMap<String, NaiveDate> = Default::default();
     loop {
         ticker.tick().await;
-        let today = Utc::now().date_naive();
-        if last_day == Some(today) || state.pool.is_none() {
+        if state.pool.is_none() {
             continue;
         }
-        match crate::services::PaymentTrackingService::new(state.clone())
-            .snapshot_debt_aging(None)
-            .await
-        {
-            Ok(rows) => {
-                last_day = Some(today);
-                tracing::info!(
-                    "[Scheduler] Debt aging snapshot for {}: {} rows",
-                    today,
-                    rows
-                );
+        let sites = site_timezones(&state).await;
+        for (site, day) in sites_due_today(&sites, Utc::now(), &last_run) {
+            match crate::services::PaymentTrackingService::new(state.clone())
+                .snapshot_debt_aging(Some(&site))
+                .await
+            {
+                Ok(rows) => {
+                    last_run.insert(site.clone(), day);
+                    tracing::info!(
+                        "[Scheduler] Debt aging snapshot for site {} on {}: {} rows",
+                        site,
+                        day,
+                        rows
+                    );
+                }
+                Err(e) => tracing::error!(
+                    "[Scheduler] Debt aging snapshot failed for site {}: {}",
+                    site,
+                    e
+                ),
             }
-            Err(e) => tracing::error!("[Scheduler] Debt aging snapshot failed: {}", e),
         }
     }
 }
 
-/// SPEC-009 daily collections worker: once per calendar day it closes or breaks
-/// payment plans, charges autopay mandates, runs each site's dunning schedule and
-/// reminds managers of interim budget deadlines. Each step is idempotent, so a
-/// restart on the same day repeats nothing. Requires `auto_scheduler_enabled`.
+/// SPEC-009 daily collections worker: once per site-local calendar day it closes
+/// or breaks payment plans, charges autopay mandates, runs each site's dunning
+/// schedule and reminds managers of interim budget deadlines. Each step is
+/// idempotent, so a pass triggered by one site's new day repeats nothing for the
+/// others. Requires `auto_scheduler_enabled`.
 pub async fn start_collections_worker(state: AppState) {
     let mut ticker = tokio::time::interval(Duration::from_secs(3600));
-    let mut last_day: Option<NaiveDate> = None;
+    let mut last_run: std::collections::HashMap<String, NaiveDate> = Default::default();
     loop {
         ticker.tick().await;
-        let today = Utc::now().date_naive();
         let enabled = state.inner.read().await.auto_scheduler_enabled;
-        if !enabled || last_day == Some(today) {
+        if !enabled {
+            continue;
+        }
+        let sites = site_timezones(&state).await;
+        let due = sites_due_today(&sites, Utc::now(), &last_run);
+        if due.is_empty() {
             continue;
         }
         let (plans, autopay, dunning, reminders) = run_daily_collections(&state).await;
-        last_day = Some(today);
+        last_run.extend(due);
         tracing::info!(
             "[Scheduler] Daily collections: {} plans closed, {} autopay charges, {} dunning steps, {} budget reminders",
             plans,

@@ -308,9 +308,9 @@ pub async fn tenanted_unit_ids(
 pub async fn fetch_debt_aging_report_from_db(
     pool: &Pool,
     site_id: &str,
+    today: chrono::NaiveDate,
 ) -> DbResult<crate::models::DebtAgingReport> {
     let client = pool.get().await?;
-    let today = chrono::Utc::now().date_naive();
 
     let rows = if site_id != "all" && !site_id.is_empty() {
         let site_num = parse_id_to_i64(site_id).unwrap_or(0);

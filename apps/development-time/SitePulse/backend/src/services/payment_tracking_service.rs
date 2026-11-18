@@ -283,13 +283,17 @@ impl PaymentTrackingService {
         &self,
         site_id: &str,
     ) -> Result<DebtAgingReport, LedgerReadError> {
+        // The report day is the site's local day, not the UTC day.
+        let today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::site_today(&inner, site_id)
+        };
         if let Some(p) = self.state.db_pool() {
-            return crate::db::dues_repository::fetch_debt_aging_report_from_db(p, site_id)
+            return crate::db::dues_repository::fetch_debt_aging_report_from_db(p, site_id, today)
                 .await
                 .map_err(|e| LedgerReadError::Unavailable(format!("debt aging report: {}", e)));
         }
         let inner = self.state.inner.read().await;
-        let today = Utc::now().date_naive();
 
         let mut brackets_map: std::collections::HashMap<(String, DebtorType), DebtAgingBracket> =
             std::collections::HashMap::new();
