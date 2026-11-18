@@ -15,3 +15,10 @@ Feature: Title deed transfer and ownership sale handover
     Given Unit "A Blok D:14" was transferred to "Selim Evsahibi" effective 2026-10-28
     When a capital assessment is accrued for the unit
     Then the CAPITAL_DUES liability is charged to Selim Evsahibi
+
+  @SC-08-05-03 @layer:gui @pending @role_manager
+  Scenario: Previous owner's advance is paid out or transferred only with a second approver
+    Given the previous owner has 800.00 in the unit's owner advance ledger
+    When the Site Manager requests a 500.00 transfer of that advance to the tenant ledger
+    Then the request stays pending until a different authorized person approves it
+    And approval moves 500.00 from the owner advance to the tenant advance in one audited transaction

@@ -2,6 +2,39 @@ part of 'dashboard_controller.dart';
 
 /// Homeowners, resident directory, household members, registration approvals and occupancy management.
 extension DashboardControllerResidents on DashboardController {
+  /// Creates a pending advance settlement request after a resident exit.
+  /// A second authorized person must approve it before any ledger is changed.
+  Future<String?> requestAdvanceExitSettlement({
+    required String unitId,
+    required String kind,
+    required String sourceDebtor,
+    required String requestKey,
+    required Decimal amount,
+    required String beneficiaryName,
+    int? beneficiaryPersonId,
+    String? targetDebtor,
+    String? note,
+  }) async {
+    if (isTestMode) return null;
+    try {
+      await PaymentsPhase3Api.createAdvanceExitSettlement(
+        unitId,
+        kind: kind,
+        sourceDebtor: sourceDebtor,
+        requestKey: requestKey,
+        amount: amount,
+        beneficiaryName: beneficiaryName,
+        beneficiaryPersonId: beneficiaryPersonId?.toString(),
+        targetDebtor: targetDebtor,
+        note: note,
+      );
+      return null;
+    } catch (e) {
+      AppLogger.warn('Advance exit settlement request failed: $e', tag: 'Residents');
+      return AppStrings.localizeBackendMessage(e.toString());
+    }
+  }
+
   /// F9: people of the site who may be the person about to be registered. The offline
   /// simulation compares the homeowners it holds; a failed check never blocks a
   /// registration, the server still refuses a taken login email.

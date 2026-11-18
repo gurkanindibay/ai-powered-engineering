@@ -79,6 +79,9 @@ routes! {
     post "/api/v1/site-admin/units/{id}/move-out" => handlers::move_out_resident, Require(OccupancyManage);
     post "/api/v1/site-admin/units/{id}/move-in" => handlers::move_in_resident, Require(OccupancyManage);
     post "/api/v1/site-admin/units/{id}/occupancy-transitions" => handlers::apply_occupancy_transition, Require(OccupancyManage);
+    post "/api/v1/site-admin/units/{unit_id}/advance-exit-settlements" => handlers::create_advance_exit_settlement, RequireAny(&[OccupancyManage, FinanceManage]);
+    get "/api/v1/site-admin/advance-exit-settlements" => handlers::list_advance_exit_settlements, Require(FinanceManage);
+    post "/api/v1/site-admin/advance-exit-settlements/{id}/decide" => handlers::decide_advance_exit_settlement, Require(FinanceManage);
     get "/api/v1/site-admin/units/{id}/occupancy-state" => handlers::get_unit_occupancy_state, Require(PersonRead);
     get "/api/v1/site-admin/units/{id}/occupancy-history" => handlers::get_unit_occupancy_history, Require(PersonRead);
     get "/api/v1/site-admin/house-types" => handlers::get_house_types, Require(SiteManage);

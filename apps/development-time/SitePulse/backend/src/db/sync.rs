@@ -765,6 +765,28 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
         );
     }
 
+    // Pending exit settlements reserve advances across backend restarts too.
+    {
+        let rows = client
+            .query(
+                "SELECT unit_id, source_debtor, SUM(amount)::NUMERIC(15,2)
+                   FROM advance_exit_settlements
+                  WHERE status = 'PENDING'
+                  GROUP BY unit_id, source_debtor",
+                &[],
+            )
+            .await?;
+        state.pending_exit_advance_reservations.clear();
+        for row in rows {
+            let unit_id: i64 = row.get(0);
+            let debtor_type: String = row.get(1);
+            let amount: Decimal = row.get(2);
+            state
+                .pending_exit_advance_reservations
+                .insert((unit_id.to_string(), debtor_type), amount);
+        }
+    }
+
     // 10b. Load idempotency keys (O-4: the only home of idempotency).
     {
         let rows = client

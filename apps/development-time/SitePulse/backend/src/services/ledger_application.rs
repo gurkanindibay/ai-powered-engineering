@@ -141,9 +141,21 @@ fn offset_units(
 
     for u_id in unit_ids {
         let mut buckets = match inner.advance_balances.get(&u_id) {
-            Some(adv) if adv.total() > Decimal::ZERO => *adv,
+            Some(adv) => *adv,
             _ => continue,
         };
+        for debtor in ["OWNER", "TENANT"] {
+            let reserved = inner
+                .pending_exit_advance_reservations
+                .get(&(u_id.clone(), debtor.to_string()))
+                .copied()
+                .unwrap_or(Decimal::ZERO);
+            let bucket = buckets.bucket_mut(debtor);
+            *bucket = (*bucket - reserved).max(Decimal::ZERO);
+        }
+        if buckets.total() <= Decimal::ZERO {
+            continue;
+        }
         // A unit without a known site is never offset: no tenant is guessed.
         let unit_site_id = match inner.units.iter().find(|u| u.id == u_id) {
             Some(u) => u.site_id.clone(),

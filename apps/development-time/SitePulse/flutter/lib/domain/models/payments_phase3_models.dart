@@ -64,6 +64,69 @@ class VirmanRequestItem {
       );
 }
 
+/// A requested payout or transfer of an exiting debtor's advance balance.
+class AdvanceExitSettlement {
+  final int id;
+  final String siteId;
+  final String unitId;
+  final String kind;
+  final String beneficiaryName;
+  final String? beneficiaryPersonId;
+  final String sourceDebtor;
+  final String? targetDebtor;
+  final Decimal amount;
+  final String? note;
+  final String requestedBy;
+  final String status;
+  final String? decidedBy;
+  final DateTime? decidedAt;
+  final String? decisionNote;
+  final String? paymentReference;
+  final DateTime? createdAt;
+
+  const AdvanceExitSettlement({
+    required this.id,
+    required this.siteId,
+    required this.unitId,
+    required this.kind,
+    required this.beneficiaryName,
+    this.beneficiaryPersonId,
+    required this.sourceDebtor,
+    this.targetDebtor,
+    required this.amount,
+    this.note,
+    required this.requestedBy,
+    required this.status,
+    this.decidedBy,
+    this.decidedAt,
+    this.decisionNote,
+    this.paymentReference,
+    this.createdAt,
+  });
+
+  factory AdvanceExitSettlement.fromJson(Map<String, dynamic> j) =>
+      AdvanceExitSettlement(
+        id: _i(j, 'id'),
+        siteId: _s(j, 'site_id'),
+        unitId: _s(j, 'unit_id'),
+        kind: _s(j, 'kind'),
+        beneficiaryName: _s(j, 'beneficiary_name'),
+        beneficiaryPersonId: _so(j, 'beneficiary_person_id'),
+        sourceDebtor: _s(j, 'source_debtor'),
+        targetDebtor: _so(j, 'target_debtor'),
+        amount: readDecimal(j, 'amount'),
+        note: _so(j, 'note'),
+        requestedBy: _s(j, 'requested_by'),
+        status: _s(j, 'status'),
+        decidedBy: _so(j, 'decided_by'),
+        decidedAt: _d(j, 'decided_at'),
+        decisionNote: _so(j, 'decision_note'),
+        paymentReference: _so(j, 'payment_reference'),
+        createdAt: _d(j, 'created_at'),
+      );
+}
+
+
 class DisputeItem {
   final int id;
   final String unitId;

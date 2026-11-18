@@ -95,7 +95,9 @@ pub fn build_statement(
             .filter(|i| i.total_outstanding > Decimal::ZERO)
             .collect();
         items.sort_by_key(|i| i.due_date);
-        let advance = inner.advance_of(&unit.id, debtor).max(Decimal::ZERO);
+        // Pending exit settlements reserve part of the advance; the statement shows
+        // only what the debtor can still use.
+        let advance = inner.available_advance_of(&unit.id, debtor);
         let holder = if debtor == DEBTOR_TENANT {
             name_of(&unit.tenant_user_id)
         } else {

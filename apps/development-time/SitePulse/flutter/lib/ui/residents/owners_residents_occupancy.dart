@@ -4,7 +4,14 @@ part of 'owners_residents_module_page.dart';
 extension _OccupancyActions on _OwnersResidentsModulePageState {
   void _openMoveOut(HomeOwnerItem ho) {
     final notesCtrl = TextEditingController();
+    final advanceAmountCtrl = TextEditingController();
     var effectiveDate = DateTime.now();
+    var settlementChoice = AdvanceExitSettlementChoice.keep;
+    const sourceDebtor = 'TENANT';
+    final settlementRequestKey = '${ho.unitId}-${DateTime.now().microsecondsSinceEpoch}';
+    Decimal? settlementAmount;
+    var isSubmitting = false;
+    var moveOutCompleted = false;
     AppFullscreenPage.push(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setMoveOutState) => AppFullscreenPage(
@@ -13,20 +20,70 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text(AppStrings.cancel)),
+            OutlinedButton(onPressed: isSubmitting ? null : () => Navigator.pop(ctx), child: const Text(AppStrings.cancel)),
             testId('module_confirm_move_out_btn', ElevatedButton(
               key: const Key('module_confirm_move_out_btn'),
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.warningFill, foregroundColor: Colors.white),
-              onPressed: () async {
-                final success = await widget.controller.moveOutResident(ho.unitId, notes: notesCtrl.text.trim(), effectiveDate: effectiveDate);
-                if (success && ctx.mounted) {
+              onPressed: isSubmitting ? null : () async {
+                if (settlementChoice != AdvanceExitSettlementChoice.keep &&
+                    (settlementAmount == null || settlementAmount! <= Decimal.zero)) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    appSnackBar(content: const Text('İade veya aktarım için geçerli bir tutar girin.')),
+                  );
+                  return;
+                }
+                setMoveOutState(() => isSubmitting = true);
+                if (!moveOutCompleted) {
+                  final success = await widget.controller.moveOutResident(ho.unitId, notes: notesCtrl.text.trim(), effectiveDate: effectiveDate);
+                  if (!success) {
+                    if (ctx.mounted) {
+                      setMoveOutState(() => isSubmitting = false);
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        appSnackBar(content: const Text('Tahliye işlemi kaydedilemedi.')),
+                      );
+                    }
+                    return;
+                  }
+                  moveOutCompleted = true;
+                }
+                var settlementMessage = '';
+                if (settlementChoice != AdvanceExitSettlementChoice.keep) {
+                  final requestError = await widget.controller.requestAdvanceExitSettlement(
+                    unitId: ho.unitId,
+                    kind: settlementChoice == AdvanceExitSettlementChoice.payout ? 'PAYOUT' : 'TRANSFER',
+                    sourceDebtor: sourceDebtor,
+                    requestKey: settlementRequestKey,
+                    amount: settlementAmount!,
+                    beneficiaryName: ho.tenantFullName ?? ho.activeResponsibleResidentName,
+                    beneficiaryPersonId: ho.tenantPersonId,
+                    targetDebtor: settlementChoice == AdvanceExitSettlementChoice.transfer
+                        ? (sourceDebtor == 'OWNER' ? 'TENANT' : 'OWNER')
+                        : null,
+                    note: notesCtrl.text.trim(),
+                  );
+                  settlementMessage = requestError == null
+                      ? ' İade/aktarım talebi ikinci yetkili onayına gönderildi.'
+                      : ' Tahliye kaydedildi, ancak avans talebi oluşturulamadı: $requestError';
+                  if (requestError != null) {
+                    if (ctx.mounted) {
+                      setMoveOutState(() => isSubmitting = false);
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        appSnackBar(content: Text(requestError)),
+                      );
+                    }
+                    return;
+                  }
+                }
+                if (ctx.mounted) {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    appSnackBar(content: Text('Sakin tahliye işlemi kaydedildi.')),
+                    appSnackBar(content: Text('Sakin tahliye işlemi kaydedildi.$settlementMessage')),
                   );
                 }
               },
-              child: const Text('Tahliyeyi Onayla'),
+              child: isSubmitting
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('Tahliyeyi Onayla'),
             )),
           ],
         ),
@@ -40,6 +97,15 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
               value: effectiveDate,
               onChanged: (d) => setMoveOutState(() => effectiveDate = d),
             )),
+            const SizedBox(height: 12),
+            AdvanceExitSettlementFields(
+              advanceBalance: ho.advanceBalance,
+              choice: settlementChoice,
+              onChoiceChanged: (choice) => setMoveOutState(() => settlementChoice = choice),
+              sourceDebtor: sourceDebtor,
+              amountController: advanceAmountCtrl,
+              onAmountChanged: (amount) => setMoveOutState(() => settlementAmount = amount),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: notesCtrl,
@@ -353,8 +419,15 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
   void _openTransferOwnership(HomeOwnerItem ho) {
     PersonRef? newOwner;
     final notesCtrl = TextEditingController();
+    final advanceAmountCtrl = TextEditingController();
     bool isSubmitting = false;
     bool newOwnerMovesIn = false;
+    var settlementChoice = AdvanceExitSettlementChoice.keep;
+    const sourceDebtor = 'OWNER';
+    final settlementRequestKey = '${ho.unitId}-${DateTime.now().microsecondsSinceEpoch}';
+    Decimal? settlementAmount;
+    var transferCompleted = false;
+    var transferMessage = '';
 
     AppFullscreenPage.push(
       context: context,
@@ -385,50 +458,90 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                             );
                             return;
                           }
+                          if (settlementChoice != AdvanceExitSettlementChoice.keep &&
+                              (settlementAmount == null || settlementAmount! <= Decimal.zero)) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              appSnackBar(content: const Text('İade veya aktarım için geçerli bir tutar girin.')),
+                            );
+                            return;
+                          }
                           setDlgState(() => isSubmitting = true);
                           try {
                             final messenger = ScaffoldMessenger.of(this.context);
-                            final selected = newOwner!;
-                            final details = selected.personId == null
-                                ? null
-                                : await widget.personRepository.getById(selected.personId!);
-                            if (details == null) {
-                              if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(appSnackBar(content: const Text('Kişi kartı yüklenemedi.')));
-                              return;
+                            if (!transferCompleted) {
+                              final selected = newOwner!;
+                              final details = selected.personId == null
+                                  ? null
+                                  : await widget.personRepository.getById(selected.personId!);
+                              if (details == null) {
+                                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(appSnackBar(content: const Text('Kişi kartı yüklenemedi.')));
+                                return;
+                              }
+                              if (!ctx.mounted) return;
+                              // Ownership transfer is a sensitive action: the server asks for a
+                              // recent password check, then the same request is retried once.
+                              final res = await runWithStepUp(
+                                ctx,
+                                reason: 'Mülk malikini değiştiriyorsunuz. Devam etmek için kendi şifrenizi doğrulayın.',
+                                action: () => widget.controller.transferUnitOwnership(
+                                  unitId: ho.unitId,
+                                  newOwnerName: details.fullName,
+                                  newOwnerPhone: details.phone,
+                                  newOwnerEmail: details.email,
+                                  newOwner: selected,
+                                  notes: notesCtrl.text.trim(),
+                                  newOwnerMovesIn: ho.isOwnerOccupied && newOwnerMovesIn,
+                                ),
+                              );
+                              if (res == null) return;
+                              if (res['success'] == false) {
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    appSnackBar(
+                                      content: Text(res['needs_step_up'] == true
+                                          ? 'Şifre doğrulaması gerekli. Devir yapılmadı.'
+                                          : 'Hata: ${res['message']}'),
+                                      backgroundColor: AppColors.dangerFill,
+                                    ),
+                                  );
+                                }
+                                return;
+                              }
+                              transferCompleted = true;
+                              transferMessage = res['message']?.toString() ?? 'Mülk tapu devri başarıyla tamamlandı.';
                             }
-                            // Ownership transfer is a sensitive action: the server asks for a
-                            // recent password check, then the same request is retried once.
-                            final res = await runWithStepUp(
-                              ctx,
-                              reason: 'Mülk malikini değiştiriyorsunuz. Devam etmek için kendi şifrenizi doğrulayın.',
-                              action: () => widget.controller.transferUnitOwnership(
+                            if (settlementChoice != AdvanceExitSettlementChoice.keep) {
+                              final requestError = await widget.controller.requestAdvanceExitSettlement(
                                 unitId: ho.unitId,
-                                newOwnerName: details.fullName,
-                                newOwnerPhone: details.phone,
-                                newOwnerEmail: details.email,
-                                newOwner: selected,
-                                notes: notesCtrl.text.trim(),
-                                newOwnerMovesIn: ho.isOwnerOccupied && newOwnerMovesIn,
+                                kind: settlementChoice == AdvanceExitSettlementChoice.payout ? 'PAYOUT' : 'TRANSFER',
+                                sourceDebtor: sourceDebtor,
+                                requestKey: settlementRequestKey,
+                                amount: settlementAmount!,
+                                beneficiaryName: ho.ownerFullName,
+                                beneficiaryPersonId: ho.ownerPersonId,
+                                targetDebtor: settlementChoice == AdvanceExitSettlementChoice.transfer
+                                    ? (sourceDebtor == 'OWNER' ? 'TENANT' : 'OWNER')
+                                    : null,
+                                note: notesCtrl.text.trim(),
+                              );
+                              if (requestError != null) {
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    appSnackBar(content: Text('Devir tamamlandı. Avans talebini yeniden deneyin: $requestError')),
+                                  );
+                                }
+                                return;
+                              }
+                              transferMessage += ' Avans talebi ikinci yetkili onayına gönderildi.';
+                            }
+                            if (!ctx.mounted) return;
+                            Navigator.pop(ctx);
+                            messenger.showSnackBar(
+                              appSnackBar(
+                                content: Text(transferMessage),
+                                backgroundColor: AppColors.successFill,
                               ),
                             );
-                            if (res != null && res['success'] == false && ctx.mounted) {
-                              ScaffoldMessenger.of(ctx).showSnackBar(
-                                appSnackBar(
-                                  content: Text(res['needs_step_up'] == true
-                                      ? 'Şifre doğrulaması gerekli. Devir yapılmadı.'
-                                      : 'Hata: ${res['message']}'),
-                                  backgroundColor: AppColors.dangerFill,
-                                ),
-                              );
-                            } else if (res != null && ctx.mounted) {
-                              Navigator.pop(ctx);
-                              messenger.showSnackBar(
-                                appSnackBar(
-                                  content: Text(res['message']?.toString() ?? 'Mülk tapu devri başarıyla tamamlandı.'),
-                                  backgroundColor: AppColors.successFill,
-                                ),
-                              );
-                            }
                           } catch (e) {
                             if (ctx.mounted) {
                               ScaffoldMessenger.of(ctx).showSnackBar(
@@ -476,7 +589,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                         const SizedBox(height: 8),
                         Text(
                           '• Mevcut Kat Maliki: ${ho.ownerFullName.isNotEmpty ? ho.ownerFullName : "Bilinmiyor"}\n'
-                          '• Devir anına kadar olan tüm ödenmemiş borçlar ve avanslar eski malik hesabında dondurulur ve arşivlenir.\n'
+                          '• Eski malik hesabındaki avans, burada seçilen iade veya aktarım talebi için ikinci yetkili onayı bekler.\n'
                           '• Yeni kat maliki tapu tescil tarihi itibarıyla tahakkuk edecek aidat ve demirbaşlardan sorumlu olur.\n'
                           '${ho.isTenantOccupied ? "• Dairedeki aktif kiracının (${ho.tenantFullName ?? 'Kiracı'}) sözleşmesi ve sorumluluğu aynen devam eder." : "• Daire mülk sahibi kullanımında görünmektedir."}',
                           style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12, height: 1.4),
@@ -497,6 +610,15 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                     value: newOwner,
                     onChanged: (value) => setDlgState(() => newOwner = value),
                     id: 'module_transfer_new_owner_name_input',
+                  ),
+                  const SizedBox(height: 12),
+                  AdvanceExitSettlementFields(
+                    advanceBalance: ho.advanceBalance,
+                    choice: settlementChoice,
+                    onChoiceChanged: (choice) => setDlgState(() => settlementChoice = choice),
+                    sourceDebtor: sourceDebtor,
+                    amountController: advanceAmountCtrl,
+                    onAmountChanged: (amount) => setDlgState(() => settlementAmount = amount),
                   ),
                   const SizedBox(height: 12),
                   testId('module_transfer_notes_input', TextField(
