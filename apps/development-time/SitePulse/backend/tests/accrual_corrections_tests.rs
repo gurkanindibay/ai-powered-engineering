@@ -212,6 +212,13 @@ async fn when_a_liability_is_reissued_then_the_original_is_cancelled_and_the_new
     let state = fixture().await;
     let due_date = today() + Days::new(10);
     push_due(&state, liability("r-1", "1800.00", due_date)).await;
+    // The original was accrued from operating budget 7 (its KMK 37 legal basis).
+    state
+        .inner
+        .write()
+        .await
+        .dues_budget_basis
+        .insert("r-1".to_string(), "7".to_string());
 
     let corrections = CorrectionService::new(&state);
     let requested = corrections
@@ -233,6 +240,17 @@ async fn when_a_liability_is_reissued_then_the_original_is_cancelled_and_the_new
     assert_eq!(replacement.period, "2026-10");
     assert_eq!(replacement.due_date, due_date);
     assert_eq!(replacement.status, DebtStatus::Pending);
+    assert_eq!(
+        state
+            .inner
+            .read()
+            .await
+            .dues_budget_basis
+            .get(&new_id)
+            .map(String::as_str),
+        Some("7"),
+        "the re-issued liability keeps the original's operating budget"
+    );
     let listed = corrections.list(SITE).await;
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].due_id, "r-1");
@@ -616,6 +634,28 @@ async fn corrections_round_trip_through_postgresql() {
         )
         .await
         .unwrap();
+    // ...and an operating budget as its legal basis (KMK 37).
+    let budget: i64 = pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "INSERT INTO operating_budgets (site_id, fiscal_year, period_start, period_end, created_by)
+             VALUES ($1, 2026, DATE '2026-01-01', DATE '2026-12-31', 'pg-test') RETURNING id",
+            &[&site.parse::<i64>().unwrap()],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    pool.get()
+        .await
+        .unwrap()
+        .execute(
+            "UPDATE dues_liabilities SET operating_budget_id = $2 WHERE id = $1",
+            &[&to_cancel.id.parse::<i64>().unwrap(), &budget],
+        )
+        .await
+        .unwrap();
     // A cancelled period can be re-issued: the duplicate guard ignores cancelled rows.
     let corrections = CorrectionService::new(&state);
     let requested = corrections
@@ -650,6 +690,22 @@ async fn corrections_round_trip_through_postgresql() {
         carried_key.as_deref(),
         Some(period.as_str()),
         "re-issue keeps the period key"
+    );
+    let carried_budget: Option<i64> = pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT operating_budget_id FROM dues_liabilities WHERE id = $1",
+            &[&replacement_id.parse::<i64>().unwrap()],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        carried_budget,
+        Some(budget),
+        "re-issue keeps the operating budget"
     );
 
     let credited = corrections

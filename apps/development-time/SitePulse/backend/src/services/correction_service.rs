@@ -386,6 +386,10 @@ impl CorrectionService {
         }
         if let (Some(next), Some(id)) = (replacement.as_mut(), replacement_id.clone()) {
             next.id = id;
+            // The re-issued liability keeps the original's legal basis (KMK 37).
+            if let Some(basis) = inner.dues_budget_basis.get(&due.id).cloned() {
+                inner.dues_budget_basis.insert(next.id.clone(), basis);
+            }
             inner.dues.push(next.clone());
         }
         correction.replacement_due_id = replacement_id;
