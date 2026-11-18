@@ -646,7 +646,11 @@ async fn corrections_round_trip_through_postgresql() {
         .await
         .unwrap()
         .get(0);
-    assert_eq!(carried_key.as_deref(), Some(period.as_str()), "re-issue keeps the period key");
+    assert_eq!(
+        carried_key.as_deref(),
+        Some(period.as_str()),
+        "re-issue keeps the period key"
+    );
 
     let credited = corrections
         .request(
