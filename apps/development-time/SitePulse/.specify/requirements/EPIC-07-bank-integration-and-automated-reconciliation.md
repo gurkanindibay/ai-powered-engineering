@@ -188,7 +188,9 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
      half away from zero; the last share absorbs the remainder so the shares add up to the unit's
      monthly amount exactly.
   2. A unit created during a period is charged only from its creation date. Whether this applies or
-     the first period is charged in full is a site setting **(decide the default)**.
+     the first period is charged in full is a site setting. The implementation defaults proration
+     off to preserve the existing full-month behavior until a manager explicitly opts in; this is a
+     compatibility assumption pending a product-owner decision, not legal approval.
   3. A move-in, move-out or title transfer recorded after the period was accrued re-splits that
      period's open liability: the shares are re-issued through corrections (STORY-07-11), never by
      editing a liability that has payments.
@@ -196,7 +198,8 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
      that debtor's advance balance.
   5. Whether proration is allowed at all depends on the management plan (yönetim planı) **(verify
      with counsel)**; a site can switch it off, and then the current rule applies (the occupant on the
-     accrual date owes the whole month).
+     accrual date owes the whole month). Default-off and explicit opt-in do not constitute counsel
+     verification or approval for any management plan.
 - **Acceptance Criteria:**
   Executable scenarios: [`STORY-07-09-occupancy-aware-proration.feature`](../features/EPIC-07/STORY-07-09-occupancy-aware-proration.feature).
 

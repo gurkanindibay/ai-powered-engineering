@@ -19,6 +19,7 @@ fn money(s: &str) -> Decimal {
 async fn when_the_daily_job_already_ran_then_stored_fee_day_rows_and_ledger_stay_consistent() {
     let state = AppState::new();
     let due_date = site_local_date("Europe/Istanbul", Utc::now()) - chrono::Days::new(40);
+
     {
         let mut inner = state.inner.write().await;
         inner.dues.clear();

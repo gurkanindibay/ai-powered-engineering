@@ -241,6 +241,24 @@ class PaymentsPhase2Api {
     return BudgetCompliance.fromJson(_decode(r) as Map<String, dynamic>);
   }
 
+  static Future<bool> prorationPolicy({String? siteId}) async {
+    final r = await ApiClient.get(
+      ApiClient.uri('/api/v1/site-admin/proration-policy', _site(siteId)),
+    ).timeout(_timeout);
+    return (_decode(r) as Map<String, dynamic>)['proration_enabled'] as bool? ??
+        false;
+  }
+
+  static Future<bool> setProrationPolicy(bool enabled, {String? siteId}) async {
+    final r = await ApiClient.put(
+      ApiClient.uri('/api/v1/site-admin/proration-policy', _site(siteId)),
+      headers: _json,
+      body: json.encode({'proration_enabled': enabled}),
+    ).timeout(_timeout);
+    return (_decode(r) as Map<String, dynamic>)['proration_enabled'] as bool? ??
+        false;
+  }
+
   static String _day(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

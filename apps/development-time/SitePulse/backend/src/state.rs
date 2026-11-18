@@ -321,6 +321,7 @@ impl AppStateInner {
                 plan_type: PlanType::Premium,
                 license_end_date: NaiveDate::from_ymd_opt(2027, 9, 1).unwrap(),
                 timezone: crate::models::default_site_timezone(),
+                proration_enabled: false,
                 tax_id: None,
                 tax_office: None,
             });
@@ -336,6 +337,7 @@ impl AppStateInner {
                 plan_type: PlanType::Standard,
                 license_end_date: NaiveDate::from_ymd_opt(2027, 10, 15).unwrap(),
                 timezone: crate::models::default_site_timezone(),
+                proration_enabled: false,
                 tax_id: None,
                 tax_office: None,
             });
@@ -400,6 +402,7 @@ impl AppStateInner {
                 tenant_user_id: None,
                 virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
+                created_on: None,
             });
         }
 
@@ -698,6 +701,7 @@ impl AppStateInner {
                 tenant_user_id: None,
                 virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
+                created_on: None,
             });
         }
         if !self

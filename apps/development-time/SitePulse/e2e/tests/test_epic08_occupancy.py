@@ -3,12 +3,44 @@ from decimal import Decimal
 
 import pytest
 
-from pages import ManagerCockpit, Occupancy, PersonPicker, ResidentsTab, UnitWorkspace
+from pages import ManagerCockpit, Occupancy, PersonPicker, ResidentsTab, Shell, UnitWorkspace
 
 
 def _unit_id(stack, block: str, number: int) -> str:
     return stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "
                      f"WHERE b.block_name = '{block}' AND u.unit_number = {number};")
+
+
+def _seed_advance(stack, unit_id: str, debtor: str, amount: str) -> None:
+    stack.sql(
+        "INSERT INTO advance_balances (unit_id, debtor_type, balance) "
+        f"VALUES ({int(unit_id)}, '{debtor}', {amount}) "
+        "ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance;"
+    )
+    stack.sql(
+        "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description) "
+        f"VALUES ({int(unit_id)}, '{debtor}', 'PAYMENT_SURPLUS', {amount}, 'E2E advance seed');"
+    )
+    stack.restart_backend()
+
+
+def _move_out_with_advance_choice(page, unit_id: str, choice_id: str, amount: str | None = None) -> None:
+    UnitWorkspace(page).open(unit_id).action(unit_id, "move_out")
+    by_id(page, choice_id).click()
+    if amount is not None:
+        from support.flutter import fill
+
+        fill(page, "exit_advance_amount", amount)
+    by_id(page, "module_confirm_move_out_btn").click()
+    by_id(page, "module_confirm_move_out_btn").wait_for(state="detached", timeout=15_000)
+    UnitWorkspace(page).close()
+
+
+def _second_manager(api, stack, actors):
+    # Promote the seeded owner account only in this resettable e2e database.
+    stack.sql("UPDATE users SET role = 'SITE_MANAGER' WHERE lower(email) = lower('ahmet.yilmaz@begonya.com');")
+    stack.restart_backend()
+    return api.login(**actors["homeowner"])
 
 
 @pytest.mark.smoke
@@ -53,6 +85,111 @@ def test_tenant_move_out_keeps_history_and_debt(login_as, page, api, actors, bui
     assert stack.sql(f"SELECT principal_amount - paid_amount FROM dues_liabilities "
                      f"WHERE id = {int(debt['liability_id'])};") == "1500.00"
     assert stack.sql(f"SELECT count(*) FROM persons WHERE id = {int(debt['person_id'])};") == "1"
+
+
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-08-14")
+@pytest.mark.covers("SC-08-03-02")
+def test_move_out_keeps_tenant_advance_when_selected(login_as, page, api, actors, stack):
+    b3 = _unit_id(stack, "B Blok", 3)
+    manager = api.login(**actors["manager"])
+    api.move_in(manager, b3, "Zeynep Kaya", "zeynep.kaya@e2e.test")
+    _seed_advance(stack, b3, "TENANT", "800.00")
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    ResidentsTab(page).open()
+
+    _move_out_with_advance_choice(page, b3, "exit_advance_keep")
+
+    assert stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'TENANT';"
+    ) == "800.00"
+    assert stack.sql(f"SELECT count(*) FROM advance_exit_settlements WHERE unit_id = {int(b3)};") == "0"
+
+
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-08-14")
+@pytest.mark.covers("SC-08-03-03")
+def test_move_out_payout_waits_for_second_approver(login_as, page, api, actors, stack):
+    b3 = _unit_id(stack, "B Blok", 3)
+    manager = api.login(**actors["manager"])
+    api.move_in(manager, b3, "Zeynep Kaya", "zeynep.kaya@e2e.test")
+    _seed_advance(stack, b3, "TENANT", "800.00")
+    reviewer = _second_manager(api, stack, actors)
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    ResidentsTab(page).open()
+
+    _move_out_with_advance_choice(page, b3, "exit_advance_payout", "500")
+
+    settlement_id = stack.sql(
+        f"SELECT id FROM advance_exit_settlements WHERE unit_id = {int(b3)} ORDER BY id DESC LIMIT 1;"
+    )
+    assert stack.sql(
+        f"SELECT kind || '|' || status || '|' || amount::text FROM advance_exit_settlements WHERE id = {int(settlement_id)};"
+    ) == "PAYOUT|PENDING|500.00"
+    assert stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'TENANT';"
+    ) == "800.00"
+
+    api.call(
+        "POST",
+        f"/api/v1/site-admin/advance-exit-settlements/{settlement_id}/decide",
+        reviewer.token,
+        body={"approve": True, "payment_reference": "E2E-PAYOUT-01", "note": None},
+    )
+    assert stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'TENANT';"
+    ) == "300.00"
+    assert stack.sql(
+        f"SELECT count(*) FROM advance_exit_disbursements WHERE settlement_id = {int(settlement_id)};"
+    ) == "1"
+
+
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-08-14")
+@pytest.mark.covers("SC-08-03-04")
+def test_move_out_transfer_waits_for_second_approver(login_as, page, api, actors, stack):
+    b3 = _unit_id(stack, "B Blok", 3)
+    manager = api.login(**actors["manager"])
+    api.move_in(manager, b3, "Zeynep Kaya", "zeynep.kaya@e2e.test")
+    _seed_advance(stack, b3, "TENANT", "800.00")
+    reviewer = _second_manager(api, stack, actors)
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    ResidentsTab(page).open()
+
+    _move_out_with_advance_choice(page, b3, "exit_advance_transfer", "500")
+
+    settlement_id = stack.sql(
+        f"SELECT id FROM advance_exit_settlements WHERE unit_id = {int(b3)} ORDER BY id DESC LIMIT 1;"
+    )
+    assert stack.sql(
+        f"SELECT kind || '|' || status || '|' || source_debtor || '|' || target_debtor "
+        f"FROM advance_exit_settlements WHERE id = {int(settlement_id)};"
+    ) == "TRANSFER|PENDING|TENANT|OWNER"
+    assert stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'TENANT';"
+    ) == "800.00"
+    assert stack.sql(
+        f"SELECT coalesce((SELECT balance FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'OWNER'), 0)::text;"
+    ) == "0"
+
+    api.call(
+        "POST",
+        f"/api/v1/site-admin/advance-exit-settlements/{settlement_id}/decide",
+        reviewer.token,
+        body={"approve": True, "payment_reference": None, "note": None},
+    )
+    assert stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'TENANT';"
+    ) == "300.00"
+    assert stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'OWNER';"
+    ) == "500.00"
+    assert stack.sql(
+        f"SELECT count(*) FROM advance_exit_disbursements WHERE settlement_id = {int(settlement_id)};"
+    ) == "0"
 
 
 # ---------------------------------------------------------------- P1 (core)
@@ -177,6 +314,57 @@ def test_ownership_transfer_records_the_previous_owners_period(login_as, page, s
 
     assert stack.sql(f"SELECT count(*) FROM unit_ownerships WHERE unit_id = {int(a14)} "
                      f"AND person_id = {int(old_owner)} AND end_date IS NOT NULL;") == "1"
+
+
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-08-15")
+@pytest.mark.covers("SC-08-05-03")
+def test_previous_owner_advance_transfer_waits_for_second_approver(login_as, page, api, stack, actors):
+    a14 = _unit_id(stack, "A Blok", 14)
+    old_owner = stack.sql(f"SELECT owner_person_id FROM units WHERE id = {int(a14)};")
+    _seed_advance(stack, a14, "OWNER", "800.00")
+    reviewer = _second_manager(api, stack, actors)
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    Shell(page).verify_sensitive(actors["manager"]["password"])
+    ResidentsTab(page).open()
+
+    UnitWorkspace(page).open(a14).action(a14, "transfer_ownership")
+    PersonPicker(page, "module_transfer_new_owner_name_input").create(
+        "Selim Evsahibi", phone="+90 532 555 66 77", email="selim.evsahibi@e2e.test")
+    by_id(page, "exit_advance_transfer").click()
+    from support.flutter import fill
+
+    fill(page, "exit_advance_amount", "500")
+    by_id(page, "module_confirm_transfer_ownership_btn").click()
+    by_id(page, "module_confirm_transfer_ownership_btn").wait_for(state="detached", timeout=15_000)
+
+    settlement_id = stack.sql(
+        f"SELECT id FROM advance_exit_settlements WHERE unit_id = {int(a14)} ORDER BY id DESC LIMIT 1;"
+    )
+    assert stack.sql(
+        f"SELECT kind || '|' || status || '|' || source_debtor || '|' || target_debtor "
+        f"FROM advance_exit_settlements WHERE id = {int(settlement_id)};"
+    ) == "TRANSFER|PENDING|OWNER|TENANT"
+    assert stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(a14)} AND debtor_type = 'OWNER';"
+    ) == "800.00"
+
+    api.call(
+        "POST",
+        f"/api/v1/site-admin/advance-exit-settlements/{settlement_id}/decide",
+        reviewer.token,
+        body={"approve": True, "payment_reference": None, "note": None},
+    )
+    assert stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(a14)} AND debtor_type = 'OWNER';"
+    ) == "300.00"
+    assert stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(a14)} AND debtor_type = 'TENANT';"
+    ) == "500.00"
+    assert stack.sql(
+        f"SELECT owner_person_id = {int(old_owner)} FROM units WHERE id = {int(a14)};"
+    ) == "f"
 
 
 @pytest.fixture

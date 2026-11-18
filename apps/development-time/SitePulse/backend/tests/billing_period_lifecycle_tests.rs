@@ -178,6 +178,7 @@ async fn a_correction_to_a_closed_period_posts_later_and_preserves_the_close_rep
                 due_date: None,
                 debtor_type: None,
                 reason: "approved invoice correction".to_string(),
+                replacement_shares: Vec::new(),
             },
         )
         .await

@@ -197,6 +197,7 @@ pub async fn get_resident_dashboard(
                     tenant_user_id: t_pid.map(|p| p.to_string()),
                     virtual_iban: v_iban,
                     house_type: h_type,
+                    created_on: None,
                 })
             } else {
                 None

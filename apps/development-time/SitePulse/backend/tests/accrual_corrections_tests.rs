@@ -7,6 +7,7 @@ use sitepulse_backend::models::*;
 use sitepulse_backend::services::accounting_service::AccountingService;
 use sitepulse_backend::services::correction_service::{plan_correction, CorrectionService};
 use sitepulse_backend::services::finance_common::{Caller, FinanceError};
+use sitepulse_backend::services::occupancy_service::OccupancyService;
 use sitepulse_backend::services::resident_statement::build_statement;
 use sitepulse_backend::services::PaymentTrackingService;
 use sitepulse_backend::state::AppState;
@@ -116,6 +117,7 @@ fn request(
         amount: amount.map(d),
         due_date: None,
         debtor_type: None,
+        replacement_shares: Vec::new(),
         reason: reason.into(),
     }
 }
@@ -262,6 +264,109 @@ async fn when_a_liability_is_reissued_then_the_original_is_cancelled_and_the_new
     let (receivable, _, balanced) = receivable_and_advance(&state).await;
     assert!(balanced);
     assert_eq!(receivable, d("1400.00"));
+}
+
+#[tokio::test]
+// covers: SC-07-09-03
+async fn when_a_paid_month_is_split_then_approval_reissues_both_roles_and_credits_the_excess() {
+    let state = fixture().await;
+    let mut paid_due = liability("split-1", "1400.00", today());
+    paid_due.debtor_type = DebtorType::Tenant;
+    paid_due.status = DebtStatus::Paid;
+    paid_due.paid_principal = d("1400.00");
+    paid_due.total_amount = Decimal::ZERO;
+    let effective_date = NaiveDate::from_ymd_opt(2026, 10, 21).expect("fixture date");
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues.push(paid_due);
+        inner
+            .dues_budget_basis
+            .insert("split-1".to_string(), "budget-split".to_string());
+        inner
+            .sites
+            .iter_mut()
+            .find(|site| site.id == SITE)
+            .expect("fixture site")
+            .proration_enabled = true;
+        inner.dues_periods.push(DuesPeriod {
+            id: "period-split".to_string(),
+            site_id: SITE.to_string(),
+            period_name: "2026-10".to_string(),
+            due_date: NaiveDate::from_ymd_opt(2026, 10, 15).expect("fixture date"),
+            status: DuesPeriodStatus::Active,
+            created_at: None,
+        });
+        inner.unit_occupancies.insert(
+            UNIT.to_string(),
+            vec![OccupancyHistoryItem {
+                id: 80,
+                unit_id: 14,
+                person_id: 12,
+                person_name: "Tenant fixture".to_string(),
+                person_phone: None,
+                person_email: None,
+                role: DebtorType::Tenant,
+                start_date: "2026-10-01".to_string(),
+                end_date: Some("2026-10-21".to_string()),
+                is_active: false,
+                exit_balance: Decimal::ZERO,
+                notes: None,
+                created_at: Utc::now(),
+            }],
+        );
+    }
+
+    let corrections = CorrectionService::new(&state);
+    let requested = OccupancyService::new(state.clone())
+        .request_open_period_split(&first_manager(), UNIT, effective_date)
+        .await
+        .unwrap()
+        .expect("move-out requests a split correction");
+    assert_eq!(requested.kind, CORRECTION_SPLIT_REISSUE);
+    assert_eq!(requested.replacement_shares.len(), 2);
+    assert!(requested
+        .replacement_shares
+        .iter()
+        .any(|share| { share.debtor_type == DebtorType::Tenant && share.amount == d("903.23") }));
+    assert!(requested
+        .replacement_shares
+        .iter()
+        .any(|share| { share.debtor_type == DebtorType::Owner && share.amount == d("496.77") }));
+    assert_eq!(due_of(&state, "split-1").await.status, DebtStatus::Paid);
+
+    let approved = corrections
+        .decide(&second_manager(), requested.id, approve())
+        .await
+        .unwrap();
+    assert_eq!(approved.status, REQUEST_APPROVED);
+    assert_eq!(approved.advance_credited, Some(d("1400.00")));
+    assert_eq!(approved.replacement_due_ids.len(), 2);
+    assert_eq!(
+        due_of(&state, "split-1").await.status,
+        DebtStatus::Cancelled
+    );
+
+    let mut replacements = Vec::new();
+    for id in &approved.replacement_due_ids {
+        replacements.push(due_of(&state, id).await);
+    }
+    assert_eq!(replacements.len(), 2);
+    assert!(replacements.iter().any(|due| {
+        due.debtor_type == DebtorType::Tenant && due.principal_amount == d("903.23")
+    }));
+    assert!(replacements.iter().any(|due| {
+        due.debtor_type == DebtorType::Owner && due.principal_amount == d("496.77")
+    }));
+    {
+        let inner = state.inner.read().await;
+        assert!(approved.replacement_due_ids.iter().all(|id| {
+            inner.dues_budget_basis.get(id).map(String::as_str) == Some("budget-split")
+        }));
+    }
+    assert_eq!(
+        state.inner.read().await.advance_of(UNIT, "TENANT"),
+        d("496.77")
+    );
 }
 
 // covers: SC-07-11-03
@@ -657,57 +762,62 @@ async fn corrections_round_trip_through_postgresql() {
         )
         .await
         .unwrap();
+    state
+        .inner
+        .write()
+        .await
+        .dues_budget_basis
+        .insert(to_cancel.id.clone(), budget.to_string());
     // A cancelled period can be re-issued: the duplicate guard ignores cancelled rows.
     let corrections = CorrectionService::new(&state);
-    let requested = corrections
-        .request(
-            &first,
-            request(
-                &to_cancel.id,
-                "REISSUE",
-                Some("1200.00"),
-                "wrong house type",
-            ),
-        )
-        .await
-        .unwrap();
+    let mut split_request = request(
+        &to_cancel.id,
+        "SPLIT_REISSUE",
+        None,
+        "correct occupancy shares",
+    );
+    split_request.replacement_shares = vec![
+        CorrectionReplacementShare {
+            debtor_type: DebtorType::Owner,
+            amount: d("600.00"),
+        },
+        CorrectionReplacementShare {
+            debtor_type: DebtorType::Tenant,
+            amount: d("600.00"),
+        },
+    ];
+    let requested = corrections.request(&first, split_request).await.unwrap();
     let approved = corrections
         .decide(&second, requested.id, approve())
         .await
         .unwrap();
-    let replacement_id = approved.replacement_due_id.clone().expect("replacement");
-    let carried_key: Option<String> = pool
-        .get()
-        .await
-        .unwrap()
-        .query_one(
-            "SELECT period_key FROM dues_liabilities WHERE id = $1",
-            &[&replacement_id.parse::<i64>().unwrap()],
-        )
-        .await
-        .unwrap()
-        .get(0);
-    assert_eq!(
-        carried_key.as_deref(),
-        Some(period.as_str()),
-        "re-issue keeps the period key"
-    );
-    let carried_budget: Option<i64> = pool
-        .get()
-        .await
-        .unwrap()
-        .query_one(
-            "SELECT operating_budget_id FROM dues_liabilities WHERE id = $1",
-            &[&replacement_id.parse::<i64>().unwrap()],
-        )
-        .await
-        .unwrap()
-        .get(0);
-    assert_eq!(
-        carried_budget,
-        Some(budget),
-        "re-issue keeps the operating budget"
-    );
+    assert_eq!(approved.replacement_due_ids.len(), 2);
+    for replacement_id in &approved.replacement_due_ids {
+        let row = pool
+            .get()
+            .await
+            .unwrap()
+            .query_one(
+                "SELECT period_key, operating_budget_id FROM dues_liabilities WHERE id = $1",
+                &[&replacement_id.parse::<i64>().unwrap()],
+            )
+            .await
+            .unwrap();
+        let carried_key: Option<String> = row.get(0);
+        let carried_budget: Option<i64> = row.get(1);
+        assert_eq!(carried_key.as_deref(), Some(period.as_str()));
+        assert_eq!(carried_budget, Some(budget));
+        assert_eq!(
+            state
+                .inner
+                .read()
+                .await
+                .dues_budget_basis
+                .get(replacement_id),
+            Some(&budget.to_string())
+        );
+    }
+    let replacement_id = approved.replacement_due_ids[0].clone();
 
     let credited = corrections
         .request(
@@ -772,7 +882,7 @@ async fn corrections_round_trip_through_postgresql() {
             .unwrap();
         (row.get(0), row.get(1))
     };
-    assert_eq!(stored.1, d("1000.00"));
+    assert_eq!(stored.1, d("400.00"));
     let cancelled: String = pool
         .get()
         .await
@@ -785,6 +895,78 @@ async fn corrections_round_trip_through_postgresql() {
         .unwrap()
         .get(0);
     assert_eq!(cancelled, "CANCELLED");
+
+    let mut split_due = make("1400.00", ExpenseType::OperationalDues);
+    split_due.debtor_type = DebtorType::Tenant;
+    split_due.period = format!("{}s", &period[..9]);
+    let split_due = store.insert_due(split_due).await.unwrap().unwrap();
+    pool.get()
+        .await
+        .unwrap()
+        .execute(
+            "UPDATE dues_liabilities SET period_key = period, paid_amount = 1400, paid_principal = 1400, status = 'PAID' WHERE id = $1::text::bigint",
+            &[&split_due.id],
+        )
+        .await
+        .unwrap();
+    if let Some(due) = state
+        .inner
+        .write()
+        .await
+        .dues
+        .iter_mut()
+        .find(|due| due.id == split_due.id)
+    {
+        due.status = DebtStatus::Paid;
+        due.paid_principal = d("1400.00");
+        due.total_amount = Decimal::ZERO;
+    }
+    let split = corrections
+        .request(
+            &first,
+            RequestCorrectionRequest {
+                due_id: split_due.id.clone(),
+                kind: CORRECTION_SPLIT_REISSUE.to_string(),
+                amount: None,
+                due_date: None,
+                debtor_type: None,
+                replacement_shares: vec![
+                    CorrectionReplacementShare {
+                        debtor_type: DebtorType::Tenant,
+                        amount: d("903.23"),
+                    },
+                    CorrectionReplacementShare {
+                        debtor_type: DebtorType::Owner,
+                        amount: d("496.77"),
+                    },
+                ],
+                reason: "Move-out changed the responsible days".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    let split_approved = corrections
+        .decide(&second, split.id, approve())
+        .await
+        .unwrap();
+    assert_eq!(split_approved.replacement_due_ids.len(), 2);
+    assert_eq!(split_approved.advance_credited, Some(d("1400.00")));
+    let replacements: i64 = pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT count(*) FROM dues_liabilities WHERE id = ANY($1::bigint[])",
+            &[&split_approved
+                .replacement_due_ids
+                .iter()
+                .filter_map(|id| id.parse::<i64>().ok())
+                .collect::<Vec<_>>()],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(replacements, 2);
 
     // A reload brings the corrections back; the cancelled liability stays out of memory.
     let reloaded = AppState::with_pool(Some(pool.clone()));

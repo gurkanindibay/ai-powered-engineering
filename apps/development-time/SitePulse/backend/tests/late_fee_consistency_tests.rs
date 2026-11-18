@@ -246,6 +246,7 @@ async fn approve_credit_note(state: &AppState, due_id: &str, amount: &str) -> Ac
                 amount: Some(d(amount)),
                 due_date: None,
                 debtor_type: None,
+                replacement_shares: Vec::new(),
                 reason: "budget revision".into(),
             },
         )

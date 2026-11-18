@@ -19,7 +19,7 @@ Feature: Tenant paying capital dues on behalf of the landlord
     When the advance is transferred to the capital dues from the payment tracking screen
     Then the capital due is settled from the advance with an audit log entry
 
-  @SC-09-06-03 @layer:api @edge @linked @pending
+  @SC-09-06-03 @layer:api @edge @linked
   Scenario: A capital keyword alone does not redirect a tenant payment
     Given a tenant has an operational due and the owner has a capital due
     When the tenant payment description contains "Asansör Demirbaş"

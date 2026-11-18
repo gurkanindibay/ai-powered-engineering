@@ -24,6 +24,7 @@ fn unit(id: &str, site_id: &str, unit_number: i32, land_share: i32) -> Independe
         tenant_user_id: None,
         virtual_iban: None,
         house_type: None,
+        created_on: None,
     }
 }
 

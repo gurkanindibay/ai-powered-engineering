@@ -9,8 +9,8 @@ use rust_decimal::Decimal;
 
 use crate::models::{
     IndependentUnit, ResidentStatement, Role, StatementCorrection, StatementDebtor,
-    StatementOpenItem, StatementReceipt, CORRECTION_REISSUE, LEDGER_KIND_COLLECTION,
-    REQUEST_APPROVED,
+    StatementOpenItem, StatementReceipt, CORRECTION_REISSUE, CORRECTION_SPLIT_REISSUE,
+    LEDGER_KIND_COLLECTION, REQUEST_APPROVED,
 };
 use crate::services::dues_ledger::{self, DEBTOR_OWNER, DEBTOR_TENANT};
 use crate::state::AppStateInner;
@@ -185,7 +185,7 @@ pub fn build_statement(
             period: c.period.clone(),
             kind: c.kind.clone(),
             original_amount: c.principal_before.unwrap_or(c.amount),
-            credited_amount: if c.kind == CORRECTION_REISSUE {
+            credited_amount: if c.kind == CORRECTION_REISSUE || c.kind == CORRECTION_SPLIT_REISSUE {
                 c.principal_before.unwrap_or_default()
             } else {
                 c.amount

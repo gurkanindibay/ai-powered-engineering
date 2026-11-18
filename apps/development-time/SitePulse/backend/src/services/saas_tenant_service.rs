@@ -140,6 +140,7 @@ impl SaasTenantService {
             plan_type: plan,
             license_end_date: license_end,
             timezone: crate::models::default_site_timezone(),
+            proration_enabled: false,
             tax_id: None,
             tax_office: None,
         };

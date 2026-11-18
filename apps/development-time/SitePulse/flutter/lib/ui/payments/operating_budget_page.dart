@@ -34,6 +34,7 @@ class _OperatingBudgetPageState extends State<OperatingBudgetPage> {
   List<OperatingBudget> _budgets = const [];
   String? _error;
   bool _loading = true;
+  bool _prorationEnabled = false;
 
   @override
   void initState() {
@@ -47,11 +48,13 @@ class _OperatingBudgetPageState extends State<OperatingBudgetPage> {
       final results = await Future.wait([
         PaymentsPhase2Api.compliance(siteId: widget.siteId),
         PaymentsPhase2Api.budgets(siteId: widget.siteId),
+        PaymentsPhase2Api.prorationPolicy(siteId: widget.siteId),
       ]);
       if (!mounted) return;
       setState(() {
         _compliance = results[0] as BudgetCompliance;
         _budgets = results[1] as List<OperatingBudget>;
+        _prorationEnabled = results[2] as bool;
         _error = null;
       });
     } catch (e) {
@@ -148,6 +151,18 @@ class _OperatingBudgetPageState extends State<OperatingBudgetPage> {
             subtitle: const Text('Açıkken aidat yalnızca yürürlükteki projenin paylarından tahakkuk eder.', style: TextStyle(fontSize: SpFontSize.caption)),
             value: c.requireOperatingBudget,
             onChanged: (v) => _run(() => PaymentsPhase2Api.setPolicy(v, siteId: widget.siteId), v ? 'Bütçe zorunlu' : 'Bütçe zorunluluğu kaldırıldı'),
+          )),
+          testId('occupancy_proration_switch', SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: const Text('İşgal süresine göre aidat paylaştır', style: TextStyle(fontSize: SpFontSize.body)),
+            subtitle: const Text('Varsayılan kapalıdır. Yalnızca yönetim planınız izin veriyorsa açın; hukuki uygunluk ayrıca doğrulanmalıdır.', style: TextStyle(fontSize: SpFontSize.caption)),
+            value: _prorationEnabled,
+            onChanged: (v) => _run(() async {
+              final enabled = await PaymentsPhase2Api.setProrationPolicy(v, siteId: widget.siteId);
+              if (mounted) setState(() => _prorationEnabled = enabled);
+              return null;
+            }, v ? 'İşgal süresiyle orantılı tahakkuk açıldı' : 'İşgal süresiyle orantılı tahakkuk kapatıldı'),
           )),
         ],
       ),

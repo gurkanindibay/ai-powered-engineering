@@ -28,6 +28,7 @@ pub mod installments;
 pub mod joint_liability;
 pub mod kvkk;
 pub mod limitation;
+pub mod occupancy_proration;
 pub mod payer_match;
 pub mod tax_id;
 // EPIC-08 unit ownership & occupancy state machine.
