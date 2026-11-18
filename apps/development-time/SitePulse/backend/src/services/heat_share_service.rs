@@ -289,6 +289,7 @@ impl HeatShareService {
                     debtor_type: debtor,
                     expense_type: ExpenseType::OperationalDues,
                     penalty_accrued_through: None,
+                    grace_days: 0,
                 };
                 due_id = self.store.insert_due(due).await?.map(|d| d.id);
             }

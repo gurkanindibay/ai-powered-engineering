@@ -526,6 +526,7 @@ impl CapitalProjectService {
                     debtor_type: DebtorType::Owner,
                     expense_type: ExpenseType::CapitalDues,
                     penalty_accrued_through: None,
+                    grace_days: 0,
                 });
             }
 

@@ -44,7 +44,12 @@ pub fn plan_accruals(
         return None;
     }
     let principal = dues_ledger::outstanding_principal(due);
-    if principal <= Decimal::ZERO || today <= due.due_date {
+    if principal <= Decimal::ZERO
+        || today <= due.due_date
+        || (due.penalty_accrued_through.is_none()
+            && last.is_none()
+            && DuesCalculationService::in_grace(due, today))
+    {
         return None;
     }
     let paid_floor = due.delay_penalty.max(due.paid_penalty);

@@ -84,6 +84,7 @@ fn liability(
         debtor_type: DebtorType::from_str_loose(debtor),
         expense_type: ExpenseType::from_str_loose(expense),
         penalty_accrued_through: None,
+        grace_days: 0,
     }
 }
 
@@ -291,6 +292,7 @@ fn penalty_keeps_kurus_precision_and_does_not_drift_across_recalculations() {
         debtor_type: DebtorType::Tenant,
         expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
+        grace_days: 0,
     };
     for day in 16..=28 {
         let evaluation = NaiveDate::from_ymd_opt(2026, 9, day).unwrap();

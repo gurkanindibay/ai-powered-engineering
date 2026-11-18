@@ -59,9 +59,60 @@ pub fn tariff_for(
         .map(|h| h.dues_amount)
 }
 
+/// One period the scheduler accrued for a site, with the liabilities it created.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccruedPeriod {
+    pub site_id: String,
+    pub period_key: String,
+    pub liabilities: usize,
+}
+
+/// Periods a site's catch-up limit left out: `first_key` to `last_key`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LimitedPeriods {
+    pub site_id: String,
+    pub first_key: String,
+    pub last_key: String,
+}
+
+/// What one scheduler run did: every period it accrued (oldest first per site) and the
+/// periods it did not accrue because of the catch-up limit.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AccrualRunReport {
+    pub periods: Vec<AccruedPeriod>,
+    pub limited: Vec<LimitedPeriods>,
+}
+
+impl AccrualRunReport {
+    pub fn sites(&self) -> usize {
+        let mut ids: Vec<&str> = self.periods.iter().map(|p| p.site_id.as_str()).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids.len()
+    }
+
+    pub fn liabilities(&self) -> usize {
+        self.periods.iter().map(|p| p.liabilities).sum()
+    }
+}
+
+/// Runs the monthly accrual for every site, idempotently, and returns the number of sites and
+/// of new liabilities. See [`run_accrual_with_report`].
+pub async fn run_periodic_accrual_for_all_sites(
+    state: &AppState,
+    now: chrono::DateTime<Utc>,
+) -> (usize, usize) {
+    let report = run_accrual_with_report(state, now).await;
+    (report.sites(), report.liabilities())
+}
+
 /// Runs the monthly accrual for every site, idempotently.
 ///
-/// * Each site's period is derived from *its* local date (site `timezone`).
+/// * Each site's schedule (accrual day, due day, grace period, catch-up limit; STORY-07-10)
+///   and local date (site `timezone`) decide which periods are accrued: the current one once
+///   its accrual day has come, plus every earlier period the site has no dues for, oldest
+///   first, never further back than the catch-up limit. A catch-up liability keeps its own
+///   period's due date, so its late fee runs from that date.
 /// * The amount is the unit's monthly share of the operating budget in force
 ///   (SPEC-007 R5), recorded as the liability's legal basis; a site without a
 ///   budget that does not require one falls back to its house-type tariff.
@@ -71,10 +122,11 @@ pub fn tariff_for(
 /// * With PostgreSQL the liability is inserted first (the unique index
 ///   `uq_unit_period_expense` is the duplicate guard) and only then added to
 ///   memory with its database id, so accruals survive restarts.
-pub async fn run_periodic_accrual_for_all_sites(
+pub async fn run_accrual_with_report(
     state: &AppState,
     now: chrono::DateTime<Utc>,
-) -> (usize, usize) {
+) -> AccrualRunReport {
+    let mut report = AccrualRunReport::default();
     // Occupancy from PostgreSQL when available: a tenant without a user account
     // is not visible on the in-memory unit.
     let tenanted = match state.pool {
@@ -85,12 +137,12 @@ pub async fn run_periodic_accrual_for_all_sites(
                     "[Scheduler] Occupancy could not be read; accrual skipped: {}",
                     e
                 );
-                return (0, 0);
+                return report;
             }
         },
         None => None,
     };
-    // 1. Inspect state with a READ lock and plan one batch per site.
+    // 1. Inspect state with a READ lock and plan one batch per site and period.
     let batches: Vec<SiteBatch> = {
         let inner = state.inner.read().await;
         let sites: Vec<(String, String)> = inner
@@ -102,92 +154,123 @@ pub async fn run_periodic_accrual_for_all_sites(
 
         for (site_id, timezone) in sites {
             let local = site_local_date(&timezone, now);
-            // The same canonical key as a manual accrual, so the two can never both charge
-            // the month.
-            let billing_period = BillingPeriod::of_date(local);
-            let period = billing_period.label();
-            let due_date =
-                NaiveDate::from_ymd_opt(local.year(), local.month(), 15).unwrap_or(local);
+            let schedule = inner
+                .site_accrual_schedules
+                .get(&site_id)
+                .copied()
+                .unwrap_or_default();
             let units_in_site: Vec<_> = inner
                 .units
                 .iter()
                 .filter(|u| u.site_id == site_id)
                 .collect();
-            let mut batch = SiteBatch {
-                site_id: site_id.clone(),
-                period_key: billing_period.key(),
-                period: period.clone(),
-                due_date,
-                dues: Vec::new(),
-                skipped: Vec::new(),
-            };
-
-            for unit in units_in_site {
-                let already = inner.dues.iter().any(|d| {
-                    d.unit_id == unit.id
-                        && BillingPeriod::parse(&d.period).ok() == Some(billing_period)
-                        && d.expense_type == ExpenseType::OperationalDues
+            let accrued_periods: std::collections::HashSet<BillingPeriod> = inner
+                .dues
+                .iter()
+                .filter(|d| {
+                    d.expense_type == ExpenseType::OperationalDues
+                        && units_in_site.iter().any(|u| u.id == d.unit_id)
+                })
+                .filter_map(|d| BillingPeriod::parse(&d.period).ok())
+                .collect();
+            let plan = schedule.catch_up_plan(local, accrued_periods.iter().min().copied(), |p| {
+                accrued_periods.contains(&p)
+            });
+            if let Some((first, last)) = plan.limited {
+                tracing::warn!(
+                    "[Scheduler] Site {}: periods {} to {} were not accrued because of the catch-up limit of {} months",
+                    site_id,
+                    first.key(),
+                    last.key(),
+                    schedule.catch_up_limit_months
+                );
+                report.limited.push(LimitedPeriods {
+                    site_id: site_id.clone(),
+                    first_key: first.key(),
+                    last_key: last.key(),
                 });
-                if already {
-                    continue;
-                }
-                let basis = match crate::services::operating_budget_service::operational_dues_basis(
-                    &inner, unit, due_date,
-                ) {
-                    Ok(b) => b,
-                    Err(reason) => {
-                        tracing::warn!(
-                            "[Scheduler] Unit {} in site {}: dues not accrued: {}",
-                            unit.id,
-                            site_id,
-                            reason
-                        );
-                        batch.skipped.push(format!(
-                            "{}: {}",
-                            inner.unit_label(&unit.block_id, unit.unit_number),
-                            reason
-                        ));
+            }
+            for billing_period in plan.periods {
+                let period = billing_period.label();
+                let due_date = schedule.due_date_for(billing_period);
+                let mut batch = SiteBatch {
+                    site_id: site_id.clone(),
+                    period_key: billing_period.key(),
+                    period: period.clone(),
+                    due_date,
+                    dues: Vec::new(),
+                    skipped: Vec::new(),
+                };
+
+                for unit in &units_in_site {
+                    let already = inner.dues.iter().any(|d| {
+                        d.unit_id == unit.id
+                            && BillingPeriod::parse(&d.period).ok() == Some(billing_period)
+                            && d.expense_type == ExpenseType::OperationalDues
+                    });
+                    if already {
                         continue;
                     }
-                };
-                let amount = basis.amount;
-                let let_to_tenant = tenanted
-                    .as_ref()
-                    .map(|t| t.contains(&unit.id))
-                    .unwrap_or(unit.tenant_user_id.is_some());
-                let debtor = if let_to_tenant {
-                    DebtorType::Tenant
-                } else {
-                    DebtorType::Owner
-                };
-                batch.dues.push((
-                    DuesLiability {
-                        id: String::new(),
-                        unit_id: unit.id.clone(),
-                        period: period.clone(),
-                        principal_amount: amount,
-                        delay_penalty: Decimal::ZERO,
-                        total_amount: amount,
-                        due_date,
-                        status: DebtStatus::Pending,
-                        paid_principal: Decimal::ZERO,
-                        paid_penalty: Decimal::ZERO,
-                        debtor_type: debtor,
-                        expense_type: ExpenseType::OperationalDues,
-                        penalty_accrued_through: None,
-                    },
-                    basis.operating_budget_id,
-                ));
-            }
-            if !batch.dues.is_empty() || !batch.skipped.is_empty() {
-                planned.push(batch);
+                    let basis =
+                        match crate::services::operating_budget_service::operational_dues_basis(
+                            &inner, unit, due_date,
+                        ) {
+                            Ok(b) => b,
+                            Err(reason) => {
+                                tracing::warn!(
+                                    "[Scheduler] Unit {} in site {}: dues not accrued: {}",
+                                    unit.id,
+                                    site_id,
+                                    reason
+                                );
+                                batch.skipped.push(format!(
+                                    "{}: {}",
+                                    inner.unit_label(&unit.block_id, unit.unit_number),
+                                    reason
+                                ));
+                                continue;
+                            }
+                        };
+                    let amount = basis.amount;
+                    let let_to_tenant = tenanted
+                        .as_ref()
+                        .map(|t| t.contains(&unit.id))
+                        .unwrap_or(unit.tenant_user_id.is_some());
+                    let debtor = if let_to_tenant {
+                        DebtorType::Tenant
+                    } else {
+                        DebtorType::Owner
+                    };
+                    batch.dues.push((
+                        DuesLiability {
+                            id: String::new(),
+                            unit_id: unit.id.clone(),
+                            period: period.clone(),
+                            principal_amount: amount,
+                            delay_penalty: Decimal::ZERO,
+                            total_amount: amount,
+                            due_date,
+                            status: DebtStatus::Pending,
+                            paid_principal: Decimal::ZERO,
+                            paid_penalty: Decimal::ZERO,
+                            debtor_type: debtor,
+                            expense_type: ExpenseType::OperationalDues,
+                            penalty_accrued_through: None,
+                            grace_days: schedule.grace_days,
+                        },
+                        basis.operating_budget_id,
+                    ));
+                }
+                if !batch.dues.is_empty() || !batch.skipped.is_empty() {
+                    planned.push(batch);
+                }
             }
         }
         planned
     };
 
     if batches.is_empty() {
-        return (0, 0);
+        return report;
     }
 
     // 2. One transaction per site batch, without holding the global memory lock: a failure
@@ -238,12 +321,17 @@ pub async fn run_periodic_accrual_for_all_sites(
     }
 
     if committed_batches.is_empty() {
-        return (0, 0);
+        return report;
     }
 
     // 3. Briefly acquire WRITE lock to record the committed liabilities (no I/O under it)
-    let total_sites_accrued = committed_batches.len();
-    let total_newly_accrued: usize = committed_batches.iter().map(|(b, _)| b.dues.len()).sum();
+    for (batch, _) in &committed_batches {
+        report.periods.push(AccruedPeriod {
+            site_id: batch.site_id.clone(),
+            period_key: batch.period_key.clone(),
+            liabilities: batch.dues.len(),
+        });
+    }
 
     {
         let mut inner = state.inner.write().await;
@@ -300,7 +388,7 @@ pub async fn run_periodic_accrual_for_all_sites(
     // 4. Offset advances against the new liabilities (transactional per unit).
     sweep_advance_offsets(state).await;
 
-    (total_sites_accrued, total_newly_accrued)
+    report
 }
 
 /// Platform-wide advance offset after a scheduled accrual. Offsets are write

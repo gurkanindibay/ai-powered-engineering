@@ -735,6 +735,10 @@ pub struct DuesLiability {
     /// `None` for liabilities that never accrued a segment (legacy rule applies).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub penalty_accrued_through: Option<NaiveDate>,
+    /// Days after `due_date` before a late fee applies, fixed when the liability was accrued
+    /// (STORY-07-10): a later change of the site's setting never touches it.
+    #[serde(default)]
+    pub grace_days: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

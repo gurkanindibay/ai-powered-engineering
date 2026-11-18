@@ -37,7 +37,7 @@ const ENGLISH_MONTHS: [&str; 12] = [
 ];
 
 /// One calendar month used as a billing period.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BillingPeriod {
     year: i32,
     month: u32,

@@ -135,6 +135,15 @@ pub async fn accrue_monthly_dues(
     let period_key = billing_period.key();
     let period_label = billing_period.label();
 
+    // The grace period in force now is fixed on every liability this run creates.
+    let site_grace_days = state
+        .inner
+        .read()
+        .await
+        .site_accrual_schedules
+        .get(&payload.site_id)
+        .map_or(0, |s| s.grace_days);
+
     // 1. Decide every unit's amount and basis under a read lock.
     let (units_in_site, planned, skipped, budget_id) = {
         let inner = state.inner.read().await;
@@ -258,6 +267,7 @@ pub async fn accrue_monthly_dues(
                 },
                 expense_type: ExpenseType::OperationalDues,
                 penalty_accrued_through: None,
+                grace_days: site_grace_days,
             },
             basis,
         ));

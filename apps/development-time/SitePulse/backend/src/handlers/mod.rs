@@ -25,6 +25,9 @@ use crate::services::{
 };
 use crate::state::AppState;
 
+mod accrual_schedule;
+pub use accrual_schedule::*;
+
 mod dashboard;
 pub use dashboard::*;
 

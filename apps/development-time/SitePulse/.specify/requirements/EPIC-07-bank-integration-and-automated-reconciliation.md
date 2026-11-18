@@ -203,7 +203,7 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
 ---
 
 ### STORY-07-10: Accrual Schedule, Catch-Up & Grace Period
-- **Status:** `PLANNED`
+- **Status:** `COMPLETED` (Backend API and scheduler; grace period decided as a configurable 0 to 30 days, default 0, still to be verified with counsel; no Flutter screen yet)
 - **Target Role:** Site Manager & System
 - **Gap today:** The scheduler only accrues the current month, so a month missed while it was off is
   never charged. The due date is fixed to the 15th. Late fees start the day after the due date, with
@@ -223,6 +223,10 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
   5. Changing the accrual day, due day or grace period affects only periods not yet accrued.
 - **Acceptance Criteria:**
   Executable scenarios: [`STORY-07-10-accrual-schedule-catch-up-and-grace.feature`](../features/EPIC-07/STORY-07-10-accrual-schedule-catch-up-and-grace.feature).
+- **Implementation Artifacts:**
+  - `domain/accrual_schedule.rs` (due-day clamp, catch-up plan and limit), `scheduler.rs` (`run_accrual_with_report`), `migrations/V41__accrual_schedule.sql`
+  - API: `GET/PUT /api/v1/accrual-schedule` (the caller's site; accrual day, due day, grace days, catch-up limit, go-live date)
+  - `services/dues_calculation_service.rs` and `services/late_fee_service.rs` (grace period; `DuesLiability.grace_days` is copied at accrual so later changes touch only new periods)
 
 ---
 

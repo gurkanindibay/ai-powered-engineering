@@ -98,6 +98,7 @@ fn liability(
         debtor_type: debtor,
         expense_type: kind,
         penalty_accrued_through: None,
+        grace_days: 0,
     }
 }
 

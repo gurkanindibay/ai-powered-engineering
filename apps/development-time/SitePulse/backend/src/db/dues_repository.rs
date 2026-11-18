@@ -300,12 +300,12 @@ pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Op
     let row = client
         .query_opt(
             r#"
-            INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type)
-            VALUES ($1, $2, $3, $4, $5, 'PENDING', 0, $6, $7)
+            INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type, grace_days)
+            VALUES ($1, $2, $3, $4, $5, 'PENDING', 0, $6, $7, $8)
             ON CONFLICT DO NOTHING
             RETURNING id
             "#,
-            &[&unit, &due.period, &key, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type],
+            &[&unit, &due.period, &key, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type, &i32::try_from(due.grace_days).unwrap_or(0)],
         )
         .await?;
     Ok(row.map(|r| r.get(0)))
@@ -391,8 +391,8 @@ pub async fn commit_accrual_batch(
                 r#"
                 INSERT INTO dues_liabilities
                     (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
-                     delay_penalty, debtor_type, expense_type, operating_budget_id)
-                VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7, $8, $9)
+                     delay_penalty, debtor_type, expense_type, operating_budget_id, grace_days)
+                VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7, $8, $9, $10)
                 ON CONFLICT DO NOTHING
                 RETURNING id
                 "#,
@@ -406,6 +406,7 @@ pub async fn commit_accrual_batch(
                     &due.debtor_type,
                     &due.expense_type,
                     &budget,
+                    &i32::try_from(due.grace_days).unwrap_or(0),
                 ],
             )
             .await?;
@@ -526,6 +527,7 @@ pub async fn fetch_debt_aging_report_from_db(
                     dl.debtor_type,
                     dl.expense_type,
                     dl.penalty_accrued_through,
+                    dl.grace_days,
                     b.block_name,
                     u.unit_number,
                     COALESCE(
@@ -560,6 +562,7 @@ pub async fn fetch_debt_aging_report_from_db(
                     dl.debtor_type,
                     dl.expense_type,
                     dl.penalty_accrued_through,
+                    dl.grace_days,
                     b.block_name,
                     u.unit_number,
                     COALESCE(
@@ -598,9 +601,10 @@ pub async fn fetch_debt_aging_report_from_db(
         let debtor_type_str: String = row.get(10);
         let expense_type_str: String = row.get(11);
         let penalty_accrued_through: Option<NaiveDate> = row.get(12);
-        let block_name: String = row.get(13);
-        let unit_number: i32 = row.get(14);
-        let resident_name: String = row.get(15);
+        let grace_days = u32::try_from(row.get::<_, i32>(13)).unwrap_or(0);
+        let block_name: String = row.get(14);
+        let unit_number: i32 = row.get(15);
+        let resident_name: String = row.get(16);
 
         let status = match status_str.as_str() {
             "PAID" => DebtStatus::Paid,
@@ -631,6 +635,7 @@ pub async fn fetch_debt_aging_report_from_db(
             debtor_type,
             expense_type,
             penalty_accrued_through,
+            grace_days,
         };
 
         let due = calc.calculate_delay_penalty(stored, today);
