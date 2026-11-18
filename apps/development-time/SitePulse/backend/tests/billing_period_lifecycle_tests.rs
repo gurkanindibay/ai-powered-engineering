@@ -216,7 +216,11 @@ async fn a_correction_to_a_closed_period_posts_later_and_preserves_the_close_rep
         .into_iter()
         .find(|entry| entry.source == "CREDIT_NOTE")
         .expect("approved credit note is booked");
-    assert_eq!(correction_entry.date, chrono::Utc::now().date_naive());
+    let operating_date = {
+        let inner = state.inner.read().await;
+        sitepulse_backend::services::finance_common::site_today(&inner, SITE)
+    };
+    assert_eq!(correction_entry.date, operating_date);
     assert!(correction_entry.description.contains("2026-10"));
 }
 

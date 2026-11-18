@@ -4,6 +4,7 @@
 use chrono::Utc;
 use rust_decimal::Decimal;
 use sitepulse_backend::models::*;
+use sitepulse_backend::scheduler::site_local_date;
 use sitepulse_backend::services::accounting_service::AccountingService;
 use sitepulse_backend::services::late_fee_service::LateFeeService;
 use sitepulse_backend::services::*;
@@ -17,7 +18,7 @@ fn money(s: &str) -> Decimal {
 #[tokio::test]
 async fn when_the_daily_job_already_ran_then_stored_fee_day_rows_and_ledger_stay_consistent() {
     let state = AppState::new();
-    let due_date = Utc::now().date_naive() - chrono::Days::new(40);
+    let due_date = site_local_date("Europe/Istanbul", Utc::now()) - chrono::Days::new(40);
     {
         let mut inner = state.inner.write().await;
         inner.dues.clear();
