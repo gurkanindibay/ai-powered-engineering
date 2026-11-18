@@ -159,6 +159,7 @@ impl PlanService {
             decision_note: None,
             principal_before: None,
             penalty_before: None,
+            booked_on: None,
         };
         Ok(self.store.insert(adjustment, col::adjustments).await?)
     }
@@ -536,6 +537,7 @@ impl PlanService {
                 decision_note: None,
                 principal_before: None,
                 penalty_before: None,
+                booked_on: None,
             };
             self.apply(&mut adj).await?;
             self.store.insert(adj, col::adjustments).await?;

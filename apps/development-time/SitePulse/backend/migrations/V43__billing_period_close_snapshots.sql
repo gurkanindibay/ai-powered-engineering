@@ -45,3 +45,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_dues_period_reopen_pending
 
 SELECT sp_enable_tenant_rls('dues_period_snapshots', 'site_id = sp_tenant_site()');
 SELECT sp_enable_tenant_rls('dues_period_reopen_requests', 'site_id = sp_tenant_site()');
+-- Keep economic accrual dates while placing postings created after close in an open month.
+ALTER TABLE late_fee_accruals
+    ADD COLUMN booked_on DATE;
+
+ALTER TABLE ledger_adjustments
+    ADD COLUMN booked_on DATE;

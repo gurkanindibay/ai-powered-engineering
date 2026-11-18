@@ -1,8 +1,12 @@
 //! #187: a backdated payment re-evaluates late fee charged past its value date.
 
-use chrono::{NaiveDate, Utc};
+use chrono::{Datelike, Days, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use sitepulse_backend::models::*;
+use sitepulse_backend::scheduler::site_local_date;
+use sitepulse_backend::services::accounting_service::AccountingService;
+use sitepulse_backend::services::billing_period_service::BillingPeriodService;
+use sitepulse_backend::services::finance_common::Caller;
 use sitepulse_backend::services::*;
 use sitepulse_backend::state::AppState;
 
@@ -114,6 +118,86 @@ async fn when_a_payment_is_backdated_then_late_fee_is_recalculated_and_the_exces
         .map(|l| l.credit - l.debit)
         .sum();
     assert_eq!(penalty_revenue_net, money("11.67"));
+}
+
+// covers: SC-07-12-07
+#[tokio::test]
+async fn when_backdated_payment_reverses_fee_from_closed_month_then_adjustment_is_booked_today() {
+    let (state, due_date) = state_with_charged_late_fee("0.00").await;
+    let today = site_local_date("Europe/Istanbul", Utc::now());
+    let closed_start = due_date.with_day(1).unwrap();
+    let closed_key = format!("{:04}-{:02}", closed_start.year(), closed_start.month());
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues[0].period = closed_key.clone();
+        inner.dues_periods.clear();
+        inner.dues_periods.push(DuesPeriod {
+            id: "period-backdated-closed".to_string(),
+            site_id: "site-1".to_string(),
+            period_name: closed_key,
+            due_date,
+            status: DuesPeriodStatus::Active,
+            created_at: None,
+        });
+        inner.dues_periods.push(DuesPeriod {
+            id: "period-backdated-open".to_string(),
+            site_id: "site-1".to_string(),
+            period_name: format!("{:04}-{:02}", today.year(), today.month()),
+            due_date: today,
+            status: DuesPeriodStatus::Active,
+            created_at: None,
+        });
+    }
+    let caller = Caller {
+        site_id: "site-1".to_string(),
+        user_id: "manager-backdated".to_string(),
+        email: "manager@example.test".to_string(),
+        role: Role::SiteManager,
+        unit_id: None,
+    };
+    let snapshot = BillingPeriodService::new(&state)
+        .close(&caller, "period-backdated-closed", "close-backdated")
+        .await
+        .unwrap();
+
+    PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(backdated_payment(
+            "1411.67",
+            due_date,
+            5,
+            PaymentChannel::ManualCash,
+        ))
+        .await
+        .unwrap();
+
+    let inner = state.inner.read().await;
+    let adjustment = inner
+        .finance
+        .adjustments
+        .iter()
+        .find(|item| item.kind == ADJUSTMENT_PENALTY_REEVALUATION)
+        .unwrap();
+    assert_eq!(adjustment.booked_on, Some(today));
+    let adjustment_id = adjustment.id;
+    drop(inner);
+
+    let accounting = AccountingService::new(&state);
+    let closed_end = (closed_start + chrono::Months::new(1)) - Days::new(1);
+    let closed_tb = accounting
+        .trial_balance("site-1", Some(closed_start), Some(closed_end))
+        .await;
+    assert_eq!(
+        serde_json::to_value(&closed_tb.rows).unwrap(),
+        serde_json::to_value(&snapshot.trial_balance.rows).unwrap()
+    );
+    let reversal = accounting
+        .journal("site-1", Some(today), Some(today))
+        .await
+        .into_iter()
+        .find(|entry| entry.source == "PENALTY_REVERSAL")
+        .unwrap();
+    assert_eq!(reversal.date, today);
+    assert_eq!(reversal.reference, format!("ADJ-{}", adjustment_id));
 }
 
 // covers: SC-09-04-06

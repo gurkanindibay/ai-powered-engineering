@@ -552,6 +552,15 @@ impl PaymentTrackingService {
 
         let calc = crate::services::DuesCalculationService::new();
         let today = issued_at.date_naive();
+        let booked_on = {
+            let inner = self.state.inner.read().await;
+            let operating_date = crate::services::finance_common::site_today(&inner, &site_id);
+            crate::services::finance_common::open_period_booking_date(
+                &inner,
+                &site_id,
+                operating_date,
+            )
+        };
         let ctx = ReceiptContext {
             site_id: site_id.clone(),
             unit_id: unit.id.clone(),
@@ -734,7 +743,7 @@ impl PaymentTrackingService {
                         &site_id,
                         re,
                         &receipt.receipt_number,
-                        today,
+                        booked_on,
                     );
                     adjustment.id = crate::db::finance_records::insert(&*tx, &adjustment)
                         .await
@@ -859,7 +868,7 @@ impl PaymentTrackingService {
                         &site_id,
                         re,
                         &receipt.receipt_number,
-                        today,
+                        booked_on,
                     );
                     adjustment.id = next_adjustment_id;
                     next_adjustment_id += 1;
@@ -1995,7 +2004,7 @@ fn penalty_reevaluation_adjustment(
     site_id: &str,
     re: &PenaltyReevaluation,
     receipt_number: &str,
-    payment_date: NaiveDate,
+    booked_on: NaiveDate,
 ) -> crate::models::LedgerAdjustment {
     let now = Utc::now();
     crate::models::LedgerAdjustment {
@@ -2006,10 +2015,10 @@ fn penalty_reevaluation_adjustment(
         kind: crate::models::ADJUSTMENT_PENALTY_REEVALUATION.to_string(),
         amount: re.reversed,
         reason: format!(
-            "Late fee of {} re-evaluated for payment {} dated {}: ₺{:.2} charged, ₺{:.2} owed",
+            "Late fee of {} re-evaluated for payment {} and booked on {}: ₺{:.2} charged, ₺{:.2} owed",
             re.due.period,
             receipt_number,
-            payment_date,
+            booked_on,
             re.original.delay_penalty,
             re.due.delay_penalty
         ),
@@ -2022,6 +2031,7 @@ fn penalty_reevaluation_adjustment(
         decision_note: Some(format!("Triggered by receipt {}", receipt_number)),
         principal_before: Some(re.original.principal_amount),
         penalty_before: Some(re.original.delay_penalty),
+        booked_on: Some(booked_on),
     }
 }
 

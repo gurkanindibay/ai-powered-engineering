@@ -38,6 +38,39 @@ pub fn invalid(message: impl Into<String>) -> FinanceError {
 pub fn conflict(message: impl Into<String>) -> FinanceError {
     FinanceError::Conflict(message.into())
 }
+
+/// Returns the first date in an open period that can book an event dated in a
+/// closed period. An open date is preserved; a closed month moves to the day
+/// after its final day, repeating across consecutive closed periods.
+pub fn open_period_booking_date(
+    inner: &AppStateInner,
+    site_id: &str,
+    date: NaiveDate,
+) -> NaiveDate {
+    let mut booking_date = date;
+    for _ in 0..=inner.dues_periods.len() {
+        let closed_end = inner.dues_periods.iter().find_map(|period| {
+            if !crate::auth::same_id(&period.site_id, site_id)
+                || period.status != crate::models::DuesPeriodStatus::Closed
+            {
+                return None;
+            }
+            let billing_period =
+                crate::domain::billing_period::BillingPeriod::parse(&period.period_name).ok()?;
+            (booking_date >= billing_period.first_day()
+                && booking_date <= billing_period.last_day())
+            .then_some(billing_period.last_day())
+        });
+        let Some(closed_end) = closed_end else {
+            break;
+        };
+        let Some(next_date) = closed_end.succ_opt() else {
+            break;
+        };
+        booking_date = next_date;
+    }
+    booking_date
+}
 pub fn not_found(message: impl Into<String>) -> FinanceError {
     FinanceError::NotFound(message.into())
 }

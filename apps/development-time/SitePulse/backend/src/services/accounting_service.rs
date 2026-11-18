@@ -126,7 +126,11 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
             .filter(|a| a.due_id == d.id && a.daily_amount > Decimal::ZERO)
         {
             booked += a.daily_amount;
-            out.push(penalty_entry(d, a.accrual_date, a.daily_amount));
+            out.push(penalty_entry(
+                d,
+                a.booked_on.unwrap_or(a.accrual_date),
+                a.daily_amount,
+            ));
         }
         let stored_rest = d.delay_penalty + waived + fee_reversed + reevaluated - booked;
         if stored_rest > Decimal::ZERO {
@@ -158,10 +162,11 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
             ("WRITE_OFF", de::WRITE_OFF_EXPENSE)
         };
         out.push(Entry {
-            date: a
-                .decided_at
-                .map(|t| local_date(inner, site_id, t))
-                .unwrap_or(today),
+            date: a.booked_on.unwrap_or_else(|| {
+                a.decided_at
+                    .map(|t| local_date(inner, site_id, t))
+                    .unwrap_or(today)
+            }),
             source,
             reference: format!("ADJ-{}", a.id),
             description: a.reason.clone(),

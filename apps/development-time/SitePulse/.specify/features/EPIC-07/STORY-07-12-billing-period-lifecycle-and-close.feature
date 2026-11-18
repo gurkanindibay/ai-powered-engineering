@@ -35,3 +35,20 @@ Feature: Billing period lifecycle and close
     When the manager requests to reopen it with reason "missed invoice"
     Then the period stays CLOSED until a second manager approves
     And the reopening is recorded in the audit list
+
+  @SC-07-12-06 @layer:backend @linked @edge @role_manager
+  Scenario: Late-fee catch-up after close is booked in the open period
+    Given period "2026-10" is closed and period "2026-11" is open
+    And the daily late-fee job has not run for liabilities due in October
+    When the job catches up the missed October days
+    Then October's closed trial balance remains equal to its saved snapshot
+    And the caught-up fees are booked in November
+    And the current trial balance receivable matches the dashboard total
+
+  @SC-07-12-07 @layer:backend @linked @edge @role_manager
+  Scenario: Backdated-payment penalty reevaluation is booked in the open period
+    Given period "2026-10" is closed and period "2026-11" is open
+    And an October liability has a late fee accrued after its value date
+    When a payment backdated to October reevaluates its late fee
+    Then the penalty reevaluation adjustment is dated in November
+    And October's closed trial balance remains equal to its saved snapshot

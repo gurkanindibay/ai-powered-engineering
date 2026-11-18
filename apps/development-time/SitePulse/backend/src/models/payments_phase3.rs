@@ -336,6 +336,10 @@ pub struct LateFeeAccrual {
     pub site_id: String,
     pub due_id: String,
     pub accrual_date: NaiveDate,
+    /// Date this accrual is booked in the ledger; closed-period catch-up rows
+    /// retain their accrual date but are posted in the current open period.
+    #[serde(default)]
+    pub booked_on: Option<NaiveDate>,
     pub outstanding_principal: Decimal,
     pub segment_start: NaiveDate,
     pub segment_base: Decimal,
@@ -1163,6 +1167,9 @@ pub struct LedgerAdjustment {
     pub decision_note: Option<String>,
     pub principal_before: Option<Decimal>,
     pub penalty_before: Option<Decimal>,
+    /// Explicit ledger date for adjustments that must not reopen a closed month.
+    #[serde(default)]
+    pub booked_on: Option<NaiveDate>,
 }
 
 /// A requested, then approved or rejected, correction of one accrued liability
