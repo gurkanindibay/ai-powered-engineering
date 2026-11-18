@@ -64,6 +64,26 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
         info!("Loaded {} sites from PostgreSQL", state.sites.len());
     }
 
+    // 1b. Load the accrual schedule of every site (STORY-07-10)
+    {
+        let rows = client.query("SELECT id, accrual_day, due_day, grace_days, catch_up_limit_months, go_live_date FROM sites WHERE deleted_at IS NULL", &[]).await?;
+        state.site_accrual_schedules.clear();
+        for row in rows {
+            let id: i64 = row.get(0);
+            let value = |i: usize| u32::try_from(row.get::<_, i16>(i)).unwrap_or(0);
+            state.site_accrual_schedules.insert(
+                id.to_string(),
+                crate::domain::accrual_schedule::AccrualSchedule {
+                    accrual_day: value(1),
+                    due_day: value(2),
+                    grace_days: value(3),
+                    catch_up_limit_months: value(4),
+                    go_live_date: row.get(5),
+                },
+            );
+        }
+    }
+
     // 2. Load Users
     {
         let rows = client.query("SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
@@ -314,7 +334,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 4. Load Dues Liabilities
     {
-        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through FROM dues_liabilities d WHERE d.status <> 'CANCELLED' AND EXISTS (SELECT 1 FROM units u WHERE u.id = d.unit_id AND u.deleted_at IS NULL)",
+        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through, grace_days FROM dues_liabilities d WHERE d.status <> 'CANCELLED' AND EXISTS (SELECT 1 FROM units u WHERE u.id = d.unit_id AND u.deleted_at IS NULL)",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -329,6 +349,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let debtor_type: DebtorType = row.get(9);
             let expense_type: ExpenseType = row.get(10);
             let penalty_accrued_through: Option<NaiveDate> = row.get(11);
+            let grace_days = u32::try_from(row.get::<_, i32>(12)).unwrap_or(0);
 
             let status = match status_str.to_uppercase().as_str() {
                 "PAID" => DebtStatus::Paid,
@@ -351,6 +372,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 debtor_type,
                 expense_type,
                 penalty_accrued_through,
+                grace_days,
             };
             crate::services::dues_ledger::refresh(&mut due);
             upsert_by_id(&mut state.dues, due, |x| &x.id);

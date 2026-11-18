@@ -32,6 +32,7 @@ async fn state_with_charged_late_fee(paid_penalty: &str) -> (AppState, NaiveDate
             debtor_type: DebtorType::Owner,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: Some(due_date + chrono::Days::new(30)),
+            grace_days: 0,
         });
     }
     (state, due_date)

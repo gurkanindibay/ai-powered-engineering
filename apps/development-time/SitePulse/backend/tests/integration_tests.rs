@@ -63,6 +63,7 @@ fn when_overdue_by_10_days_then_calculates_exact_5_percent_pro_rated_penalty() {
         debtor_type: DebtorType::Tenant,
         expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
+        grace_days: 0,
     };
 
     let evaluation_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
@@ -96,6 +97,7 @@ fn when_not_overdue_then_penalty_remains_zero() {
         debtor_type: DebtorType::Tenant,
         expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
+        grace_days: 0,
     };
 
     let evaluation_date = NaiveDate::from_ymd_opt(2026, 9, 10).unwrap();
@@ -1415,6 +1417,7 @@ async fn when_querying_resident_dashboard_then_separates_capital_dues_by_project
         debtor_type: DebtorType::Owner,
         expense_type: ExpenseType::CapitalDues,
         penalty_accrued_through: None,
+        grace_days: 0,
     });
     {
         let inner = state.inner.read().await;
@@ -1505,6 +1508,7 @@ async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent
         debtor_type: DebtorType::Tenant,
         expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
+        grace_days: 0,
     }];
 
     // Narrative contains NO block name and NO resident name, only the Virtual IBAN!
@@ -3528,6 +3532,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             debtor_type: DebtorType::Tenant,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         });
 
         // 1-30 days overdue (due 20 days ago)
@@ -3545,6 +3550,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             debtor_type: DebtorType::Tenant,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         });
 
         // 31-60 days overdue (due 45 days ago)
@@ -3562,6 +3568,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             debtor_type: DebtorType::Tenant,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         });
 
         // 60+ days overdue (due 80 days ago)
@@ -3579,6 +3586,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             debtor_type: DebtorType::Tenant,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         });
     }
 
@@ -3682,6 +3690,7 @@ fn owner_capital_due(id: &str, amount: &str) -> DuesLiability {
         debtor_type: DebtorType::Owner,
         expense_type: ExpenseType::CapitalDues,
         penalty_accrued_through: None,
+        grace_days: 0,
     }
 }
 
@@ -3810,6 +3819,7 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
             debtor_type: DebtorType::Owner,
             expense_type: ExpenseType::CapitalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         });
     }
 
@@ -3872,6 +3882,7 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
             debtor_type: DebtorType::Tenant,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         });
     }
 
@@ -4136,6 +4147,7 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
             debtor_type: DebtorType::Tenant,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         });
     }
 
@@ -4212,6 +4224,7 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
             debtor_type: DebtorType::Tenant,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         });
     }
 

@@ -5,6 +5,7 @@
 //! `docs/reusability/rust-backend-reusability-report.md`; keep them free of I/O,
 //! environment access, and global state so they stay independently testable.
 
+pub mod accrual_schedule;
 pub mod apportionment;
 pub mod billing_period;
 pub mod email;

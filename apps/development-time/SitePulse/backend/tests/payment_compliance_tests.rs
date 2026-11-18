@@ -39,6 +39,7 @@ fn liability(
         debtor_type: DebtorType::from_str_loose(debtor),
         expense_type: ExpenseType::from_str_loose(expense),
         penalty_accrued_through: None,
+        grace_days: 0,
     }
 }
 

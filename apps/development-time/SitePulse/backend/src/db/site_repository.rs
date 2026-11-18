@@ -524,3 +524,32 @@ pub async fn fetch_saas_global_stats(pool: &Pool) -> DbResult<SaasGlobalStatsDto
         monthly_collection_volume,
     })
 }
+
+/// Stores a site's accrual schedule (STORY-07-10). Periods already accrued keep their dates.
+pub async fn save_site_accrual_schedule(
+    pool: &Pool,
+    site_id: &str,
+    schedule: &crate::domain::accrual_schedule::AccrualSchedule,
+) -> DbResult<()> {
+    let id = require_id("site", site_id)?;
+    let client = pool.get().await?;
+    let small = |v: u32| i16::try_from(v).unwrap_or(0);
+    let updated = client
+        .execute(
+            "UPDATE sites SET accrual_day = $2, due_day = $3, grace_days = $4, \
+             catch_up_limit_months = $5, go_live_date = $6 WHERE id = $1 AND deleted_at IS NULL",
+            &[
+                &id,
+                &small(schedule.accrual_day),
+                &small(schedule.due_day),
+                &small(schedule.grace_days),
+                &small(schedule.catch_up_limit_months),
+                &schedule.go_live_date,
+            ],
+        )
+        .await?;
+    if updated == 0 {
+        return Err(format!("Site {} not found", site_id).into());
+    }
+    Ok(())
+}

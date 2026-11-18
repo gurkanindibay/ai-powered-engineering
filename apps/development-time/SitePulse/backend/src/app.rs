@@ -274,6 +274,9 @@ routes! {
     get "/api/v1/adjustments" => handlers::list_adjustments, Require(FinanceRead);
     post "/api/v1/adjustments" => handlers::request_adjustment, Require(FinanceManage);
     post "/api/v1/adjustments/{id}/decide" => handlers::decide_adjustment, Require(AdjustmentApprove);
+    // STORY-07-10: the site's accrual schedule
+    get "/api/v1/accrual-schedule" => handlers::get_accrual_schedule, Require(FinanceRead);
+    put "/api/v1/accrual-schedule" => handlers::update_accrual_schedule, Require(FinanceManage);
     // STORY-07-11: accrual corrections (cancel, re-issue, credit note)
     get "/api/v1/accrual-corrections" => handlers::list_corrections, Require(FinanceRead);
     post "/api/v1/accrual-corrections" => handlers::request_correction, Require(FinanceManage);

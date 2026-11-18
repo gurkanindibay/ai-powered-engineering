@@ -36,6 +36,7 @@ async fn when_the_daily_job_already_ran_then_stored_fee_day_rows_and_ledger_stay
             debtor_type: DebtorType::Owner,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         });
     }
     let job = LateFeeService::new(&state);

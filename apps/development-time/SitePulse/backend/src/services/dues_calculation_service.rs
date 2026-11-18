@@ -35,6 +35,8 @@ impl DuesCalculationService {
     /// * A liability that never accrued a segment (`penalty_accrued_through`
     ///   is `None`) is evaluated as one segment from the due date, and never
     ///   ends up below its stored penalty.
+    /// * While the liability's grace period runs (`grace_days` after the due date) no fee
+    ///   accrues; afterwards the fee runs from the due date.
     /// * `total_amount` is always the outstanding balance.
     pub fn calculate_delay_penalty(
         &self,
@@ -42,6 +44,18 @@ impl DuesCalculationService {
         evaluation_date: NaiveDate,
     ) -> DuesLiability {
         if matches!(dues.status, DebtStatus::Paid | DebtStatus::Cancelled) {
+            dues_ledger::refresh(&mut dues);
+            return dues;
+        }
+
+        // Grace period (STORY-07-10): while it runs nothing accrues and no segment starts. The
+        // first evaluation after it covers the segment from the due date, as KMK 20 requires.
+        if dues.penalty_accrued_through.is_none() && Self::in_grace(&dues, evaluation_date) {
+            dues.status = if evaluation_date > dues.due_date {
+                DebtStatus::Overdue
+            } else {
+                DebtStatus::Pending
+            };
             dues_ledger::refresh(&mut dues);
             return dues;
         }
@@ -82,6 +96,12 @@ impl DuesCalculationService {
         dues
     }
 
+    /// Whether `date` is within the liability's grace period (the due date and the
+    /// `grace_days` after it).
+    pub fn in_grace(dues: &DuesLiability, date: NaiveDate) -> bool {
+        dues.grace_days > 0 && date <= dues.due_date + chrono::Days::new(u64::from(dues.grace_days))
+    }
+
     /// Late fee a liability accrues from its due date up to `through`, given the
     /// principal payments made against it (`(payment date, principal)`).
     ///
@@ -96,10 +116,34 @@ impl DuesCalculationService {
         through: NaiveDate,
         principal_payments: &[(NaiveDate, Decimal)],
     ) -> Decimal {
+        self.penalty_through_with_grace(principal_amount, due_date, through, principal_payments, 0)
+    }
+
+    /// [`Self::penalty_through`] for a liability with a grace period (STORY-07-10): nothing
+    /// accrues up to the end of the grace period, a payment inside it counts as made on the
+    /// due date, and afterwards the fee runs from the due date.
+    pub fn penalty_through_with_grace(
+        &self,
+        principal_amount: Decimal,
+        due_date: NaiveDate,
+        through: NaiveDate,
+        principal_payments: &[(NaiveDate, Decimal)],
+        grace_days: u32,
+    ) -> Decimal {
+        let grace_end = due_date + chrono::Days::new(u64::from(grace_days));
+        if grace_days > 0 && through <= grace_end {
+            return Decimal::ZERO;
+        }
         let mut payments: Vec<(NaiveDate, Decimal)> = principal_payments
             .iter()
             .filter(|(_, amount)| *amount > Decimal::ZERO)
-            .copied()
+            .map(|(date, amount)| {
+                if grace_days > 0 && *date <= grace_end {
+                    (due_date, *amount)
+                } else {
+                    (*date, *amount)
+                }
+            })
             .collect();
         payments.sort_by_key(|(date, _)| *date);
         let mut penalty = Decimal::ZERO;
@@ -156,6 +200,7 @@ mod tests {
             debtor_type: DebtorType::Tenant,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
+            grace_days: 0,
         }
     }
 
