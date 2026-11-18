@@ -14,7 +14,9 @@
 use chrono::Utc;
 use rust_decimal::{Decimal, RoundingStrategy};
 
-use crate::db::correction_repository::{apply_accrual_correction, CorrectionWrite};
+use crate::db::correction_repository::{
+    apply_accrual_correction, reject_accrual_correction, Approval, CorrectionWrite,
+};
 use crate::db::finance_store::FinanceStore;
 use crate::finance_book::col;
 use crate::models::*;
@@ -262,22 +264,35 @@ impl CorrectionService {
                 "The approver must be a different person from the requester (four-eyes)".into(),
             ));
         }
-        let mut offset_unit = None;
-        if decision.approve {
-            self.apply(&mut correction).await?;
-            correction.status = REQUEST_APPROVED.to_string();
-            offset_unit = Some(correction.unit_id.clone());
-        } else {
-            correction.status = REQUEST_REJECTED.to_string();
-        }
         correction.decided_by = Some(caller.actor());
         correction.decided_at = Some(Utc::now());
         correction.decision_note = opt_text(&decision.note);
-        let saved = self.store.update(correction, col::corrections).await?;
-        if let Some(unit_id) = offset_unit {
-            self.offset_advance(&saved.site_id, &unit_id).await;
+        if !decision.approve {
+            correction.status = REQUEST_REJECTED.to_string();
+            if let Some(pool) = self.state.db_pool() {
+                if !reject_accrual_correction(pool, &correction).await? {
+                    return Err(already_decided(correction.id));
+                }
+            }
+            let mut inner = self.state.inner.write().await;
+            return match inner
+                .finance
+                .corrections
+                .iter_mut()
+                .find(|c| c.id == correction.id)
+            {
+                Some(slot) if slot.status == REQUEST_PENDING => {
+                    *slot = correction.clone();
+                    Ok(correction)
+                }
+                _ => Err(already_decided(correction.id)),
+            };
         }
-        Ok(saved)
+        correction.status = REQUEST_APPROVED.to_string();
+        self.apply(&mut correction).await?;
+        self.offset_advance(&correction.site_id, &correction.unit_id)
+            .await;
+        Ok(correction)
     }
 
     /// Offsets the advance the correction created against the debtor's other
@@ -290,6 +305,9 @@ impl CorrectionService {
         }
     }
 
+    /// Applies an approval. The correction leaves `PENDING` in the same database
+    /// transaction (or, without a database, in the same critical section) as the
+    /// liability and advance changes, so it can never be applied twice.
     async fn apply(&self, correction: &mut AccrualCorrection) -> FinanceResult<()> {
         let due = self
             .store
@@ -319,6 +337,11 @@ impl CorrectionService {
             "Accrual correction {}: {}",
             correction.id, correction.reason
         );
+        correction.principal_before = Some(due.principal_amount);
+        correction.penalty_before = Some(due.delay_penalty);
+        correction.paid_before = Some(due.paid_principal + due.paid_penalty);
+        correction.penalty_reversed = Some(plan.penalty_reversed);
+        correction.advance_credited = Some(plan.advance_credit);
         let mut replacement_id = None;
         let mut replacement = replacement;
         if let Some(pool) = self.state.db_pool() {
@@ -336,14 +359,24 @@ impl CorrectionService {
                 reference: &reference,
                 description: &description,
                 replacement: replacement.as_ref(),
+                correction,
             };
-            replacement_id = apply_accrual_correction(pool, &write)
-                .await?
-                .map(|id| id.to_string());
+            replacement_id = match apply_accrual_correction(pool, &write).await? {
+                Approval::Applied(id) => id.map(|id| id.to_string()),
+                Approval::AlreadyDecided => return Err(already_decided(correction.id)),
+            };
         } else if replacement.is_some() {
             replacement_id = Some(format!("due-{}", uuid::Uuid::new_v4().simple()));
         }
         let mut inner = self.state.inner.write().await;
+        if !inner
+            .finance
+            .corrections
+            .iter()
+            .any(|c| c.id == correction.id && c.status == REQUEST_PENDING)
+        {
+            return Err(already_decided(correction.id));
+        }
         let today = site_today(&inner, &correction.site_id);
         if let Some(stored) = inner.dues.iter_mut().find(|d| d.id == due.id) {
             apply_plan(stored, &plan, today);
@@ -355,12 +388,19 @@ impl CorrectionService {
             next.id = id;
             inner.dues.push(next.clone());
         }
-        correction.principal_before = Some(due.principal_amount);
-        correction.penalty_before = Some(due.delay_penalty);
-        correction.paid_before = Some(due.paid_principal + due.paid_penalty);
-        correction.penalty_reversed = Some(plan.penalty_reversed);
-        correction.advance_credited = Some(plan.advance_credit);
         correction.replacement_due_id = replacement_id;
+        if let Some(slot) = inner
+            .finance
+            .corrections
+            .iter_mut()
+            .find(|c| c.id == correction.id)
+        {
+            *slot = correction.clone();
+        }
         Ok(())
     }
+}
+
+fn already_decided(id: i64) -> FinanceError {
+    conflict(format!("Correction {} was already decided", id))
 }

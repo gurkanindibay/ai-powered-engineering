@@ -8,7 +8,7 @@ use rust_decimal::Decimal;
 
 use super::payment_repository::tx_credit_advance;
 use super::{require_id, DbResult};
-use crate::models::DuesLiability;
+use crate::models::{AccrualCorrection, DuesLiability};
 
 /// What an approved correction does to the database.
 pub struct CorrectionWrite<'a> {
@@ -30,19 +30,81 @@ pub struct CorrectionWrite<'a> {
     pub description: &'a str,
     /// The corrected liability of a re-issue.
     pub replacement: Option<&'a DuesLiability>,
+    /// The correction being approved, with its decision and snapshot fields set.
+    pub correction: &'a AccrualCorrection,
 }
 
-/// Applies the correction and returns the id of the replacement liability, if any.
+/// How an approval ended.
+pub enum Approval {
+    /// Applied; the id of the replacement liability, if any.
+    Applied(Option<i64>),
+    /// Another approval or rejection won; nothing was changed.
+    AlreadyDecided,
+}
+
+/// Rejects a pending correction. Returns `false` when it was no longer pending.
+pub async fn reject_accrual_correction(
+    pool: &Pool,
+    correction: &AccrualCorrection,
+) -> DbResult<bool> {
+    let client = pool.get().await?;
+    let changed = client
+        .execute(
+            "UPDATE accrual_corrections
+             SET status = 'REJECTED', decided_by = $2, decided_at = $3, decision_note = $4
+             WHERE id = $1 AND status = 'PENDING'",
+            &[
+                &correction.id,
+                &correction.decided_by,
+                &correction.decided_at,
+                &correction.decision_note,
+            ],
+        )
+        .await?;
+    Ok(changed == 1)
+}
+
+/// Approves the correction and applies it, all in one transaction. The first
+/// statement claims the correction (`PENDING` to `APPROVED`); a concurrent or
+/// repeated approval finds no pending row and changes nothing, so the liability
+/// change and the advance credit happen exactly once.
 pub async fn apply_accrual_correction(
     pool: &Pool,
     write: &CorrectionWrite<'_>,
-) -> DbResult<Option<i64>> {
+) -> DbResult<Approval> {
     let site = require_id("site", write.site_id)?;
     let due = require_id("dues liability", write.due_id)?;
     let unit = require_id("unit", write.unit_id)?;
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
     super::tx_bind_tenant(&tx, site).await?;
+
+    let c = write.correction;
+    let claimed = tx
+        .execute(
+            r#"
+            UPDATE accrual_corrections
+            SET status = 'APPROVED', decided_by = $2, decided_at = $3, decision_note = $4,
+                principal_before = $5, penalty_before = $6, paid_before = $7,
+                penalty_reversed = $8, advance_credited = $9
+            WHERE id = $1 AND status = 'PENDING'
+            "#,
+            &[
+                &c.id,
+                &c.decided_by,
+                &c.decided_at,
+                &c.decision_note,
+                &c.principal_before,
+                &c.penalty_before,
+                &c.paid_before,
+                &c.penalty_reversed,
+                &c.advance_credited,
+            ],
+        )
+        .await?;
+    if claimed != 1 {
+        return Ok(Approval::AlreadyDecided);
+    }
 
     let changed = if write.cancel {
         tx.execute(
@@ -125,6 +187,13 @@ pub async fn apply_accrual_correction(
         }
         None => None,
     };
+    if let Some(id) = replacement_id {
+        tx.execute(
+            "UPDATE accrual_corrections SET replacement_due_id = $2 WHERE id = $1",
+            &[&c.id, &id],
+        )
+        .await?;
+    }
     tx.commit().await?;
-    Ok(replacement_id)
+    Ok(Approval::Applied(replacement_id))
 }

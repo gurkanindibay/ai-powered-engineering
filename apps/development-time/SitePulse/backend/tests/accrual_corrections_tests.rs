@@ -499,6 +499,51 @@ fn the_credit_note_plan_rounds_the_remaining_late_fee_half_away_from_zero() {
     assert_eq!(cancel.penalty_reversed, d("23.33"));
 }
 
+#[tokio::test]
+async fn approving_the_same_correction_twice_concurrently_applies_it_once() {
+    let state = fixture().await;
+    push_due(&state, liability("k-1", "1000.00", today() + Days::new(5))).await;
+    pay(&state, "800.00").await;
+    let corrections = CorrectionService::new(&state);
+    let requested = corrections
+        .request(
+            &first_manager(),
+            request("k-1", "CREDIT_NOTE", Some("500.00"), "budget revision"),
+        )
+        .await
+        .unwrap();
+    let other = manager("usr-site-manager-3");
+    let approver = second_manager();
+    let (a, b) = tokio::join!(
+        corrections.decide(&approver, requested.id, approve()),
+        corrections.decide(&other, requested.id, approve()),
+    );
+    assert_eq!(
+        [a.is_ok(), b.is_ok()].iter().filter(|ok| **ok).count(),
+        1,
+        "exactly one approval wins"
+    );
+    assert!(matches!(
+        a.err().or(b.err()),
+        Some(FinanceError::Conflict(_))
+    ));
+    assert_eq!(due_of(&state, "k-1").await.principal_amount, d("500.00"));
+    assert_eq!(
+        state.inner.read().await.advance_of(UNIT, "OWNER"),
+        d("300.00")
+    );
+
+    // A later approval, for example a retry after a failure, changes nothing.
+    let again = corrections
+        .decide(&second_manager(), requested.id, approve())
+        .await;
+    assert!(matches!(again, Err(FinanceError::Conflict(_))));
+    assert_eq!(
+        state.inner.read().await.advance_of(UNIT, "OWNER"),
+        d("300.00")
+    );
+}
+
 /// PostgreSQL round trip (opt-in, scratch database; see `finance_store_pg_tests`):
 /// the three corrections are stored, survive a reload and credit the advance in the database.
 #[tokio::test]
@@ -596,6 +641,41 @@ async fn corrections_round_trip_through_postgresql() {
         .decide(&second, credited.id, approve())
         .await
         .unwrap();
+
+    // Two approvers at once: the correction is claimed in the same transaction as
+    // the change, so the advance is credited once.
+    let mut paid_due = make("900.00", ExpenseType::OperationalDues);
+    paid_due.period = format!("{}b", &period[..9]);
+    let paid_due = store.insert_due(paid_due).await.unwrap().unwrap();
+    let note = corrections
+        .request(
+            &first,
+            request(&paid_due.id, "CANCEL", None, "duplicate charge"),
+        )
+        .await
+        .unwrap();
+    let third = Caller {
+        user_id: "990002".into(),
+        email: "m3@pg".into(),
+        ..first.clone()
+    };
+    let (x, y) = tokio::join!(
+        corrections.decide(&second, note.id, approve()),
+        corrections.decide(&third, note.id, approve()),
+    );
+    assert_eq!([x.is_ok(), y.is_ok()].iter().filter(|ok| **ok).count(), 1);
+    let approvals: i64 = pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT count(*) FROM accrual_corrections WHERE id = $1 AND status = 'APPROVED'",
+            &[&note.id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(approvals, 1);
 
     let stored: (String, rust_decimal::Decimal) = {
         let client = pool.get().await.unwrap();
