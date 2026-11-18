@@ -4458,6 +4458,7 @@ fn payment_on(date: chrono::DateTime<Utc>) -> RecordManualPaymentRequest {
     }
 }
 
+// covers: SC-09-04-05
 #[tokio::test]
 async fn when_payment_date_is_in_the_future_then_it_is_rejected() {
     let service = PaymentTrackingService::new(AppState::new());
@@ -4468,6 +4469,7 @@ async fn when_payment_date_is_in_the_future_then_it_is_rejected() {
     assert!(err.contains("gelecekte"), "unexpected error: {err}");
 }
 
+// covers: SC-09-04-05
 #[tokio::test]
 async fn when_payment_date_is_beyond_the_backdating_window_then_it_is_rejected() {
     let service = PaymentTrackingService::new(AppState::new());

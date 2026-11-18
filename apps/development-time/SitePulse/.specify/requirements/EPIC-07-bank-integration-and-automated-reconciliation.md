@@ -224,7 +224,7 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
 - **Acceptance Criteria:**
   Executable scenarios: [`STORY-07-10-accrual-schedule-catch-up-and-grace.feature`](../features/EPIC-07/STORY-07-10-accrual-schedule-catch-up-and-grace.feature).
 - **Implementation Artifacts:**
-  - `domain/accrual_schedule.rs` (due-day clamp, catch-up plan and limit), `scheduler.rs` (`run_accrual_with_report`), `migrations/V41__accrual_schedule.sql`
+  - `domain/accrual_schedule.rs` (due-day clamp, catch-up plan and limit), `scheduler.rs` (`run_accrual_with_report`), `migrations/V42__accrual_schedule.sql`
   - API: `GET/PUT /api/v1/accrual-schedule` (the caller's site; accrual day, due day, grace days, catch-up limit, go-live date)
   - `services/dues_calculation_service.rs` and `services/late_fee_service.rs` (grace period; `DuesLiability.grace_days` is copied at accrual so later changes touch only new periods)
 
