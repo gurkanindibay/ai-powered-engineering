@@ -720,6 +720,7 @@ def check_finance_desk(ctx: Context) -> Tuple[bool, str]:
                 f"self-approval {self_approve}, foreign isolated {isolated}, forged lawyer token {lawyer}, violations {violations}")
 
 
+# covers: SC-09-05-02
 def check_exit_settlement_self_approval_audited(ctx: Context) -> Tuple[bool, str]:
     """A requester cannot approve their own exit settlement; middleware audits the denial."""
     db, b = ctx.backend.db_name, ctx.backend.base
