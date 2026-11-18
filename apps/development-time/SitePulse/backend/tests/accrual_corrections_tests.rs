@@ -882,7 +882,7 @@ async fn corrections_round_trip_through_postgresql() {
             .unwrap();
         (row.get(0), row.get(1))
     };
-    assert_eq!(stored.1, d("1000.00"));
+    assert_eq!(stored.1, d("400.00"));
     let cancelled: String = pool
         .get()
         .await

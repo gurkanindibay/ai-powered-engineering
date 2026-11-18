@@ -193,7 +193,10 @@ pub async fn apply_accrual_correction(
         replacement_ids.push(row.get::<_, i64>(0));
     }
     if let Some(id) = replacement_ids.first() {
-        let ids_json = serde_json::to_value(&replacement_ids)?;
+        // Stored as strings, like `AccrualCorrection::replacement_due_ids`, so a reload
+        // (`load_all_from_db`) can read the column back.
+        let id_strings: Vec<String> = replacement_ids.iter().map(i64::to_string).collect();
+        let ids_json = serde_json::to_value(&id_strings)?;
         tx.execute(
             "UPDATE accrual_corrections SET replacement_due_id = $2, replacement_due_ids = $3 WHERE id = $1",
             &[&c.id, id, &ids_json],
