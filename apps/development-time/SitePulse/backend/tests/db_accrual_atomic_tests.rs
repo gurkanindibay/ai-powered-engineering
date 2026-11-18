@@ -37,6 +37,8 @@ struct Env {
     app: Router,
     token: String,
     site: i64,
+    other_site: i64,
+    other_token: String,
 }
 
 impl Env {
@@ -60,7 +62,7 @@ impl Env {
             .await
             .expect("connection")
             .execute(
-                "WITH s AS (SELECT id FROM sites WHERE slug = 'begonya-sitesi'),
+                "WITH s AS (SELECT id FROM sites WHERE deleted_at IS NULL),
                       p AS (INSERT INTO persons (full_name, email, person_type, site_id)
                             SELECT 'Manager ' || id, 'accrual' || id || '@tenant.test', 'SITE_MANAGER', id FROM s
                             RETURNING id, email)
@@ -79,10 +81,19 @@ impl Env {
             .await
             .expect("site")
             .get(0);
+        let other_site: i64 = pool
+            .get()
+            .await
+            .expect("connection")
+            .query_one("SELECT id FROM sites WHERE slug = 'kardelen-rezidans'", &[])
+            .await
+            .expect("other site")
+            .get(0);
         let state = AppState::with_pool(Some(pool.clone()));
         state.reload_from_db().await.expect("load state");
         let app = build_router(state.clone());
         let token = login(&app, &format!("accrual{site}@tenant.test")).await;
+        let other_token = login(&app, &format!("accrual{other_site}@tenant.test")).await;
         Self {
             name,
             admin,
@@ -91,6 +102,8 @@ impl Env {
             app,
             token,
             site,
+            other_site,
+            other_token,
         }
     }
 
@@ -117,10 +130,20 @@ impl Env {
     }
 
     async fn call(&self, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
+        self.call_as(&self.token, method, uri, body).await
+    }
+
+    async fn call_as(
+        &self,
+        token: &str,
+        method: &str,
+        uri: &str,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
         let mut req = Request::builder()
             .method(method)
             .uri(uri)
-            .header("authorization", format!("Bearer {}", self.token));
+            .header("authorization", format!("Bearer {token}"));
         let body = match body {
             Some(b) => {
                 req = req.header("content-type", "application/json");
@@ -338,5 +361,64 @@ async fn skipped_units_are_recorded_where_the_manager_can_read_them() {
     assert_eq!(run["period_key"], "2026-10");
     assert_eq!(run["source"], "MANUAL");
     assert_eq!(run["skipped_units"].as_array().map(Vec::len), Some(1));
+    env.drop_db().await;
+}
+
+// covers: SC-07-08-03
+#[tokio::test]
+#[ignore = "needs PostgreSQL and DB_PASS"]
+async fn two_sites_accrue_in_a_row_each_with_its_own_period_row() {
+    let env = Env::new("twosites").await;
+    // The second site gets two units with a tariff of its own.
+    env.exec(&format!(
+        "WITH b AS (INSERT INTO blocks (site_id, block_name) VALUES ({site}, 'K Blok') RETURNING id),
+              h AS (INSERT INTO house_types (site_id, type_name, dues_amount) VALUES ({site}, '2+1', 1100.00) ON CONFLICT (site_id, type_name) DO UPDATE SET dues_amount = EXCLUDED.dues_amount RETURNING id)
+         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, house_type, house_type_id)
+         SELECT b.id, {site}, n, 1, 1, '2+1', h.id FROM b, h, generate_series(1, 2) n",
+        site = env.other_site
+    ))
+    .await;
+    env.state.reload_from_db().await.expect("reload");
+    for (token, site) in [
+        (env.token.clone(), env.site),
+        (env.other_token.clone(), env.other_site),
+    ] {
+        let (status, body) = env
+            .call_as(
+                &token,
+                "POST",
+                "/api/v1/dues/accrue-period",
+                Some(json!({
+                    "site_id": site.to_string(),
+                    "period": "2026-10",
+                    "amount": "0",
+                    "due_date": "2026-10-15",
+                })),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "site {site}: {body}");
+        assert!(
+            body["newly_accrued_units_count"].as_i64().unwrap_or(0) > 0,
+            "{body}"
+        );
+    }
+    // A later period of the first site, after the second site took its first.
+    let (status, body) = env.accrue("2026-11", "2026-11-15").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        env.int(
+            "SELECT count(DISTINCT id) FROM dues_periods WHERE period_key IN ('2026-10','2026-11')"
+        )
+        .await,
+        3
+    );
+    assert_eq!(
+        env.int(&format!(
+            "SELECT count(*) FROM dues_periods WHERE site_id = {} AND period_key = '2026-10'",
+            env.other_site
+        ))
+        .await,
+        1
+    );
     env.drop_db().await;
 }

@@ -87,7 +87,7 @@ SELECT 'dues_liabilities', id, period, 'duplicate of another operational liabili
 FROM (
     SELECT id, period,
            row_number() OVER (PARTITION BY unit_id, period_key, expense_type ORDER BY id) AS rn
-    FROM dues_liabilities WHERE period_key IS NOT NULL AND capital_project_id IS NULL
+    FROM dues_liabilities WHERE period_key IS NOT NULL AND capital_project_id IS NULL AND status <> 'CANCELLED'
 ) d WHERE rn > 1;
 UPDATE dues_liabilities SET period_key = NULL
 WHERE id IN (SELECT row_id FROM dues_period_migration_issues
@@ -109,8 +109,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_dues_periods_site_key
     ON dues_periods (site_id, period_key) WHERE period_key IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_unit_period_key_expense
     ON dues_liabilities (unit_id, period_key, expense_type)
-    WHERE capital_project_id IS NULL AND period_key IS NOT NULL;
+    WHERE capital_project_id IS NULL AND period_key IS NOT NULL AND status <> 'CANCELLED';
 
 DROP FUNCTION sp_period_key(TEXT);
+
+-- Earlier code inserted periods with explicit ids; move the identity sequence past them.
+SELECT setval(pg_get_serial_sequence('dues_periods', 'id'),
+              GREATEST((SELECT COALESCE(MAX(id), 0) FROM dues_periods), 1));
 
 SELECT sp_enable_tenant_rls('dues_accrual_runs', 'site_id = sp_tenant_site()');

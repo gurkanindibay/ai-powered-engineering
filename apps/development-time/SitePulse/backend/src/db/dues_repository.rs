@@ -90,6 +90,14 @@ pub async fn save_dues_period(
                     ],
                 )
                 .await?;
+            // An explicit id leaves the identity sequence behind; later default inserts
+            // (the accrual batch) would collide with it.
+            client
+                .execute(
+                    "SELECT setval(pg_get_serial_sequence('dues_periods', 'id'), (SELECT COALESCE(MAX(id), 1) FROM dues_periods))",
+                    &[],
+                )
+                .await?;
             info!(
                 "Saved dues period '{}' (numeric ID: {}) for site {} to PostgreSQL",
                 period.period_name, id_num, period.site_id
@@ -322,8 +330,12 @@ pub async fn commit_accrual_batch(
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
     super::tx_bind_tenant(&tx, site).await?;
-    tx.execute("SELECT pg_advisory_xact_lock(7708)", &[])
-        .await?;
+    // Serialise accruals of the same site and month only.
+    tx.execute(
+        "SELECT pg_advisory_xact_lock(7708, hashtext($1::bigint::text || ':' || $2))",
+        &[&site, &batch.period_key],
+    )
+    .await?;
     let existing = tx
         .query_opt(
             "SELECT id FROM dues_periods WHERE site_id = $1 AND period_key = $2",
@@ -334,19 +346,24 @@ pub async fn commit_accrual_batch(
         None
     } else {
         Some(match existing {
-        Some(row) => row.get(0),
-        None => tx
-            .query_one(
-                r#"
-                INSERT INTO dues_periods (id, site_id, period_name, period_key, due_date, status)
-                VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM dues_periods), $1, $2, $3, $4, 'ACTIVE')
+            Some(row) => row.get(0),
+            None => tx
+                .query_one(
+                    r#"
+                INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status)
+                VALUES ($1, $2, $3, $4, 'ACTIVE')
                 ON CONFLICT (site_id, period_name) DO UPDATE SET period_key = EXCLUDED.period_key
                 RETURNING id
                 "#,
-                &[&site, &batch.period_label, &batch.period_key, &batch.due_date],
-            )
-            .await?
-            .get(0),
+                    &[
+                        &site,
+                        &batch.period_label,
+                        &batch.period_key,
+                        &batch.due_date,
+                    ],
+                )
+                .await?
+                .get(0),
         })
     };
     let mut due_ids = Vec::with_capacity(batch.dues.len());
@@ -664,4 +681,31 @@ pub async fn fetch_debt_aging_report_from_db(
         grand_total,
         brackets,
     })
+}
+
+/// Logs, once at startup, the liabilities and periods the V37 migration could not resolve to
+/// a month (they keep a NULL key and are not covered by the duplicate guard), so they get
+/// fixed by hand instead of staying unnoticed.
+pub async fn warn_unresolved_period_labels(pool: &Pool) -> DbResult<usize> {
+    let client = pool.get().await?;
+    let rows = client
+        .query(
+            "SELECT table_name, count(*), min(period) FROM dues_period_migration_issues GROUP BY table_name",
+            &[],
+        )
+        .await?;
+    let mut total = 0usize;
+    for row in &rows {
+        let table: String = row.get(0);
+        let count: i64 = row.get(1);
+        let example: String = row.get(2);
+        total += usize::try_from(count).unwrap_or(0);
+        tracing::warn!(
+            "{} row(s) of {} have a period label that is not a month or duplicates another (for example '{}'); see dues_period_migration_issues",
+            count,
+            table,
+            example
+        );
+    }
+    Ok(total)
 }
