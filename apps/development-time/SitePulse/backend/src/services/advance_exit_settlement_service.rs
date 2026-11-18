@@ -50,7 +50,8 @@ impl AdvanceExitSettlementService {
         let beneficiary_person = beneficiary_person_id
             .as_deref()
             .map(|id| parse_id("person", id))
-            .transpose()?;
+            .transpose()?
+            .ok_or_else(|| invalid("beneficiary_person_id is required for an exit settlement"))?;
         let pool = self
             .state
             .pool
@@ -62,9 +63,7 @@ impl AdvanceExitSettlementService {
             .await
             .map_err(db_unavailable)?;
         ensure_unit(&tx, site, unit).await?;
-        if let Some(person_id) = beneficiary_person {
-            ensure_person(&tx, site, unit, person_id, source).await?;
-        }
+        ensure_person(&tx, site, unit, beneficiary_person, source).await?;
         if let Some(existing) = find_by_request_key(&tx, site, &request_key).await? {
             if matches_request(
                 &existing,
@@ -75,7 +74,7 @@ impl AdvanceExitSettlementService {
                 target,
                 amount,
                 &beneficiary_name,
-                beneficiary_person,
+                Some(beneficiary_person),
                 &note,
             ) {
                 tx.commit().await.map_err(db_unavailable)?;
@@ -98,7 +97,7 @@ impl AdvanceExitSettlementService {
                 target,
                 amount,
                 &beneficiary_name,
-                beneficiary_person,
+                Some(beneficiary_person),
                 &note,
             ) {
                 tx.commit().await.map_err(db_unavailable)?;
@@ -107,6 +106,13 @@ impl AdvanceExitSettlementService {
             return Err(conflict(
                 "request_key was already used for a different settlement",
             ));
+        }
+        let exit_balance = outstanding_exit_balance(&tx, unit, beneficiary_person, source).await?;
+        if exit_balance > Decimal::ZERO {
+            return Err(conflict(format!(
+                "Cannot request an exit settlement while the departing resident has ₺{:.2} in unpaid exit dues",
+                exit_balance
+            )));
         }
         let available: Decimal = tx
             .query_one(
@@ -176,7 +182,7 @@ impl AdvanceExitSettlementService {
                     target,
                     amount,
                     &beneficiary_name,
-                    beneficiary_person,
+                    Some(beneficiary_person),
                     &note,
                 ) {
                     return Err(conflict(
@@ -188,7 +194,13 @@ impl AdvanceExitSettlementService {
             }
         };
         tx.commit().await.map_err(db_unavailable)?;
-        Ok(from_row(&row))
+        let settlement = from_row(&row);
+        self.state.inner.write().await.reserve_exit_advance(
+            &settlement.unit_id,
+            source,
+            settlement.amount,
+        );
+        Ok(settlement)
     }
 
     pub async fn list(&self, caller: &Caller) -> FinanceResult<Vec<AdvanceExitSettlement>> {
@@ -283,6 +295,24 @@ impl AdvanceExitSettlementService {
             if settlement.kind == "TRANSFER" && reference.is_some() {
                 return Err(invalid("payment_reference is only valid for a payout"));
             }
+            let beneficiary_person = settlement
+                .beneficiary_person_id
+                .as_deref()
+                .ok_or_else(|| invalid("beneficiary_person_id is required for an exit settlement"))
+                .and_then(|id| parse_id("person", id))?;
+            let exit_balance = outstanding_exit_balance(
+                &tx,
+                parse_id("unit", &settlement.unit_id)?,
+                beneficiary_person,
+                &settlement.source_debtor,
+            )
+            .await?;
+            if exit_balance > Decimal::ZERO {
+                return Err(conflict(format!(
+                    "Cannot approve an exit settlement while the departing resident has ₺{:.2} in unpaid exit dues",
+                    exit_balance
+                )));
+            }
             apply_settlement(&tx, site, &settlement, caller, reference.as_deref()).await?;
             settlement.status = APPROVED.to_string();
         } else {
@@ -320,7 +350,20 @@ impl AdvanceExitSettlementService {
             .await
             .map_err(db_unavailable)?;
         tx.commit().await.map_err(db_unavailable)?;
-        Ok(from_row(&updated))
+        let decided = from_row(&updated);
+        let mut inner = self.state.inner.write().await;
+        inner.release_exit_advance_reservation(
+            &decided.unit_id,
+            &decided.source_debtor,
+            decided.amount,
+        );
+        if decided.status == APPROVED {
+            inner.adjust_advance(&decided.unit_id, &decided.source_debtor, -decided.amount);
+            if let Some(target) = decided.target_debtor.as_deref() {
+                inner.adjust_advance(&decided.unit_id, target, decided.amount);
+            }
+        }
+        Ok(decided)
     }
 }
 
@@ -388,6 +431,11 @@ fn validate_request(req: &CreateAdvanceExitSettlementRequest) -> FinanceResult<V
         .map(str::trim)
         .filter(|id| !id.is_empty())
         .map(str::to_string);
+    if beneficiary_person_id.is_none() {
+        return Err(invalid(
+            "beneficiary_person_id is required for an exit settlement",
+        ));
+    }
     let target = match (
         kind,
         req.target_debtor
@@ -519,6 +567,33 @@ async fn ensure_person(
     }
 }
 
+async fn outstanding_exit_balance(
+    tx: &Transaction<'_>,
+    unit: i64,
+    person: i64,
+    source_debtor: &str,
+) -> FinanceResult<Decimal> {
+    let balance: Decimal = tx
+        .query_one(
+            "SELECT COALESCE(SUM(GREATEST(d.principal_amount + d.delay_penalty - d.paid_amount, 0)), 0)::NUMERIC(15,2)
+               FROM unit_occupancies o
+               JOIN dues_liabilities d ON d.unit_id = o.unit_id
+              WHERE o.unit_id = $1 AND o.person_id = $2
+                AND o.occupancy_type = $3 AND NOT o.is_active
+                AND d.status NOT IN ('PAID', 'CANCELLED')
+                AND ($3 = 'OWNER' OR d.expense_type <> 'CAPITAL_DUES')
+                AND (d.liable_person_id = o.person_id OR d.occupancy_id = o.id
+                     OR (d.liable_person_id IS NULL AND d.occupancy_id IS NULL
+                         AND d.debtor_type = $3 AND d.due_date >= o.start_date
+                         AND d.due_date <= o.end_date))",
+            &[&unit, &person, &source_debtor],
+        )
+        .await
+        .map_err(db_unavailable)?
+        .get(0);
+    Ok(balance.max(Decimal::ZERO))
+}
+
 async fn lock_advance(tx: &Transaction<'_>, unit: i64, debtor: &str) -> FinanceResult<()> {
     tx.execute(
         "INSERT INTO advance_balances (unit_id, debtor_type, balance)
@@ -554,6 +629,32 @@ async fn apply_settlement(
     debtors.dedup();
     for debtor in debtors {
         lock_advance(tx, unit, debtor).await?;
+    }
+    let reserved: Decimal = tx
+        .query_one(
+            "SELECT COALESCE(SUM(amount), 0)::NUMERIC(15,2)
+               FROM advance_exit_settlements
+              WHERE site_id = $1 AND unit_id = $2 AND source_debtor = $3
+                AND status = 'PENDING' AND id <> $4",
+            &[&site, &unit, &source, &settlement.id],
+        )
+        .await
+        .map_err(db_unavailable)?
+        .get(0);
+    let balance: Decimal = tx
+        .query_one(
+            "SELECT balance FROM advance_balances WHERE unit_id = $1 AND debtor_type = $2",
+            &[&unit, &source],
+        )
+        .await
+        .map_err(db_unavailable)?
+        .get(0);
+    if balance - reserved < settlement.amount {
+        return Err(conflict(format!(
+            "The {} advance has ₺{:.2} available after other pending exit requests",
+            source,
+            balance - reserved
+        )));
     }
     let source_updated = tx
         .execute(
@@ -711,7 +812,7 @@ mod tests {
             target_debtor: target.map(str::to_string),
             amount,
             beneficiary_name: "Departing Resident".to_string(),
-            beneficiary_person_id: None,
+            beneficiary_person_id: Some("1".to_string()),
             note: None,
         }
     }
@@ -736,6 +837,13 @@ mod tests {
         assert!(
             validate_request(&request("PAYOUT", "RESIDENT", None, Decimal::new(100, 0))).is_err()
         );
+    }
+
+    #[test]
+    fn request_requires_departing_beneficiary_identity() {
+        let mut req = request("PAYOUT", TENANT, None, Decimal::new(100, 2));
+        req.beneficiary_person_id = None;
+        assert!(validate_request(&req).is_err());
     }
 
     #[test]

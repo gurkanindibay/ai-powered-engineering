@@ -6,7 +6,9 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use sitepulse_backend::{
     db,
-    models::{CreateAdvanceExitSettlementRequest, DecideAdvanceExitSettlementRequest},
+    models::{
+        CreateAdvanceExitSettlementRequest, DecideAdvanceExitSettlementRequest, IndependentUnit,
+    },
     services::{
         advance_exit_settlement_service::AdvanceExitSettlementService,
         finance_common::{Caller, FinanceError},
@@ -100,6 +102,45 @@ impl TestDb {
             .expect("seed unit");
         (row.get(0), row.get(1))
     }
+
+    async fn departing_tenant(&self, unit_id: i64, site_id: &str, debt: Decimal) -> i64 {
+        let client = self.pool.get().await.expect("test connection");
+        let site_id = site_id.parse::<i64>().expect("numeric site id");
+        let person_id: i64 = client
+            .query_one(
+                "INSERT INTO persons (site_id, full_name, person_type)
+                 VALUES ($1, 'Exit Settlement Test Tenant', 'HOME_RESIDENT') RETURNING id",
+                &[&site_id],
+            )
+            .await
+            .expect("create test tenant")
+            .get(0);
+        let occupancy_id: i64 = client
+            .query_one(
+                "INSERT INTO unit_occupancies
+                    (unit_id, person_id, occupancy_type, start_date, end_date, is_active, exit_balance)
+                 VALUES ($1, $2, 'TENANT', CURRENT_DATE - 30, CURRENT_DATE - 1, FALSE, $3)
+                 RETURNING id",
+                &[&unit_id, &person_id, &debt],
+            )
+            .await
+            .expect("create closed test occupancy")
+            .get(0);
+        if debt > Decimal::ZERO {
+            client
+                .execute(
+                    "INSERT INTO dues_liabilities
+                        (unit_id, period, debtor_type, expense_type, liable_person_id, occupancy_id,
+                         principal_amount, due_date, status)
+                     VALUES ($1, 'Exit settlement test', 'TENANT', 'OPERATIONAL_DUES', $2, $3,
+                             $4, CURRENT_DATE - 1, 'PENDING')",
+                    &[&unit_id, &person_id, &occupancy_id, &debt],
+                )
+                .await
+                .expect("create frozen exit due");
+        }
+        person_id
+    }
 }
 
 fn caller(site_id: &str, user_id: &str) -> Caller {
@@ -131,7 +172,7 @@ fn request(
         target_debtor: target.map(str::to_string),
         amount,
         beneficiary_name: "Departing Resident".to_string(),
-        beneficiary_person_id: None,
+        beneficiary_person_id: Some("1".to_string()),
         note: Some("Move-out settlement".to_string()),
     }
 }
@@ -145,6 +186,11 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
     db.seed_advance(unit, "TENANT", amount).await;
     db.seed_advance(unit, "OWNER", amount).await;
     let state = AppState::with_pool(Some(db.pool.clone()));
+    {
+        let mut inner = state.inner.write().await;
+        inner.adjust_advance(&unit.to_string(), "TENANT", amount);
+        inner.adjust_advance(&unit.to_string(), "OWNER", amount);
+    }
     let service = AdvanceExitSettlementService::new(&state);
     let requester = caller(&site_id, "requester");
     let checker = caller(&site_id, "checker");
@@ -158,6 +204,31 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .await
         .expect("seeded owner")
         .get(0);
+    let tenant_id = db.departing_tenant(unit, &site_id, Decimal::ZERO).await;
+    let indebted_tenant = db
+        .departing_tenant(unit, &site_id, Decimal::new(30000, 2))
+        .await;
+    let mut blocked_request = request("PAYOUT", "TENANT", None, Decimal::new(100, 2));
+    blocked_request.beneficiary_person_id = Some(indebted_tenant.to_string());
+    assert!(matches!(
+        service
+            .create(&requester, &unit.to_string(), blocked_request)
+            .await,
+        Err(FinanceError::Conflict(_))
+    ));
+    {
+        let mut inner = state.inner.write().await;
+        inner.reserve_exit_advance(&unit.to_string(), "TENANT", Decimal::new(5000, 2));
+        assert_eq!(
+            inner.available_advance_of(&unit.to_string(), "TENANT"),
+            Decimal::new(5000, 2)
+        );
+        inner.release_exit_advance_reservation(&unit.to_string(), "TENANT", Decimal::new(5000, 2));
+        assert_eq!(
+            inner.available_advance_of(&unit.to_string(), "TENANT"),
+            amount
+        );
+    }
     let mut unrelated_tenant = request("PAYOUT", "TENANT", None, Decimal::new(100, 2));
     unrelated_tenant.beneficiary_person_id = Some(owner_id.to_string());
     assert!(matches!(
@@ -167,7 +238,8 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         Err(FinanceError::NotFound(_))
     ));
 
-    let payout_request = request("PAYOUT", "TENANT", None, Decimal::new(4000, 2));
+    let mut payout_request = request("PAYOUT", "TENANT", None, Decimal::new(4000, 2));
+    payout_request.beneficiary_person_id = Some(tenant_id.to_string());
     let payout = service
         .create(&requester, &unit.to_string(), payout_request.clone())
         .await
@@ -177,8 +249,38 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .await
         .expect("idempotent retry returns the original request");
     assert_eq!(retried_payout.id, payout.id);
+    assert_eq!(
+        state
+            .inner
+            .read()
+            .await
+            .available_advance_of(&unit.to_string(), "TENANT"),
+        Decimal::new(6000, 2)
+    );
+    let unit_projection = IndependentUnit {
+        id: unit.to_string(),
+        site_id: site_id.clone(),
+        block_id: "A Blok".to_string(),
+        unit_number: 14,
+        floor: 0,
+        land_share: 1,
+        owner_user_id: None,
+        tenant_user_id: None,
+        virtual_iban: None,
+        house_type: None,
+    };
+    let inner = state.inner.read().await;
+    let statement = sitepulse_backend::services::resident_statement::build_statement(
+        &inner,
+        &unit_projection,
+        Some("TENANT"),
+        chrono::Utc::now().date_naive(),
+    );
+    assert_eq!(statement.debtors[0].advance_balance, Decimal::new(6000, 2));
+    drop(inner);
     let mut changed_payload = request("PAYOUT", "TENANT", None, Decimal::new(5000, 2));
     changed_payload.request_key = retried_payout.request_key.clone();
+    changed_payload.beneficiary_person_id = Some(tenant_id.to_string());
     assert!(matches!(
         service
             .create(&requester, &unit.to_string(), changed_payload)
@@ -230,6 +332,14 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .get(0);
     assert_eq!(disbursement_count, 1);
     assert_eq!(tenant_balance, Decimal::new(6000, 2));
+    assert_eq!(
+        state
+            .inner
+            .read()
+            .await
+            .advance_of(&unit.to_string(), "TENANT"),
+        Decimal::new(6000, 2)
+    );
     assert!(matches!(
         service
             .decide(
@@ -246,12 +356,10 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
     ));
     drop(client);
 
+    let mut transfer_request = request("TRANSFER", "TENANT", Some("OWNER"), Decimal::new(2000, 2));
+    transfer_request.beneficiary_person_id = Some(tenant_id.to_string());
     let transfer = service
-        .create(
-            &requester,
-            &unit.to_string(),
-            request("TRANSFER", "TENANT", Some("OWNER"), Decimal::new(2000, 2)),
-        )
+        .create(&requester, &unit.to_string(), transfer_request)
         .await
         .expect("create transfer request");
     service
@@ -285,6 +393,22 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .get(0);
     assert_eq!(tenant_balance, Decimal::new(4000, 2));
     assert_eq!(owner_balance, Decimal::new(12000, 2));
+    assert_eq!(
+        state
+            .inner
+            .read()
+            .await
+            .advance_of(&unit.to_string(), "TENANT"),
+        Decimal::new(4000, 2)
+    );
+    assert_eq!(
+        state
+            .inner
+            .read()
+            .await
+            .advance_of(&unit.to_string(), "OWNER"),
+        Decimal::new(12000, 2)
+    );
     let exit_transfer_entries: i64 = client
         .query_one(
             "SELECT COUNT(*) FROM advance_ledger_entries WHERE reference_id = $1 AND entry_type IN ('EXIT_TRANSFER_DEBIT', 'EXIT_TRANSFER_CREDIT')",
@@ -296,12 +420,10 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
     assert_eq!(exit_transfer_entries, 2);
     drop(client);
 
+    let mut stale_request = request("PAYOUT", "TENANT", None, Decimal::new(3000, 2));
+    stale_request.beneficiary_person_id = Some(tenant_id.to_string());
     let stale = service
-        .create(
-            &requester,
-            &unit.to_string(),
-            request("PAYOUT", "TENANT", None, Decimal::new(3000, 2)),
-        )
+        .create(&requester, &unit.to_string(), stale_request)
         .await
         .expect("create request before external balance change");
     let client = db.pool.get().await.expect("test connection");

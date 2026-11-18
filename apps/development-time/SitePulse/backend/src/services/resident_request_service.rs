@@ -47,7 +47,7 @@ impl ResidentRequestService {
                     (Some(own), _) => own,
                     (None, asked) => asked,
                 };
-                let available = inner.advance_of(&unit.id, source);
+                let available = inner.available_advance_of(&unit.id, source);
                 Ok((unit, (source, available)))
             })
             .await?;

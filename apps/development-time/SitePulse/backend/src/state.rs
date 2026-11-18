@@ -50,6 +50,8 @@ pub struct AppStateInner {
     pub site_bank_accounts: Vec<SiteBankAccount>,
     /// Advance (avans) balance per unit, split by debtor like `advance_balances`.
     pub advance_balances: HashMap<String, crate::models::UnitAdvance>,
+    /// Amounts reserved by pending exit-settlement requests, by unit and source debtor.
+    pub pending_exit_advance_reservations: HashMap<(String, String), Decimal>,
     /// Idempotency keys: (site id, key) -> receipt id. Mirrors `payment_idempotency_keys`.
     pub payment_idempotency: HashMap<(String, String), i64>,
     pub homeowner_payments: Vec<HomeownerPaymentRecord>,
@@ -115,6 +117,7 @@ impl AppStateInner {
             reconciliation_queue: Vec::new(),
             site_bank_accounts: Vec::new(),
             advance_balances: HashMap::new(),
+            pending_exit_advance_reservations: HashMap::new(),
             payment_idempotency: HashMap::new(),
             homeowner_payments: Vec::new(),
             remembered_sender_ibans: HashMap::new(),
@@ -565,6 +568,38 @@ impl AppStateInner {
             .unwrap_or(Decimal::ZERO)
     }
 
+    /// Advance remaining for a new in-memory spend after pending exit requests.
+    pub fn available_advance_of(&self, unit_id: &str, debtor_type: &str) -> Decimal {
+        let reserved = self
+            .pending_exit_advance_reservations
+            .get(&(unit_id.to_string(), debtor_type.to_string()))
+            .copied()
+            .unwrap_or(Decimal::ZERO);
+        (self.advance_of(unit_id, debtor_type) - reserved).max(Decimal::ZERO)
+    }
+
+    pub fn reserve_exit_advance(&mut self, unit_id: &str, debtor_type: &str, amount: Decimal) {
+        *self
+            .pending_exit_advance_reservations
+            .entry((unit_id.to_string(), debtor_type.to_string()))
+            .or_default() += amount;
+    }
+
+    pub fn release_exit_advance_reservation(
+        &mut self,
+        unit_id: &str,
+        debtor_type: &str,
+        amount: Decimal,
+    ) {
+        let key = (unit_id.to_string(), debtor_type.to_string());
+        if let Some(reserved) = self.pending_exit_advance_reservations.get_mut(&key) {
+            *reserved = (*reserved - amount).max(Decimal::ZERO);
+            if reserved.is_zero() {
+                self.pending_exit_advance_reservations.remove(&key);
+            }
+        }
+    }
+
     /// Adds `delta` (may be negative) to one debtor's advance of a unit.
     pub fn adjust_advance(&mut self, unit_id: &str, debtor_type: &str, delta: Decimal) {
         let entry = self
@@ -591,6 +626,7 @@ impl AppStateInner {
         self.reconciliation_queue.clear();
         self.site_bank_accounts.clear();
         self.advance_balances.clear();
+        self.pending_exit_advance_reservations.clear();
         self.payment_idempotency.clear();
         self.homeowner_payments.clear();
         self.remembered_sender_ibans.clear();
@@ -611,6 +647,7 @@ impl AppStateInner {
     pub fn reset_all_payments_and_balances(&mut self) {
         self.auto_scheduler_enabled = false;
         self.advance_balances.clear();
+        self.pending_exit_advance_reservations.clear();
         self.payment_idempotency.clear();
         self.homeowner_payments.clear();
         self.reconciliation_queue.clear();
@@ -854,6 +891,7 @@ pub fn seed_password_hash(password: &str) -> Option<String> {
 #[cfg(test)]
 mod fixture_detection_tests {
     use super::AppStateInner;
+    use rust_decimal::Decimal;
 
     #[test]
     fn when_test_binary_uses_either_cargo_layout_then_fixtures_are_seeded() {
@@ -876,5 +914,24 @@ mod fixture_detection_tests {
             "payments_phase3_tests-0123456789abcdef"
         ));
         assert!(!AppStateInner::is_fixture_test_binary(""));
+    }
+
+    #[test]
+    fn pending_exit_reservations_reduce_only_spendable_advance() {
+        let mut state = AppStateInner::blank();
+        state.adjust_advance("14", "TENANT", Decimal::new(80000, 2));
+        state.reserve_exit_advance("14", "TENANT", Decimal::new(30000, 2));
+
+        assert_eq!(state.advance_of("14", "TENANT"), Decimal::new(80000, 2));
+        assert_eq!(
+            state.available_advance_of("14", "TENANT"),
+            Decimal::new(50000, 2)
+        );
+
+        state.release_exit_advance_reservation("14", "TENANT", Decimal::new(30000, 2));
+        assert_eq!(
+            state.available_advance_of("14", "TENANT"),
+            Decimal::new(80000, 2)
+        );
     }
 }

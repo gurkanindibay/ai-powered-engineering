@@ -14,10 +14,23 @@ Feature: Zero-data-loss move-out and exit settlement
     And zero records are deleted from dues_liabilities, collection_transactions, or persons
 
   @SC-08-03-02 @layer:gui @pending @role_manager
-  Scenario: Move-out keeps the advance unless the manager requests an approved disposition
+  Scenario: Move-out can keep the advance without changing the balance
     Given departing Tenant "Zeynep Kaya" has 800.00 in the tenant advance ledger
     When the Site Manager chooses to keep the advance during move-out
     Then the tenant advance remains unchanged
-    When the Site Manager requests a 500.00 payout instead
+
+  @SC-08-03-03 @layer:gui @pending @role_manager
+  Scenario: Move-out payout is debited only after four-eyes approval
+    Given departing Tenant "Zeynep Kaya" has 800.00 in the tenant advance ledger
+    When the Site Manager requests a 500.00 payout during move-out
     Then an outgoing-payment request is created for a different authorized person to approve
+    And the tenant advance remains 800.00 while the payout is pending
     And the advance is debited only after that approval
+
+  @SC-08-03-04 @layer:gui @pending @role_manager
+  Scenario: Move-out transfer changes debtor only after four-eyes approval
+    Given departing Tenant "Zeynep Kaya" has 800.00 in the tenant advance ledger
+    When the Site Manager requests a 500.00 transfer to the owner advance during move-out
+    Then the transfer request waits for a different authorized person to approve
+    And approval debits 500.00 from tenant advance and credits 500.00 to owner advance
+    And no outgoing payment is created
