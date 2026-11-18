@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-18T21:43:38Z",
- "run_id": "20261118T214338Z-18b64e1",
- "commit": "18b64e1324585877b1821fe3022dc9c0c957e486",
+ "generated_at": "2026-11-18T22:30:31Z",
+ "run_id": "20261118T223031Z-1c8f0e5",
+ "commit": "1c8f0e5d360cc25ceda996fedd47de44e9f66e58",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 116,
-  "seconds": 1933.0,
+  "seconds": 2178.8,
   "files": 8,
   "unparseable": []
  },
@@ -19,12 +19,12 @@
   "stories": 100,
   "stories_with_scenarios": 100,
   "stories_passing": 25,
-  "scenarios": 298,
-  "automated": 259,
+  "scenarios": 300,
+  "automated": 265,
   "passing": 102,
   "failing": 0,
-  "no_result": 157,
-  "planned": 39,
+  "no_result": 163,
+  "planned": 35,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -120,12 +120,12 @@
    "stories": 13,
    "stories_with_scenarios": 13,
    "stories_passing": 1,
-   "scenarios": 51,
-   "automated": 46,
+   "scenarios": 53,
+   "automated": 52,
    "passing": 12,
    "failing": 0,
-   "no_result": 34,
-   "planned": 5,
+   "no_result": 40,
+   "planned": 1,
    "health": "in_progress"
   },
   {
@@ -825,26 +825,38 @@
    "story": "STORY-07-08"
   },
   "SC-07-09-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A mid-month move-in splits the month between owner and tenant",
    "epic": "EPIC-07",
    "story": "STORY-07-09"
   },
   "SC-07-09-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A unit created mid-month is charged from its creation date",
    "epic": "EPIC-07",
    "story": "STORY-07-09"
   },
   "SC-07-09-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A move-out recorded after accrual re-splits the open liability",
    "epic": "EPIC-07",
    "story": "STORY-07-09"
   },
   "SC-07-09-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "With proration switched off the occupant on the accrual date owes the whole month",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-05": {
+   "state": "no_result",
+   "name": "A scheduler retry after move-in does not add another monthly liability",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-06": {
+   "state": "no_result",
+   "name": "A manual accrual retry after move-in does not add another monthly liability",
    "epic": "EPIC-07",
    "story": "STORY-07-09"
   },
@@ -2147,8 +2159,8 @@
    "epics": 12,
    "stories": 100,
    "stories_with_scenarios": 100,
-   "scenarios": 298,
-   "automated": 259
+   "scenarios": 300,
+   "automated": 265
   }
  ],
  "recent_changes": [
@@ -2157,14 +2169,14 @@
    "epic": "EPIC-07",
    "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
    "new_stories": 0,
-   "new_scenarios": 2,
-   "newly_automated": 13,
-   "items": 13,
+   "new_scenarios": 4,
+   "newly_automated": 19,
+   "items": 19,
    "samples": [
-    "SC-07-10-01: The site's due day is used for every accrued liability",
-    "SC-07-10-02: A due day beyond the end of the month falls on its last day",
-    "SC-07-10-03: The scheduler catches up months it missed",
-    "SC-07-10-04: Catch-up stops at the configured limit"
+    "SC-07-09-01: A mid-month move-in splits the month between owner and tenant",
+    "SC-07-09-02: A unit created mid-month is charged from its creation date",
+    "SC-07-09-03: A move-out recorded after accrual re-splits the open liability",
+    "SC-07-09-04: With proration switched off the occupant on the accrual date owes the whole month"
    ]
   },
   {
@@ -2700,5 +2712,5 @@
    ]
   }
  ],
- "href": "reports/44402879183-1/"
+ "href": "reports/44410845053-1/"
 }
