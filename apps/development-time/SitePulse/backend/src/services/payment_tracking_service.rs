@@ -1921,7 +1921,13 @@ fn rewind_penalties(
         }
         let original = d.clone();
         d.delay_penalty = calc
-            .penalty_through(d.principal_amount, d.due_date, payment_date, history)
+            .penalty_through_with_grace(
+                d.principal_amount,
+                d.due_date,
+                payment_date,
+                history,
+                d.grace_days,
+            )
             .min(original.delay_penalty);
         d.penalty_accrued_through = Some(payment_date);
         rewinds.push(PenaltyRewind {
@@ -1956,11 +1962,12 @@ fn finish_penalty_reevaluation(
             history.push((payment_date, line.settlement.principal));
         }
         let recalculated = calc
-            .penalty_through(
+            .penalty_through_with_grace(
                 rw.original.principal_amount,
                 rw.original.due_date,
                 accrued_through,
                 &history,
+                rw.original.grace_days,
             )
             .min(rw.original.delay_penalty);
         let d = &mut dues[rw.index];

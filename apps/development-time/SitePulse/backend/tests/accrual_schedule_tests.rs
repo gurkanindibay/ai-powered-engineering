@@ -233,3 +233,87 @@ async fn when_the_grace_period_changes_then_accrued_liabilities_keep_theirs() {
         (0, day(2026, 11, 20))
     );
 }
+
+// covers: SC-07-10-05
+#[test]
+fn when_a_backdated_payment_is_inside_the_grace_period_then_the_reevaluated_fee_is_zero() {
+    let calc = DuesCalculationService::new();
+    let (due, through) = (day(2026, 10, 15), day(2026, 11, 14));
+    let paid = [(day(2026, 10, 18), d("1400.00"))];
+    assert_eq!(
+        calc.penalty_through_with_grace(d("1400.00"), due, through, &paid, 5),
+        Decimal::ZERO
+    );
+    // Without grace the same payment leaves 3 days of fee.
+    assert_eq!(
+        calc.penalty_through_with_grace(d("1400.00"), due, through, &paid, 0),
+        d("7.00")
+    );
+    // After the grace period the fee runs from the due date.
+    let late = [(day(2026, 10, 25), d("1400.00"))];
+    assert_eq!(
+        calc.penalty_through_with_grace(d("1400.00"), due, through, &late, 5),
+        d("23.33")
+    );
+    // Nothing accrues while the grace period runs.
+    assert_eq!(
+        calc.penalty_through_with_grace(d("1400.00"), due, day(2026, 10, 20), &[], 5),
+        Decimal::ZERO
+    );
+}
+
+#[tokio::test]
+async fn when_a_backdated_payment_settles_a_charged_liability_inside_grace_then_the_fee_is_reversed(
+) {
+    let state = AppState::new();
+    let due_date = Utc::now().date_naive() - chrono::Days::new(40);
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues.clear();
+        inner.advance_balances.clear();
+        let mut due = liability(due_date, 5);
+        due.delay_penalty = d("70.00");
+        due.total_amount = d("1470.00");
+        due.status = DebtStatus::Overdue;
+        due.penalty_accrued_through = Some(due_date + chrono::Days::new(30));
+        inner.dues.push(due);
+    }
+    let request = RecordManualPaymentRequest {
+        site_id: Some(SITE.to_string()),
+        unit_id: "d-14".to_string(),
+        amount: d("1400.00"),
+        payer_name: "Owner".to_string(),
+        payer_role: DebtorType::Owner,
+        payment_channel: PaymentChannel::ManualCash,
+        payment_date: Some(
+            (due_date + chrono::Days::new(3))
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc(),
+        ),
+        ..Default::default()
+    };
+    PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(request)
+        .await
+        .unwrap();
+    let inner = state.inner.read().await;
+    let paid = inner.dues.iter().find(|x| x.id == "g-1").unwrap();
+    assert_eq!(paid.status, DebtStatus::Paid);
+    assert_eq!(paid.delay_penalty, Decimal::ZERO);
+}
+
+#[test]
+fn when_day_rows_are_rewritten_then_they_honour_the_grace_period() {
+    use sitepulse_backend::services::late_fee_service::rewritten_accruals;
+    let mut due = liability(day(2026, 10, 15), 5);
+    due.paid_principal = d("1400.00");
+    let sum = |payments: &[(NaiveDate, Decimal)]| {
+        rewritten_accruals(SITE, &due, payments, day(2026, 10, 15), day(2026, 11, 14))
+            .iter()
+            .map(|r| r.daily_amount)
+            .sum::<Decimal>()
+    };
+    assert_eq!(sum(&[(day(2026, 10, 18), d("1400.00"))]), Decimal::ZERO);
+    assert_eq!(sum(&[(day(2026, 10, 25), d("1400.00"))]), d("23.33"));
+}

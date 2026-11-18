@@ -121,8 +121,28 @@ pub fn rewritten_accruals(
     through: NaiveDate,
 ) -> Vec<LateFeeAccrual> {
     let calc = DuesCalculationService::new();
-    let cumulative =
-        |day: NaiveDate| calc.penalty_through(due.principal_amount, due.due_date, day, payments);
+    // A payment inside the grace period counts as made on the due date.
+    let grace_end = due.due_date + chrono::Days::new(u64::from(due.grace_days));
+    let payments: Vec<(NaiveDate, Decimal)> = payments
+        .iter()
+        .map(|(d, a)| {
+            if due.grace_days > 0 && *d <= grace_end {
+                (due.due_date, *a)
+            } else {
+                (*d, *a)
+            }
+        })
+        .collect();
+    let payments = payments.as_slice();
+    let cumulative = |day: NaiveDate| {
+        calc.penalty_through_with_grace(
+            due.principal_amount,
+            due.due_date,
+            day,
+            payments,
+            due.grace_days,
+        )
+    };
     let mut previous = cumulative(after.max(due.due_date));
     let mut rows = Vec::new();
     let mut day = after;

@@ -116,10 +116,34 @@ impl DuesCalculationService {
         through: NaiveDate,
         principal_payments: &[(NaiveDate, Decimal)],
     ) -> Decimal {
+        self.penalty_through_with_grace(principal_amount, due_date, through, principal_payments, 0)
+    }
+
+    /// [`Self::penalty_through`] for a liability with a grace period (STORY-07-10): nothing
+    /// accrues up to the end of the grace period, a payment inside it counts as made on the
+    /// due date, and afterwards the fee runs from the due date.
+    pub fn penalty_through_with_grace(
+        &self,
+        principal_amount: Decimal,
+        due_date: NaiveDate,
+        through: NaiveDate,
+        principal_payments: &[(NaiveDate, Decimal)],
+        grace_days: u32,
+    ) -> Decimal {
+        let grace_end = due_date + chrono::Days::new(u64::from(grace_days));
+        if grace_days > 0 && through <= grace_end {
+            return Decimal::ZERO;
+        }
         let mut payments: Vec<(NaiveDate, Decimal)> = principal_payments
             .iter()
             .filter(|(_, amount)| *amount > Decimal::ZERO)
-            .copied()
+            .map(|(date, amount)| {
+                if grace_days > 0 && *date <= grace_end {
+                    (due_date, *amount)
+                } else {
+                    (*date, *amount)
+                }
+            })
             .collect();
         payments.sort_by_key(|(date, _)| *date);
         let mut penalty = Decimal::ZERO;
