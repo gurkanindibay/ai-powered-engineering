@@ -1,6 +1,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
+use std::collections::HashSet;
 use tracing::info;
 
 use super::base::{parse_id_to_i64, require_id, DbResult};
@@ -351,6 +352,31 @@ pub async fn commit_accrual_batch(
         &[&site, &batch.period_key],
     )
     .await?;
+    let mut batch_units = Vec::new();
+    for (due, _) in batch.dues {
+        let unit = require_id("unit", &due.unit_id)?;
+        if !batch_units.contains(&unit) {
+            batch_units.push(unit);
+        }
+    }
+    let existing_liability_keys: HashSet<(i64, String)> = if batch_units.is_empty() {
+        HashSet::new()
+    } else {
+        tx.query(
+            r#"
+            SELECT DISTINCT unit_id, expense_type
+            FROM dues_liabilities
+            WHERE unit_id = ANY($1)
+              AND (period_key = $2 OR (period_key IS NULL AND period = $3))
+              AND capital_project_id IS NULL
+            "#,
+            &[&batch_units, &batch.period_key, &batch.period_label],
+        )
+        .await?
+        .into_iter()
+        .map(|row| (row.get(0), row.get(1)))
+        .collect()
+    };
     let existing = tx
         .query_opt(
             "SELECT id,status FROM dues_periods WHERE site_id = $1 AND period_key = $2 FOR UPDATE",
@@ -398,6 +424,10 @@ pub async fn commit_accrual_batch(
     let mut due_ids = Vec::with_capacity(batch.dues.len());
     for (due, basis) in batch.dues {
         let unit = require_id("unit", &due.unit_id)?;
+        if existing_liability_keys.contains(&(unit, due.expense_type.as_str().to_string())) {
+            due_ids.push(None);
+            continue;
+        }
         let budget = basis
             .as_deref()
             .map(|b| require_id("operating budget", b))
@@ -409,7 +439,6 @@ pub async fn commit_accrual_batch(
                     (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
                      delay_penalty, debtor_type, expense_type, operating_budget_id, grace_days)
                 VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7, $8, $9, $10)
-
                 ON CONFLICT DO NOTHING
                 RETURNING id
                 "#,

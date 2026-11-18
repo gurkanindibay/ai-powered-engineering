@@ -133,10 +133,13 @@ impl OccupancyService {
         if !exists {
             return Err(OccupancyError::UnitNotFound);
         }
-        if let Some(pool) = &self.state.pool {
-            crate::db::site_repository::set_proration_policy(pool, site_id, enabled)
-                .await
-                .map_err(|error| OccupancyError::Storage(error.to_string()))?;
+        match self.state.db_pool() {
+            Some(pool) => {
+                crate::db::site_repository::set_proration_policy(pool, site_id, enabled)
+                    .await
+                    .map_err(|error| OccupancyError::Storage(error.to_string()))?;
+            }
+            None => tracing::debug!("Saving proration policy in memory without a database"),
         }
         let mut inner = self.state.inner.write().await;
         let site = inner

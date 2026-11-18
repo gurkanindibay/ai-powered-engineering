@@ -317,7 +317,11 @@ pub async fn accrue_monthly_dues(
             )
         } else {
             vec![(
-                if is_tenant { DebtorType::Tenant } else { DebtorType::Owner },
+                if is_tenant {
+                    DebtorType::Tenant
+                } else {
+                    DebtorType::Owner
+                },
                 amount,
             )]
         };
