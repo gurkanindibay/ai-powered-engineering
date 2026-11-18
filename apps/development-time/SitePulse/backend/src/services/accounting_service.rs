@@ -117,6 +117,7 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
         // before the job existed) is booked on the accrual date, and what the
         // evaluation for today adds beyond the stored fee is booked today, so the
         // receivable agrees with the dashboard before the day's job has run.
+        let reevaluated = adjusted_total(inner, &d.id, ADJUSTMENT_PENALTY_REEVALUATION);
         let mut booked = Decimal::ZERO;
         for a in inner
             .finance
@@ -127,7 +128,7 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
             booked += a.daily_amount;
             out.push(penalty_entry(d, a.accrual_date, a.daily_amount));
         }
-        let stored_rest = d.delay_penalty + waived + fee_reversed - booked;
+        let stored_rest = d.delay_penalty + waived + fee_reversed + reevaluated - booked;
         if stored_rest > Decimal::ZERO {
             let date = d.penalty_accrued_through.unwrap_or(today).max(d.due_date);
             out.push(penalty_entry(d, date, stored_rest));
@@ -147,7 +148,11 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
         .iter()
         .filter(|a| a.status == REQUEST_APPROVED && crate::auth::same_id(&a.site_id, site_id))
     {
-        let (source, account) = if a.kind == ADJUSTMENT_PENALTY_WAIVER {
+        // A re-evaluation reverses the penalty revenue itself (it was never
+        // owed); a waiver forgives penalty that was owed.
+        let (source, account) = if a.kind == ADJUSTMENT_PENALTY_REEVALUATION {
+            ("PENALTY_REVERSAL", de::PENALTY_REVENUE)
+        } else if a.kind == ADJUSTMENT_PENALTY_WAIVER {
             ("WAIVER", de::PENALTY_WAIVED)
         } else {
             ("WRITE_OFF", de::WRITE_OFF_EXPENSE)

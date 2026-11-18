@@ -82,6 +82,55 @@ impl DuesCalculationService {
         dues
     }
 
+    /// Late fee a liability accrues from its due date up to `through`, given the
+    /// principal payments made against it (`(payment date, principal)`).
+    ///
+    /// Each payment reduces the penalised principal from its payment date on, and
+    /// every segment is rounded like `calculate_delay_penalty`. Used to
+    /// re-evaluate the fee when a payment is recorded with a value date earlier
+    /// than `penalty_accrued_through` (#187).
+    pub fn penalty_through(
+        &self,
+        principal_amount: Decimal,
+        due_date: NaiveDate,
+        through: NaiveDate,
+        principal_payments: &[(NaiveDate, Decimal)],
+    ) -> Decimal {
+        let mut payments: Vec<(NaiveDate, Decimal)> = principal_payments
+            .iter()
+            .filter(|(_, amount)| *amount > Decimal::ZERO)
+            .copied()
+            .collect();
+        payments.sort_by_key(|(date, _)| *date);
+        let mut penalty = Decimal::ZERO;
+        let mut cursor = due_date;
+        let mut paid = Decimal::ZERO;
+        let mut index = 0;
+        loop {
+            // Payments dated on or before the cursor already reduce the principal.
+            while index < payments.len() && payments[index].0 <= cursor {
+                paid += payments[index].1;
+                index += 1;
+            }
+            let segment_end = match payments.get(index) {
+                Some((date, _)) if *date < through => *date,
+                _ => through,
+            };
+            let days = (segment_end - cursor).num_days();
+            let outstanding = (principal_amount - paid).max(Decimal::ZERO);
+            if days > 0 && outstanding > Decimal::ZERO {
+                penalty += (outstanding * Self::monthly_rate() * Decimal::from(days)
+                    / Decimal::from(30))
+                .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
+            }
+            if segment_end >= through {
+                break;
+            }
+            cursor = segment_end;
+        }
+        penalty
+    }
+
     fn monthly_rate() -> Decimal {
         Decimal::new(5, 2)
     }
@@ -108,6 +157,45 @@ mod tests {
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
         }
+    }
+
+    #[test]
+    fn penalty_through_charges_only_the_days_before_a_backdated_payment() {
+        let svc = DuesCalculationService::new();
+        let due_date = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
+        let principal = Decimal::from_str_exact("1400.00").unwrap();
+        let nov_15 = NaiveDate::from_ymd_opt(2026, 11, 14).unwrap();
+        let oct_20 = NaiveDate::from_ymd_opt(2026, 10, 20).unwrap();
+        assert_eq!(
+            svc.penalty_through(principal, due_date, nov_15, &[]),
+            Decimal::from_str_exact("70.00").unwrap(),
+            "one month on the full principal"
+        );
+        assert_eq!(
+            svc.penalty_through(principal, due_date, nov_15, &[(oct_20, principal)]),
+            Decimal::from_str_exact("11.67").unwrap(),
+            "5 days on 1,400.00 before the payment"
+        );
+    }
+
+    #[test]
+    fn penalty_through_follows_partial_payments_in_date_order() {
+        let svc = DuesCalculationService::new();
+        let due_date = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
+        let principal = Decimal::from_str_exact("1400.00").unwrap();
+        let through = NaiveDate::from_ymd_opt(2026, 11, 14).unwrap();
+        let half = Decimal::from_str_exact("700.00").unwrap();
+        let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap();
+        // 10 days on 1,400 (23.33) then 20 days on 700 (23.33).
+        assert_eq!(
+            svc.penalty_through(principal, due_date, through, &[(day(10, 25), half)]),
+            Decimal::from_str_exact("46.66").unwrap()
+        );
+        // A payment on the due date or before it leaves nothing to penalise.
+        assert_eq!(
+            svc.penalty_through(principal, due_date, through, &[(day(10, 15), principal)]),
+            Decimal::ZERO
+        );
     }
 
     #[test]

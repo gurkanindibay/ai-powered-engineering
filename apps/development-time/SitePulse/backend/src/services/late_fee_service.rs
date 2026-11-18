@@ -103,6 +103,59 @@ pub fn plan_accruals(
     Some((rows, updated))
 }
 
+/// The day rows of a liability from the day after `after` up to `through`, as they
+/// stand once its principal payments (`(date, principal)`, the backdated payment
+/// included) are known (#187). A day's fee uses the principal outstanding after the
+/// payments dated before that day, so each row stays on the segment formula the daily
+/// job continues from. Days with nothing outstanding have no row.
+pub fn rewritten_accruals(
+    site_id: &str,
+    due: &DuesLiability,
+    payments: &[(NaiveDate, Decimal)],
+    after: NaiveDate,
+    through: NaiveDate,
+) -> Vec<LateFeeAccrual> {
+    let calc = DuesCalculationService::new();
+    let cumulative =
+        |day: NaiveDate| calc.penalty_through(due.principal_amount, due.due_date, day, payments);
+    let mut previous = cumulative(after.max(due.due_date));
+    let mut rows = Vec::new();
+    let mut day = after;
+    while day < through {
+        let Some(next) = day.succ_opt() else { break };
+        day = next;
+        if day <= due.due_date {
+            continue;
+        }
+        let before: Vec<&(NaiveDate, Decimal)> =
+            payments.iter().filter(|(d, _)| *d < day).collect();
+        let outstanding =
+            due.principal_amount - before.iter().map(|(_, amount)| *amount).sum::<Decimal>();
+        if outstanding <= Decimal::ZERO {
+            continue;
+        }
+        let segment_start = before
+            .iter()
+            .map(|(d, _)| *d)
+            .max()
+            .map_or(due.due_date, |d| d.max(due.due_date));
+        let fee = cumulative(day);
+        rows.push(LateFeeAccrual {
+            id: 0,
+            site_id: site_id.to_string(),
+            due_id: due.id.clone(),
+            accrual_date: day,
+            outstanding_principal: outstanding,
+            segment_start,
+            segment_base: cumulative(segment_start),
+            cumulative_fee: fee,
+            daily_amount: fee - previous,
+        });
+        previous = fee;
+    }
+    rows
+}
+
 pub struct LateFeeService {
     store: FinanceStore,
     state: AppState,

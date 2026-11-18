@@ -582,6 +582,11 @@ impl PaymentTrackingService {
             advance_debtor: credit_debtor.clone(),
         };
 
+        // Late-fee re-evaluation of a backdated payment (#187): the audited
+        // adjustments and the penalty handed back to the payer's advance.
+        let mut adjustments: Vec<crate::models::LedgerAdjustment> = Vec::new();
+        let mut penalty_refund = Decimal::ZERO;
+        let mut accrual_rewrites: Vec<AccrualRewrite> = Vec::new();
         let (receipt, settled_dues, mut entry) = if let Some(ref pool) = self.state.pool {
             let site_num = crate::db::require_id("site", &site_id)?;
             let unit_num = crate::db::require_id("unit", &unit.id)?;
@@ -629,7 +634,23 @@ impl PaymentTrackingService {
                 .into_iter()
                 .map(|d| calc.calculate_delay_penalty(d, today))
                 .collect();
+            let mut histories = std::collections::HashMap::new();
+            for d in dues
+                .iter()
+                .filter(|d| d.penalty_accrued_through.is_some_and(|t| t > today))
+            {
+                let due_num = crate::db::require_id("dues liability", &d.id)?;
+                histories.insert(
+                    d.id.clone(),
+                    crate::db::tx_load_due_principal_payments(&tx, due_num)
+                        .await
+                        .map_err(db_err)?,
+                );
+            }
+            let rewinds = rewind_penalties(&calc, &mut dues, &histories, today);
             let (lines, surplus, designated_any) = allocate(&mut dues);
+            let reevaluations =
+                finish_penalty_reevaluation(&calc, &mut dues, rewinds, &lines, today);
 
             let sequence =
                 crate::db::tx_next_receipt_sequence(&tx, site_num, LEDGER_KIND_COLLECTION)
@@ -658,16 +679,81 @@ impl PaymentTrackingService {
                     .map_err(db_err)?,
             };
             for line in &lines {
-                let d = &dues[line.due_index];
+                let mut d = dues[line.due_index].clone();
+                // A re-evaluated liability is settled against its stored penalty
+                // first and lowered afterwards, so no row is ever inconsistent.
+                if let Some(re) = reevaluations.iter().find(|r| r.due.id == d.id) {
+                    d.delay_penalty = re.original.delay_penalty;
+                }
                 crate::db::tx_settle_due(
                     &tx,
                     entry.id,
-                    d,
+                    &d,
                     line.settlement.principal,
                     line.settlement.penalty,
                 )
                 .await
                 .map_err(db_err)?;
+            }
+            for re in &reevaluations {
+                let due_num = crate::db::require_id("dues liability", &re.due.id)?;
+                crate::db::tx_apply_penalty_reevaluation(
+                    &tx,
+                    due_num,
+                    re.due.delay_penalty,
+                    re.refund,
+                )
+                .await
+                .map_err(db_err)?;
+                // STORY-07-13 day rows dated after the payment were computed on the
+                // principal before it; rewrite them with the stored figure.
+                let deleted = crate::db::tx_delete_late_fee_accruals_after(&tx, due_num, today)
+                    .await
+                    .map_err(db_err)?;
+                if deleted > 0 {
+                    let mut rows = crate::services::late_fee_service::rewritten_accruals(
+                        &site_id,
+                        &re.original,
+                        &re.payments,
+                        today,
+                        re.original.penalty_accrued_through.unwrap_or(today),
+                    );
+                    for row in rows.iter_mut() {
+                        row.id = crate::db::finance_records::insert(&*tx, row)
+                            .await
+                            .map_err(db_err)?;
+                    }
+                    accrual_rewrites.push(AccrualRewrite {
+                        due_id: re.due.id.clone(),
+                        after: today,
+                        rows,
+                    });
+                }
+                if re.reversed > Decimal::ZERO {
+                    let mut adjustment = penalty_reevaluation_adjustment(
+                        &site_id,
+                        re,
+                        &receipt.receipt_number,
+                        today,
+                    );
+                    adjustment.id = crate::db::finance_records::insert(&*tx, &adjustment)
+                        .await
+                        .map_err(db_err)?;
+                    adjustments.push(adjustment);
+                }
+                if re.refund > Decimal::ZERO {
+                    crate::db::tx_credit_advance(
+                        &tx,
+                        unit_num,
+                        &credit_debtor,
+                        "ADJUSTMENT_CREDIT",
+                        re.refund,
+                        Some(&receipt.receipt_number),
+                        Some("Gecikme tazminatı yeniden hesaplandı; fazla ödenen tutar avansa aktarıldı"),
+                    )
+                    .await
+                    .map_err(db_err)?;
+                }
             }
             if surplus > Decimal::ZERO {
                 crate::db::tx_credit_advance(
@@ -690,6 +776,7 @@ impl PaymentTrackingService {
             tx.commit()
                 .await
                 .map_err(|e| format!("Payment was not recorded: {}", e))?;
+            penalty_refund = reevaluations.iter().map(|r| r.refund).sum();
             let touched: Vec<DuesLiability> =
                 lines.iter().map(|l| dues[l.due_index].clone()).collect();
             (receipt, touched, entry)
@@ -733,11 +820,53 @@ impl PaymentTrackingService {
                 .unwrap_or(0)
                 + 1;
             let issuer = Issuer::of(&inner, &site_id);
+            let due_ids: Vec<String> = dues
+                .iter()
+                .filter(|d| d.penalty_accrued_through.is_some_and(|t| t > today))
+                .map(|d| d.id.clone())
+                .collect();
+            let histories = memory_principal_histories(&inner, &due_ids);
+            let mut next_adjustment_id = inner
+                .finance
+                .adjustments
+                .iter()
+                .map(|a| a.id)
+                .max()
+                .unwrap_or(0)
+                + 1;
             drop(inner);
+            let rewinds = rewind_penalties(&calc, &mut dues, &histories, today);
             let (lines, surplus, designated_any) = allocate(&mut dues);
+            let reevaluations =
+                finish_penalty_reevaluation(&calc, &mut dues, rewinds, &lines, today);
             let mut receipt = build_receipt(&ctx, &dues, &lines, surplus, next_seq);
             receipt.id = next_receipt_id;
             issuer.apply(&mut receipt);
+            for re in &reevaluations {
+                accrual_rewrites.push(AccrualRewrite {
+                    due_id: re.due.id.clone(),
+                    after: today,
+                    rows: crate::services::late_fee_service::rewritten_accruals(
+                        &site_id,
+                        &re.original,
+                        &re.payments,
+                        today,
+                        re.original.penalty_accrued_through.unwrap_or(today),
+                    ),
+                });
+                if re.reversed > Decimal::ZERO {
+                    let mut adjustment = penalty_reevaluation_adjustment(
+                        &site_id,
+                        re,
+                        &receipt.receipt_number,
+                        today,
+                    );
+                    adjustment.id = next_adjustment_id;
+                    next_adjustment_id += 1;
+                    adjustments.push(adjustment);
+                }
+                penalty_refund += re.refund;
+            }
             let mut entry = build_entry(&ctx, &receipt);
             entry.id = unmatched_entry
                 .as_deref()
@@ -768,6 +897,37 @@ impl PaymentTrackingService {
         }
         if receipt.allocated_advance > Decimal::ZERO {
             inner.adjust_advance(&unit.id, &credit_debtor, receipt.allocated_advance);
+        }
+        if penalty_refund > Decimal::ZERO {
+            inner.adjust_advance(&unit.id, &credit_debtor, penalty_refund);
+        }
+        inner.finance.adjustments.extend(adjustments);
+        for rewrite in accrual_rewrites {
+            let stale = |a: &crate::models::LateFeeAccrual| {
+                a.due_id == rewrite.due_id && a.accrual_date > rewrite.after
+            };
+            let had_rows = inner.finance.late_fee_accruals.iter().any(stale);
+            // With PostgreSQL the rows were rewritten in the transaction (ids set);
+            // in memory they are rewritten only where the daily job had written some.
+            if !had_rows && rewrite.rows.iter().all(|r| r.id == 0) {
+                continue;
+            }
+            inner.finance.late_fee_accruals.retain(|a| !stale(a));
+            let mut next_id = inner
+                .finance
+                .late_fee_accruals
+                .iter()
+                .map(|a| a.id)
+                .max()
+                .unwrap_or(0)
+                + 1;
+            for mut row in rewrite.rows {
+                if row.id == 0 {
+                    row.id = next_id;
+                    next_id += 1;
+                }
+                inner.finance.late_fee_accruals.push(row);
+            }
         }
         if let Some(key) = idempotency_key.as_deref() {
             inner
@@ -1708,6 +1868,185 @@ const VIRMAN_NOTE: &str = "Avans bakiyesinden demirbaş/ortak gider borcuna virm
 
 /// Key of `AppStateInner.payment_idempotency`: the site id in its numeric form
 /// (in-memory `site-1` and PostgreSQL `1` are the same site) and the key.
+/// A liability whose late fee is re-evaluated because a payment carries a value
+/// date earlier than `penalty_accrued_through` (#187).
+struct PenaltyRewind {
+    index: usize,
+    original: DuesLiability,
+    history: Vec<(NaiveDate, Decimal)>,
+}
+
+/// Outcome of a re-evaluation: the penalty the liability no longer owes and the
+/// penalty already paid beyond the recalculated amount.
+#[derive(Clone)]
+struct PenaltyReevaluation {
+    /// Liability after the re-evaluation (final penalty and paid amounts).
+    due: DuesLiability,
+    /// Liability as stored before the payment was applied.
+    original: DuesLiability,
+    reversed: Decimal,
+    refund: Decimal,
+    /// Principal payments of the liability including the backdated one.
+    payments: Vec<(NaiveDate, Decimal)>,
+}
+
+/// The late-fee day rows of a liability after a re-evaluation: those dated after
+/// the payment are replaced (#187), so the stored figure, the day rows and the
+/// ledger agree.
+struct AccrualRewrite {
+    due_id: String,
+    after: NaiveDate,
+    rows: Vec<crate::models::LateFeeAccrual>,
+}
+
+/// Moves every liability with a late fee accrued past `payment_date` back to the
+/// payment date, as if the payment had been entered on time. Liabilities whose
+/// payment history does not add up to `paid_principal` are left alone.
+fn rewind_penalties(
+    calc: &crate::services::DuesCalculationService,
+    dues: &mut [DuesLiability],
+    histories: &std::collections::HashMap<String, Vec<(NaiveDate, Decimal)>>,
+    payment_date: NaiveDate,
+) -> Vec<PenaltyRewind> {
+    let mut rewinds = Vec::new();
+    for (index, d) in dues.iter_mut().enumerate() {
+        if !d.penalty_accrued_through.is_some_and(|t| t > payment_date) {
+            continue;
+        }
+        let Some(history) = histories.get(&d.id) else {
+            continue;
+        };
+        if history.iter().map(|h| h.1).sum::<Decimal>() != d.paid_principal {
+            continue;
+        }
+        let original = d.clone();
+        d.delay_penalty = calc
+            .penalty_through(d.principal_amount, d.due_date, payment_date, history)
+            .min(original.delay_penalty);
+        d.penalty_accrued_through = Some(payment_date);
+        rewinds.push(PenaltyRewind {
+            index,
+            original,
+            history: history.clone(),
+        });
+    }
+    rewinds
+}
+
+/// After allocation: recalculates the late fee of each rewound liability the
+/// payment settled, from its due date to the original `penalty_accrued_through`,
+/// with the payment's principal counted from its date. Untouched liabilities
+/// return to their stored state. The fee is never raised.
+fn finish_penalty_reevaluation(
+    calc: &crate::services::DuesCalculationService,
+    dues: &mut [DuesLiability],
+    rewinds: Vec<PenaltyRewind>,
+    lines: &[dues_ledger::AllocationLine],
+    payment_date: NaiveDate,
+) -> Vec<PenaltyReevaluation> {
+    let mut out = Vec::new();
+    for rw in rewinds {
+        let Some(line) = lines.iter().find(|l| l.due_index == rw.index) else {
+            dues[rw.index] = rw.original;
+            continue;
+        };
+        let accrued_through = rw.original.penalty_accrued_through.unwrap_or(payment_date);
+        let mut history = rw.history;
+        if line.settlement.principal > Decimal::ZERO {
+            history.push((payment_date, line.settlement.principal));
+        }
+        let recalculated = calc
+            .penalty_through(
+                rw.original.principal_amount,
+                rw.original.due_date,
+                accrued_through,
+                &history,
+            )
+            .min(rw.original.delay_penalty);
+        let d = &mut dues[rw.index];
+        let refund = (d.paid_penalty - recalculated).max(Decimal::ZERO);
+        d.paid_penalty -= refund;
+        d.delay_penalty = recalculated;
+        d.penalty_accrued_through = Some(accrued_through);
+        *d = calc.calculate_delay_penalty(d.clone(), accrued_through);
+        let reversed = rw.original.delay_penalty - recalculated;
+        if reversed > Decimal::ZERO || refund > Decimal::ZERO {
+            out.push(PenaltyReevaluation {
+                due: d.clone(),
+                original: rw.original,
+                reversed,
+                refund,
+                payments: history,
+            });
+        }
+    }
+    out
+}
+
+/// The audited, system-approved adjustment that reverses re-evaluated late fee.
+fn penalty_reevaluation_adjustment(
+    site_id: &str,
+    re: &PenaltyReevaluation,
+    receipt_number: &str,
+    payment_date: NaiveDate,
+) -> crate::models::LedgerAdjustment {
+    let now = Utc::now();
+    crate::models::LedgerAdjustment {
+        id: 0,
+        site_id: site_id.to_string(),
+        unit_id: re.due.unit_id.clone(),
+        due_id: re.due.id.clone(),
+        kind: crate::models::ADJUSTMENT_PENALTY_REEVALUATION.to_string(),
+        amount: re.reversed,
+        reason: format!(
+            "Late fee of {} re-evaluated for payment {} dated {}: ₺{:.2} charged, ₺{:.2} owed",
+            re.due.period,
+            receipt_number,
+            payment_date,
+            re.original.delay_penalty,
+            re.due.delay_penalty
+        ),
+        source: crate::models::ADJUSTMENT_SOURCE_PAYMENT_DATE.to_string(),
+        requested_by: "system:backdated-payment".to_string(),
+        requested_at: now,
+        status: crate::models::REQUEST_APPROVED.to_string(),
+        decided_by: Some("system:late-fee-reevaluation".to_string()),
+        decided_at: Some(now),
+        decision_note: Some(format!("Triggered by receipt {}", receipt_number)),
+        principal_before: Some(re.original.principal_amount),
+        penalty_before: Some(re.original.delay_penalty),
+    }
+}
+
+/// Principal payments per liability from the in-memory ledger (reversed
+/// payments and reversal receipts excluded).
+fn memory_principal_histories(
+    inner: &crate::state::AppStateInner,
+    due_ids: &[String],
+) -> std::collections::HashMap<String, Vec<(NaiveDate, Decimal)>> {
+    let reversed: std::collections::HashSet<i64> = inner
+        .payment_receipts
+        .iter()
+        .filter_map(|r| r.reverses_receipt_id)
+        .collect();
+    let mut out: std::collections::HashMap<String, Vec<(NaiveDate, Decimal)>> =
+        due_ids.iter().map(|id| (id.clone(), Vec::new())).collect();
+    for r in inner
+        .payment_receipts
+        .iter()
+        .filter(|r| r.receipt_type == LEDGER_KIND_COLLECTION && !reversed.contains(&r.id))
+    {
+        for item in &r.allocation_breakdown {
+            if let Some(history) = item.due_id.as_ref().and_then(|id| out.get_mut(id)) {
+                if item.principal_paid > Decimal::ZERO {
+                    history.push((r.issued_at.date_naive(), item.principal_paid));
+                }
+            }
+        }
+    }
+    out
+}
+
 fn idempotency_slot(site_id: &str, key: &str) -> (String, String) {
     let site = crate::db::parse_id_to_i64(site_id)
         .map(|n| n.to_string())
