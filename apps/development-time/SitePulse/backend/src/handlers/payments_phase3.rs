@@ -20,6 +20,7 @@ use crate::services::analytics_service::AnalyticsService;
 use crate::services::assembly_service::AssemblyService;
 use crate::services::autopay_service::AutopayService;
 use crate::services::bank_matching_service::BankMatchingService;
+use crate::services::billing_period_service::BillingPeriodService;
 use crate::services::budget_compliance_service::BudgetComplianceService;
 use crate::services::collections_service::CollectionsService;
 use crate::services::correction_service::CorrectionService;
@@ -835,6 +836,51 @@ pub async fn trial_balance(
             .trial_balance(&ctx.claims.site_id, q.from, q.to)
             .await,
     )
+}
+
+pub async fn billing_period_summary(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(period_id): Path<String>,
+) -> ApiResult<DuesPeriodSummary> {
+    ok(BillingPeriodService::new(&state)
+        .summary(&ctx.claims.site_id, &period_id)
+        .await)
+}
+
+pub async fn close_billing_period(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(period_id): Path<String>,
+) -> ApiResult<DuesPeriodSnapshot> {
+    let snapshot = BillingPeriodService::new(&state)
+        .close(&caller(&ctx), &period_id, &ctx.request_id)
+        .await;
+    ok(snapshot)
+}
+
+pub async fn request_billing_period_reopen(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(period_id): Path<String>,
+    Json(req): Json<RequestPeriodReopen>,
+) -> Result<(StatusCode, Json<DuesPeriodReopenRequest>), ApiError> {
+    created(
+        BillingPeriodService::new(&state)
+            .request_reopen(&caller(&ctx), &period_id, req, &ctx.request_id)
+            .await,
+    )
+}
+
+pub async fn decide_billing_period_reopen(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(request_id): Path<String>,
+    Json(req): Json<DecidePeriodReopen>,
+) -> ApiResult<DuesPeriodReopenRequest> {
+    ok(BillingPeriodService::new(&state)
+        .decide_reopen(&caller(&ctx), &request_id, req, &ctx.request_id)
+        .await)
 }
 
 pub async fn chart_of_accounts() -> Json<Vec<serde_json::Value>> {

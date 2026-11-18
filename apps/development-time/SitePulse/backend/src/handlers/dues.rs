@@ -77,7 +77,7 @@ pub async fn create_dues_period(
         site_id: payload.site_id.clone(),
         period_name: payload.period_name.clone(),
         due_date: payload.due_date,
-        status: DuesPeriodStatus::Active,
+        status: DuesPeriodStatus::Draft,
         created_at: Some(chrono::Utc::now()),
     };
 
@@ -87,10 +87,19 @@ pub async fn create_dues_period(
         crate::db::save_dues_period(pool, &new_period)
             .await
             .map_err(|e| {
-                (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    crate::error::sanitized("Database write failed", &e),
-                )
+                if e.to_string()
+                    .contains("cannot accrue into a closed billing period")
+                {
+                    (
+                        StatusCode::CONFLICT,
+                        "Billing period is closed and cannot be accrued".to_string(),
+                    )
+                } else {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        crate::error::sanitized("Database write failed", &e),
+                    )
+                }
             })?;
     }
     let mut inner = state.inner.write().await;
@@ -147,6 +156,12 @@ pub async fn accrue_monthly_dues(
     // 1. Decide every unit's amount and basis under a read lock.
     let (units_in_site, planned, skipped, budget_id) = {
         let inner = state.inner.read().await;
+        crate::services::billing_period_service::ensure_open_for_accrual(
+            &inner,
+            &payload.site_id,
+            billing_period,
+        )
+        .map_err(|error| (StatusCode::CONFLICT, error.to_string()))?;
         let units_in_site: Vec<IndependentUnit> = inner
             .units
             .iter()
@@ -336,6 +351,11 @@ pub async fn accrue_monthly_dues(
                     status: DuesPeriodStatus::Active,
                     created_at: Some(chrono::Utc::now()),
                 });
+            } else if let Some(period) = inner.dues_periods.iter_mut().find(|period| {
+                crate::auth::same_id(&period.site_id, &payload.site_id)
+                    && BillingPeriod::parse(&period.period_name).ok() == Some(billing_period)
+            }) {
+                period.status = DuesPeriodStatus::Active;
             }
         }
     }

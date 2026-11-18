@@ -1,6 +1,7 @@
 pub mod advance_offset_repository;
 pub mod bank_account_repository;
 pub mod base;
+pub mod billing_period_repository;
 pub mod budget_repository;
 pub mod correction_repository;
 pub mod dues_repository;
