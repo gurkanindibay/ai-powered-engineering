@@ -308,7 +308,7 @@ async fn get_views_never_change_the_ledger_and_accrual_offsets_transactionally()
         "/api/v1/dues/accrue-period",
         &token,
         Some(serde_json::json!({
-            "site_id": a.to_string(), "period": "RUST-ACCRUAL", "amount": "10.00",
+            "site_id": a.to_string(), "period": "2030-01", "amount": "10.00",
             "due_date": "2030-01-15"
         })),
     )

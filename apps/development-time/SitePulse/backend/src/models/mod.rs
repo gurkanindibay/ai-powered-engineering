@@ -742,7 +742,11 @@ pub struct AccrueDuesPeriodRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccrueDuesPeriodResponse {
     pub site_id: String,
+    /// The Turkish label derived from the period key, for display.
     pub period: String,
+    /// The canonical period key `YYYY-MM`.
+    #[serde(default)]
+    pub period_key: String,
     pub total_units_accrued: usize,
     pub newly_accrued_units_count: usize,
     pub auto_settled_units_count: usize,

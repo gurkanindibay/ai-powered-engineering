@@ -1,6 +1,7 @@
 //! Dues periods and monthly dues accrual.
 
 use super::*;
+use crate::domain::billing_period::BillingPeriod;
 
 #[derive(Debug, Deserialize)]
 pub struct DuesPeriodsQuery {
@@ -38,6 +39,21 @@ pub async fn create_dues_period(
     Json(mut payload): Json<CreateDuesPeriodRequest>,
 ) -> Result<(StatusCode, Json<DuesPeriod>), (StatusCode, String)> {
     scope.pin(&mut payload.site_id)?;
+    // The period is one canonical month: any spelling resolves to the same key.
+    let billing_period = BillingPeriod::parse(&payload.period_name)
+        .map_err(|reason| (StatusCode::BAD_REQUEST, reason))?;
+    if !billing_period.accepts_due_date(payload.due_date) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "Due date {} is outside period {} ({})",
+                payload.due_date,
+                billing_period.key(),
+                billing_period.label()
+            ),
+        ));
+    }
+    payload.period_name = billing_period.label();
     let inner = state.inner.read().await;
 
     // Check if period already exists
@@ -45,7 +61,7 @@ pub async fn create_dues_period(
         (p.site_id == payload.site_id
             || crate::db::parse_id_to_i64(&p.site_id)
                 == crate::db::parse_id_to_i64(&payload.site_id))
-            && p.period_name.eq_ignore_ascii_case(&payload.period_name)
+            && BillingPeriod::parse(&p.period_name).ok() == Some(billing_period)
     }) {
         return Ok((StatusCode::OK, Json(existing.clone())));
     }
@@ -80,7 +96,7 @@ pub async fn create_dues_period(
     let mut inner = state.inner.write().await;
     if !inner.dues_periods.iter().any(|p| {
         crate::auth::same_id(&p.site_id, &new_period.site_id)
-            && p.period_name.eq_ignore_ascii_case(&new_period.period_name)
+            && BillingPeriod::parse(&p.period_name).ok() == Some(billing_period)
     }) {
         inner.dues_periods.push(new_period.clone());
     }
@@ -100,6 +116,24 @@ pub async fn accrue_monthly_dues(
 ) -> Result<(StatusCode, Json<AccrueDuesPeriodResponse>), (StatusCode, String)> {
     scope.pin(&mut payload.site_id)?;
     use crate::services::operating_budget_service as budgets;
+
+    // STORY-07-08: one canonical period key, and a due date that belongs to it.
+    let billing_period = BillingPeriod::parse(&payload.period)
+        .map_err(|reason| (StatusCode::BAD_REQUEST, reason))?;
+    if !billing_period.accepts_due_date(payload.due_date) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "Due date {} is outside period {} ({}); it must fall in that month or within {} days after it",
+                payload.due_date,
+                billing_period.key(),
+                billing_period.label(),
+                crate::domain::billing_period::DUE_DATE_GRACE_DAYS
+            ),
+        ));
+    }
+    let period_key = billing_period.key();
+    let period_label = billing_period.label();
 
     // 1. Decide every unit's amount and basis under a read lock.
     let (units_in_site, planned, skipped, budget_id) = {
@@ -146,7 +180,7 @@ pub async fn accrue_monthly_dues(
         for unit in &units_in_site {
             let already = inner.dues.iter().any(|d| {
                 d.unit_id == unit.id
-                    && d.period == payload.period
+                    && BillingPeriod::parse(&d.period).ok() == Some(billing_period)
                     && d.expense_type == ExpenseType::OperationalDues
             });
             if already {
@@ -196,36 +230,57 @@ pub async fn accrue_monthly_dues(
         None => None,
     };
 
-    // 2. The billing period row.
-    let period_record = {
-        let mut inner = state.inner.write().await;
-        let exists = inner.dues_periods.iter().any(|p| {
-            crate::auth::same_id(&p.site_id, &payload.site_id)
-                && p.period_name.eq_ignore_ascii_case(&payload.period)
-        });
-        if exists {
-            None
-        } else {
-            let max_p = inner
-                .dues_periods
-                .iter()
-                .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
-                .max()
-                .unwrap_or(0);
-            let record = DuesPeriod {
-                id: (max_p + 1).to_string(),
-                site_id: payload.site_id.clone(),
-                period_name: payload.period.clone(),
+    // 2. Build every liability; nothing is written yet.
+    let mut accrued: Vec<(DuesLiability, Option<String>)> = Vec::new();
+    for (unit, amount, basis) in planned {
+        accrued.push((
+            DuesLiability {
+                id: String::new(),
+                unit_id: unit.id.clone(),
+                period: period_label.clone(),
+                principal_amount: amount,
+                delay_penalty: Decimal::ZERO,
+                total_amount: amount,
                 due_date: payload.due_date,
-                status: DuesPeriodStatus::Active,
-                created_at: Some(chrono::Utc::now()),
-            };
-            inner.dues_periods.push(record.clone());
-            Some(record)
-        }
-    };
-    if let (Some(ref pool), Some(ref record)) = (&state.pool, &period_record) {
-        crate::db::save_dues_period(pool, record)
+                status: DebtStatus::Pending,
+                paid_principal: Decimal::ZERO,
+                paid_penalty: Decimal::ZERO,
+                // Operational dues are the occupant's: the tenant's when the unit is
+                // let, otherwise the owner's (same rule as the scheduler).
+                debtor_type: if tenanted
+                    .as_ref()
+                    .map(|t| t.contains(&unit.id))
+                    .unwrap_or(unit.tenant_user_id.is_some())
+                {
+                    DebtorType::Tenant
+                } else {
+                    DebtorType::Owner
+                },
+                expense_type: ExpenseType::OperationalDues,
+                penalty_accrued_through: None,
+            },
+            basis,
+        ));
+    }
+
+    // 3. One transaction per site batch: the period row, every liability (linked to it,
+    //    with its budget basis) and the run report commit together or not at all.
+    //    Memory follows from the committed result only.
+    let mut period_db_id: Option<String> = None;
+    if let Some(ref pool) = state.pool {
+        if !accrued.is_empty() || !skipped.is_empty() {
+            let committed = crate::db::commit_accrual_batch(
+                pool,
+                &crate::db::AccrualBatch {
+                    site_id: &payload.site_id,
+                    period_key: &period_key,
+                    period_label: &period_label,
+                    due_date: payload.due_date,
+                    source: "MANUAL",
+                    dues: &accrued,
+                    skipped: &skipped,
+                },
+            )
             .await
             .map_err(|e| {
                 (
@@ -233,61 +288,46 @@ pub async fn accrue_monthly_dues(
                     crate::error::sanitized("Database write failed", &e),
                 )
             })?;
+            period_db_id = committed.period_id.map(|id| id.to_string());
+            let mut kept = Vec::new();
+            for ((mut due, basis), id) in accrued.into_iter().zip(committed.due_ids) {
+                if let Some(id) = id {
+                    due.id = id.to_string();
+                    kept.push((due, basis)); // else accrued concurrently
+                }
+            }
+            accrued = kept;
+        }
     }
 
-    // 3. Insert the liabilities. With PostgreSQL the identity column assigns the id
-    //    and the unique (unit, period, expense) index is the duplicate guard.
-    let mut accrued: Vec<(DuesLiability, Option<String>)> = Vec::new();
-    for (unit, amount, basis) in planned {
-        let mut due = DuesLiability {
-            id: String::new(),
-            unit_id: unit.id.clone(),
-            period: payload.period.clone(),
-            principal_amount: amount,
-            delay_penalty: Decimal::ZERO,
-            total_amount: amount,
-            due_date: payload.due_date,
-            status: DebtStatus::Pending,
-            paid_principal: Decimal::ZERO,
-            paid_penalty: Decimal::ZERO,
-            // Operational dues are the occupant's: the tenant's when the unit is
-            // let, otherwise the owner's (same rule as the scheduler).
-            debtor_type: if tenanted
-                .as_ref()
-                .map(|t| t.contains(&unit.id))
-                .unwrap_or(unit.tenant_user_id.is_some())
-            {
-                DebtorType::Tenant
-            } else {
-                DebtorType::Owner
-            },
-            expense_type: ExpenseType::OperationalDues,
-            penalty_accrued_through: None,
-        };
-        if let Some(ref pool) = state.pool {
-            match crate::db::insert_accrued_due(pool, &due)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        crate::error::sanitized("Database write failed", &e),
-                    )
-                })? {
-                Some(id) => due.id = id.to_string(),
-                None => continue, // accrued concurrently
-            }
-            if let Some(ref b) = basis {
-                crate::db::set_due_budget_basis(pool, &due.id, b)
-                    .await
-                    .map_err(|e| {
-                        (
-                            StatusCode::SERVICE_UNAVAILABLE,
-                            crate::error::sanitized("Database write failed", &e),
-                        )
-                    })?;
+    {
+        let mut inner = state.inner.write().await;
+        if !accrued.is_empty() {
+            let known = inner.dues_periods.iter().any(|p| {
+                crate::auth::same_id(&p.site_id, &payload.site_id)
+                    && BillingPeriod::parse(&p.period_name).ok() == Some(billing_period)
+            });
+            if !known {
+                let id = period_db_id.unwrap_or_else(|| {
+                    (inner
+                        .dues_periods
+                        .iter()
+                        .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                        .max()
+                        .unwrap_or(0)
+                        + 1)
+                    .to_string()
+                });
+                inner.dues_periods.push(DuesPeriod {
+                    id,
+                    site_id: payload.site_id.clone(),
+                    period_name: period_label.clone(),
+                    due_date: payload.due_date,
+                    status: DuesPeriodStatus::Active,
+                    created_at: Some(chrono::Utc::now()),
+                });
             }
         }
-        accrued.push((due, basis));
     }
 
     let mut inner = state.inner.write().await;
@@ -320,7 +360,8 @@ pub async fn accrue_monthly_dues(
             StatusCode::OK,
             Json(AccrueDuesPeriodResponse {
                 site_id: payload.site_id,
-                period: payload.period.clone(),
+                period: period_label.clone(),
+                period_key: period_key.clone(),
                 total_units_accrued: total_units_in_site,
                 newly_accrued_units_count: 0,
                 auto_settled_units_count: 0,
@@ -328,11 +369,11 @@ pub async fn accrue_monthly_dues(
                 total_amount_offset_from_advance: Decimal::ZERO,
                 already_accrued: skipped.is_empty(),
                 message: if skipped.is_empty() {
-                    format!("'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.", payload.period)
+                    format!("'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.", period_label)
                 } else {
                     format!(
                         "'{}' dönemi için tahakkuk yapılamadı: {}",
-                        payload.period,
+                        period_label,
                         skipped.join("; ")
                     )
                 },
@@ -359,7 +400,8 @@ pub async fn accrue_monthly_dues(
         StatusCode::OK,
         Json(AccrueDuesPeriodResponse {
             site_id: payload.site_id,
-            period: payload.period.clone(),
+            period: period_label.clone(),
+            period_key: period_key.clone(),
             total_units_accrued: total_units_in_site,
             newly_accrued_units_count,
             auto_settled_units_count: auto_settled_count,
@@ -369,7 +411,7 @@ pub async fn accrue_monthly_dues(
             message: {
                 let mut message = format!(
                     "'{}' dönemi için {} daireye başarıyla aidat tahakkuk ettirildi. {} daire avanstan otomatik kapatıldı.",
-                    payload.period, newly_accrued_units_count, auto_settled_count
+                    period_label, newly_accrued_units_count, auto_settled_count
                 );
                 if !skipped.is_empty() {
                     message.push_str(&format!(
@@ -385,4 +427,30 @@ pub async fn accrue_monthly_dues(
             skipped_units: skipped,
         }),
     ))
+}
+
+/// The latest accrual runs of a site with the units each one skipped and why, so the
+/// manager sees what a scheduled run did not charge (STORY-07-08). Empty without
+/// PostgreSQL, where the manual response already lists the skipped units.
+pub async fn list_accrual_runs(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Query(mut query): Query<DuesPeriodsQuery>,
+) -> Result<Json<Vec<crate::db::AccrualRunRecord>>, (StatusCode, String)> {
+    scope.pin_opt(&mut query.site_id)?;
+    let site_id = query
+        .site_id
+        .ok_or((StatusCode::BAD_REQUEST, "site_id is required".to_string()))?;
+    let Some(ref pool) = state.pool else {
+        return Ok(Json(Vec::new()));
+    };
+    crate::db::list_accrual_runs(pool, &site_id, 50)
+        .await
+        .map(Json)
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                crate::error::sanitized("Database unavailable", &e),
+            )
+        })
 }

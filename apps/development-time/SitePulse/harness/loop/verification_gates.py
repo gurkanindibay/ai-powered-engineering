@@ -143,6 +143,7 @@ GATES: Dict[str, List[CommandSpec]] = {
                                   "--test", "db_person_api_tests",
                                   "--test", "db_person_merge_tests",
                                   "--test", "db_unit_person_action_cycles_tests",
+                                  "--test", "db_accrual_atomic_tests",
                                   "--", "--ignored", "--test-threads=4"], "backend", 900)],
     # Errors are fatal; warnings/infos are reported by `flutter analyze` itself.
     "flutter-analyze": [CommandSpec(["flutter", "analyze", "--no-fatal-infos", "--no-fatal-warnings"], "flutter", 600)],

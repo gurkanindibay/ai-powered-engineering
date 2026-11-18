@@ -6,6 +6,7 @@
 //! environment access, and global state so they stay independently testable.
 
 pub mod apportionment;
+pub mod billing_period;
 pub mod email;
 pub mod fingerprint;
 pub mod household_relationship;

@@ -235,7 +235,7 @@ async fn when_an_interim_budget_is_within_the_cap_then_it_is_in_force_with_a_thr
 
 async fn accrue(
     state: &AppState,
-    period: &str,
+    _label: &str,
     amount: &str,
     due: NaiveDate,
 ) -> Result<AccrueDuesPeriodResponse, (axum::http::StatusCode, String)> {
@@ -244,7 +244,8 @@ async fn accrue(
         sitepulse_backend::tenancy::TenantScope::platform(),
         Json(AccrueDuesPeriodRequest {
             site_id: SITE.to_string(),
-            period: period.to_string(),
+            // A period is a canonical month (STORY-07-08): the one of the due date.
+            period: sitepulse_backend::domain::billing_period::BillingPeriod::of_date(due).key(),
             amount: d(amount),
             due_date: due,
         }),
@@ -345,10 +346,13 @@ async fn when_a_unit_has_no_tariff_then_manual_accrual_skips_it_instead_of_charg
         inner.units.push(untariffed);
     }
     // The manager's dialog sends no amount: the request body omits it.
+    let tariff_due = today() + Days::new(5);
+    let tariff_period =
+        sitepulse_backend::domain::billing_period::BillingPeriod::of_date(tariff_due);
     let request: AccrueDuesPeriodRequest = serde_json::from_value(serde_json::json!({
         "site_id": SITE,
-        "period": "Tarife Dönemi",
-        "due_date": (today() + Days::new(5)).to_string(),
+        "period": tariff_period.key(),
+        "due_date": tariff_due.to_string(),
     }))
     .unwrap();
     assert_eq!(request.amount, Decimal::ZERO);
@@ -370,7 +374,7 @@ async fn when_a_unit_has_no_tariff_then_manual_accrual_skips_it_instead_of_charg
         inner
             .dues
             .iter()
-            .find(|d| d.unit_id == unit && d.period == "Tarife Dönemi")
+            .find(|d| d.unit_id == unit && d.period == tariff_period.label())
             .map(|d| d.principal_amount)
     };
     assert_eq!(charged("d-14"), Some(d("1800.00")));
