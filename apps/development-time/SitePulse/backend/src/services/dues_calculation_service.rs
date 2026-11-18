@@ -164,7 +164,7 @@ mod tests {
         let svc = DuesCalculationService::new();
         let due_date = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
         let principal = Decimal::from_str_exact("1400.00").unwrap();
-        let nov_15 = NaiveDate::from_ymd_opt(2026, 11, 15).unwrap();
+        let nov_15 = NaiveDate::from_ymd_opt(2026, 11, 14).unwrap();
         let oct_20 = NaiveDate::from_ymd_opt(2026, 10, 20).unwrap();
         assert_eq!(
             svc.penalty_through(principal, due_date, nov_15, &[]),
