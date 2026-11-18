@@ -16,7 +16,7 @@ Feature: Title deed transfer and ownership sale handover
     When a capital assessment is accrued for the unit
     Then the CAPITAL_DUES liability is charged to Selim Evsahibi
 
-  @SC-08-05-03 @layer:gui @pending @role_manager
+  @SC-08-05-03 @GUI-08-15 @layer:gui @linked @role_manager
   Scenario: Previous owner's advance is paid out or transferred only with a second approver
     Given the previous owner has 800.00 in the unit's owner advance ledger
     When the Site Manager requests a 500.00 transfer of that advance to the tenant ledger

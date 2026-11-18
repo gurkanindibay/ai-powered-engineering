@@ -7,11 +7,13 @@ use rust_decimal::Decimal;
 use sitepulse_backend::{
     db,
     models::{
-        CreateAdvanceExitSettlementRequest, DecideAdvanceExitSettlementRequest, IndependentUnit,
+        CreateAdvanceExitSettlementRequest, DebtorType, DecideAdvanceExitSettlementRequest,
+        IndependentUnit, PaymentChannel, RecordManualPaymentRequest,
     },
     services::{
         advance_exit_settlement_service::AdvanceExitSettlementService,
         finance_common::{Caller, FinanceError},
+        PaymentTrackingService,
     },
     state::AppState,
 };
@@ -184,6 +186,7 @@ fn request(
 
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+// covers: SC-09-05-03, SC-09-05-04, SC-09-05-05, SC-09-05-06
 async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
     let db = TestDb::create().await;
     let (unit, site_id) = db.unit().await;
@@ -209,7 +212,6 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .await
         .expect("seeded owner")
         .get(0);
-    let tenant_id = db.departing_tenant(unit, &site_id, Decimal::ZERO).await;
     let indebted_tenant = db
         .departing_tenant(unit, &site_id, Decimal::new(30000, 2))
         .await;
@@ -221,6 +223,79 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
             .await,
         Err(FinanceError::Conflict(_))
     ));
+    state
+        .reload_from_db()
+        .await
+        .expect("load the frozen exit debt for the normal collection service");
+    let liability_id: String = db
+        .pool
+        .get()
+        .await
+        .expect("test connection")
+        .query_one(
+            "SELECT id::text FROM dues_liabilities WHERE liable_person_id = $1 ORDER BY id DESC LIMIT 1",
+            &[&indebted_tenant],
+        )
+        .await
+        .expect("frozen exit liability")
+        .get(0);
+    let payment_amount = {
+        let inner = state.inner.read().await;
+        let liability = inner
+            .dues
+            .iter()
+            .find(|due| due.id == liability_id)
+            .cloned()
+            .expect("frozen liability in read model");
+        sitepulse_backend::services::DuesCalculationService::new()
+            .calculate_delay_penalty(liability, chrono::Utc::now().date_naive())
+            .total_amount
+    };
+    PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(RecordManualPaymentRequest {
+            site_id: Some(site_id.clone()),
+            unit_id: unit.to_string(),
+            amount: payment_amount,
+            payer_name: "Departing Resident".to_string(),
+            payer_role: DebtorType::Tenant,
+            payment_channel: PaymentChannel::BankTransfer,
+            ..Default::default()
+        })
+        .await
+        .expect("pay frozen exit debt through normal collection");
+    let mut unblocked_request = request("PAYOUT", "TENANT", None, Decimal::new(100, 2));
+    unblocked_request.beneficiary_person_id = Some(indebted_tenant.to_string());
+    let unblocked = service
+        .create(&requester, &unit.to_string(), unblocked_request)
+        .await
+        .expect("allow settlement after the frozen debt is paid");
+    assert_eq!(unblocked.status, "PENDING");
+    let tenant_balance: Decimal = db
+        .pool
+        .get()
+        .await
+        .expect("test connection")
+        .query_one(
+            "SELECT balance FROM advance_balances WHERE unit_id = $1 AND debtor_type = 'TENANT'",
+            &[&unit],
+        )
+        .await
+        .expect("tenant advance remains available")
+        .get(0);
+    assert_eq!(tenant_balance, amount);
+    service
+        .decide(
+            &checker,
+            unblocked.id,
+            DecideAdvanceExitSettlementRequest {
+                approve: false,
+                payment_reference: None,
+                note: Some("Release the reservation for the remaining assertions".to_string()),
+            },
+        )
+        .await
+        .expect("reject the second request and release its reservation");
+    let tenant_id = db.departing_tenant(unit, &site_id, Decimal::ZERO).await;
     {
         let mut inner = state.inner.write().await;
         inner.reserve_exit_advance(&unit.to_string(), "TENANT", Decimal::new(5000, 2));
