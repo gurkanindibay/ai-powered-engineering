@@ -91,6 +91,7 @@ pub fn plan_accruals(
             site_id: site_id.to_string(),
             due_id: due.id.clone(),
             accrual_date: day,
+            booked_on: None,
             outstanding_principal: principal,
             segment_start,
             segment_base,
@@ -170,6 +171,7 @@ pub fn rewritten_accruals(
             site_id: site_id.to_string(),
             due_id: due.id.clone(),
             accrual_date: day,
+            booked_on: None,
             outstanding_principal: outstanding,
             segment_start,
             segment_base: cumulative(segment_start),
@@ -210,8 +212,20 @@ impl LateFeeService {
                             .iter()
                             .filter(|a| a.due_id == d.id)
                             .max_by_key(|a| a.accrual_date);
-                        plan_accruals(site_id, d, last, today)
-                            .map(|(rows, updated)| (updated, rows))
+                        plan_accruals(site_id, d, last, today).map(|(mut rows, updated)| {
+                            for row in &mut rows {
+                                let booking_date =
+                                    crate::services::finance_common::open_period_booking_date(
+                                        inner,
+                                        site_id,
+                                        row.accrual_date,
+                                    );
+                                if booking_date != row.accrual_date {
+                                    row.booked_on = Some(booking_date);
+                                }
+                            }
+                            (updated, rows)
+                        })
                     })
                     .collect()
             })

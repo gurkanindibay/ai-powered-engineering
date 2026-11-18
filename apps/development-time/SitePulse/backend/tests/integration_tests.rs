@@ -2965,7 +2965,7 @@ async fn when_managing_dues_periods_then_can_list_and_create_period_in_separate_
 
     assert_eq!(status, axum::http::StatusCode::CREATED);
     assert_eq!(created_period.period_name, "Kasım 2026");
-    assert_eq!(created_period.status, DuesPeriodStatus::Active);
+    assert_eq!(created_period.status, DuesPeriodStatus::Draft);
 
     // 3. Verify it is listed in list_dues_periods
     let query2 = sitepulse_backend::handlers::DuesPeriodsQuery {

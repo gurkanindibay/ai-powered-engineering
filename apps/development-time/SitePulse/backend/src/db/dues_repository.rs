@@ -351,20 +351,34 @@ pub async fn commit_accrual_batch(
     .await?;
     let existing = tx
         .query_opt(
-            "SELECT id FROM dues_periods WHERE site_id = $1 AND period_key = $2",
+            "SELECT id,status FROM dues_periods WHERE site_id = $1 AND period_key = $2 FOR UPDATE",
             &[&site, &batch.period_key],
         )
         .await?;
+    if existing
+        .as_ref()
+        .is_some_and(|row| row.get::<_, String>(1) == "CLOSED")
+    {
+        return Err(std::io::Error::other("cannot accrue into a closed billing period").into());
+    }
     let period_id: Option<i64> = if batch.dues.is_empty() {
         None
     } else {
         Some(match existing {
-            Some(row) => row.get(0),
+            Some(row) => {
+                let id: i64 = row.get(0);
+                tx.execute(
+                    "UPDATE dues_periods SET status='OPEN' WHERE id=$1 AND site_id=$2",
+                    &[&id, &site],
+                )
+                .await?;
+                id
+            }
             None => tx
                 .query_one(
                     r#"
                 INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status)
-                VALUES ($1, $2, $3, $4, 'ACTIVE')
+                VALUES ($1, $2, $3, $4, 'OPEN')
                 ON CONFLICT (site_id, period_name) DO UPDATE SET period_key = EXCLUDED.period_key
                 RETURNING id
                 "#,

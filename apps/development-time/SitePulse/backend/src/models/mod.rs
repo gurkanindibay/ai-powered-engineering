@@ -349,6 +349,7 @@ impl_sql_for_enum!(OccupancyStatus);
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DuesPeriodStatus {
     #[default]
+    #[serde(rename = "OPEN", alias = "ACTIVE")]
     Active,
     Closed,
     Draft,
@@ -357,7 +358,7 @@ pub enum DuesPeriodStatus {
 impl DuesPeriodStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
-            DuesPeriodStatus::Active => "ACTIVE",
+            DuesPeriodStatus::Active => "OPEN",
             DuesPeriodStatus::Closed => "CLOSED",
             DuesPeriodStatus::Draft => "DRAFT",
         }
@@ -367,6 +368,7 @@ impl DuesPeriodStatus {
         match s.to_uppercase().as_str() {
             "CLOSED" => DuesPeriodStatus::Closed,
             "DRAFT" => DuesPeriodStatus::Draft,
+            "OPEN" | "ACTIVE" => DuesPeriodStatus::Active,
             _ => DuesPeriodStatus::Active,
         }
     }
@@ -788,6 +790,74 @@ pub struct DuesPeriod {
     pub status: DuesPeriodStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Immutable financial figures captured when a billing period is closed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuesPeriodSnapshot {
+    pub site_id: String,
+    pub period_id: String,
+    pub period_key: String,
+    pub accrued: Decimal,
+    pub collected: Decimal,
+    pub outstanding: Decimal,
+    pub corrections: Decimal,
+    pub per_unit: Vec<DuesPeriodUnitSnapshot>,
+    pub trial_balance: TrialBalance,
+    pub account_report: DuesPeriodSummary,
+    pub journal_entries: Vec<JournalEntryView>,
+    pub snapshot_version: i32,
+    pub closed_by: String,
+    pub closed_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuesPeriodUnitSnapshot {
+    pub unit_id: String,
+    pub accrued: Decimal,
+    pub collected: Decimal,
+    pub outstanding: Decimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuesPeriodSummary {
+    pub period_id: String,
+    pub period_key: String,
+    pub status: DuesPeriodStatus,
+    pub accrued: Decimal,
+    pub collected: Decimal,
+    pub outstanding: Decimal,
+    pub corrections: Decimal,
+    pub per_unit: Vec<DuesPeriodUnitSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestPeriodReopen {
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecidePeriodReopen {
+    pub approve: bool,
+    #[serde(default)]
+    pub decision_note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuesPeriodReopenRequest {
+    pub id: String,
+    pub site_id: String,
+    pub period_id: String,
+    pub reason: String,
+    pub requested_by: String,
+    pub requested_at: chrono::DateTime<chrono::Utc>,
+    pub status: String,
+    #[serde(default)]
+    pub decided_by: Option<String>,
+    #[serde(default)]
+    pub decided_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default)]
+    pub decision_note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

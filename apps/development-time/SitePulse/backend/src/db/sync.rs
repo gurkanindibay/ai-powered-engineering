@@ -431,6 +431,57 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
         );
     }
 
+    // 4c. Frozen close reports and pending four-eyes reopen requests.
+    {
+        let rows = client.query(
+            "SELECT site_id,period_id,period_key,accrued,collected,outstanding,corrections,per_unit,trial_balance,account_report,journal_entries,snapshot_version,closed_by,closed_at FROM dues_period_snapshots ORDER BY period_id,snapshot_version",
+            &[],
+        ).await?;
+        for row in rows {
+            let per_unit: tokio_postgres::types::Json<serde_json::Value> = row.get(7);
+            let trial_balance: tokio_postgres::types::Json<serde_json::Value> = row.get(8);
+            let account_report: tokio_postgres::types::Json<serde_json::Value> = row.get(9);
+            let journal_entries: tokio_postgres::types::Json<serde_json::Value> = row.get(10);
+            let snapshot = crate::models::DuesPeriodSnapshot {
+                site_id: row.get::<_, i64>(0).to_string(),
+                period_id: row.get::<_, i64>(1).to_string(),
+                period_key: row.get(2),
+                accrued: row.get(3),
+                collected: row.get(4),
+                outstanding: row.get(5),
+                corrections: row.get(6),
+                per_unit: serde_json::from_value(per_unit.0)?,
+                trial_balance: serde_json::from_value(trial_balance.0)?,
+                account_report: serde_json::from_value(account_report.0)?,
+                journal_entries: serde_json::from_value(journal_entries.0)?,
+                snapshot_version: row.get(11),
+                closed_by: row.get(12),
+                closed_at: row.get(13),
+            };
+            state.dues_period_snapshots.push(snapshot);
+        }
+        let rows = client.query(
+            "SELECT id,site_id,period_id,reason,requested_by,requested_at,status,decided_by,decided_at,decision_note FROM dues_period_reopen_requests ORDER BY id",
+            &[],
+        ).await?;
+        for row in rows {
+            state
+                .dues_period_reopen_requests
+                .push(crate::models::DuesPeriodReopenRequest {
+                    id: row.get::<_, i64>(0).to_string(),
+                    site_id: row.get::<_, i64>(1).to_string(),
+                    period_id: row.get::<_, i64>(2).to_string(),
+                    reason: row.get(3),
+                    requested_by: row.get(4),
+                    requested_at: row.get(5),
+                    status: row.get(6),
+                    decided_by: row.get(7),
+                    decided_at: row.get(8),
+                    decision_note: row.get(9),
+                });
+        }
+    }
+
     // 5. Load Site Bank Accounts
     {
         let rows = client.query("SELECT id, site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at FROM site_bank_accounts",

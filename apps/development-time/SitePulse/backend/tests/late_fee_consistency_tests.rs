@@ -1,12 +1,15 @@
 //! STORY-07-13: one late-fee figure across the dashboard, the statement and the ledger.
 
-use chrono::{Datelike, Days, NaiveDate, Utc};
+use chrono::{Datelike, Days, Months, NaiveDate, Utc};
 use rust_decimal::Decimal;
+use sitepulse_backend::models::Role;
 use sitepulse_backend::models::*;
 use sitepulse_backend::scheduler::site_local_date;
 use sitepulse_backend::services::accounting_service::AccountingService;
+use sitepulse_backend::services::billing_period_service::BillingPeriodService;
 use sitepulse_backend::services::dues_calculation_service::DuesCalculationService;
 use sitepulse_backend::services::dues_ledger;
+use sitepulse_backend::services::finance_common::Caller;
 use sitepulse_backend::services::late_fee_service::{plan_accruals, LateFeeService};
 use sitepulse_backend::state::AppState;
 
@@ -300,6 +303,95 @@ async fn when_a_credit_note_follows_daily_accruals_then_the_trial_balance_matche
     // The dashboard's live evaluation agrees with the ledger.
     let live = DuesCalculationService::new().calculate_delay_penalty(reduced, today());
     assert_eq!(live.total_amount, d("711.67"));
+}
+
+// covers: SC-07-12-06
+#[tokio::test]
+async fn when_catch_up_runs_after_close_then_fee_is_booked_open_and_balances_match_dashboard() {
+    let today = today();
+    let closed_month = today
+        .with_day(1)
+        .unwrap()
+        .checked_sub_months(Months::new(1))
+        .unwrap();
+    let closed_month_end = (closed_month + Months::new(1)) - Days::new(1);
+    let period_key = format!("{:04}-{:02}", closed_month.year(), closed_month.month());
+    let due_date = closed_month + Days::new(9);
+    let mut due = liability("lf-closed-catch-up", "1400.00", due_date);
+    due.period = period_key.clone();
+    let state = state_with(due).await;
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues_periods.clear();
+        inner.dues_periods.push(DuesPeriod {
+            id: "period-closed-catch-up".to_string(),
+            site_id: SITE.to_string(),
+            period_name: period_key.clone(),
+            due_date,
+            status: DuesPeriodStatus::Active,
+            created_at: None,
+        });
+        inner.dues_periods.push(DuesPeriod {
+            id: "period-open-catch-up".to_string(),
+            site_id: SITE.to_string(),
+            period_name: format!("{:04}-{:02}", today.year(), today.month()),
+            due_date: today,
+            status: DuesPeriodStatus::Active,
+            created_at: None,
+        });
+    }
+    let caller = Caller {
+        site_id: SITE.to_string(),
+        user_id: "manager-catch-up".to_string(),
+        email: "manager@example.test".to_string(),
+        role: Role::SiteManager,
+        unit_id: None,
+    };
+    let snapshot = BillingPeriodService::new(&state)
+        .close(&caller, "period-closed-catch-up", "close-catch-up")
+        .await
+        .unwrap();
+
+    assert_eq!(LateFeeService::new(&state).run_site(SITE).await, 1);
+    let inner = state.inner.read().await;
+    let rows: Vec<_> = inner
+        .finance
+        .late_fee_accruals
+        .iter()
+        .filter(|row| row.due_id == "lf-closed-catch-up")
+        .collect();
+    assert!(rows.iter().any(|row| {
+        row.accrual_date >= closed_month
+            && row.accrual_date <= closed_month_end
+            && row.booked_on == Some(closed_month_end + Days::new(1))
+    }));
+    let current_due = inner
+        .dues
+        .iter()
+        .find(|item| item.id == "lf-closed-catch-up")
+        .unwrap()
+        .clone();
+    drop(inner);
+
+    let accounting = AccountingService::new(&state);
+    let closed_tb = accounting
+        .trial_balance(SITE, Some(closed_month), Some(closed_month_end))
+        .await;
+    assert_eq!(
+        serde_json::to_value(&closed_tb.rows).unwrap(),
+        serde_json::to_value(&snapshot.trial_balance.rows).unwrap()
+    );
+    let current_tb = accounting.trial_balance(SITE, None, None).await;
+    assert!(current_tb.balanced);
+    let receivable = current_tb
+        .rows
+        .iter()
+        .find(|row| row.account_code == "120")
+        .unwrap();
+    let dashboard_total = DuesCalculationService::new()
+        .calculate_delay_penalty(current_due, today)
+        .total_amount;
+    assert_eq!(receivable.balance, dashboard_total);
 }
 
 // covers: SC-07-13-02

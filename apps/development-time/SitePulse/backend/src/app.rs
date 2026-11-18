@@ -119,6 +119,10 @@ routes! {
     put "/api/v1/residents/{unit_id}/matching-criteria/payer-names" => handlers::update_unit_payer_names, Require(UnitPaymentProfileManage);
     get "/api/v1/dues/periods" => handlers::list_dues_periods, Require(LedgerManageAll);
     post "/api/v1/dues/periods" => handlers::create_dues_period, Require(LedgerManageAll);
+    get "/api/v1/dues/periods/{period_id}/summary" => handlers::billing_period_summary, Require(LedgerManageAll);
+    post "/api/v1/dues/periods/{period_id}/close" => handlers::close_billing_period, Require(LedgerManageAll);
+    post "/api/v1/dues/periods/{period_id}/reopen" => handlers::request_billing_period_reopen, Require(LedgerManageAll);
+    post "/api/v1/dues/period-reopen-requests/{request_id}/decide" => handlers::decide_billing_period_reopen, Require(LedgerManageAll);
     post "/api/v1/dues/accrue-period" => handlers::accrue_monthly_dues, Require(LedgerManageAll);
     get "/api/v1/dues/accrual-runs" => handlers::list_accrual_runs, Require(LedgerManageAll);
     post "/api/v1/payments/record" => handlers::record_homeowner_payment, Require(PaymentRecordManual);

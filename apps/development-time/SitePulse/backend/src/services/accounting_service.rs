@@ -126,7 +126,11 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
             .filter(|a| a.due_id == d.id && a.daily_amount > Decimal::ZERO)
         {
             booked += a.daily_amount;
-            out.push(penalty_entry(d, a.accrual_date, a.daily_amount));
+            out.push(penalty_entry(
+                d,
+                a.booked_on.unwrap_or(a.accrual_date),
+                a.daily_amount,
+            ));
         }
         let stored_rest = d.delay_penalty + waived + fee_reversed + reevaluated - booked;
         if stored_rest > Decimal::ZERO {
@@ -158,10 +162,11 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
             ("WRITE_OFF", de::WRITE_OFF_EXPENSE)
         };
         out.push(Entry {
-            date: a
-                .decided_at
-                .map(|t| local_date(inner, site_id, t))
-                .unwrap_or(today),
+            date: a.booked_on.unwrap_or_else(|| {
+                a.decided_at
+                    .map(|t| local_date(inner, site_id, t))
+                    .unwrap_or(today)
+            }),
             source,
             reference: format!("ADJ-{}", a.id),
             description: a.reason.clone(),
@@ -331,8 +336,72 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
                 .collect(),
         });
     }
+    // A closed month is reported from the journal captured at close. Payments
+    // received later and approved corrections therefore cannot rewrite its books.
+    for period in inner.dues_periods.iter().filter(|period| {
+        crate::auth::same_id(&period.site_id, site_id) && period.status == DuesPeriodStatus::Closed
+    }) {
+        let Ok(billing_period) =
+            crate::domain::billing_period::BillingPeriod::parse(&period.period_name)
+        else {
+            continue;
+        };
+        let Some(snapshot) = inner
+            .dues_period_snapshots
+            .iter()
+            .filter(|snapshot| {
+                crate::auth::same_id(&snapshot.site_id, site_id)
+                    && crate::auth::same_id(&snapshot.period_id, &period.id)
+            })
+            .max_by_key(|snapshot| snapshot.snapshot_version)
+        else {
+            continue;
+        };
+        out.retain(|entry| {
+            entry.date < billing_period.first_day() || entry.date > billing_period.last_day()
+        });
+        out.extend(snapshot.journal_entries.iter().map(|entry| {
+            Entry {
+                date: entry.date,
+                source: source_kind(&entry.source),
+                reference: entry.reference.clone(),
+                description: entry.description.clone(),
+                lines: entry
+                    .lines
+                    .iter()
+                    .map(|line| Posting {
+                        account: line.account_code.clone(),
+                        debit: line.debit,
+                        credit: line.credit,
+                    })
+                    .collect(),
+            }
+        }));
+    }
     out.sort_by(|a, b| a.date.cmp(&b.date).then(a.reference.cmp(&b.reference)));
     out
+}
+
+fn source_kind(source: &str) -> &'static str {
+    match source {
+        "ACCRUAL" => "ACCRUAL",
+        "PENALTY" => "PENALTY",
+        "RECEIPT" => "RECEIPT",
+        "REVERSAL" => "REVERSAL",
+        "ADVANCE_USE" => "ADVANCE_USE",
+        "WAIVER" => "WAIVER",
+        "WRITE_OFF" => "WRITE_OFF",
+        "EXPENSE" => "EXPENSE",
+        "EXPENSE_PAYMENT" => "EXPENSE_PAYMENT",
+        "CAPITAL_DISBURSEMENT" => "CAPITAL_DISBURSEMENT",
+        "CANCELLATION" => "CANCELLATION",
+        "CREDIT_NOTE" => "CREDIT_NOTE",
+        "OPENING" => "OPENING",
+        "RESERVE_ALLOCATION" => "RESERVE_ALLOCATION",
+        "RESERVE_USE" => "RESERVE_USE",
+        "BANK_FEE" => "BANK_FEE",
+        _ => "GENERAL",
+    }
 }
 
 /// The original accrual and the reversing entry of every approved cancel and
