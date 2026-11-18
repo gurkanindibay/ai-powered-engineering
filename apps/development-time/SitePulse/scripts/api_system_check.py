@@ -1463,9 +1463,15 @@ def seed(ctx: Context) -> None:
                 CURRENT_DATE - 5, 'OVERDUE', 0.00, 0.00, 0.00, 0)
         RETURNING id;
     """)
+    second_manager_person_id = ctx.psql.run(db, f"""
+        INSERT INTO persons (site_id, full_name, email, person_type)
+        VALUES ({ctx.site_id}, 'API System Check Second Manager',
+                'api-system-second-manager@example.com', 'SITE_MANAGER')
+        RETURNING id;
+    """)
     ctx.psql.run(db, f"""
-        INSERT INTO users (site_id, full_name, email, password_hash, role, must_change_password)
-        VALUES ({ctx.site_id}, 'API System Check Second Manager', 'api-system-second-manager@example.com',
+        INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+        VALUES ({ctx.site_id}, {second_manager_person_id}, 'api-system-second-manager@example.com',
                 '{hash_password("API-System-Second-Manager-123")}', 'SITE_MANAGER', false);
     """)
 
