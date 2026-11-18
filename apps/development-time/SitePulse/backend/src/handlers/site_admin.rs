@@ -15,10 +15,12 @@ use crate::models::Permission;
 use crate::models::{
     BlockDto, CreateBlockRequest, CreateHouseTypeRequest, HomeOwnerResponse, HouseTypeTariff,
     MoveInResidentRequest, MoveOutResidentRequest, OccupancyHistoryItem,
-    OccupancyTransitionRequest, OccupancyTransitionResponse, RegisterHomeOwnerRequest,
-    UnitOccupancyStateResponse, UpdateHomeOwnerRequest,
+    OccupancyTransitionRequest, OccupancyTransitionResponse, ProrationPolicyRequest,
+    ProrationPolicyResponse, RegisterHomeOwnerRequest, UnitOccupancyStateResponse,
+    UpdateHomeOwnerRequest,
 };
 use crate::services::account_activation_service::{ActivationDelivery, ActivationError};
+use crate::services::finance_common::{Caller, FinanceError};
 use crate::services::occupancy_service::OccupancyService;
 use crate::services::person_directory_service::{
     DirectoryPage, DirectoryQuery, PersonDirectoryError, PersonDirectoryService, PersonProfile,
@@ -294,17 +296,86 @@ pub async fn move_in_resident(
 /// Any guarded occupancy command, including the compound moves C1-C3.
 pub async fn apply_occupancy_transition(
     State(state): State<AppState>,
+    ctx: AuthzContext,
     scope: crate::tenancy::TenantScope,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
-    Json(payload): Json<OccupancyTransitionRequest>,
+    Json(mut payload): Json<OccupancyTransitionRequest>,
 ) -> Result<Json<OccupancyTransitionResponse>, AppError> {
     let site_id = scope.pinned(q.site_id)?;
-    OccupancyService::new(state)
+    let accrued_on = {
+        let inner = state.inner.read().await;
+        let timezone = inner
+            .sites
+            .iter()
+            .find(|site| crate::auth::same_id(&site.id, &site_id))
+            .map(|site| site.timezone.as_str())
+            .unwrap_or("Europe/Istanbul");
+        payload
+            .effective_date
+            .unwrap_or_else(|| crate::scheduler::site_local_date(timezone, chrono::Utc::now()))
+    };
+    payload.effective_date = Some(accrued_on);
+    let service = OccupancyService::new(state);
+    let mut response = service
         .transition(&site_id, &id, payload)
         .await
-        .map(Json)
-        .map_err(occupancy_error)
+        .map_err(occupancy_error)?;
+    if let Some(correction) = service
+        .request_open_period_split(&Caller::from_claims(&ctx.claims), &id, accrued_on)
+        .await
+        .map_err(correction_error)?
+    {
+        response.correction_requests.push(correction);
+    }
+    Ok(Json(response))
+}
+
+/// Sets the per-site opt-in for occupancy-aware dues proration.
+pub async fn get_proration_policy(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Query(q): Query<SiteIdParam>,
+) -> Result<Json<ProrationPolicyResponse>, AppError> {
+    let site_id = scope.pinned(q.site_id)?;
+    let inner = state.inner.read().await;
+    let site = inner
+        .sites
+        .iter()
+        .find(|site| crate::auth::same_id(&site.id, &site_id))
+        .ok_or_else(|| AppError::not_found(format!("Site {} not found", site_id)))?;
+    Ok(Json(ProrationPolicyResponse {
+        site_id,
+        proration_enabled: site.proration_enabled,
+    }))
+}
+
+/// Sets the per-site opt-in for occupancy-aware dues proration.
+pub async fn set_proration_policy(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<ProrationPolicyRequest>,
+) -> Result<Json<ProrationPolicyResponse>, AppError> {
+    let site_id = scope.pinned(q.site_id)?;
+    OccupancyService::new(state)
+        .set_proration_policy(&site_id, payload.proration_enabled)
+        .await
+        .map_err(occupancy_error)?;
+    Ok(Json(ProrationPolicyResponse {
+        site_id,
+        proration_enabled: payload.proration_enabled,
+    }))
+}
+
+fn correction_error(error: FinanceError) -> AppError {
+    match error {
+        FinanceError::NotFound(message) => AppError::not_found(message),
+        FinanceError::Invalid(message) => AppError::validation(message),
+        FinanceError::Conflict(message) => AppError::conflict(message),
+        FinanceError::Forbidden(message) => AppError::forbidden(message),
+        FinanceError::Unavailable(message) => AppError::unavailable(message),
+    }
 }
 
 /// The unit's ownership, occupancy, owners on record and legal commands.

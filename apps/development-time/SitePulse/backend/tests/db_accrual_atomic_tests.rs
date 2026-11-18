@@ -11,9 +11,16 @@
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
+use chrono::NaiveDate;
 use deadpool_postgres::Pool;
+use rust_decimal::Decimal;
 use serde_json::{json, Value};
-use sitepulse_backend::{app::build_router, auth, db, state::AppState};
+use sitepulse_backend::{
+    app::build_router,
+    auth, db,
+    models::{DebtStatus, DebtorType, DuesLiability, ExpenseType},
+    state::AppState,
+};
 use tower::ServiceExt;
 
 const IGNORE: &str = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate";
@@ -419,6 +426,83 @@ async fn two_sites_accrue_in_a_row_each_with_its_own_period_row() {
         ))
         .await,
         1
+    );
+    env.drop_db().await;
+}
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL and DB_PASS"]
+async fn a_first_accrual_batch_keeps_both_debtor_shares_and_blocks_a_rerun() {
+    let env = Env::new("shares").await;
+    let unit = env
+        .int(&format!(
+            "SELECT id FROM units WHERE site_id = {} AND deleted_at IS NULL AND house_type_id IS NOT NULL ORDER BY id LIMIT 1",
+            env.site
+        ))
+        .await;
+    let site_id = env.site.to_string();
+    let unit_id = unit.to_string();
+    let period_key = "2099-01";
+    let period_label = period_key;
+    let due_date = NaiveDate::from_ymd_opt(2099, 1, 15).expect("fixture date");
+    let dues: Vec<(DuesLiability, Option<String>)> = [DebtorType::Owner, DebtorType::Tenant]
+        .into_iter()
+        .map(|debtor_type| {
+            let share = Decimal::from(600);
+            (
+                DuesLiability {
+                    id: String::new(),
+                    unit_id: unit_id.clone(),
+                    period: period_label.to_string(),
+                    principal_amount: share,
+                    delay_penalty: Decimal::ZERO,
+                    total_amount: share,
+                    due_date,
+                    status: DebtStatus::Pending,
+                    paid_principal: Decimal::ZERO,
+                    paid_penalty: Decimal::ZERO,
+                    debtor_type,
+                    expense_type: ExpenseType::OperationalDues,
+                    penalty_accrued_through: None,
+                    grace_days: 0,
+                },
+                None,
+            )
+        })
+        .collect();
+    let batch = db::AccrualBatch {
+        site_id: &site_id,
+        period_key,
+        period_label,
+        due_date,
+        source: "SCHEDULER",
+        dues: &dues,
+        skipped: &[],
+    };
+
+    let first = db::commit_accrual_batch(&env.pool, &batch)
+        .await
+        .expect("first owner and tenant shares commit");
+    assert_eq!(first.due_ids.len(), 2);
+    assert!(first.due_ids.iter().all(Option::is_some));
+    assert_eq!(
+        env.int(&format!(
+            "SELECT count(*) FROM dues_liabilities WHERE unit_id = {unit} AND period_key = '{period_key}' AND capital_project_id IS NULL"
+        ))
+        .await,
+        2
+    );
+
+    let rerun = db::commit_accrual_batch(&env.pool, &batch)
+        .await
+        .expect("an existing unit-period prevents a second accrual");
+    assert_eq!(rerun.due_ids, vec![None, None]);
+    assert_eq!(
+        env.int(&format!(
+            "SELECT count(*) FROM dues_liabilities WHERE unit_id = {unit} AND period_key = '{period_key}' AND capital_project_id IS NULL"
+        ))
+        .await,
+        2
     );
     env.drop_db().await;
 }

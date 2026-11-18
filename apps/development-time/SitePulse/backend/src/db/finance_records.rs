@@ -198,7 +198,7 @@ finance_record!(AccrualCorrection, "accrual_corrections", {
     requested_by: plain, requested_at: plain, status: plain, decided_by: plain,
     decided_at: plain, decision_note: plain, principal_before: plain, penalty_before: plain,
     paid_before: plain, penalty_reversed: plain, advance_credited: plain,
-    replacement_due_id: opt_id,
+    replacement_due_id: opt_id, replacement_shares: json, replacement_due_ids: json,
 });
 finance_record!(LateFeeAccrual, "late_fee_accruals", {
     site_id: id, due_id: id, accrual_date: plain, booked_on: plain, outstanding_principal: plain,

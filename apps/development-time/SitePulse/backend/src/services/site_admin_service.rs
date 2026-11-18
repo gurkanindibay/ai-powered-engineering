@@ -1082,6 +1082,7 @@ impl SiteAdminService {
                 },
                 virtual_iban: Some(viban),
                 house_type: effective_house_type.clone(),
+                created_on: Some(Utc::now().date_naive()),
             };
 
             // Insert or update in-memory unit

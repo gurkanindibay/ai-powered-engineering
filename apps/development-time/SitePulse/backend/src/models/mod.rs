@@ -881,6 +881,9 @@ pub struct IndependentUnit {
     pub virtual_iban: Option<String>,
     #[serde(default)]
     pub house_type: Option<String>,
+    /// Calendar date the unit was created, used to exclude pre-existing periods.
+    #[serde(default)]
+    pub created_on: Option<NaiveDate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -927,11 +930,26 @@ pub struct Site {
     /// IANA time zone used for accrual dates (e.g. `Europe/Istanbul`).
     #[serde(default = "default_site_timezone")]
     pub timezone: String,
+    /// Whether monthly operational dues are split by occupancy days. Defaults
+    /// off to preserve existing full-month accrual until a manager opts in.
+    #[serde(default)]
+    pub proration_enabled: bool,
     /// Vergi Kimlik No (10 digits) or the manager's T.C. Kimlik No (11), printed on receipts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tax_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tax_office: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProrationPolicyRequest {
+    pub proration_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProrationPolicyResponse {
+    pub site_id: String,
+    pub proration_enabled: bool,
 }
 
 pub fn default_site_timezone() -> String {
@@ -1302,6 +1320,9 @@ pub struct OccupancyTransitionResponse {
     pub closed: Option<OccupancyHistoryItem>,
     /// The session the command opened.
     pub opened: Option<OccupancyHistoryItem>,
+    /// Corrections requested when this transition changed an accrued open-period share.
+    #[serde(default)]
+    pub correction_requests: Vec<AccrualCorrection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

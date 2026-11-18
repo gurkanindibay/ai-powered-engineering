@@ -571,6 +571,7 @@ pub async fn provision_site_units(
                         license_end_date: lic_end
                             .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
                         timezone: crate::models::default_site_timezone(),
+                        proration_enabled: false,
                         tax_id: None,
                         tax_office: None,
                     });
@@ -651,6 +652,7 @@ pub async fn provision_site_units(
                         license_end_date: lic_end
                             .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
                         timezone: crate::models::default_site_timezone(),
+                        proration_enabled: false,
                         tax_id: None,
                         tax_office: None,
                     });
@@ -693,6 +695,7 @@ pub async fn provision_site_units(
                     plan_type: PlanType::Premium,
                     license_end_date: license_end,
                     timezone: crate::models::default_site_timezone(),
+                    proration_enabled: false,
                     tax_id: None,
                     tax_office: None,
                 });
@@ -723,6 +726,7 @@ pub async fn provision_site_units(
                     plan_type: PlanType::Premium,
                     license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
                     timezone: crate::models::default_site_timezone(),
+                    proration_enabled: false,
                     tax_id: None,
                     tax_office: None,
                 });
@@ -856,6 +860,7 @@ pub async fn provision_site_units(
                 } else {
                     "2+1".to_string()
                 }),
+                created_on: Some(Utc::now().date_naive()),
             });
             new_unit_id
         };

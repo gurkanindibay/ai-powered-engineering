@@ -26,7 +26,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 1. Load Sites
     {
-        let rows = client.query("SELECT id, name, address, slug, status, plan_type, license_end_date, timezone, tax_id, tax_office FROM sites WHERE deleted_at IS NULL",
+        let rows = client.query("SELECT id, name, address, slug, status, plan_type, license_end_date, timezone, tax_id, tax_office, proration_enabled FROM sites WHERE deleted_at IS NULL",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -57,6 +57,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                     .unwrap_or_else(crate::models::default_site_timezone),
                 tax_id: row.get(8),
                 tax_office: row.get(9),
+                proration_enabled: row.get(10),
             };
 
             upsert_by_id(&mut state.sites, s, |x| &x.id);
@@ -183,7 +184,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 3. Load Units
     {
-        let rows = client.query("SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type FROM units WHERE deleted_at IS NULL",
+        let rows = client.query("SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type, (created_at AT TIME ZONE 'UTC')::date FROM units WHERE deleted_at IS NULL",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -196,6 +197,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let site_id: Option<i64> = row.get(7);
             let virtual_iban: Option<String> = row.get(8);
             let house_type: Option<String> = row.get(9);
+            let created_on: Option<NaiveDate> = row.get(10);
 
             let block_label = if block_id == 1 { "blok-A" } else { "blok-B" };
             let resolved_viban = virtual_iban.or_else(|| {
@@ -219,6 +221,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 tenant_user_id: tenant_person_id.map(|p| format!("person-{}", p)),
                 virtual_iban: resolved_viban,
                 house_type,
+                created_on,
             };
 
             // Register unit payer names (tenant first as primary payer, then owner)
