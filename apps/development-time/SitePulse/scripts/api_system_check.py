@@ -1446,11 +1446,14 @@ def seed(ctx: Context) -> None:
         VALUES ({ctx.unit_id}, 'System Check Dues', 100.00, CURRENT_DATE, 'PENDING');
     """)
     ctx.site_id = ctx.psql.run(db, "SELECT id FROM sites WHERE slug='begonya-sitesi' AND deleted_at IS NULL LIMIT 1;")
-    ctx.accrual_check_period_key = ctx.psql.run(db, "SELECT to_char(CURRENT_DATE, 'YYYY-MM');")
+    ctx.accrual_check_period_key = ctx.psql.run(db, "SELECT to_char(CURRENT_DATE - interval '1 month', 'YYYY-MM');")
+    # A previous-month period on another unit keeps these rows out of the current-month budget accrual
+    # and the shared unit's advance/allocation checks that run earlier in the suite.
+    accrual_unit_id = ctx.psql.run(db, f"SELECT id FROM units WHERE site_id={ctx.site_id} AND id <> {ctx.unit_id} ORDER BY id LIMIT 1;")
     ctx.accrual_check_period_id = ctx.psql.run(db, f"""
         INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status)
         VALUES ({ctx.site_id}, '{ctx.accrual_check_period_key}', '{ctx.accrual_check_period_key}',
-                date_trunc('month', CURRENT_DATE)::date, 'OPEN')
+                date_trunc('month', CURRENT_DATE - interval '1 month')::date, 'OPEN')
         ON CONFLICT (site_id, period_name) DO UPDATE SET status='OPEN'
         RETURNING id;
     """)
@@ -1458,7 +1461,7 @@ def seed(ctx: Context) -> None:
         INSERT INTO dues_liabilities
             (unit_id, dues_period_id, period, period_key, debtor_type, expense_type, principal_amount,
              due_date, status, delay_penalty, paid_principal, paid_penalty, grace_days)
-        VALUES ({ctx.unit_id}, {ctx.accrual_check_period_id}, '{ctx.accrual_check_period_key}',
+        VALUES ({accrual_unit_id}, {ctx.accrual_check_period_id}, '{ctx.accrual_check_period_key}',
                 '{ctx.accrual_check_period_key}', 'OWNER', 'OPERATIONAL_DUES', 1400.00,
                 CURRENT_DATE - 5, 'OVERDUE', 0.00, 0.00, 0.00, 0)
         RETURNING id;
@@ -1473,6 +1476,18 @@ def seed(ctx: Context) -> None:
         INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
         VALUES ({ctx.site_id}, {second_manager_person_id}, 'api-system-second-manager@example.com',
                 '{hash_password("API-System-Second-Manager-123")}', 'SITE_MANAGER', false);
+    """)
+    # A dedicated resident: other checks revoke or change the seeded residents' sessions and passwords.
+    resident_person_id = ctx.psql.run(db, f"""
+        INSERT INTO persons (site_id, full_name, email, person_type)
+        VALUES ({ctx.site_id}, 'API System Check Resident',
+                'api-system-resident@example.com', 'HOME_OWNER')
+        RETURNING id;
+    """)
+    ctx.psql.run(db, f"""
+        INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+        VALUES ({ctx.site_id}, {resident_person_id}, 'api-system-resident@example.com',
+                '{hash_password("API-System-Resident-123")}', 'HOME_OWNER', false);
     """)
 
 
@@ -1491,7 +1506,7 @@ def run(selected: List[str], container: str, keep: bool, log_dir: Path) -> Dict[
         ctx.manager = login(backend, "mehmet.demir@begonya.com", "mehmet123")
         ctx.other_manager = login(backend, "other.manager@syscheck.test", "OtherManager-123")
         ctx.second_site_manager = login(backend, "api-system-second-manager@example.com", "API-System-Second-Manager-123")
-        ctx.write_denied_user = login(backend, "ahmet.yilmaz@begonya.com", "ahmet123")
+        ctx.write_denied_user = login(backend, "api-system-resident@example.com", "API-System-Resident-123")
         for name in CHECKS:
             if name not in selected:
                 continue
