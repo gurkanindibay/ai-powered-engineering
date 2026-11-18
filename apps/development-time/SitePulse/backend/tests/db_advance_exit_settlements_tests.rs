@@ -28,12 +28,17 @@ impl TestDb {
             db::create_pool_for("postgres").expect("DB_PASS is required for PostgreSQL tests");
         let name = format!("sp_exit_{}", std::process::id());
         let client = admin.get().await.expect("admin connection");
-        client
-            .batch_execute(&format!(
-                "DROP DATABASE IF EXISTS {name} WITH (FORCE); CREATE DATABASE {name};"
-            ))
-            .await
-            .expect("create throwaway database");
+        // One statement per call: DROP/CREATE DATABASE cannot run in the implicit
+        // transaction a multi-statement batch opens.
+        for sql in [
+            format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
+            format!("CREATE DATABASE {name}"),
+        ] {
+            client
+                .batch_execute(&sql)
+                .await
+                .expect("create throwaway database");
+        }
         drop(client);
         let pool = db::create_pool_for(&name).expect("test database pool");
         db::init_db(&pool).await.expect("apply migrations");
