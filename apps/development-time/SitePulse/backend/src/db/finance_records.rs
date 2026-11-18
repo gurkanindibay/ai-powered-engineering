@@ -200,6 +200,10 @@ finance_record!(AccrualCorrection, "accrual_corrections", {
     paid_before: plain, penalty_reversed: plain, advance_credited: plain,
     replacement_due_id: opt_id,
 });
+finance_record!(LateFeeAccrual, "late_fee_accruals", {
+    site_id: id, due_id: id, accrual_date: plain, outstanding_principal: plain,
+    segment_start: plain, segment_base: plain, cumulative_fee: plain, daily_amount: plain,
+});
 finance_record!(HeatCostPeriod, "heat_cost_periods", {
     site_id: id, label: plain, period_start: plain, period_end: plain, total_cost: plain,
     consumption_share_percent: plain, due_date: plain, status: plain, approved_by: plain,

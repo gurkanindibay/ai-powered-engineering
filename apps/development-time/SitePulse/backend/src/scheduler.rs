@@ -514,6 +514,13 @@ pub async fn run_daily_collections(state: &AppState) -> (usize, usize, usize, us
             Err(e) => tracing::warn!("[Scheduler] Autopay for site {}: {}", site, e),
         }
     }
+    // STORY-07-13: persist the day's late fee first, so dunning and the ledger see it.
+    let late_fees = crate::services::late_fee_service::LateFeeService::new(state)
+        .run_all()
+        .await;
+    if late_fees > 0 {
+        tracing::info!("[Scheduler] Late fees accrued on {} liabilities", late_fees);
+    }
     let dunning = DunningService::new(state).run_all().await;
     let reminders = match BudgetComplianceService::new(state)
         .remind_interim_deadlines()

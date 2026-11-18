@@ -586,6 +586,7 @@ impl PaymentTrackingService {
         // adjustments and the penalty handed back to the payer's advance.
         let mut adjustments: Vec<crate::models::LedgerAdjustment> = Vec::new();
         let mut penalty_refund = Decimal::ZERO;
+        let mut accrual_rewrites: Vec<AccrualRewrite> = Vec::new();
         let (receipt, settled_dues, mut entry) = if let Some(ref pool) = self.state.pool {
             let site_num = crate::db::require_id("site", &site_id)?;
             let unit_num = crate::db::require_id("unit", &unit.id)?;
@@ -704,6 +705,30 @@ impl PaymentTrackingService {
                 )
                 .await
                 .map_err(db_err)?;
+                // STORY-07-13 day rows dated after the payment were computed on the
+                // principal before it; rewrite them with the stored figure.
+                let deleted = crate::db::tx_delete_late_fee_accruals_after(&tx, due_num, today)
+                    .await
+                    .map_err(db_err)?;
+                if deleted > 0 {
+                    let mut rows = crate::services::late_fee_service::rewritten_accruals(
+                        &site_id,
+                        &re.original,
+                        &re.payments,
+                        today,
+                        re.original.penalty_accrued_through.unwrap_or(today),
+                    );
+                    for row in rows.iter_mut() {
+                        row.id = crate::db::finance_records::insert(&*tx, row)
+                            .await
+                            .map_err(db_err)?;
+                    }
+                    accrual_rewrites.push(AccrualRewrite {
+                        due_id: re.due.id.clone(),
+                        after: today,
+                        rows,
+                    });
+                }
                 if re.reversed > Decimal::ZERO {
                     let mut adjustment = penalty_reevaluation_adjustment(
                         &site_id,
@@ -818,6 +843,17 @@ impl PaymentTrackingService {
             receipt.id = next_receipt_id;
             issuer.apply(&mut receipt);
             for re in &reevaluations {
+                accrual_rewrites.push(AccrualRewrite {
+                    due_id: re.due.id.clone(),
+                    after: today,
+                    rows: crate::services::late_fee_service::rewritten_accruals(
+                        &site_id,
+                        &re.original,
+                        &re.payments,
+                        today,
+                        re.original.penalty_accrued_through.unwrap_or(today),
+                    ),
+                });
                 if re.reversed > Decimal::ZERO {
                     let mut adjustment = penalty_reevaluation_adjustment(
                         &site_id,
@@ -866,6 +902,33 @@ impl PaymentTrackingService {
             inner.adjust_advance(&unit.id, &credit_debtor, penalty_refund);
         }
         inner.finance.adjustments.extend(adjustments);
+        for rewrite in accrual_rewrites {
+            let stale = |a: &crate::models::LateFeeAccrual| {
+                a.due_id == rewrite.due_id && a.accrual_date > rewrite.after
+            };
+            let had_rows = inner.finance.late_fee_accruals.iter().any(stale);
+            // With PostgreSQL the rows were rewritten in the transaction (ids set);
+            // in memory they are rewritten only where the daily job had written some.
+            if !had_rows && rewrite.rows.iter().all(|r| r.id == 0) {
+                continue;
+            }
+            inner.finance.late_fee_accruals.retain(|a| !stale(a));
+            let mut next_id = inner
+                .finance
+                .late_fee_accruals
+                .iter()
+                .map(|a| a.id)
+                .max()
+                .unwrap_or(0)
+                + 1;
+            for mut row in rewrite.rows {
+                if row.id == 0 {
+                    row.id = next_id;
+                    next_id += 1;
+                }
+                inner.finance.late_fee_accruals.push(row);
+            }
+        }
         if let Some(key) = idempotency_key.as_deref() {
             inner
                 .payment_idempotency
@@ -1823,6 +1886,17 @@ struct PenaltyReevaluation {
     original: DuesLiability,
     reversed: Decimal,
     refund: Decimal,
+    /// Principal payments of the liability including the backdated one.
+    payments: Vec<(NaiveDate, Decimal)>,
+}
+
+/// The late-fee day rows of a liability after a re-evaluation: those dated after
+/// the payment are replaced (#187), so the stored figure, the day rows and the
+/// ledger agree.
+struct AccrualRewrite {
+    due_id: String,
+    after: NaiveDate,
+    rows: Vec<crate::models::LateFeeAccrual>,
 }
 
 /// Moves every liability with a late fee accrued past `payment_date` back to the
@@ -1878,7 +1952,9 @@ fn finish_penalty_reevaluation(
         };
         let accrued_through = rw.original.penalty_accrued_through.unwrap_or(payment_date);
         let mut history = rw.history;
-        history.push((payment_date, line.settlement.principal));
+        if line.settlement.principal > Decimal::ZERO {
+            history.push((payment_date, line.settlement.principal));
+        }
         let recalculated = calc
             .penalty_through(
                 rw.original.principal_amount,
@@ -1900,6 +1976,7 @@ fn finish_penalty_reevaluation(
                 original: rw.original,
                 reversed,
                 refund,
+                payments: history,
             });
         }
     }

@@ -36,6 +36,7 @@ pub mod dunning_service;
 pub mod finance_common;
 pub mod heat_share_service;
 pub mod kvkk_service;
+pub mod late_fee_service;
 pub mod lease_service;
 pub mod notification_service;
 pub mod person_directory_service;

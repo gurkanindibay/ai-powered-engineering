@@ -1354,3 +1354,17 @@ pub async fn tx_apply_penalty_reevaluation(
     }
     Ok(())
 }
+
+/// Deletes a liability's late-fee day rows dated after `after`; returns how many.
+pub async fn tx_delete_late_fee_accruals_after(
+    tx: &deadpool_postgres::Transaction<'_>,
+    due_id: i64,
+    after: NaiveDate,
+) -> DbResult<u64> {
+    Ok(tx
+        .execute(
+            "DELETE FROM late_fee_accruals WHERE due_id = $1 AND accrual_date > $2",
+            &[&due_id, &after],
+        )
+        .await?)
+}

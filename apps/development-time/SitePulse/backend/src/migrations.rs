@@ -71,6 +71,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(37, "V37__canonical_billing_period_and_accrual_runs.sql"),
     migration!(38, "V38__accrual_corrections.sql"),
     migration!(39, "V39__advance_exit_settlements.sql"),
+    migration!(40, "V40__late_fee_accruals.sql"),
     migration!(41, "V41__penalty_reevaluation_adjustments.sql"),
 ];
 

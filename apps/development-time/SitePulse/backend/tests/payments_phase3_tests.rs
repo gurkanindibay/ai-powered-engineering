@@ -1446,7 +1446,12 @@ async fn when_the_ledger_is_derived_then_the_trial_balance_balances_and_receivab
         .await
         .dues
         .iter()
-        .map(sitepulse_backend::services::dues_ledger::outstanding)
+        .map(|due| {
+            // The ledger books the late fee accrued up to today, like the dashboard.
+            let live = sitepulse_backend::services::DuesCalculationService::new()
+                .calculate_delay_penalty(due.clone(), today());
+            sitepulse_backend::services::dues_ledger::outstanding(&live)
+        })
         .sum();
     assert_eq!(receivable, open);
     assert_eq!(

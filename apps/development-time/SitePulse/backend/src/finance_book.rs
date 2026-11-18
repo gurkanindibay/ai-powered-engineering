@@ -40,6 +40,7 @@ pub struct FinanceBook {
     pub plan_installments: Vec<PaymentPlanInstallment>,
     pub adjustments: Vec<LedgerAdjustment>,
     pub corrections: Vec<AccrualCorrection>,
+    pub late_fee_accruals: Vec<LateFeeAccrual>,
     pub heat_periods: Vec<HeatCostPeriod>,
     pub heat_readings: Vec<HeatMeterReading>,
     pub heat_shares: Vec<HeatCostShare>,
@@ -142,6 +143,9 @@ pub mod col {
     }
     pub fn plan_installments(b: &mut FinanceBook) -> &mut Vec<PaymentPlanInstallment> {
         &mut b.plan_installments
+    }
+    pub fn late_fee_accruals(b: &mut FinanceBook) -> &mut Vec<LateFeeAccrual> {
+        &mut b.late_fee_accruals
     }
     pub fn adjustments(b: &mut FinanceBook) -> &mut Vec<LedgerAdjustment> {
         &mut b.adjustments
