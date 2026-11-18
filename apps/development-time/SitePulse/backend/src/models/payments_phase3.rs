@@ -78,6 +78,11 @@ pub const PLAN_CANCELLED: &str = "CANCELLED";
 
 pub const ADJUSTMENT_PENALTY_WAIVER: &str = "PENALTY_WAIVER";
 pub const ADJUSTMENT_WRITE_OFF: &str = "PRINCIPAL_WRITE_OFF";
+/// System-generated reversal of late fee that a backdated payment makes
+/// unwarranted (#187). Never requested by a user.
+pub const ADJUSTMENT_PENALTY_REEVALUATION: &str = "PENALTY_REEVALUATION";
+/// `LedgerAdjustment::source` of a re-evaluation caused by a payment's value date.
+pub const ADJUSTMENT_SOURCE_PAYMENT_DATE: &str = "PAYMENT_DATE";
 
 // ---------------------------------------------------------------------------
 // R2: KVKK

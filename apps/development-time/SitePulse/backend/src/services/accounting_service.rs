@@ -76,7 +76,8 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
                 ],
             });
         }
-        let penalty = d.delay_penalty + waived;
+        let reevaluated = adjusted_total(inner, &d.id, ADJUSTMENT_PENALTY_REEVALUATION);
+        let penalty = d.delay_penalty + waived + reevaluated;
         if penalty > Decimal::ZERO {
             out.push(Entry {
                 date: d.penalty_accrued_through.unwrap_or(today).max(d.due_date),
@@ -97,7 +98,11 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
         .iter()
         .filter(|a| a.status == REQUEST_APPROVED && crate::auth::same_id(&a.site_id, site_id))
     {
-        let (source, account) = if a.kind == ADJUSTMENT_PENALTY_WAIVER {
+        // A re-evaluation reverses the penalty revenue itself (it was never
+        // owed); a waiver forgives penalty that was owed.
+        let (source, account) = if a.kind == ADJUSTMENT_PENALTY_REEVALUATION {
+            ("PENALTY_REVERSAL", de::PENALTY_REVENUE)
+        } else if a.kind == ADJUSTMENT_PENALTY_WAIVER {
             ("WAIVER", de::PENALTY_WAIVED)
         } else {
             ("WRITE_OFF", de::WRITE_OFF_EXPENSE)

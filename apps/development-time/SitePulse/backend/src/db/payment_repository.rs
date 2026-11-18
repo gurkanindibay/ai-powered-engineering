@@ -1304,3 +1304,52 @@ pub async fn fetch_site_payments_from_db(
         "guidance": guidance
     }))
 }
+
+/// Principal payments settled against one liability, as `(payment date, principal)`.
+/// Reversed payments and reversal contra entries are excluded. Used to re-evaluate
+/// late fees when a backdated payment is recorded (#187).
+pub async fn tx_load_due_principal_payments(
+    tx: &deadpool_postgres::Transaction<'_>,
+    due_id: i64,
+) -> DbResult<Vec<(chrono::NaiveDate, Decimal)>> {
+    let rows = tx
+        .query(
+            "SELECT pe.payment_date, pa.principal_amount FROM payment_allocations pa \
+             JOIN payment_entries pe ON pe.id = pa.payment_entry_id \
+             WHERE pa.dues_liability_id = $1 AND pa.principal_amount > 0 \
+               AND pe.entry_type = 'COLLECTION' AND pe.settlement_status <> 'REVERSED' \
+             ORDER BY pe.payment_date, pe.id",
+            &[&due_id],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let at: chrono::DateTime<chrono::Utc> = r.get(0);
+            (at.date_naive(), r.get::<_, Decimal>(1))
+        })
+        .collect())
+}
+
+/// Writes the re-evaluated late fee of a liability: the new accrued penalty and
+/// the penalty paid beyond it handed back (`penalty_refund`, credited to the
+/// payer's advance by the caller).
+pub async fn tx_apply_penalty_reevaluation(
+    tx: &deadpool_postgres::Transaction<'_>,
+    due_id: i64,
+    delay_penalty: Decimal,
+    penalty_refund: Decimal,
+) -> DbResult<()> {
+    let n = tx
+        .execute(
+            "UPDATE dues_liabilities SET delay_penalty = $2, \
+                 paid_penalty = paid_penalty - $3, paid_amount = paid_amount - $3, \
+                 version = version + 1 WHERE id = $1",
+            &[&due_id, &delay_penalty, &penalty_refund],
+        )
+        .await?;
+    if n != 1 {
+        return Err(format!("dues liability {} disappeared during re-evaluation", due_id).into());
+    }
+    Ok(())
+}
