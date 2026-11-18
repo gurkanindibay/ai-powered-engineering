@@ -120,6 +120,7 @@ routes! {
     get "/api/v1/dues/periods" => handlers::list_dues_periods, Require(LedgerManageAll);
     post "/api/v1/dues/periods" => handlers::create_dues_period, Require(LedgerManageAll);
     post "/api/v1/dues/accrue-period" => handlers::accrue_monthly_dues, Require(LedgerManageAll);
+    get "/api/v1/dues/accrual-runs" => handlers::list_accrual_runs, Require(LedgerManageAll);
     post "/api/v1/payments/record" => handlers::record_homeowner_payment, Require(PaymentRecordManual);
     post "/api/v1/payments/match-all" => handlers::match_all_homeowner_payments, Require(PaymentRecordManual);
     get "/api/v1/payments/homeowner-records" => handlers::get_homeowner_payments, Require(LedgerManageAll);
@@ -272,6 +273,10 @@ routes! {
     get "/api/v1/adjustments" => handlers::list_adjustments, Require(FinanceRead);
     post "/api/v1/adjustments" => handlers::request_adjustment, Require(FinanceManage);
     post "/api/v1/adjustments/{id}/decide" => handlers::decide_adjustment, Require(AdjustmentApprove);
+    // STORY-07-11: accrual corrections (cancel, re-issue, credit note)
+    get "/api/v1/accrual-corrections" => handlers::list_corrections, Require(FinanceRead);
+    post "/api/v1/accrual-corrections" => handlers::request_correction, Require(FinanceManage);
+    post "/api/v1/accrual-corrections/{id}/decide" => handlers::decide_correction, Require(AdjustmentApprove);
     // SPEC-009 R11: heat-share billing
     get "/api/v1/heat-share/periods" => handlers::list_heat_periods, Require(FinanceRead);
     post "/api/v1/heat-share/periods" => handlers::create_heat_period, Require(FinanceManage);

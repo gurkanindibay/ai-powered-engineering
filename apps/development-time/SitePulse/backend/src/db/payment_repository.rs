@@ -326,6 +326,7 @@ fn due_from_row(r: &tokio_postgres::Row, unit_id: i64) -> DuesLiability {
         status: match status.as_str() {
             "PAID" => DebtStatus::Paid,
             "OVERDUE" => DebtStatus::Overdue,
+            "CANCELLED" => DebtStatus::Cancelled,
             _ => DebtStatus::Pending,
         },
         paid_principal: r.get(4),

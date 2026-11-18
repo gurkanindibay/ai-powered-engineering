@@ -71,6 +71,7 @@ pub async fn record_homeowner_payment(
             payment_date: None,
             idempotency_key: reference.as_ref().map(|r| format!("HOP:{}", r)),
             designation: None,
+            settles_owner_capital_dues: false,
             external_reference: reference.clone(),
             designate_from_description: true,
             settles_unmatched_entry_id: None,
@@ -93,7 +94,7 @@ pub async fn record_homeowner_payment(
     let remaining_debt: Decimal = inner
         .dues
         .iter()
-        .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+        .filter(|d| d.unit_id == unit.id && d.status.is_collectable())
         .map(|d| d.total_amount)
         .sum();
     let message = if cleared_debt > Decimal::ZERO && advance_credit > Decimal::ZERO {
@@ -231,6 +232,7 @@ pub async fn match_all_homeowner_payments(
                 payment_date: None,
                 idempotency_key: Some(format!("HOP:{}", record.id)),
                 designation: None,
+                settles_owner_capital_dues: false,
                 external_reference: record.reference_code.clone(),
                 designate_from_description: true,
                 settles_unmatched_entry_id: Some(record.id.clone()),

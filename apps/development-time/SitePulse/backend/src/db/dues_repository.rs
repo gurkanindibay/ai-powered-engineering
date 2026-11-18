@@ -65,14 +65,17 @@ pub async fn save_dues_period(
     let client = pool.get().await?;
     let site_id_num = require_id("entity", &period.site_id)?;
     let maybe_id = parse_id_to_i64(&period.id);
+    let period_key = crate::domain::billing_period::BillingPeriod::parse(&period.period_name)
+        .ok()
+        .map(|p| p.key());
 
     match maybe_id {
         Some(id_num) if id_num > 0 => {
             client
                 .execute(
                     r#"
-                    INSERT INTO dues_periods (id, site_id, period_name, due_date, status)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO dues_periods (id, site_id, period_name, period_key, due_date, status)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (site_id, period_name) DO UPDATE SET
                         due_date = EXCLUDED.due_date,
                         status = EXCLUDED.status
@@ -81,9 +84,18 @@ pub async fn save_dues_period(
                         &id_num,
                         &site_id_num,
                         &period.period_name,
+                        &period_key,
                         &period.due_date,
                         &period.status,
                     ],
+                )
+                .await?;
+            // An explicit id leaves the identity sequence behind; later default inserts
+            // (the accrual batch) would collide with it.
+            client
+                .execute(
+                    "SELECT setval(pg_get_serial_sequence('dues_periods', 'id'), (SELECT COALESCE(MAX(id), 1) FROM dues_periods))",
+                    &[],
                 )
                 .await?;
             info!(
@@ -95,8 +107,8 @@ pub async fn save_dues_period(
             let row = client
                 .query_one(
                     r#"
-                    INSERT INTO dues_periods (site_id, period_name, due_date, status)
-                    VALUES ($1, $2, $3, $4)
+                    INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status)
+                    VALUES ($1, $2, $3, $4, $5)
                     ON CONFLICT (site_id, period_name) DO UPDATE SET
                         due_date = EXCLUDED.due_date,
                         status = EXCLUDED.status
@@ -105,6 +117,7 @@ pub async fn save_dues_period(
                     &[
                         &site_id_num,
                         &period.period_name,
+                        &period_key,
                         &period.due_date,
                         &period.status,
                     ],
@@ -162,6 +175,7 @@ pub async fn save_due_liability(
         DebtStatus::Paid => "PAID",
         DebtStatus::Overdue => "OVERDUE",
         DebtStatus::Pending => "PENDING",
+        DebtStatus::Cancelled => "CANCELLED",
     };
     let due_id_num = require_id("entity", &due.id)?;
     let unit_id_num = require_id("entity", &due.unit_id)?;
@@ -263,22 +277,203 @@ pub async fn record_due_allocation(
 }
 
 /// Inserts an accrued liability and returns its id, or `None` when the unit
-/// already has one for this period and expense type (`uq_unit_period_expense`).
+/// already has one for this period and expense type. The canonical period key is set
+/// when the label is a month.
 pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Option<i64>> {
     let unit = require_id("unit", &due.unit_id)?;
+    let key = crate::domain::billing_period::BillingPeriod::parse(&due.period)
+        .ok()
+        .map(|p| p.key());
     let client = pool.get().await?;
+    // The unique index ignores cancelled rows (a re-issue replaces one), but
+    // accrual never charges a period again once any liability of it exists.
+    let existing = client
+        .query_opt(
+            "SELECT 1 FROM dues_liabilities
+             WHERE unit_id = $1 AND period = $2 AND expense_type = $3 AND capital_project_id IS NULL",
+            &[&unit, &due.period, &due.expense_type],
+        )
+        .await?;
+    if existing.is_some() {
+        return Ok(None);
+    }
     let row = client
         .query_opt(
             r#"
-            INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type)
-            VALUES ($1, $2, $3, $4, 'PENDING', 0, $5, $6)
-            ON CONFLICT (unit_id, period, expense_type) WHERE capital_project_id IS NULL DO NOTHING
+            INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type)
+            VALUES ($1, $2, $3, $4, $5, 'PENDING', 0, $6, $7)
+            ON CONFLICT DO NOTHING
             RETURNING id
             "#,
-            &[&unit, &due.period, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type],
+            &[&unit, &due.period, &key, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type],
         )
         .await?;
     Ok(row.map(|r| r.get(0)))
+}
+
+/// What one site's accrual commits: the period row, every liability with its budget
+/// basis, and the run report, in a single transaction.
+pub struct AccrualBatch<'a> {
+    pub site_id: &'a str,
+    pub period_key: &'a str,
+    pub period_label: &'a str,
+    pub due_date: NaiveDate,
+    /// `MANUAL` or `SCHEDULER`.
+    pub source: &'a str,
+    pub dues: &'a [(DuesLiability, Option<String>)],
+    pub skipped: &'a [String],
+}
+
+/// The committed result of an accrual batch.
+pub struct CommittedAccrual {
+    /// The period row, absent when the batch had nothing to accrue.
+    pub period_id: Option<i64>,
+    /// The new id per input liability, `None` when the unit already had one for the period.
+    pub due_ids: Vec<Option<i64>>,
+}
+
+/// Commits one site's accrual atomically (STORY-07-08): a database error at any liability
+/// rolls the whole batch back, including the period row and the run report. Every
+/// liability is linked to its period row and records its budget basis in the same insert.
+pub async fn commit_accrual_batch(
+    pool: &Pool,
+    batch: &AccrualBatch<'_>,
+) -> DbResult<CommittedAccrual> {
+    let site = require_id("site", batch.site_id)?;
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
+    // Serialise accruals of the same site and month only.
+    tx.execute(
+        "SELECT pg_advisory_xact_lock(7708, hashtext($1::bigint::text || ':' || $2))",
+        &[&site, &batch.period_key],
+    )
+    .await?;
+    let existing = tx
+        .query_opt(
+            "SELECT id FROM dues_periods WHERE site_id = $1 AND period_key = $2",
+            &[&site, &batch.period_key],
+        )
+        .await?;
+    let period_id: Option<i64> = if batch.dues.is_empty() {
+        None
+    } else {
+        Some(match existing {
+            Some(row) => row.get(0),
+            None => tx
+                .query_one(
+                    r#"
+                INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status)
+                VALUES ($1, $2, $3, $4, 'ACTIVE')
+                ON CONFLICT (site_id, period_name) DO UPDATE SET period_key = EXCLUDED.period_key
+                RETURNING id
+                "#,
+                    &[
+                        &site,
+                        &batch.period_label,
+                        &batch.period_key,
+                        &batch.due_date,
+                    ],
+                )
+                .await?
+                .get(0),
+        })
+    };
+    let mut due_ids = Vec::with_capacity(batch.dues.len());
+    for (due, basis) in batch.dues {
+        let unit = require_id("unit", &due.unit_id)?;
+        let budget = basis
+            .as_deref()
+            .map(|b| require_id("operating budget", b))
+            .transpose()?;
+        let row = tx
+            .query_opt(
+                r#"
+                INSERT INTO dues_liabilities
+                    (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
+                     delay_penalty, debtor_type, expense_type, operating_budget_id)
+                VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7, $8, $9)
+                ON CONFLICT DO NOTHING
+                RETURNING id
+                "#,
+                &[
+                    &unit,
+                    &batch.period_label,
+                    &batch.period_key,
+                    &period_id,
+                    &due.principal_amount,
+                    &due.due_date,
+                    &due.debtor_type,
+                    &due.expense_type,
+                    &budget,
+                ],
+            )
+            .await?;
+        due_ids.push(row.map(|r| r.get::<_, i64>(0)));
+    }
+    let accrued = due_ids.iter().flatten().count() as i32;
+    tx.execute(
+        r#"
+        INSERT INTO dues_accrual_runs (site_id, period_key, source, accrued_count, skipped_units)
+        VALUES ($1, $2, $3, $4, $5)
+        "#,
+        &[
+            &site,
+            &batch.period_key,
+            &batch.source,
+            &accrued,
+            &batch.skipped,
+        ],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(CommittedAccrual { period_id, due_ids })
+}
+
+/// One accrual run as the manager sees it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AccrualRunRecord {
+    pub period_key: String,
+    pub period: String,
+    pub source: String,
+    pub accrued_count: i32,
+    pub skipped_units: Vec<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// The latest accrual runs of a site, newest first.
+pub async fn list_accrual_runs(
+    pool: &Pool,
+    site_id: &str,
+    limit: i64,
+) -> DbResult<Vec<AccrualRunRecord>> {
+    let site = require_id("site", site_id)?;
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
+    let rows = tx
+        .query(
+            "SELECT period_key, source, accrued_count, skipped_units, created_at
+             FROM dues_accrual_runs WHERE site_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2",
+            &[&site, &limit],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let key: String = r.get(0);
+            AccrualRunRecord {
+                period: crate::domain::billing_period::BillingPeriod::parse(&key)
+                    .map(|p| p.label())
+                    .unwrap_or_else(|_| key.clone()),
+                period_key: key,
+                source: r.get(1),
+                accrued_count: r.get(2),
+                skipped_units: r.get(3),
+                created_at: r.get(4),
+            }
+        })
+        .collect())
 }
 
 /// Ids of a site's units that currently have a tenant (operational dues are theirs).
@@ -308,9 +503,9 @@ pub async fn tenanted_unit_ids(
 pub async fn fetch_debt_aging_report_from_db(
     pool: &Pool,
     site_id: &str,
+    today: chrono::NaiveDate,
 ) -> DbResult<crate::models::DebtAgingReport> {
     let client = pool.get().await?;
-    let today = chrono::Utc::now().date_naive();
 
     let rows = if site_id != "all" && !site_id.is_empty() {
         let site_num = parse_id_to_i64(site_id).unwrap_or(0);
@@ -410,6 +605,7 @@ pub async fn fetch_debt_aging_report_from_db(
         let status = match status_str.as_str() {
             "PAID" => DebtStatus::Paid,
             "OVERDUE" => DebtStatus::Overdue,
+            "CANCELLED" => DebtStatus::Cancelled,
             _ => DebtStatus::Pending,
         };
         let debtor_type = match debtor_type_str.as_str() {
@@ -499,4 +695,31 @@ pub async fn fetch_debt_aging_report_from_db(
         grand_total,
         brackets,
     })
+}
+
+/// Logs, once at startup, the liabilities and periods the V37 migration could not resolve to
+/// a month (they keep a NULL key and are not covered by the duplicate guard), so they get
+/// fixed by hand instead of staying unnoticed.
+pub async fn warn_unresolved_period_labels(pool: &Pool) -> DbResult<usize> {
+    let client = pool.get().await?;
+    let rows = client
+        .query(
+            "SELECT table_name, count(*), min(period) FROM dues_period_migration_issues GROUP BY table_name",
+            &[],
+        )
+        .await?;
+    let mut total = 0usize;
+    for row in &rows {
+        let table: String = row.get(0);
+        let count: i64 = row.get(1);
+        let example: String = row.get(2);
+        total += usize::try_from(count).unwrap_or(0);
+        tracing::warn!(
+            "{} row(s) of {} have a period label that is not a month or duplicates another (for example '{}'); see dues_period_migration_issues",
+            count,
+            table,
+            example
+        );
+    }
+    Ok(total)
 }

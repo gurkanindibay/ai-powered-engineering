@@ -22,6 +22,7 @@ use crate::services::autopay_service::AutopayService;
 use crate::services::bank_matching_service::BankMatchingService;
 use crate::services::budget_compliance_service::BudgetComplianceService;
 use crate::services::collections_service::CollectionsService;
+use crate::services::correction_service::CorrectionService;
 use crate::services::dunning_service::DunningService;
 use crate::services::finance_common::{Caller, FinanceError};
 use crate::services::heat_share_service::HeatShareService;
@@ -1075,6 +1076,44 @@ pub async fn decide_adjustment(
 ) -> ApiResult<LedgerAdjustment> {
     ok(PlanService::new(&state)
         .decide_adjustment(&caller(&ctx), id, req)
+        .await)
+}
+
+// ---------------------------------------------------------------------------
+// STORY-07-11: accrual corrections
+// ---------------------------------------------------------------------------
+
+pub async fn list_corrections(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+) -> Json<Vec<AccrualCorrection>> {
+    Json(
+        CorrectionService::new(&state)
+            .list(&ctx.claims.site_id)
+            .await,
+    )
+}
+
+pub async fn request_correction(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Json(req): Json<RequestCorrectionRequest>,
+) -> Result<(StatusCode, Json<AccrualCorrection>), ApiError> {
+    created(
+        CorrectionService::new(&state)
+            .request(&caller(&ctx), req)
+            .await,
+    )
+}
+
+pub async fn decide_correction(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(id): Path<i64>,
+    Json(req): Json<DecideRequest>,
+) -> ApiResult<AccrualCorrection> {
+    ok(CorrectionService::new(&state)
+        .decide(&caller(&ctx), id, req)
         .await)
 }
 

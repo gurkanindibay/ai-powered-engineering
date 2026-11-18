@@ -959,6 +959,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
         matches: matches.clone(),
         optional_message: None,
         remember_sender_iban: None,
+        owner_capital_match_ids: Vec::new(),
     };
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -1030,6 +1031,7 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
             "Sayın Ahmet Yılmaz, ₺1.423,33 aidat ödemeniz onaylanmıştır.".to_string(),
         ),
         remember_sender_iban: None,
+        owner_capital_match_ids: Vec::new(),
     };
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -1727,12 +1729,17 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
     );
 
     // 2. New monthly dues period arrives: "Ekim 2026" (₺1400.00)
+    let not_yet_due = Utc::now().date_naive() + chrono::Days::new(30);
+    let accrued_label =
+        sitepulse_backend::domain::billing_period::BillingPeriod::of_date(not_yet_due).label();
     let accrue_req = AccrueDuesPeriodRequest {
         site_id: "site-1".to_string(),
-        period: "Ekim 2026".to_string(),
+        // The canonical month of the due date (STORY-07-08).
+        period: sitepulse_backend::domain::billing_period::BillingPeriod::of_date(not_yet_due)
+            .key(),
         amount: Decimal::from_str_exact("1400.00").unwrap(),
         // Not yet due by the real clock, so the offset is exactly the principal.
-        due_date: Utc::now().date_naive() + chrono::Days::new(30),
+        due_date: not_yet_due,
     };
 
     let (accrue_status, axum::Json(accrue_res)) = sitepulse_backend::handlers::accrue_monthly_dues(
@@ -1772,7 +1779,11 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
         Decimal::from_str_exact("60.67").unwrap()
     );
 
-    let oct_due = dash.dues.iter().find(|d| d.period == "Ekim 2026").unwrap();
+    let oct_due = dash
+        .dues
+        .iter()
+        .find(|d| d.period == accrued_label)
+        .unwrap();
     assert_eq!(oct_due.status, "PAID");
 
     // 4. Verify transaction history records the automatic advance offset!
@@ -1787,7 +1798,7 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
     );
     assert_eq!(
         offset_tx.subtitle,
-        "Ekim 2026 aidatı avans bakiyenizden otomatik mahsup edildi"
+        format!("{accrued_label} aidatı avans bakiyenizden otomatik mahsup edildi")
     );
     assert!(offset_tx.is_credit);
 }
@@ -2187,6 +2198,7 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
         matches: vec![],
         optional_message: None,
         remember_sender_iban: None,
+        owner_capital_match_ids: Vec::new(),
     };
 
     let (status, axum::Json(res)) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -3496,7 +3508,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
 
-    let today = Utc::now().date_naive();
+    let today = sitepulse_backend::scheduler::site_local_date("Europe/Istanbul", Utc::now());
     {
         let mut inner = state.inner.write().await;
         inner.dues.clear();
@@ -3602,7 +3614,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
 }
 
 #[tokio::test]
-async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_marks_rent_offset_eligible(
+async fn when_tenant_payment_is_explicitly_designated_for_capital_dues_then_rent_offset_is_eligible(
 ) {
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
@@ -3621,6 +3633,7 @@ async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_m
         payer_role: DebtorType::Tenant,
         payment_channel: PaymentChannel::BankTransfer,
         description: Some("Daire 14 Asansör ve Demirbaş Harcaması Payı".to_string()),
+        settles_owner_capital_dues: true,
         payment_date: Some(Utc::now()),
         idempotency_key: None,
         ..Default::default()
@@ -4417,4 +4430,73 @@ fn when_utc_is_late_evening_then_accrual_uses_the_site_local_date() {
         sitepulse_backend::scheduler::format_turkish_month_year(local),
         "Aralık 2026"
     );
+}
+
+fn payment_on(date: chrono::DateTime<Utc>) -> RecordManualPaymentRequest {
+    RecordManualPaymentRequest {
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        amount: Decimal::from_str_exact("100.00").unwrap(),
+        payer_name: "Ayşe Yılmaz".to_string(),
+        payer_role: DebtorType::Owner,
+        payment_channel: PaymentChannel::ManualCash,
+        payment_date: Some(date),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn when_payment_date_is_in_the_future_then_it_is_rejected() {
+    let service = PaymentTrackingService::new(AppState::new());
+    let err = service
+        .record_and_allocate_payment(payment_on(Utc::now() + chrono::Duration::days(2)))
+        .await
+        .unwrap_err();
+    assert!(err.contains("gelecekte"), "unexpected error: {err}");
+}
+
+#[tokio::test]
+async fn when_payment_date_is_beyond_the_backdating_window_then_it_is_rejected() {
+    let service = PaymentTrackingService::new(AppState::new());
+    let err = service
+        .record_and_allocate_payment(payment_on(Utc::now() - chrono::Duration::days(400)))
+        .await
+        .unwrap_err();
+    assert!(err.contains("geriye"), "unexpected error: {err}");
+}
+
+#[tokio::test]
+async fn when_payment_date_is_within_the_backdating_window_then_it_is_accepted() {
+    let service = PaymentTrackingService::new(AppState::new());
+    service
+        .record_and_allocate_payment(payment_on(Utc::now() - chrono::Duration::days(10)))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn when_bank_statement_line_is_older_than_the_window_then_it_is_accepted() {
+    let service = PaymentTrackingService::new(AppState::new());
+    let mut req = payment_on(Utc::now() - chrono::Duration::days(400));
+    req.payment_channel = PaymentChannel::BankStatement;
+    service.record_and_allocate_payment(req).await.unwrap();
+}
+
+#[tokio::test]
+async fn when_bank_line_is_dated_today_local_at_utc_midnight_then_it_is_not_treated_as_future() {
+    let service = PaymentTrackingService::new(AppState::new());
+    // 00:30 local (UTC+3) on day D: the bank line is stamped 00:00 UTC of D+1's
+    // local date, i.e. up to a day ahead of the UTC clock.
+    let mut req = payment_on(Utc::now() + chrono::Duration::hours(23));
+    req.payment_channel = PaymentChannel::BankStatement;
+    service.record_and_allocate_payment(req).await.unwrap();
+}
+
+#[test]
+fn payment_date_violation_is_deterministic_for_a_given_window() {
+    let now = Utc::now();
+    let v = PaymentTrackingService::payment_date_violation;
+    assert!(v(now - chrono::Duration::days(31), now, 30).is_some());
+    assert!(v(now - chrono::Duration::days(29), now, 30).is_none());
+    assert!(v(now + chrono::Duration::hours(1), now, 30).is_some());
 }

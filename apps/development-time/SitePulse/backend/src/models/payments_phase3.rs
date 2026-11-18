@@ -79,6 +79,11 @@ pub const PLAN_CANCELLED: &str = "CANCELLED";
 pub const ADJUSTMENT_PENALTY_WAIVER: &str = "PENALTY_WAIVER";
 pub const ADJUSTMENT_WRITE_OFF: &str = "PRINCIPAL_WRITE_OFF";
 
+/// Accrual corrections (STORY-07-11).
+pub const CORRECTION_CANCEL: &str = "CANCEL";
+pub const CORRECTION_REISSUE: &str = "REISSUE";
+pub const CORRECTION_CREDIT_NOTE: &str = "CREDIT_NOTE";
+
 // ---------------------------------------------------------------------------
 // R2: KVKK
 // ---------------------------------------------------------------------------
@@ -1118,6 +1123,59 @@ pub struct LedgerAdjustment {
     pub decision_note: Option<String>,
     pub principal_before: Option<Decimal>,
     pub penalty_before: Option<Decimal>,
+}
+
+/// A requested, then approved or rejected, correction of one accrued liability
+/// (STORY-07-11). The liability is never deleted; the record keeps what it was.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AccrualCorrection {
+    pub id: i64,
+    pub site_id: String,
+    pub unit_id: String,
+    pub due_id: String,
+    pub period: String,
+    /// `OWNER` or `TENANT`: whose liability this was.
+    pub debtor_type: String,
+    /// `CANCEL`, `REISSUE` or `CREDIT_NOTE`.
+    pub kind: String,
+    /// Cancel: the principal cancelled. Re-issue: the corrected principal.
+    /// Credit note: the principal credited.
+    pub amount: Decimal,
+    pub new_due_date: Option<NaiveDate>,
+    pub new_debtor_type: Option<String>,
+    pub reason: String,
+    pub requested_by: String,
+    pub requested_at: DateTime<Utc>,
+    pub status: String,
+    pub decided_by: Option<String>,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub decision_note: Option<String>,
+    /// What the liability owed and had paid when the correction was approved.
+    pub principal_before: Option<Decimal>,
+    pub penalty_before: Option<Decimal>,
+    pub paid_before: Option<Decimal>,
+    /// Late fee reversed by the correction.
+    pub penalty_reversed: Option<Decimal>,
+    /// Paid amount moved to the debtor's advance balance.
+    pub advance_credited: Option<Decimal>,
+    /// The liability that replaced the cancelled one (re-issue).
+    pub replacement_due_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestCorrectionRequest {
+    pub due_id: String,
+    pub kind: String,
+    /// Re-issue: the corrected principal. Credit note: the principal to credit.
+    #[serde(default)]
+    pub amount: Option<Decimal>,
+    /// Re-issue: the corrected due date (default: unchanged).
+    #[serde(default)]
+    pub due_date: Option<NaiveDate>,
+    /// Re-issue: the corrected debtor, `OWNER` or `TENANT` (default: unchanged).
+    #[serde(default)]
+    pub debtor_type: Option<String>,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

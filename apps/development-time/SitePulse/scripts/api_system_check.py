@@ -594,12 +594,14 @@ def check_issuer_snapshot(ctx: Context) -> Tuple[bool, str]:
 def check_aging_snapshot(ctx: Context) -> Tuple[bool, str]:
     """SPEC-006 O-8: debt_aging_snapshots is written (once per unit/debtor/day)."""
     db, url = ctx.backend.db_name, ctx.backend.base + "/api/v1/payments/debt-aging/snapshot"
+    # The report day is the site's local day (Europe/Istanbul), not the database UTC day.
+    local_today = "(now() AT TIME ZONE 'Europe/Istanbul')::date"
     site = ctx.psql.run(db, f"SELECT site_id FROM units WHERE id = {ctx.unit_id};")
     # An open liability so the unit appears in today's report.
     ctx.psql.run(db, f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type)"
-                     f" VALUES ({ctx.unit_id}, 'SYS-AGING-{time.time_ns()}', 12.00, CURRENT_DATE - 45, 'PENDING', 'OWNER');")
+                     f" VALUES ({ctx.unit_id}, 'SYS-AGING-{time.time_ns()}', 12.00, {local_today} - 45, 'PENDING', 'OWNER');")
     relogin(ctx)
-    count_sql = f"SELECT count(*) FROM debt_aging_snapshots WHERE as_of_date = CURRENT_DATE AND site_id = {site};"
+    count_sql = f"SELECT count(*) FROM debt_aging_snapshots WHERE as_of_date = {local_today} AND site_id = {site};"
     first = http("POST", url, token=ctx.manager)
     count1 = ctx.psql.run(db, count_sql)
     second = http("POST", url, token=ctx.manager)
@@ -847,17 +849,18 @@ def check_budget_accrual(ctx: Context) -> Tuple[bool, str]:
     g_status, g_body = http("GET", f"{b}/api/v1/operating-budgets/{budget['id']}", token=ctx.manager)
     reloaded = json.loads(g_body) if g_status == 200 else {}
     share = next((s for s in reloaded.get("unit_shares", []) if s["unit_id"] == ctx.unit_id), None)
-    period = f"SYS-BUDGET-{time.time_ns()}"
     due = ctx.psql.run(db, "SELECT (CURRENT_DATE + 10)::text;")
+    # A period is the canonical month key (STORY-07-08), here the month of the due date.
+    period = due[:7]
     acc_status, acc_body = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.manager, body={
         "site_id": site, "period": period, "amount": "0", "due_date": due})
     typed = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.manager, body={
-        "site_id": site, "period": period + "-X", "amount": "5.00", "due_date": due})[0]
+        "site_id": site, "period": period, "amount": "5.00", "due_date": due})[0]
     row = ctx.psql.run(db, (
         f"SELECT count(*) || '|' || count(*) FILTER (WHERE operating_budget_id = {budget['id']}) || '|' ||"
         f" coalesce(max(principal_amount) FILTER (WHERE unit_id = {ctx.unit_id}), 0) || '|' ||"
         f" count(*) FILTER (WHERE debtor_type = 'OWNER' AND unit_id IN (SELECT id FROM units WHERE tenant_person_id IS NULL))"
-        f" FROM dues_liabilities WHERE period = '{period}';"))
+        f" FROM dues_liabilities WHERE period_key = '{period}';"))
     count, linked, amount, owner_rows = (row.split("|") + ["", "", "", ""])[:4]
     ok = (reloaded.get("status") == "APPROVED" and share is not None and acc_status == 200 and typed == 409
           and count == linked and int(count or 0) > 0 and Decimal(amount) == Decimal(share["monthly_amount"])

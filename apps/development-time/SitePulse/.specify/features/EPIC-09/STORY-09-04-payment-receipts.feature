@@ -28,3 +28,9 @@ Feature: Official digital payment receipt and voucher export
     Given a resident has an open dues item
     When the resident pays by card on the provider page
     Then a receipt is issued for the payment
+
+  @SC-09-04-05 @layer:api @core @role_manager @pending
+  Scenario: Payment dates in the future or beyond the backdating window are rejected
+    Given a unit with open dues
+    When a payment is recorded with a date in the future or older than the backdating window
+    Then the request is rejected with 400 and no receipt is issued

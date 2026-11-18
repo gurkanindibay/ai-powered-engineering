@@ -234,6 +234,16 @@ pub enum DebtStatus {
     Pending,
     Overdue,
     Paid,
+    /// Cancelled by an approved accrual correction (STORY-07-11). The row is kept
+    /// as it was; it owes nothing and is never collected.
+    Cancelled,
+}
+
+impl DebtStatus {
+    /// Still to be collected: neither settled nor cancelled.
+    pub fn is_collectable(self) -> bool {
+        matches!(self, DebtStatus::Pending | DebtStatus::Overdue)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -742,7 +752,11 @@ pub struct AccrueDuesPeriodRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccrueDuesPeriodResponse {
     pub site_id: String,
+    /// The Turkish label derived from the period key, for display.
     pub period: String,
+    /// The canonical period key `YYYY-MM`.
+    #[serde(default)]
+    pub period_key: String,
     pub total_units_accrued: usize,
     pub newly_accrued_units_count: usize,
     pub auto_settled_units_count: usize,
@@ -1772,6 +1786,9 @@ pub struct ConfirmReconciliationRequest {
     pub optional_message: Option<String>,
     #[serde(default)]
     pub remember_sender_iban: Option<bool>,
+    /// Match ids explicitly approved for owner capital allocation by the manager.
+    #[serde(default)]
+    pub owner_capital_match_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2317,6 +2334,10 @@ pub struct RecordManualPaymentRequest {
     /// TBK 101: which liabilities the payer is paying (settled first).
     #[serde(default)]
     pub designation: Option<PaymentDesignation>,
+    /// Explicitly settles the property owner's capital dues when a tenant pays.
+    /// Description text never grants this authority by itself.
+    #[serde(default)]
+    pub settles_owner_capital_dues: bool,
     /// Bank/channel transaction reference, stored on the ledger entry.
     #[serde(default)]
     pub external_reference: Option<String>,

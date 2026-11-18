@@ -46,6 +46,24 @@ def test_epic07_rust_linked_scenarios() -> None:
 
 
 @pytest.mark.epic_07
+@pytest.mark.covers("SC-07-08-01")
+@pytest.mark.covers("SC-07-08-02")
+@pytest.mark.covers("SC-07-08-04")
+def test_epic07_billing_period_linked_scenarios() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "billing_period_tests"], BACKEND)
+
+
+@pytest.mark.epic_07
+@pytest.mark.covers("SC-07-11-01")
+@pytest.mark.covers("SC-07-11-02")
+@pytest.mark.covers("SC-07-11-03")
+@pytest.mark.covers("SC-07-11-04")
+@pytest.mark.covers("SC-07-11-05")
+def test_epic07_accrual_corrections_linked_scenarios() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "accrual_corrections_tests"], BACKEND)
+
+
+@pytest.mark.epic_07
 @pytest.mark.covers("SC-07-07-03")
 def test_epic07_flutter_linked_scenarios() -> None:
     run_suite(["flutter", "test", "test/dues_management_view_test.dart"], FLUTTER)

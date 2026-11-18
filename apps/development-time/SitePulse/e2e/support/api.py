@@ -154,11 +154,13 @@ class Api:
 
     def record_manual_payment(self, session: Session, unit_id: str, amount: Decimal, payer_name: str,
                               payer_role: str = "OWNER", channel: str = "MANUAL_CASH",
-                              description: str | None = None) -> dict:
+                              description: str | None = None,
+                              settles_owner_capital_dues: bool = False) -> dict:
         return self.call("POST", "/api/v1/payments/record-manual", session.token, body={
             "site_id": session.user.get("site_id"), "unit_id": str(unit_id), "amount": str(amount),
             "payer_name": payer_name, "payer_role": payer_role, "payment_channel": channel,
-            "description": description, "idempotency_key": f"e2e-{payer_role}-{unit_id}-{amount}-{payer_name}"})
+            "description": description, "settles_owner_capital_dues": settles_owner_capital_dues,
+            "idempotency_key": f"e2e-{payer_role}-{unit_id}-{amount}-{payer_name}"})
 
 
 class Builders:

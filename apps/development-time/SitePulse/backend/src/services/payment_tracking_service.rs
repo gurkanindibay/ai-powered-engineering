@@ -75,7 +75,7 @@ impl PaymentTrackingService {
         })
     }
 
-    /// Detects capital expenditure keyword intent in transaction description
+    /// Detects possible capital intent so an automatic bank webhook can request manager review.
     pub fn is_capital_expenditure_intent(desc: &str) -> bool {
         let upper = desc.to_uppercase();
         upper.contains("DEMİRBAŞ")
@@ -283,13 +283,17 @@ impl PaymentTrackingService {
         &self,
         site_id: &str,
     ) -> Result<DebtAgingReport, LedgerReadError> {
+        // The report day is the site's local day, not the UTC day.
+        let today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::site_today(&inner, site_id)
+        };
         if let Some(p) = self.state.db_pool() {
-            return crate::db::dues_repository::fetch_debt_aging_report_from_db(p, site_id)
+            return crate::db::dues_repository::fetch_debt_aging_report_from_db(p, site_id, today)
                 .await
                 .map_err(|e| LedgerReadError::Unavailable(format!("debt aging report: {}", e)));
         }
         let inner = self.state.inner.read().await;
-        let today = Utc::now().date_naive();
 
         let mut brackets_map: std::collections::HashMap<(String, DebtorType), DebtAgingBracket> =
             std::collections::HashMap::new();
@@ -395,6 +399,34 @@ impl PaymentTrackingService {
         })
     }
 
+    /// Backdating window for manual payments, in days
+    /// (`SITEPULSE_PAYMENT_BACKDATE_DAYS`, default 90).
+    pub fn backdate_window_days() -> i64 {
+        std::env::var("SITEPULSE_PAYMENT_BACKDATE_DAYS")
+            .ok()
+            .and_then(|v| v.trim().parse::<i64>().ok())
+            .filter(|d| *d >= 0)
+            .unwrap_or(90)
+    }
+
+    /// Reason a manually entered payment date is rejected: in the future
+    /// (beyond a small clock-skew allowance) or older than `window_days`.
+    pub fn payment_date_violation(
+        payment_date: chrono::DateTime<Utc>,
+        now: chrono::DateTime<Utc>,
+        window_days: i64,
+    ) -> Option<String> {
+        if payment_date > now + chrono::Duration::minutes(5) {
+            return Some("Ödeme tarihi gelecekte olamaz".to_string());
+        }
+        if payment_date < now - chrono::Duration::days(window_days) {
+            return Some(format!(
+                "Ödeme tarihi en fazla {window_days} gün geriye alınabilir"
+            ));
+        }
+        None
+    }
+
     /// The single ingestion path for every payment channel (SPEC-005 R1).
     ///
     /// Allocation: the payer's designated liabilities first (TBK 101), each with
@@ -422,6 +454,18 @@ impl PaymentTrackingService {
         let unit_id = req.unit_id.clone();
         let payment_amount = req.amount;
         let issued_at = req.payment_date.unwrap_or_else(Utc::now);
+        // Only manually keyed payments are date-checked: bank, card and provider
+        // payments carry the institution's value date for money already received.
+        if matches!(
+            req.payment_channel,
+            PaymentChannel::ManualCash | PaymentChannel::Cash | PaymentChannel::Other
+        ) {
+            if let Some(reason) =
+                Self::payment_date_violation(issued_at, Utc::now(), Self::backdate_window_days())
+            {
+                return Err(reason);
+            }
+        }
         if payment_amount <= Decimal::ZERO {
             return Err("Ödeme tutarı 0.00'dan büyük olmalıdır".to_string());
         }
@@ -448,11 +492,7 @@ impl PaymentTrackingService {
             None
         };
 
-        let desc = req.description.clone().unwrap_or_default();
-        // A tenant paying capital dues explicitly does so on behalf of the owner
-        // (KMK 22 rent offset); otherwise a tenant only settles tenant liabilities.
-        let on_behalf_of_owner =
-            payer_role == DebtorType::Tenant && Self::is_capital_expenditure_intent(&desc);
+        let on_behalf_of_owner = payer_role == DebtorType::Tenant && req.settles_owner_capital_dues;
         let settling_role = if on_behalf_of_owner {
             DebtorType::Owner
         } else {
@@ -673,9 +713,7 @@ impl PaymentTrackingService {
             let mut dues: Vec<DuesLiability> = inner
                 .dues
                 .iter()
-                .filter(|d| {
-                    d.status != DebtStatus::Paid && crate::auth::same_id(&d.unit_id, &unit.id)
-                })
+                .filter(|d| d.status.is_collectable() && crate::auth::same_id(&d.unit_id, &unit.id))
                 .cloned()
                 .map(|d| calc.calculate_delay_penalty(d, today))
                 .collect();
@@ -1010,9 +1048,7 @@ impl PaymentTrackingService {
             let mut dues: Vec<DuesLiability> = inner
                 .dues
                 .iter()
-                .filter(|d| {
-                    d.status != DebtStatus::Paid && crate::auth::same_id(&d.unit_id, &unit.id)
-                })
+                .filter(|d| d.status.is_collectable() && crate::auth::same_id(&d.unit_id, &unit.id))
                 .cloned()
                 .map(|d| calc.calculate_delay_penalty(d, now.date_naive()))
                 .collect();
@@ -1502,7 +1538,7 @@ impl PaymentTrackingService {
         let old_owner_exit_balance: Decimal = inner
             .dues
             .iter()
-            .filter(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid)
+            .filter(|d| d.unit_id == unit_id && d.status.is_collectable())
             .map(|d| d.total_amount)
             .sum();
 

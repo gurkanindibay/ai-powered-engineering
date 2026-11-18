@@ -6,8 +6,11 @@
 //! (`domain::kvkk::check_delivery`); a refused delivery is logged as `BLOCKED`.
 //!
 //! The sender is a port: `LOG` records the message without contacting anyone
-//! (development and tests). A real SMS, push or e-mail vendor is a new
-//! [`NotificationSender`] selected with `SITEPULSE_NOTIFICATION_SENDER`.
+//! (development and tests). `WEBHOOK` hands each message to a delivery gateway
+//! (an SMS, push or e-mail provider's HTTP endpoint) and is selected with
+//! `SITEPULSE_NOTIFICATION_SENDER`; its URL and bearer token come from
+//! `SITEPULSE_NOTIFICATION_WEBHOOK_URL` and `SITEPULSE_NOTIFICATION_WEBHOOK_TOKEN`
+//! and are never logged or echoed in a failure.
 
 use chrono::Utc;
 
@@ -71,6 +74,116 @@ impl NotificationSender for LogSender {
     }
 }
 
+/// Hands each message to a delivery gateway over HTTPS: one JSON `POST` with an
+/// optional bearer token. A 2xx answer is a delivery; anything else is a failure.
+pub struct WebhookSender {
+    url: String,
+    token: Option<String>,
+}
+
+impl std::fmt::Debug for WebhookSender {
+    // The URL and token are credentials: never printed.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("WebhookSender { .. }")
+    }
+}
+
+impl WebhookSender {
+    /// Plain `http` is accepted only outside production.
+    pub fn new(url: &str, token: Option<String>, production: bool) -> Result<Self, SendError> {
+        let url = url.trim();
+        let secure = url.starts_with("https://");
+        if url.is_empty() || !(secure || (!production && url.starts_with("http://"))) {
+            return Err(SendError(
+                "SITEPULSE_NOTIFICATION_WEBHOOK_URL must be an https URL".into(),
+            ));
+        }
+        Ok(Self {
+            url: url.to_string(),
+            token: token
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty()),
+        })
+    }
+
+    fn from_env() -> Result<Self, SendError> {
+        let url = std::env::var("SITEPULSE_NOTIFICATION_WEBHOOK_URL").unwrap_or_default();
+        let token = std::env::var("SITEPULSE_NOTIFICATION_WEBHOOK_TOKEN").ok();
+        Self::new(&url, token, crate::state::AppStateInner::is_production())
+    }
+
+    async fn post(&self, payload: serde_json::Value) -> Result<String, SendError> {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|_| SendError("Notification gateway client could not start".into()))?;
+        let mut request = client.post(&self.url).json(&payload);
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        // `without_url` keeps the configured endpoint out of the failure text.
+        let response = request.send().await.map_err(|e| {
+            SendError(format!(
+                "Notification gateway unreachable: {}",
+                e.without_url()
+            ))
+        })?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(SendError(format!(
+                "Notification gateway answered HTTP {}",
+                status.as_u16()
+            )));
+        }
+        let reference = response
+            .json::<serde_json::Value>()
+            .await
+            .ok()
+            .and_then(|v| v.get("id").and_then(|id| id.as_str().map(str::to_string)))
+            .unwrap_or_else(|| format!("WEBHOOK-{}", uuid::Uuid::new_v4().simple()));
+        Ok(reference)
+    }
+}
+
+impl NotificationSender for WebhookSender {
+    fn name(&self) -> &'static str {
+        "WEBHOOK"
+    }
+    fn send(
+        &self,
+        channel: DeliveryChannel,
+        to: &Recipient,
+        subject: &str,
+        body: &str,
+    ) -> Result<String, SendError> {
+        let payload = serde_json::json!({
+            "channel": channel.as_str(),
+            "recipient": {
+                "reference": to.reference,
+                "name": to.name,
+                "email": to.email,
+                "phone": to.phone,
+            },
+            "subject": subject,
+            "body": body,
+        });
+        // The port is synchronous and callers may be on any runtime flavour, so
+        // the request runs on its own short-lived thread and runtime.
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|_| SendError("Notification runtime could not start".into()))?
+                        .block_on(self.post(payload))
+                })
+                .join()
+                .unwrap_or_else(|_| Err(SendError("Notification delivery aborted".into())))
+        })
+    }
+}
+
 /// The deployment's sender. Without a real vendor, production records the
 /// message as FAILED instead of pretending it was delivered.
 pub fn configured_sender() -> Result<Box<dyn NotificationSender>, SendError> {
@@ -80,6 +193,7 @@ pub fn configured_sender() -> Result<Box<dyn NotificationSender>, SendError> {
         "LOG" => Err(SendError(
             "No notification vendor is configured for production".into(),
         )),
+        "WEBHOOK" => Ok(Box::new(WebhookSender::from_env()?)),
         other => Err(SendError(format!(
             "Notification sender '{}' is not integrated in this build",
             other

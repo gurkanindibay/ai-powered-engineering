@@ -8,8 +8,9 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use crate::models::{
-    DebtStatus, IndependentUnit, ResidentStatement, Role, StatementDebtor, StatementOpenItem,
-    StatementReceipt, LEDGER_KIND_COLLECTION,
+    IndependentUnit, ResidentStatement, Role, StatementCorrection, StatementDebtor,
+    StatementOpenItem, StatementReceipt, CORRECTION_REISSUE, LEDGER_KIND_COLLECTION,
+    REQUEST_APPROVED,
 };
 use crate::services::dues_ledger::{self, DEBTOR_OWNER, DEBTOR_TENANT};
 use crate::state::AppStateInner;
@@ -70,7 +71,7 @@ pub fn build_statement(
             .iter()
             .filter(|d| {
                 crate::auth::same_id(&d.unit_id, &unit.id)
-                    && d.status != DebtStatus::Paid
+                    && d.status.is_collectable()
                     && d.debtor_type.as_str() == debtor
             })
             .map(|stored| {
@@ -168,7 +169,33 @@ pub fn build_statement(
     receipts.sort_by_key(|r| std::cmp::Reverse(r.issued_at));
     receipts.truncate(50);
 
+    let mut corrections: Vec<StatementCorrection> = inner
+        .finance
+        .corrections
+        .iter()
+        .filter(|c| {
+            c.status == REQUEST_APPROVED
+                && crate::auth::same_id(&c.unit_id, &unit.id)
+                && viewer.is_none_or(|v| c.debtor_type == v)
+        })
+        .map(|c| StatementCorrection {
+            correction_id: c.id,
+            period: c.period.clone(),
+            kind: c.kind.clone(),
+            original_amount: c.principal_before.unwrap_or(c.amount),
+            credited_amount: if c.kind == CORRECTION_REISSUE {
+                c.principal_before.unwrap_or_default()
+            } else {
+                c.amount
+            },
+            reason: c.reason.clone(),
+            decided_at: c.decided_at,
+        })
+        .collect();
+    corrections.sort_by_key(|c| std::cmp::Reverse(c.correction_id));
+
     ResidentStatement {
+        corrections,
         unit_id: unit.id.clone(),
         unit_label: inner.unit_label(&unit.block_id, unit.unit_number),
         as_of: today,

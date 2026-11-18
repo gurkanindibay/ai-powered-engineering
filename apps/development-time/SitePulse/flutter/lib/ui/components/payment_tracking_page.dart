@@ -131,6 +131,7 @@ class PaymentTrackingPage extends StatefulWidget {
     String unitId = initialUnitId ?? 'd-14';
     String role = 'TENANT';
     String channel = 'MANUAL_CASH';
+    bool settlesOwnerCapitalDues = false;
 
     return AppFullscreenPage.push(
       context: context,
@@ -163,6 +164,7 @@ class PaymentTrackingPage extends StatefulWidget {
                       payerRole: role,
                       paymentChannel: channel,
                       description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                      settlesOwnerCapitalDues: settlesOwnerCapitalDues,
                     );
 
                     if (ctx.mounted) Navigator.pop(ctx);
@@ -267,6 +269,16 @@ class PaymentTrackingPage extends StatefulWidget {
                       border: OutlineInputBorder(),
                     ),
                   ),
+                  if (role == 'TENANT')
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: settlesOwnerCapitalDues,
+                      title: const Text('Malik adına demirbaş borcuna işle'),
+                      subtitle: const Text('Açıklama tek başına bu işlemi seçmez.'),
+                      onChanged: (value) => setDialogState(
+                        () => settlesOwnerCapitalDues = value ?? false,
+                      ),
+                    ),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 6,

@@ -2,7 +2,7 @@
 
 > **Epic ID:** EPIC-07  
 > **Module:** `backend-rust`, `flutter-ui`, `flutter-domain`, `mvp_ux_prototype`  
-> **Status:** IN PROGRESS (7 / 13 Stories Completed & Verified; STORY-07-08 to 07-13 planned)  
+> **Status:** IN PROGRESS (8 / 13 Stories Completed & Verified; STORY-07-09 to 07-13 planned)  
 > **Target Audience:** `SITE_MANAGER`, `HOME_RESIDENT`, `SAAS_ADMIN`  
 > **Governance:** Turkish Condominium Law (634 Sayılı KMK Madde 35-f), TCMB Açık Bankacılık & 6493 Sayılı Kanun  
 > **Business Value:** Automates dues collection and ledger reconciliation directly with Turkish banks (*Kuveyt Türk Sandbox, Garanti BBVA, İş Bankası, Yapı Kredi, Akbank*) and licensed FinTech payment facilitators. Eliminates manual bank statement tracking, removes human matching errors via flat-specific Virtual IBANs (Sanal IBAN), provides a zero-permission Excel/MT940 parser for individual developers, manages advance balances (avans bakiye), and autonomously runs periodic monthly dues accrual with strict duplicate prevention.
@@ -144,7 +144,7 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
 ---
 
 ### STORY-07-08: Canonical Billing Period & Atomic Accrual Batch
-- **Status:** `PLANNED`
+- **Status:** `COMPLETED` (decision: the due date may fall up to 30 days after the period's month, `DUE_DATE_GRACE_DAYS`)
 - **Target Role:** System & Site Manager
 - **Gap today:** The period is free text. The duplicate guard and the unique index
   `uq_unit_period_expense` compare that text exactly, so "Ekim 2026", "ekim 2026" and "2026-10" are
@@ -169,6 +169,9 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
      guessed.
 - **Acceptance Criteria:**
   Executable scenarios: [`STORY-07-08-canonical-period-and-atomic-batch.feature`](../features/EPIC-07/STORY-07-08-canonical-period-and-atomic-batch.feature).
+- **Implementation Artifacts:**
+  - `domain/billing_period.rs` (key, label, due-date rule), `db/dues_repository.rs` (`commit_accrual_batch`, `list_accrual_runs`), `handlers/dues.rs`, `scheduler.rs`, migration `V37` (`period_key` columns, unique indexes, `dues_accrual_runs`, `dues_period_migration_issues` for unparseable or duplicate labels), `GET /api/v1/dues/accrual-runs`
+- **Verification & Tests:** `backend/tests/billing_period_tests.rs`, `backend/tests/db_accrual_atomic_tests.rs`
 
 ---
 
@@ -224,7 +227,7 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
 ---
 
 ### STORY-07-11: Accrual Corrections (Cancel, Re-issue, Credit Note)
-- **Status:** `PLANNED`
+- **Status:** `COMPLETED` (Backend API, ledger and resident statement; requirement 7 waits for STORY-07-12; no Flutter screen yet)
 - **Target Role:** Site Manager, Second Approver, Auditor
 - **Gap today:** `DebtStatus` has only Pending, Overdue and Paid. The only adjustments are a principal
   write-off and a penalty waiver. A liability with the wrong amount, period or debtor can only be
@@ -247,6 +250,10 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
   7. A correction to a closed period is posted in the current open period (STORY-07-12).
 - **Acceptance Criteria:**
   Executable scenarios: [`STORY-07-11-accrual-corrections.feature`](../features/EPIC-07/STORY-07-11-accrual-corrections.feature).
+- **Implementation Artifacts:**
+  - `services/correction_service.rs`, `db/correction_repository.rs`, `migrations/V38__accrual_corrections.sql`
+  - API: `GET/POST /api/v1/accrual-corrections` and `POST /api/v1/accrual-corrections/{id}/decide` (the audit list is the GET)
+  - `services/accounting_service.rs` (reversing entries), `services/resident_statement.rs` (`corrections`)
 
 ---
 

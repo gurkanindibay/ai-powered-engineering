@@ -68,7 +68,9 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(34, "V34__person_merge_canonical.sql"),
     migration!(35, "V35__role_free_person_cards.sql"),
     migration!(36, "V36__revoke_migration_helpers_from_public.sql"),
-    migration!(37, "V37__advance_exit_settlements.sql"),
+    migration!(37, "V37__canonical_billing_period_and_accrual_runs.sql"),
+    migration!(38, "V38__accrual_corrections.sql"),
+    migration!(39, "V39__advance_exit_settlements.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.
