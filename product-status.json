@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-18T19:34:20Z",
- "run_id": "20261118T193420Z-6c7e525",
- "commit": "6c7e525c7a1f0388cb2522d35a0df131f1ce0997",
+ "generated_at": "2026-11-18T19:53:34Z",
+ "run_id": "20261118T195333Z-c5ef7c4",
+ "commit": "c5ef7c42861e3f5821465edda4a5526962e6dce6",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 116,
-  "seconds": 2277.8,
+  "seconds": 1927.5,
   "files": 8,
   "unparseable": []
  },
@@ -20,11 +20,11 @@
   "stories_with_scenarios": 100,
   "stories_passing": 25,
   "scenarios": 294,
-  "automated": 239,
+  "automated": 243,
   "passing": 102,
   "failing": 0,
-  "no_result": 137,
-  "planned": 55,
+  "no_result": 141,
+  "planned": 51,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -121,11 +121,11 @@
    "stories_with_scenarios": 13,
    "stories_passing": 1,
    "scenarios": 49,
-   "automated": 29,
+   "automated": 33,
    "passing": 12,
    "failing": 0,
-   "no_result": 17,
-   "planned": 20,
+   "no_result": 21,
+   "planned": 16,
    "health": "in_progress"
   },
   {
@@ -945,25 +945,25 @@
    "story": "STORY-07-12"
   },
   "SC-07-13-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Dashboard, statement, aging and trial balance agree on an overdue unit",
    "epic": "EPIC-07",
    "story": "STORY-07-13"
   },
   "SC-07-13-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "The daily late-fee job is idempotent",
    "epic": "EPIC-07",
    "story": "STORY-07-13"
   },
   "SC-07-13-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Penalty revenue is booked in the month it accrued",
    "epic": "EPIC-07",
    "story": "STORY-07-13"
   },
   "SC-07-13-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "The reconciliation check reports a mismatch",
    "epic": "EPIC-07",
    "story": "STORY-07-13"
@@ -2116,7 +2116,7 @@
    "stories": 100,
    "stories_with_scenarios": 100,
    "scenarios": 294,
-   "automated": 239
+   "automated": 243
   }
  ],
  "recent_changes": [
@@ -2156,8 +2156,8 @@
    "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
    "new_stories": 0,
    "new_scenarios": 0,
-   "newly_automated": 9,
-   "items": 9,
+   "newly_automated": 13,
+   "items": 13,
    "samples": [
     "SC-07-08-01: Another spelling of an accrued month is a duplicate",
     "SC-07-08-02: A due date outside the period is rejected",
@@ -2653,5 +2653,5 @@
    ]
   }
  ],
- "href": "reports/44380454362-1/"
+ "href": "reports/44383461685-1/"
 }
