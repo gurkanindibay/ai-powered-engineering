@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-18T21:24:51Z",
- "run_id": "20261118T212450Z-83e542d",
- "commit": "83e542d45a46c0c094aef601fb39dd3bfff8c98a",
+ "generated_at": "2026-11-18T21:43:38Z",
+ "run_id": "20261118T214338Z-18b64e1",
+ "commit": "18b64e1324585877b1821fe3022dc9c0c957e486",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 116,
-  "seconds": 1961.4,
+  "seconds": 1933.0,
   "files": 8,
   "unparseable": []
  },
@@ -19,12 +19,12 @@
   "stories": 100,
   "stories_with_scenarios": 100,
   "stories_passing": 25,
-  "scenarios": 296,
-  "automated": 252,
+  "scenarios": 298,
+  "automated": 259,
   "passing": 102,
   "failing": 0,
-  "no_result": 150,
-  "planned": 44,
+  "no_result": 157,
+  "planned": 39,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -120,12 +120,12 @@
    "stories": 13,
    "stories_with_scenarios": 13,
    "stories_passing": 1,
-   "scenarios": 49,
-   "automated": 39,
+   "scenarios": 51,
+   "automated": 46,
    "passing": 12,
    "failing": 0,
-   "no_result": 27,
-   "planned": 10,
+   "no_result": 34,
+   "planned": 5,
    "health": "in_progress"
   },
   {
@@ -915,32 +915,44 @@
    "story": "STORY-07-11"
   },
   "SC-07-12-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Closing a period shows its summary and stores a snapshot",
    "epic": "EPIC-07",
    "story": "STORY-07-12"
   },
   "SC-07-12-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A closed period still accepts payments",
    "epic": "EPIC-07",
    "story": "STORY-07-12"
   },
   "SC-07-12-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A correction to a closed period is booked in the open period",
    "epic": "EPIC-07",
    "story": "STORY-07-12"
   },
   "SC-07-12-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Accrual into a closed period is refused",
    "epic": "EPIC-07",
    "story": "STORY-07-12"
   },
   "SC-07-12-05": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Reopening a period needs a second approver",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-06": {
+   "state": "no_result",
+   "name": "Late-fee catch-up after close is booked in the open period",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-07": {
+   "state": "no_result",
+   "name": "Backdated-payment penalty reevaluation is booked in the open period",
    "epic": "EPIC-07",
    "story": "STORY-07-12"
   },
@@ -2135,8 +2147,8 @@
    "epics": 12,
    "stories": 100,
    "stories_with_scenarios": 100,
-   "scenarios": 296,
-   "automated": 252
+   "scenarios": 298,
+   "automated": 259
   }
  ],
  "recent_changes": [
@@ -2145,9 +2157,9 @@
    "epic": "EPIC-07",
    "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
    "new_stories": 0,
-   "new_scenarios": 0,
-   "newly_automated": 6,
-   "items": 6,
+   "new_scenarios": 2,
+   "newly_automated": 13,
+   "items": 13,
    "samples": [
     "SC-07-10-01: The site's due day is used for every accrued liability",
     "SC-07-10-02: A due day beyond the end of the month falls on its last day",
@@ -2688,5 +2700,5 @@
    ]
   }
  ],
- "href": "reports/44400021645-1/"
+ "href": "reports/44402879183-1/"
 }
