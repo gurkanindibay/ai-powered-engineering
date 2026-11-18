@@ -273,6 +273,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         tenant_user_id: None,
         virtual_iban: None,
         house_type: None,
+        created_on: None,
     };
     let inner = state.inner.read().await;
     let statement = sitepulse_backend::services::resident_statement::build_statement(
