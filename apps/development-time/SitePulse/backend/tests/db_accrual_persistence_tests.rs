@@ -136,8 +136,8 @@ async fn v38_corrections_and_v41_reevaluation_adjustments_round_trip_with_rls() 
     ).await.expect("insert correction").get(0);
     let adjustment: i64 = tx.query_one(
         "INSERT INTO ledger_adjustments
-            (site_id,unit_id,due_id,kind,amount,reason,source,requested_by,requested_at,status)
-         VALUES ($1,$2,$3,'PENALTY_REEVALUATION',1.00,'reevaluation test','PAYMENT_DATE','system',$4,'APPROVED')
+            (site_id,unit_id,due_id,kind,amount,reason,source,requested_by,requested_at,status,decided_by,decided_at)
+         VALUES ($1,$2,$3,'PENALTY_REEVALUATION',1.00,'reevaluation test','PAYMENT_DATE','system',$4,'APPROVED','approver',$4)
          RETURNING id",
         &[&db.site, &db.unit, &db.due, &Utc::now()],
     ).await.expect("V41 adjustment constraint accepts new kind and source").get(0);
