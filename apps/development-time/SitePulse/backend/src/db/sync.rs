@@ -333,6 +333,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let status = match status_str.to_uppercase().as_str() {
                 "PAID" => DebtStatus::Paid,
                 "OVERDUE" => DebtStatus::Overdue,
+                "CANCELLED" => DebtStatus::Cancelled,
                 _ => DebtStatus::Pending,
             };
 

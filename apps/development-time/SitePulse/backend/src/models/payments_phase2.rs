@@ -360,6 +360,23 @@ pub struct ResidentStatement {
     pub as_of: NaiveDate,
     pub debtors: Vec<StatementDebtor>,
     pub receipts: Vec<StatementReceipt>,
+    /// Approved accrual corrections (cancel, re-issue, credit note) of this unit.
+    #[serde(default)]
+    pub corrections: Vec<StatementCorrection>,
+}
+
+/// One approved correction of a liability, as the statement shows it (STORY-07-11).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StatementCorrection {
+    pub correction_id: i64,
+    pub period: String,
+    pub kind: String,
+    /// What the liability owed before the correction.
+    pub original_amount: Decimal,
+    /// The principal taken off (cancel: all of it).
+    pub credited_amount: Decimal,
+    pub reason: String,
+    pub decided_at: Option<DateTime<Utc>>,
 }
 
 /// What anyone holding a receipt can confirm (KVKK: no payer name, no unit).

@@ -713,9 +713,7 @@ impl PaymentTrackingService {
             let mut dues: Vec<DuesLiability> = inner
                 .dues
                 .iter()
-                .filter(|d| {
-                    d.status != DebtStatus::Paid && crate::auth::same_id(&d.unit_id, &unit.id)
-                })
+                .filter(|d| d.status.is_collectable() && crate::auth::same_id(&d.unit_id, &unit.id))
                 .cloned()
                 .map(|d| calc.calculate_delay_penalty(d, today))
                 .collect();
@@ -1038,9 +1036,7 @@ impl PaymentTrackingService {
             let mut dues: Vec<DuesLiability> = inner
                 .dues
                 .iter()
-                .filter(|d| {
-                    d.status != DebtStatus::Paid && crate::auth::same_id(&d.unit_id, &unit.id)
-                })
+                .filter(|d| d.status.is_collectable() && crate::auth::same_id(&d.unit_id, &unit.id))
                 .cloned()
                 .map(|d| calc.calculate_delay_penalty(d, now.date_naive()))
                 .collect();
@@ -1517,7 +1513,7 @@ impl PaymentTrackingService {
         let old_owner_exit_balance: Decimal = inner
             .dues
             .iter()
-            .filter(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid)
+            .filter(|d| d.unit_id == unit_id && d.status.is_collectable())
             .map(|d| d.total_amount)
             .sum();
 

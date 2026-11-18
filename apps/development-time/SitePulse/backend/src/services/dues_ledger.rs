@@ -27,10 +27,16 @@ impl Settlement {
 }
 
 pub fn outstanding_principal(d: &DuesLiability) -> Decimal {
+    if d.status == DebtStatus::Cancelled {
+        return Decimal::ZERO;
+    }
     (d.principal_amount - d.paid_principal).max(Decimal::ZERO)
 }
 
 pub fn outstanding_penalty(d: &DuesLiability) -> Decimal {
+    if d.status == DebtStatus::Cancelled {
+        return Decimal::ZERO;
+    }
     (d.delay_penalty - d.paid_penalty).max(Decimal::ZERO)
 }
 
@@ -41,7 +47,7 @@ pub fn outstanding(d: &DuesLiability) -> Decimal {
 /// Recomputes `total_amount` (outstanding) and marks the liability paid when settled.
 pub fn refresh(d: &mut DuesLiability) {
     d.total_amount = outstanding(d);
-    if d.total_amount <= Decimal::ZERO {
+    if d.status != DebtStatus::Cancelled && d.total_amount <= Decimal::ZERO {
         d.status = DebtStatus::Paid;
     }
 }
@@ -261,9 +267,7 @@ pub fn open_dues_for(
     dues.iter()
         .enumerate()
         .filter(|(_, d)| {
-            d.status != DebtStatus::Paid
-                && unit_matches(&d.unit_id)
-                && payer_may_settle(d, payer_role)
+            d.status.is_collectable() && unit_matches(&d.unit_id) && payer_may_settle(d, payer_role)
         })
         .map(|(i, _)| i)
         .collect()

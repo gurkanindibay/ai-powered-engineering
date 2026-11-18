@@ -94,7 +94,7 @@ pub async fn record_homeowner_payment(
     let remaining_debt: Decimal = inner
         .dues
         .iter()
-        .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+        .filter(|d| d.unit_id == unit.id && d.status.is_collectable())
         .map(|d| d.total_amount)
         .sum();
     let message = if cleared_debt > Decimal::ZERO && advance_credit > Decimal::ZERO {

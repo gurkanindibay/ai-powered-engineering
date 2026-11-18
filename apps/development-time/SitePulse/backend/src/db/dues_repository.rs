@@ -175,6 +175,7 @@ pub async fn save_due_liability(
         DebtStatus::Paid => "PAID",
         DebtStatus::Overdue => "OVERDUE",
         DebtStatus::Pending => "PENDING",
+        DebtStatus::Cancelled => "CANCELLED",
     };
     let due_id_num = require_id("entity", &due.id)?;
     let unit_id_num = require_id("entity", &due.unit_id)?;
@@ -284,6 +285,18 @@ pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Op
         .ok()
         .map(|p| p.key());
     let client = pool.get().await?;
+    // The unique index ignores cancelled rows (a re-issue replaces one), but
+    // accrual never charges a period again once any liability of it exists.
+    let existing = client
+        .query_opt(
+            "SELECT 1 FROM dues_liabilities
+             WHERE unit_id = $1 AND period = $2 AND expense_type = $3 AND capital_project_id IS NULL",
+            &[&unit, &due.period, &due.expense_type],
+        )
+        .await?;
+    if existing.is_some() {
+        return Ok(None);
+    }
     let row = client
         .query_opt(
             r#"
@@ -592,6 +605,7 @@ pub async fn fetch_debt_aging_report_from_db(
         let status = match status_str.as_str() {
             "PAID" => DebtStatus::Paid,
             "OVERDUE" => DebtStatus::Overdue,
+            "CANCELLED" => DebtStatus::Cancelled,
             _ => DebtStatus::Pending,
         };
         let debtor_type = match debtor_type_str.as_str() {

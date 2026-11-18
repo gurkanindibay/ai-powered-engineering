@@ -227,7 +227,7 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
 ---
 
 ### STORY-07-11: Accrual Corrections (Cancel, Re-issue, Credit Note)
-- **Status:** `PLANNED`
+- **Status:** `COMPLETED` (Backend API, ledger and resident statement; requirement 7 waits for STORY-07-12; no Flutter screen yet)
 - **Target Role:** Site Manager, Second Approver, Auditor
 - **Gap today:** `DebtStatus` has only Pending, Overdue and Paid. The only adjustments are a principal
   write-off and a penalty waiver. A liability with the wrong amount, period or debtor can only be
@@ -250,6 +250,10 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
   7. A correction to a closed period is posted in the current open period (STORY-07-12).
 - **Acceptance Criteria:**
   Executable scenarios: [`STORY-07-11-accrual-corrections.feature`](../features/EPIC-07/STORY-07-11-accrual-corrections.feature).
+- **Implementation Artifacts:**
+  - `services/correction_service.rs`, `db/correction_repository.rs`, `migrations/V38__accrual_corrections.sql`
+  - API: `GET/POST /api/v1/accrual-corrections` and `POST /api/v1/accrual-corrections/{id}/decide` (the audit list is the GET)
+  - `services/accounting_service.rs` (reversing entries), `services/resident_statement.rs` (`corrections`)
 
 ---
 

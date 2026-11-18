@@ -270,6 +270,10 @@ routes! {
     get "/api/v1/adjustments" => handlers::list_adjustments, Require(FinanceRead);
     post "/api/v1/adjustments" => handlers::request_adjustment, Require(FinanceManage);
     post "/api/v1/adjustments/{id}/decide" => handlers::decide_adjustment, Require(AdjustmentApprove);
+    // STORY-07-11: accrual corrections (cancel, re-issue, credit note)
+    get "/api/v1/accrual-corrections" => handlers::list_corrections, Require(FinanceRead);
+    post "/api/v1/accrual-corrections" => handlers::request_correction, Require(FinanceManage);
+    post "/api/v1/accrual-corrections/{id}/decide" => handlers::decide_correction, Require(AdjustmentApprove);
     // SPEC-009 R11: heat-share billing
     get "/api/v1/heat-share/periods" => handlers::list_heat_periods, Require(FinanceRead);
     post "/api/v1/heat-share/periods" => handlers::create_heat_period, Require(FinanceManage);
