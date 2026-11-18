@@ -26,6 +26,7 @@ run_tests = _load_run_tests()
 
 
 class GateGroupTests(unittest.TestCase):
+    # covers: SC-05-05-01
     def test_groups_partition_order(self):
         grouped = [gate for gates in run_tests.GATE_GROUPS.values() for gate in gates]
         self.assertEqual(len(grouped), len(set(grouped)), "a gate is listed in more than one group")

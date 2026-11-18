@@ -5,7 +5,7 @@ Feature: PostgreSQL relational schema and SQL migrations
   SqlSchemaGate; the traceability linker only reads Rust, Dart and e2e tests, so the
   scenario stays pending until a linkable test declares it.
 
-  @SC-05-01-01 @pending
+  @SC-05-01-01 @layer:database @linked
   Scenario: SQL migrations execute with strict NUMERIC types
     When database migrations execute
     Then the core tables are created

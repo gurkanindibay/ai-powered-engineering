@@ -53,6 +53,7 @@ void main() {
       expect(session.permissions.any((p) => p.code == 'SITE_MANAGE' && p.isGranted), isTrue);
     });
 
+    // covers: SC-06-05-02
     test('when login with Google, then authenticates as homeOwner with Google provider', () {
       controller.loginWithGoogle();
 

@@ -89,6 +89,7 @@ class RustStandardsLintTests(unittest.TestCase):
         self.assertEqual(_rules(_lint({"src/a.rs": ok})), [])
         self.assertEqual(_rules(_lint({"src/a.rs": bad})), ["regex-per-call"])
 
+    # covers: SC-05-04-01
     def test_implicit_rounding_and_floats_are_reported(self):
         report = _lint({"src/a.rs": "fn f(d: Decimal) -> Decimal { let x: f64 = 0.1; d.round_dp(2) }\n"})
         self.assertEqual(_rules(report), ["float-money", "implicit-rounding"])

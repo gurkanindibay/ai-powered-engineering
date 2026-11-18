@@ -538,6 +538,7 @@ def check_seed_replay(db: str, seed_files: list[pathlib.Path]) -> list[dict]:
     return findings
 
 
+# covers: SC-05-01-01
 def check() -> dict:
     findings: list[dict] = []
     files = migrations()

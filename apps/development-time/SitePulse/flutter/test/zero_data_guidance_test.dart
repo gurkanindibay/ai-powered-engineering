@@ -172,6 +172,7 @@ void main() {
       expect(find.textContaining('Daireniz tanımlandığında'), findsOneWidget);
     });
 
+    // covers: SC-10-06-04
     testWidgets('HeroBalanceCard displays reassuring zero debt guidance when no dues exist', (tester) async {
       final zeroDues = DuesLiability(
         id: '',
@@ -210,6 +211,7 @@ void main() {
       expect(find.text('Kat Maliki Sorumluluğunda'), findsOneWidget);
     });
 
+    // covers: SC-10-06-03
     testWidgets('HeroBalanceCard shows capital dues separately by project', (tester) async {
       final zeroDues = DuesLiability(
         id: '',

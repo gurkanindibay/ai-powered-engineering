@@ -33,6 +33,7 @@ def test_portfolio_stats_agree_with_site_list(api, actors):
 
 @pytest.mark.covers("SC-03-03-01")
 @pytest.mark.covers("SC-03-04-01")
+@pytest.mark.covers("SC-03-04-03")
 @pytest.mark.smoke
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-02")
@@ -138,6 +139,7 @@ def test_edit_site_updates_the_card(saas_ui, stack):
     assert stack.sql("SELECT name FROM sites WHERE id = 1;") == "Begonya Sitesi Evleri"
 
 
+@pytest.mark.covers("SC-03-04-04")
 @pytest.mark.covers("SC-03-06-01")
 @pytest.mark.core
 @pytest.mark.role_saas
@@ -190,3 +192,23 @@ def test_admin_password_reset_issues_a_new_password_and_retires_the_old(saas_ui,
     assert api.login(manager["email"], new_password).user["must_change_password"] is True
     with pytest.raises(ApiError):
         api.login(manager["email"], manager["password"])
+
+
+@pytest.mark.covers("SC-03-05-01")
+@pytest.mark.role_saas
+def test_saas_onboarding_rest_endpoint_returns_201_and_credentials(api, saas_ready):
+    created = api.create_site(saas_ready, "API Onboarded Site", "api.manager@e2e.test")
+    assert "site_id" in created
+    assert "slug" in created
+    assert "admin_user_id" in created or "site_admin_id" in created
+    assert "temporary_password" in created
+    assert len(created["temporary_password"]) >= 8
+
+
+@pytest.mark.covers("SC-03-07-02")
+@pytest.mark.role_saas
+def test_reset_admin_password_non_existent_site_fails(api, saas_ready):
+    with pytest.raises(ApiError) as exc_info:
+        api.call("POST", "/api/v1/saas/sites/999999/reset-admin-password", saas_ready.token)
+    assert "404" in str(exc_info.value)
+

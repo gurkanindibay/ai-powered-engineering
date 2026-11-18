@@ -2,7 +2,7 @@
 Feature: JWT claims, profile inspection and session handling
   Tokens carry the user's claims; the client exposes the profile, password change and logout.
 
-  @SC-06-04-01 @layer:gui @pending
+  @SC-06-04-01 @layer:backend @linked
   Scenario: User inspects their active profile and permissions
     Given an authenticated session for "Kat Maliki"
     When inspecting authentication claims

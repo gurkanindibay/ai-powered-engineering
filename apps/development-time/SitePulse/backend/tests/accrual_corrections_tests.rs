@@ -623,6 +623,7 @@ fn the_credit_note_plan_rounds_the_remaining_late_fee_half_away_from_zero() {
     assert_eq!(cancel.penalty_reversed, d("23.33"));
 }
 
+// covers: SC-05-02-01
 #[tokio::test]
 async fn approving_the_same_correction_twice_concurrently_applies_it_once() {
     let state = fixture().await;

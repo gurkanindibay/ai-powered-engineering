@@ -8,7 +8,7 @@ Feature: Cross-platform Flutter login and registration experience
     When they tap the Google sign-in button
     Then the Google authentication flow starts
 
-  @SC-06-05-02 @layer:gui @pending
+  @SC-06-05-02 @layer:flutter @linked
   Scenario: Google sign-in completes and the dashboard shows the Google profile
     Given the user is on the SitePulse login screen
     When they tap "Google ile Giriş Yap"

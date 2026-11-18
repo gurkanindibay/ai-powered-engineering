@@ -52,7 +52,7 @@ Feature: Forced password change gate before any operation
     Then the AUDITOR home page is shown with the role's data
     And signing in again with the new password does not ask for a change
 
-  @SC-06-06-06 @layer:gui @pending
+  @SC-06-06-06 @layer:backend @linked @role_saas
   Scenario: Server blocks operations before the password is changed
     Given an authenticated session whose user must change the password
     When the client calls any business endpoint

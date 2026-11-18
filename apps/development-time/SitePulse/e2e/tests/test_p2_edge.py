@@ -136,6 +136,7 @@ def test_adding_a_resident_to_an_occupied_unit_warns_and_saves_nothing(login_as,
 
 @pytest.mark.edge
 @pytest.mark.role_homeowner
+@pytest.mark.covers("SC-04-07-02")
 @pytest.mark.gui_id("GUI-04-07")
 def test_co_resident_joins_through_a_unit_invite(login_page, page, api, actors):
     owner = api.login(**actors["homeowner"])
@@ -155,6 +156,7 @@ def test_co_resident_joins_through_a_unit_invite(login_page, page, api, actors):
 
 @pytest.mark.edge
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-04-02-02")
 @pytest.mark.gui_id("GUI-04-08")
 def test_empty_approval_queue_shows_zero(login_as, page):
     login_as("manager")
@@ -166,6 +168,7 @@ def test_empty_approval_queue_shows_zero(login_as, page):
 
 @pytest.mark.edge
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-07-02-05")
 @pytest.mark.gui_id("GUI-07-06")
 def test_payer_name_alias_auto_matches_the_transfer(login_as, login_page, page, api, actors, tmp_path):
     homeowner = api.login(**actors["homeowner"])
@@ -268,6 +271,7 @@ def test_debt_aging_total_matches_the_open_ledger(login_as, page, tenant_paid_ca
 
 @pytest.mark.edge
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-10-04-02")
 @pytest.mark.gui_id("GUI-09-07")
 def test_virman_moves_advance_to_the_capital_due(login_as, page, api):
     api.webhook_transfer(A14_IBAN, Decimal("3500.00"), "E2E-FAST-VIRMAN", "AHMET YILMAZ AVANS")  # no dues: all advance

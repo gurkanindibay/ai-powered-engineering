@@ -4,7 +4,7 @@ Feature: Closed-loop verification harness and gate enforcement
   tests (harness/tests/test_harness.py) exercise the loop, but the traceability linker
   does not read harness tests, so the scenario is pending.
 
-  @SC-05-04-01 @pending
+  @SC-05-04-01 @layer:harness @linked
   Scenario: Verification gate rejects floating-point rounding leaks
     Given generated source code introducing float or double in financial packages
     When the FinancialIntegrityGate executes

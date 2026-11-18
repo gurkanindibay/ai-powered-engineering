@@ -16,13 +16,13 @@ Feature: Resident view separates operational and capital dues
     When the home owner signs in
     Then the owner responsibility capital badge is shown
 
-  @SC-10-06-03 @layer:gui @pending
+  @SC-10-06-03 @layer:flutter @linked
   Scenario: Owner opens the project detail from the capital card
     Given property owner "Ahmet Yılmaz" has operational dues of 1500.00 and a capital installment of 3000.00
     When the owner selects "Detay" on the capital balance card
     Then the project breakdown, contractor info and installment schedule are shown
 
-  @SC-10-06-04 @layer:gui @pending
+  @SC-10-06-04 @layer:flutter @linked
   Scenario: Tenant reads the statutory protection guidance
     Given tenant "Canan Can" signs in to a unit with an active capital project
     When the tenant views the dues breakdown

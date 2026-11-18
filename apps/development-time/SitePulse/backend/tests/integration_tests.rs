@@ -577,6 +577,7 @@ async fn when_duplicate_email_for_home_resident_then_throws_exception() {
     assert!(err.contains("already exists") || err.contains("zaten mevcut"));
 }
 
+// covers: SC-06-02-01
 #[tokio::test]
 async fn when_valid_password_registration_then_can_authenticate() {
     let state = AppState::new();
@@ -652,6 +653,7 @@ async fn when_wrong_password_then_throws_exception() {
     assert!(err.contains("Invalid") || err.contains("hatalı"));
 }
 
+// covers: SC-06-03-01
 #[tokio::test]
 async fn when_valid_google_id_token_then_authenticates_and_links_account() {
     std::env::set_var("SITEPULSE_ALLOW_MOCK_GOOGLE_TOKENS", "true");
@@ -688,6 +690,7 @@ fn when_resident_role_then_has_unit_restricted_permissions() {
     assert!(!permissions.contains(&Permission::TenantManage));
 }
 
+// covers: SC-06-04-01
 #[test]
 fn when_home_owner_role_then_has_invite_and_household_permissions() {
     let permissions = Permission::permissions_for_role(Role::HomeOwner);
@@ -784,6 +787,7 @@ async fn when_resetting_admin_password_then_generates_new_temporary_password_and
     assert!(login_res.user.must_change_password);
 }
 
+// covers: SC-03-07-02
 #[tokio::test]
 async fn when_resetting_admin_password_for_non_existent_site_then_fails() {
     let state = AppState::new();
@@ -1370,6 +1374,61 @@ async fn when_querying_resident_dashboard_then_includes_allocated_virtual_iban()
     assert!(iban.starts_with("TR"));
     assert!(iban.contains("00205"));
     assert!(VirtualIbanService::validate_tr_iban(&iban));
+}
+
+// covers: SC-05-03-01
+#[tokio::test]
+async fn when_getting_resident_dashboard_then_returns_real_time_calculated_dues() {
+    let state = AppState::new();
+    let today = chrono::Utc::now().date_naive();
+    let due_date = today - chrono::Duration::days(10);
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues.retain(|d| d.unit_id != "d-14");
+        inner.dues.push(DuesLiability {
+            id: "due-realtime-test".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Eylül 2026".to_string(),
+            principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
+            delay_penalty: Decimal::ZERO,
+            total_amount: Decimal::from_str_exact("1400.00").unwrap(),
+            due_date,
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: None,
+            grace_days: 0,
+        });
+    }
+
+    let res = sitepulse_backend::handlers::get_resident_dashboard(
+        axum::extract::Path("d-14".to_string()),
+        axum::extract::State(state.clone()),
+        resident_dashboard_authz(Role::HomeOwner),
+    )
+    .await;
+
+    let json_bytes = axum::body::to_bytes(res.into_response().into_body(), 1024 * 64)
+        .await
+        .unwrap();
+    let dto: ResidentDashboardDto = serde_json::from_slice(&json_bytes).unwrap();
+    assert_eq!(dto.total_debt, Decimal::from_str_exact("1423.33").unwrap());
+    let due = dto
+        .dues
+        .iter()
+        .find(|d| d.id == "due-realtime-test")
+        .unwrap();
+    assert_eq!(
+        due.principal_amount,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
+    assert_eq!(due.delay_penalty, Decimal::from_str_exact("23.33").unwrap());
+    assert_eq!(
+        due.total_amount,
+        Decimal::from_str_exact("1423.33").unwrap()
+    );
 }
 
 #[tokio::test]
@@ -4039,6 +4098,7 @@ async fn when_accruing_capital_installment_then_reconciles_penny_drift_exactly()
     assert_eq!(sum_dues, Decimal::from_str_exact("10000.00").unwrap());
 }
 
+// covers: SC-10-05-03
 #[tokio::test]
 async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
     let state = AppState::new();

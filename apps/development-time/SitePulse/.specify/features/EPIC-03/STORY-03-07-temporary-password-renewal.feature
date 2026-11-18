@@ -10,7 +10,7 @@ Feature: Temporary password renewal and recovery for site managers
     And the site admin record is updated with mustChangePassword = true
     And the credentials dialog is presented to the SaaS Admin for delivery to the site manager
 
-  @SC-03-07-02 @layer:gui @pending
+  @SC-03-07-02 @layer:gui @linked
   Scenario: Password renewal fails for non-existent site
     When SaaS Admin requests password renewal for an invalid site_id
     Then the request fails with 404 Not Found

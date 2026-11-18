@@ -27,7 +27,7 @@ Feature: Manual unit and home owner registration
     When the manager deletes the resident and confirms
     Then the delete is refused and the resident card stays
 
-  @SC-02-03-05 @pending @core @role_manager
+  @SC-02-03-05 @layer:gui @linked @core @role_manager
   Scenario: Registration shows generated temporary credentials
     Given the Site Manager opens the add owner modal
     When saving a new owner with block "B", flat "25", resident "Fatma Şahin" and an email

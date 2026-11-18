@@ -9,7 +9,7 @@ Feature: Unit-scoped co-resident invitation link and home permissions
     Then produce a tokenized URL "https://sitepulse.app/join/begonya-sitesi/units/d-14?token=SP-HANE-XXXX"
     And state security constraint "Bu link sadece A Blok D:14 yetkisi tanımlar. Başka daire bilgilerine erişemez."
 
-  @SC-04-07-02 @GUI-04-07 @pending @edge @role_resident
+  @SC-04-07-02 @GUI-04-07 @layer:gui @linked @edge @role_resident
   Scenario: Co-resident registers with unit-scoped permissions
     Given a valid unit invite token for "A Blok D:14"
     When Zeynep Yılmaz registers with relationship "SPOUSE"

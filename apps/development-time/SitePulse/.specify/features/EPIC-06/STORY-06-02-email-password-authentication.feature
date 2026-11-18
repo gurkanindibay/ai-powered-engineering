@@ -2,7 +2,7 @@
 Feature: Email and password registration and authentication
   Users register with a validated password and sign in with it.
 
-  @SC-06-02-01 @layer:gui @pending
+  @SC-06-02-01 @layer:backend @linked
   Scenario: User registers and authenticates with password
     Given a new user provides valid registration details with password "GucluSifre2026!"
     When registration is submitted
