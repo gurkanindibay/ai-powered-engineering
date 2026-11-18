@@ -1,30 +1,30 @@
 {
  "schema": 1,
- "generated_at": "2026-11-18T22:42:49Z",
- "run_id": "20261118T224249Z-a875bf2",
- "commit": "a875bf219064658bd94d72cbff317dba67a1ec31",
+ "generated_at": "2026-11-18T22:52:42Z",
+ "run_id": "20261118T225242Z-f257507",
+ "commit": "f25750709d8da844c98e612155a1b8047133a474",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 117,
+  "tests": 121,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 116,
-  "seconds": 1953.5,
+  "passed": 120,
+  "seconds": 2089.8,
   "files": 8,
   "unparseable": []
  },
  "totals": {
   "stories": 100,
   "stories_with_scenarios": 100,
-  "stories_passing": 25,
+  "stories_passing": 27,
   "scenarios": 300,
-  "automated": 265,
-  "passing": 102,
+  "automated": 275,
+  "passing": 106,
   "failing": 0,
-  "no_result": 163,
-  "planned": 35,
+  "no_result": 169,
+  "planned": 25,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -133,13 +133,13 @@
    "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
    "stories": 12,
    "stories_with_scenarios": 12,
-   "stories_passing": 2,
+   "stories_passing": 4,
    "scenarios": 55,
-   "automated": 51,
-   "passing": 8,
+   "automated": 55,
+   "passing": 12,
    "failing": 0,
    "no_result": 43,
-   "planned": 4,
+   "planned": 0,
    "health": "in_progress"
   },
   {
@@ -149,11 +149,11 @@
    "stories_with_scenarios": 7,
    "stories_passing": 2,
    "scenarios": 24,
-   "automated": 18,
+   "automated": 24,
    "passing": 9,
    "failing": 0,
-   "no_result": 9,
-   "planned": 6,
+   "no_result": 15,
+   "planned": 0,
    "health": "in_progress"
   },
   {
@@ -1023,19 +1023,19 @@
    "story": "STORY-08-03"
   },
   "SC-08-03-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "Move-out can keep the advance without changing the balance",
    "epic": "EPIC-08",
    "story": "STORY-08-03"
   },
   "SC-08-03-03": {
-   "state": "planned",
+   "state": "passing",
    "name": "Move-out payout is debited only after four-eyes approval",
    "epic": "EPIC-08",
    "story": "STORY-08-03"
   },
   "SC-08-03-04": {
-   "state": "planned",
+   "state": "passing",
    "name": "Move-out transfer changes debtor only after four-eyes approval",
    "epic": "EPIC-08",
    "story": "STORY-08-03"
@@ -1065,7 +1065,7 @@
    "story": "STORY-08-05"
   },
   "SC-08-05-03": {
-   "state": "planned",
+   "state": "passing",
    "name": "Previous owner's advance is paid out or transferred only with a second approver",
    "epic": "EPIC-08",
    "story": "STORY-08-05"
@@ -1407,31 +1407,31 @@
    "story": "STORY-09-05"
   },
   "SC-09-05-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Approver cannot approve their own advance settlement request",
    "epic": "EPIC-09",
    "story": "STORY-09-05"
   },
   "SC-09-05-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Departing tenant's advance is paid out only after four-eyes approval",
    "epic": "EPIC-09",
    "story": "STORY-09-05"
   },
   "SC-09-05-05": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Departing tenant's advance transfers only after four-eyes approval",
    "epic": "EPIC-09",
    "story": "STORY-09-05"
   },
   "SC-09-05-06": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Frozen exit dues block advance settlement until the debt is paid",
    "epic": "EPIC-09",
    "story": "STORY-09-05"
   },
   "SC-09-05-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Retrying a timed-out settlement request does not create a duplicate",
    "epic": "EPIC-09",
    "story": "STORY-09-05"
@@ -1449,7 +1449,7 @@
    "story": "STORY-09-06"
   },
   "SC-09-06-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A capital keyword alone does not redirect a tenant payment",
    "epic": "EPIC-09",
    "story": "STORY-09-06"
@@ -2160,10 +2160,40 @@
    "stories": 100,
    "stories_with_scenarios": 100,
    "scenarios": 300,
-   "automated": 265
+   "automated": 275
   }
  ],
  "recent_changes": [
+  {
+   "date": "2026-11-19",
+   "epic": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 6,
+   "items": 6,
+   "samples": [
+    "SC-09-05-02: Approver cannot approve their own advance settlement request",
+    "SC-09-05-03: Departing tenant's advance is paid out only after four-eyes approval",
+    "SC-09-05-04: Retrying a timed-out settlement request does not create a duplicate",
+    "SC-09-05-05: Departing tenant's advance transfers only after four-eyes approval"
+   ]
+  },
+  {
+   "date": "2026-11-19",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 4,
+   "items": 4,
+   "samples": [
+    "SC-08-03-02: Move-out can keep the advance without changing the balance",
+    "SC-08-03-03: Move-out payout is debited only after four-eyes approval",
+    "SC-08-03-04: Move-out transfer changes debtor only after four-eyes approval",
+    "SC-08-05-03: Previous owner's advance is paid out or transferred only with a second approver"
+   ]
+  },
   {
    "date": "2026-11-19",
    "epic": "EPIC-07",
@@ -2712,5 +2742,5 @@
    ]
   }
  ],
- "href": "reports/44412938990-1/"
+ "href": "reports/44412948281-1/"
 }
