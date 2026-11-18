@@ -144,8 +144,17 @@ GATES: Dict[str, List[CommandSpec]] = {
                                   "--test", "db_person_merge_tests",
                                   "--test", "db_unit_person_action_cycles_tests",
                                   "--test", "db_accrual_atomic_tests",
+                                  "--test", "db_accrual_persistence_tests",
                                   "--test", "db_advance_exit_settlements_tests",
-                                  "--", "--ignored", "--test-threads=4"], "backend", 900)],
+                                  "--", "--ignored", "--test-threads=4"], "backend", 900),
+                        # These opt-in PostgreSQL tests were previously never reached by CI.
+                        # The CI job uses a fresh service database for this gate.
+                        CommandSpec(["env", "SITEPULSE_PG_TESTS=1", "cargo", "test", "--locked",
+                                     "--test", "accrual_corrections_tests",
+                                     "corrections_round_trip_through_postgresql", "--", "--exact"], "backend", 600),
+                        CommandSpec(["env", "SITEPULSE_PG_TESTS=1", "cargo", "test", "--locked",
+                                     "--test", "finance_store_pg_tests",
+                                     "every_spec009_record_round_trips_through_postgresql", "--", "--exact"], "backend", 600)],
     # Errors are fatal; warnings/infos are reported by `flutter analyze` itself.
     "flutter-analyze": [CommandSpec(["flutter", "analyze", "--no-fatal-infos", "--no-fatal-warnings"], "flutter", 600)],
     "flutter-test": [CommandSpec(["flutter", "test"], "flutter", 1200)],
