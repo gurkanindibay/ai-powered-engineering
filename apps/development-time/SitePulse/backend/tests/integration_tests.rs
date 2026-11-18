@@ -959,6 +959,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
         matches: matches.clone(),
         optional_message: None,
         remember_sender_iban: None,
+        owner_capital_match_ids: Vec::new(),
     };
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -1030,6 +1031,7 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
             "Sayın Ahmet Yılmaz, ₺1.423,33 aidat ödemeniz onaylanmıştır.".to_string(),
         ),
         remember_sender_iban: None,
+        owner_capital_match_ids: Vec::new(),
     };
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -2187,6 +2189,7 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
         matches: vec![],
         optional_message: None,
         remember_sender_iban: None,
+        owner_capital_match_ids: Vec::new(),
     };
 
     let (status, axum::Json(res)) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -3602,7 +3605,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
 }
 
 #[tokio::test]
-async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_marks_rent_offset_eligible(
+async fn when_tenant_payment_is_explicitly_designated_for_capital_dues_then_rent_offset_is_eligible(
 ) {
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
@@ -3621,6 +3624,7 @@ async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_m
         payer_role: DebtorType::Tenant,
         payment_channel: PaymentChannel::BankTransfer,
         description: Some("Daire 14 Asansör ve Demirbaş Harcaması Payı".to_string()),
+        settles_owner_capital_dues: true,
         payment_date: Some(Utc::now()),
         idempotency_key: None,
         ..Default::default()

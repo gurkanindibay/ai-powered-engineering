@@ -1772,6 +1772,9 @@ pub struct ConfirmReconciliationRequest {
     pub optional_message: Option<String>,
     #[serde(default)]
     pub remember_sender_iban: Option<bool>,
+    /// Match ids explicitly approved for owner capital allocation by the manager.
+    #[serde(default)]
+    pub owner_capital_match_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2317,6 +2320,10 @@ pub struct RecordManualPaymentRequest {
     /// TBK 101: which liabilities the payer is paying (settled first).
     #[serde(default)]
     pub designation: Option<PaymentDesignation>,
+    /// Explicitly settles the property owner's capital dues when a tenant pays.
+    /// Description text never grants this authority by itself.
+    #[serde(default)]
+    pub settles_owner_capital_dues: bool,
     /// Bank/channel transaction reference, stored on the ledger entry.
     #[serde(default)]
     pub external_reference: Option<String>,

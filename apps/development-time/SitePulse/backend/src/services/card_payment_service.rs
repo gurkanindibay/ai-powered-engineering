@@ -370,6 +370,7 @@ impl CardPaymentService {
                             intent.provider, intent.provider_ref
                         )),
                         designation: intent.designation.clone(),
+                        settles_owner_capital_dues: false,
                         external_reference: Some(intent.provider_ref.clone()),
                         designate_from_description: false,
                         settles_unmatched_entry_id: None,

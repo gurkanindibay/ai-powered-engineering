@@ -195,6 +195,7 @@ pub async fn confirm_reconciliation(
         payer_role: DebtorType,
         payer_name: String,
         request_designation: Option<crate::models::PaymentDesignation>,
+        settles_owner_capital_dues: bool,
         item: ReconciliationMatch,
     }
     let lines: Vec<Line> = {
@@ -272,6 +273,7 @@ pub async fn confirm_reconciliation(
                 payer_role,
                 payer_name,
                 request_designation,
+                settles_owner_capital_dues: payload.owner_capital_match_ids.contains(match_id),
                 item: {
                     let mut item = m.clone();
                     item.site_id = payload.site_id.clone();
@@ -308,6 +310,7 @@ pub async fn confirm_reconciliation(
                 payment_date: txn.date.and_hms_opt(0, 0, 0).map(|d| d.and_utc()),
                 idempotency_key: Some(format!("STMT:{}", key)),
                 designation: line.request_designation.clone(),
+                settles_owner_capital_dues: line.settles_owner_capital_dues,
                 external_reference: txn.reference_no.clone().or_else(|| Some(key.clone())),
                 designate_from_description: true,
                 settles_unmatched_entry_id: None,
@@ -1299,6 +1302,82 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
         .as_ref()
         .and_then(|uid| inner.users.iter().find(|u| &u.id == uid))
         .map(|u| u.full_name.clone());
+
+    let txn_desc = payload.description.clone().unwrap_or_else(|| {
+        if is_virtual_iban {
+            format!("Sanal IBAN FAST Transferi: {}", payload.virtual_iban)
+        } else {
+            format!("Site Ana Hesabı FAST Transferi: {}", payload.virtual_iban)
+        }
+    });
+    if payer_role == DebtorType::Tenant
+        && crate::services::PaymentTrackingService::is_capital_expenditure_intent(&txn_desc)
+    {
+        let review_match = ReconciliationMatch {
+            match_id: format!("CAPITAL-REVIEW:{}", payload.transaction_id),
+            site_id: unit.site_id.clone(),
+            transaction: BankTransactionItem {
+                transaction_id: payload.transaction_id.clone(),
+                date: Utc::now().date_naive(),
+                amount: payload.amount,
+                currency: payload.currency.clone().unwrap_or_else(|| "TRY".to_string()),
+                description: txn_desc,
+                sender_name: payload.sender_name.clone(),
+                sender_iban: payload.sender_iban.clone(),
+                reference_no: Some(payload.transaction_id.clone()),
+            },
+            matched_unit_id: Some(unit.id.clone()),
+            matched_block: Some(unit.block_id.clone()),
+            matched_unit_number: Some(unit.unit_number),
+            matched_resident_name,
+            confidence_score: 100,
+            matched_due_id: None,
+            outstanding_balance: None,
+            amount_matches_balance: false,
+            status: ReconciliationStatus::PendingApproval,
+            status_code: ReconciliationStatus::PendingApproval.as_str().to_string(),
+            notes: Some("Açıklamada demirbaş niyeti var. Malik borcuna işlem için yöneticinin açık onayı bekleniyor.".to_string()),
+        };
+        drop(inner);
+        if let Some(ref pool) = state.pool {
+            crate::db::save_reconciliation_match_for_site(
+                pool,
+                &review_match,
+                &review_match.site_id,
+                account_scope,
+            )
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    crate::error::sanitized("Database write failed", &e),
+                )
+            })?;
+        }
+        state
+            .inner
+            .write()
+            .await
+            .reconciliation_queue
+            .push(review_match);
+        return Ok((
+            StatusCode::ACCEPTED,
+            Json(BankIncomingWebhookResponse {
+                status: "PENDING_REVIEW".to_string(),
+                transaction_id: payload.transaction_id,
+                matched_unit_id: unit.id,
+                matched_block: unit.block_id,
+                matched_unit_number: unit.unit_number,
+                cleared_due_period: None,
+                cleared_amount: Decimal::ZERO,
+                remaining_debt: Decimal::ZERO,
+                advance_payment: Decimal::ZERO,
+                receipt_id: String::new(),
+                message: "Capital payment intent needs manager review before allocation."
+                    .to_string(),
+            }),
+        ));
+    }
     drop(inner);
 
     let txn_desc = payload.description.clone().unwrap_or_else(|| {
@@ -1327,6 +1406,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
                 None => format!("BANK:{}", payload.transaction_id),
             }),
             designation: None,
+            settles_owner_capital_dues: false,
             external_reference: Some(payload.transaction_id.clone()),
             designate_from_description: true,
             settles_unmatched_entry_id: None,

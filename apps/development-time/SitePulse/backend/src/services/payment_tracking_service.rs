@@ -75,7 +75,7 @@ impl PaymentTrackingService {
         })
     }
 
-    /// Detects capital expenditure keyword intent in transaction description
+    /// Detects possible capital intent so an automatic bank webhook can request manager review.
     pub fn is_capital_expenditure_intent(desc: &str) -> bool {
         let upper = desc.to_uppercase();
         upper.contains("DEMİRBAŞ")
@@ -492,11 +492,7 @@ impl PaymentTrackingService {
             None
         };
 
-        let desc = req.description.clone().unwrap_or_default();
-        // A tenant paying capital dues explicitly does so on behalf of the owner
-        // (KMK 22 rent offset); otherwise a tenant only settles tenant liabilities.
-        let on_behalf_of_owner =
-            payer_role == DebtorType::Tenant && Self::is_capital_expenditure_intent(&desc);
+        let on_behalf_of_owner = payer_role == DebtorType::Tenant && req.settles_owner_capital_dues;
         let settling_role = if on_behalf_of_owner {
             DebtorType::Owner
         } else {

@@ -1145,6 +1145,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     final txn = item.transaction;
 
     bool sendMessage = true;
+    bool settlesOwnerCapitalDues = false;
     final messageController = TextEditingController(
       text:
           'Sayın $residentName, $unitDesc nolu bağımsız bölümünüze ait ${formatTry(txn.amount)} tutarındaki aidat ödemeniz onaylanmış ve kayıtlara işlenmiştir. Teşekkür ederiz.',
@@ -1206,6 +1207,15 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         ],
                       ),
                       const SizedBox(height: 18),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: settlesOwnerCapitalDues,
+                        title: const Text('Malik adına demirbaş borcuna işle'),
+                        subtitle: const Text('Açıklama tek başına bu işlemi seçmez.'),
+                        onChanged: (value) => setDialogState(
+                          () => settlesOwnerCapitalDues = value ?? false,
+                        ),
+                      ),
 
                       // Host / Payment Card
                       Container(
@@ -1344,6 +1354,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
       await widget.controller.confirmReconciliation(
         [item.matchId],
         optionalHostMessage: sendMessage ? messageController.text.trim() : null,
+        settlesOwnerCapitalDues: settlesOwnerCapitalDues,
       );
       if (!mounted) return;
       setState(() {
@@ -1372,6 +1383,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     );
 
     bool sendMessage = true;
+    bool settlesOwnerCapitalDues = false;
     final messageController = TextEditingController(
       text:
           'Sayın Kat Sakini, aidat ödemeniz banka ekstresi ile eşleştirilmiş ve tahsilatınız muhasebeleştirilmiştir. Teşekkür ederiz.',
@@ -1433,6 +1445,15 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         ],
                       ),
                       const SizedBox(height: 18),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: settlesOwnerCapitalDues,
+                        title: const Text('Seçili ödemeleri malik demirbaş borcuna işle'),
+                        subtitle: const Text('Açıklama tek başına bu işlemi seçmez.'),
+                        onChanged: (value) => setDialogState(
+                          () => settlesOwnerCapitalDues = value ?? false,
+                        ),
+                      ),
 
                       // Selected Items Summary
                       Container(
@@ -1583,6 +1604,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
       await widget.controller.confirmReconciliation(
         _selectedMatchIds.toList(),
         optionalHostMessage: sendMessage ? messageController.text.trim() : null,
+        settlesOwnerCapitalDues: settlesOwnerCapitalDues,
       );
       if (!mounted) return;
       setState(() {

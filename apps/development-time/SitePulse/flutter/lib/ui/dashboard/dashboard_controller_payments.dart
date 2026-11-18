@@ -281,6 +281,7 @@ extension DashboardControllerPayments on DashboardController {
     required String payerRole,
     required String paymentChannel,
     String? description,
+    bool settlesOwnerCapitalDues = false,
     String? siteId,
   }) async {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
@@ -292,6 +293,7 @@ extension DashboardControllerPayments on DashboardController {
       'payer_role': payerRole,
       'payment_channel': paymentChannel,
       'description': description,
+      'settles_owner_capital_dues': settlesOwnerCapitalDues,
     };
 
     if (!isTestMode) {
@@ -331,7 +333,7 @@ extension DashboardControllerPayments on DashboardController {
       allocatedPrincipal: amount,
       allocatedPenalty: Decimal.zero,
       allocatedAdvance: Decimal.zero,
-      isRentOffsetEligible: payerRole == 'TENANT' && (description?.toUpperCase().contains('DEMİRBAŞ') ?? false),
+      isRentOffsetEligible: payerRole == 'TENANT' && settlesOwnerCapitalDues,
       verificationHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       issuedAt: DateTime.now(),
     );

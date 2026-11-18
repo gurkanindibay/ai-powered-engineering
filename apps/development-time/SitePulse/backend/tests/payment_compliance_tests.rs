@@ -98,6 +98,66 @@ async fn webhook(
     res
 }
 
+// covers: SC-09-06-04
+#[tokio::test]
+async fn when_tenant_webhook_mentions_capital_then_it_waits_for_manager_review() {
+    let state = state_with(Vec::new()).await;
+    {
+        let mut inner = state.inner.write().await;
+        let mut tenant = inner
+            .users
+            .iter()
+            .find(|user| user.id == "usr-home-owner-1")
+            .unwrap()
+            .clone();
+        tenant.id = "usr-review-tenant".to_string();
+        tenant.full_name = "Canan Kaya".to_string();
+        inner.users.push(tenant);
+        inner
+            .units
+            .iter_mut()
+            .find(|unit| unit.id == UNIT)
+            .unwrap()
+            .tenant_user_id = Some("usr-review-tenant".to_string());
+    }
+    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", WEBHOOK_SECRET);
+    let req = BankIncomingWebhookRequest {
+        transaction_id: "CAPITAL-REVIEW-001".to_string(),
+        virtual_iban: VIRTUAL_IBAN.to_string(),
+        amount: d("300.00"),
+        currency: Some("TRY".to_string()),
+        sender_name: Some("Canan Kaya".to_string()),
+        sender_iban: None,
+        description: Some("A Blok D:14 Asansör Demirbaş".to_string()),
+        signature: None,
+    };
+    let body = serde_json::to_vec(&req).unwrap();
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        sitepulse_backend::handlers::BANK_WEBHOOK_SIGNATURE_HEADER,
+        sitepulse_backend::auth::sign_webhook_body(WEBHOOK_SECRET, &body)
+            .parse()
+            .unwrap(),
+    );
+    let (status, axum::Json(response)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        headers,
+        axum::body::Bytes::from(body),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::ACCEPTED);
+    assert_eq!(response.status, "PENDING_REVIEW");
+    let inner = state.inner.read().await;
+    assert!(inner.payment_receipts.is_empty());
+    assert_eq!(inner.reconciliation_queue.len(), 1);
+    assert_eq!(
+        inner.reconciliation_queue[0].status,
+        ReconciliationStatus::PendingApproval
+    );
+}
+
 fn manual(amount: &str) -> RecordManualPaymentRequest {
     RecordManualPaymentRequest {
         site_id: Some("site-1".to_string()),
@@ -308,6 +368,7 @@ async fn when_a_statement_line_is_confirmed_twice_then_it_is_settled_once() {
                 matches: vec![],
                 optional_message: None,
                 remember_sender_iban: None,
+                owner_capital_match_ids: Vec::new(),
             }),
         )
         .await

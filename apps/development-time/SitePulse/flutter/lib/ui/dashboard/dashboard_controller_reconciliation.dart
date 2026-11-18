@@ -498,6 +498,7 @@ extension DashboardControllerReconciliation on DashboardController {
     List<String> matchIds, {
     String? optionalHostMessage,
     bool rememberSenderIban = true,
+    bool settlesOwnerCapitalDues = false,
   }) async {
     if (matchIds.isEmpty) return;
     if (!isTestMode) {
@@ -517,6 +518,7 @@ extension DashboardControllerReconciliation on DashboardController {
             'matches': selectedMatches,
             'remember_sender_iban': rememberSenderIban,
             'optional_message': optionalHostMessage,
+            'owner_capital_match_ids': settlesOwnerCapitalDues ? matchIds : <String>[],
           }),
         ).timeout(const Duration(seconds: 5));
         if (response.statusCode != 200 && response.statusCode != 204) {

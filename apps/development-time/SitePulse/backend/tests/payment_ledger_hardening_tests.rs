@@ -228,7 +228,7 @@ async fn when_tenant_surplus_is_transferred_to_owner_capital_then_the_tenant_adv
 
 // covers: SC-09-06-01
 #[tokio::test]
-async fn when_tenant_pays_elevator_fixture_with_keyword_then_capital_due_is_settled_on_behalf() {
+async fn when_manager_explicitly_designates_tenant_payment_for_owner_capital_dues() {
     let state = tenanted_state_with(vec![
         liability(
             "op-1",
@@ -251,6 +251,7 @@ async fn when_tenant_pays_elevator_fixture_with_keyword_then_capital_due_is_sett
     let service = PaymentTrackingService::new(state.clone());
     let mut req = payment("3000.00", "TENANT", "Canan Kaya");
     req.description = Some("A Blok D:14 Asansör Demirbaş".to_string());
+    req.settles_owner_capital_dues = true;
     let receipt = service.record_and_allocate_payment(req).await.unwrap();
 
     assert_eq!(receipt.payer_role, DebtorType::Tenant);
@@ -773,6 +774,58 @@ async fn when_a_site_tax_id_is_not_10_or_11_digits_then_the_update_is_rejected()
             .tax_id
             .as_deref(),
         Some("1234567890")
+    );
+}
+
+// covers: SC-09-06-03
+#[tokio::test]
+async fn when_capital_keyword_is_not_confirmed_then_tenant_pays_only_operational_dues() {
+    let state = tenanted_state_with(vec![
+        liability(
+            "op-1",
+            "October 2026",
+            "1000.00",
+            today() + Days::new(5),
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ),
+        liability(
+            "cap-1",
+            "Elevator",
+            "3000.00",
+            today() + Days::new(5),
+            "OWNER",
+            "CAPITAL_DUES",
+        ),
+    ])
+    .await;
+    let mut req = payment("1000.00", "TENANT", "Canan Kaya");
+    req.description = Some("Asansör Demirbaş".to_string());
+    let receipt = PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(req)
+        .await
+        .unwrap();
+
+    assert_eq!(receipt.on_behalf_of_role, None);
+    assert!(!receipt.is_rent_offset_eligible);
+    let inner = state.inner.read().await;
+    assert_eq!(
+        inner
+            .dues
+            .iter()
+            .find(|due| due.id == "op-1")
+            .unwrap()
+            .status,
+        DebtStatus::Paid
+    );
+    assert_eq!(
+        inner
+            .dues
+            .iter()
+            .find(|due| due.id == "cap-1")
+            .unwrap()
+            .status,
+        DebtStatus::Pending
     );
 }
 
