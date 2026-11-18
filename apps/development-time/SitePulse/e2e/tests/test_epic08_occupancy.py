@@ -172,7 +172,7 @@ def test_move_out_transfer_waits_for_second_approver(login_as, page, api, actors
         f"SELECT balance FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'TENANT';"
     ) == "800.00"
     assert stack.sql(
-        f"SELECT coalesce(balance, 0)::text FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'OWNER';"
+        f"SELECT coalesce((SELECT balance FROM advance_balances WHERE unit_id = {int(b3)} AND debtor_type = 'OWNER'), 0)::text;"
     ) == "0"
 
     api.call(

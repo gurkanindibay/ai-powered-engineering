@@ -258,7 +258,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
             amount: payment_amount,
             payer_name: "Departing Resident".to_string(),
             payer_role: DebtorType::Tenant,
-            payment_channel: PaymentChannel::Other,
+            payment_channel: PaymentChannel::BankTransfer,
             ..Default::default()
         })
         .await
