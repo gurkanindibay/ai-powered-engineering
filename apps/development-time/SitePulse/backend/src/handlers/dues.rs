@@ -269,21 +269,17 @@ pub async fn accrue_monthly_dues(
         None => None,
     };
 
-    let existing_roles: std::collections::HashMap<String, std::collections::HashSet<DebtorType>> = {
+    let existing_units: std::collections::HashSet<String> = {
         let inner = state.inner.read().await;
-        let mut roles = std::collections::HashMap::new();
+        let mut units = std::collections::HashSet::new();
         for due in &inner.dues {
             if BillingPeriod::parse(&due.period).ok() == Some(billing_period)
                 && due.expense_type == ExpenseType::OperationalDues
-                && due.status != DebtStatus::Cancelled
             {
-                roles
-                    .entry(due.unit_id.clone())
-                    .or_insert_with(std::collections::HashSet::new)
-                    .insert(due.debtor_type);
+                units.insert(due.unit_id.clone());
             }
         }
-        roles
+        units
     };
 
     // 2. Build every liability; nothing is written yet.
@@ -325,7 +321,7 @@ pub async fn accrue_monthly_dues(
                 amount,
             )]
         };
-        if existing_roles.contains_key(&unit.id) {
+        if existing_units.contains(&unit.id) {
             continue;
         }
         for (debtor_type, share_amount) in shares {

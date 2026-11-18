@@ -101,6 +101,43 @@ async fn dues(state: &AppState, period: &str) -> Vec<DuesLiability> {
         .collect()
 }
 
+async fn manual_accrue(state: &AppState) {
+    let request = AccrueDuesPeriodRequest {
+        site_id: SITE.to_string(),
+        period: "2026-10".to_string(),
+        due_date: date("2026-10-15"),
+        amount: Decimal::ZERO,
+    };
+    let (status, _) = sitepulse_backend::handlers::accrue_monthly_dues(
+        axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        axum::Json(request),
+    )
+    .await
+    .expect("manual accrual succeeds");
+    assert_eq!(status, axum::http::StatusCode::OK);
+}
+
+async fn move_tenant_in_on_october_11(state: &AppState) {
+    let mut inner = state.inner.write().await;
+    inner
+        .units
+        .iter_mut()
+        .find(|unit| unit.id == UNIT)
+        .expect("fixture unit")
+        .tenant_user_id = Some("tenant-1".to_string());
+    inner.unit_occupancies.insert(
+        UNIT.to_string(),
+        vec![history(DebtorType::Tenant, "2026-10-11", None)],
+    );
+}
+
+fn assert_only_original_owner_liability(due: &[DuesLiability]) {
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].debtor_type, DebtorType::Owner);
+    assert_eq!(due[0].principal_amount, amount("1400.00"));
+}
+
 #[tokio::test]
 async fn when_a_tenant_moves_in_mid_month_then_scheduler_splits_by_actual_days() {
     let state = state_with_unit(
@@ -192,6 +229,36 @@ async fn when_proration_is_disabled_then_scheduler_keeps_the_full_month_rule() {
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].principal_amount, amount("1400.00"));
     assert_eq!(due[0].debtor_type, DebtorType::Tenant);
+}
+
+#[tokio::test]
+async fn when_scheduler_retries_after_tenant_moves_in_then_existing_unit_charge_blocks_rerun() {
+    for proration_enabled in [false, true] {
+        let state =
+            state_with_unit("1400.00", proration_enabled, "2026-01-01", None, Vec::new()).await;
+        let (_, first_count) = run_periodic_accrual_for_all_sites(&state, now("2026-10-20")).await;
+        assert_eq!(first_count, 1);
+        move_tenant_in_on_october_11(&state).await;
+
+        let (_, retry_count) = run_periodic_accrual_for_all_sites(&state, now("2026-10-20")).await;
+        assert_eq!(retry_count, 0);
+        assert_only_original_owner_liability(&dues(&state, "Ekim 2026").await);
+    }
+}
+
+#[tokio::test]
+async fn when_manual_accrual_retries_after_tenant_moves_in_then_existing_unit_charge_blocks_rerun()
+{
+    for proration_enabled in [false, true] {
+        let state =
+            state_with_unit("1400.00", proration_enabled, "2026-01-01", None, Vec::new()).await;
+        manual_accrue(&state).await;
+        assert_only_original_owner_liability(&dues(&state, "Ekim 2026").await);
+        move_tenant_in_on_october_11(&state).await;
+
+        manual_accrue(&state).await;
+        assert_only_original_owner_liability(&dues(&state, "Ekim 2026").await);
+    }
 }
 
 #[tokio::test]

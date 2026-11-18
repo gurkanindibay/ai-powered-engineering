@@ -37,3 +37,31 @@ Feature: Occupancy-aware accrual and proration
     When period "2026-10" is accrued on "2026-10-20"
     Then the tenant owes 1400.00 for period "2026-10"
     And the owner owes nothing for period "2026-10"
+
+  @SC-07-09-05 @layer:backend @linked @edge @role_manager
+  Scenario Outline: A scheduler retry after move-in does not add another monthly liability
+    Given proration is <setting>
+    And unit "A-14" with monthly dues of 1400.00 is vacant
+    And the scheduler accrues period "2026-10" to the owner
+    When a tenant moves into unit "A-14" on "2026-10-11"
+    And the scheduler retries period "2026-10"
+    Then unit "A-14" still has exactly one 1400.00 operational liability for period "2026-10"
+
+    Examples:
+      | setting  |
+      | disabled |
+      | enabled  |
+
+  @SC-07-09-06 @layer:backend @linked @edge @role_manager
+  Scenario Outline: A manual accrual retry after move-in does not add another monthly liability
+    Given proration is <setting>
+    And unit "A-14" with monthly dues of 1400.00 is vacant
+    And manual accrual records period "2026-10" to the owner
+    When a tenant moves into unit "A-14" on "2026-10-11"
+    And the manager manually retries period "2026-10"
+    Then unit "A-14" still has exactly one 1400.00 operational liability for period "2026-10"
+
+    Examples:
+      | setting  |
+      | disabled |
+      | enabled  |

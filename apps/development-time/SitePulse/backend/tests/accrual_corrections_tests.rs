@@ -280,6 +280,9 @@ async fn when_a_paid_month_is_split_then_approval_reissues_both_roles_and_credit
         let mut inner = state.inner.write().await;
         inner.dues.push(paid_due);
         inner
+            .dues_budget_basis
+            .insert("split-1".to_string(), "budget-split".to_string());
+        inner
             .sites
             .iter_mut()
             .find(|site| site.id == SITE)
@@ -354,6 +357,12 @@ async fn when_a_paid_month_is_split_then_approval_reissues_both_roles_and_credit
     assert!(replacements.iter().any(|due| {
         due.debtor_type == DebtorType::Owner && due.principal_amount == d("496.77")
     }));
+    {
+        let inner = state.inner.read().await;
+        assert!(approved.replacement_due_ids.iter().all(|id| {
+            inner.dues_budget_basis.get(id).map(String::as_str) == Some("budget-split")
+        }));
+    }
     assert_eq!(
         state.inner.read().await.advance_of(UNIT, "TENANT"),
         d("496.77")
@@ -753,57 +762,62 @@ async fn corrections_round_trip_through_postgresql() {
         )
         .await
         .unwrap();
+    state
+        .inner
+        .write()
+        .await
+        .dues_budget_basis
+        .insert(to_cancel.id.clone(), budget.to_string());
     // A cancelled period can be re-issued: the duplicate guard ignores cancelled rows.
     let corrections = CorrectionService::new(&state);
-    let requested = corrections
-        .request(
-            &first,
-            request(
-                &to_cancel.id,
-                "REISSUE",
-                Some("1200.00"),
-                "wrong house type",
-            ),
-        )
-        .await
-        .unwrap();
+    let mut split_request = request(
+        &to_cancel.id,
+        "SPLIT_REISSUE",
+        None,
+        "correct occupancy shares",
+    );
+    split_request.replacement_shares = vec![
+        CorrectionReplacementShare {
+            debtor_type: DebtorType::Owner,
+            amount: d("600.00"),
+        },
+        CorrectionReplacementShare {
+            debtor_type: DebtorType::Tenant,
+            amount: d("600.00"),
+        },
+    ];
+    let requested = corrections.request(&first, split_request).await.unwrap();
     let approved = corrections
         .decide(&second, requested.id, approve())
         .await
         .unwrap();
-    let replacement_id = approved.replacement_due_id.clone().expect("replacement");
-    let carried_key: Option<String> = pool
-        .get()
-        .await
-        .unwrap()
-        .query_one(
-            "SELECT period_key FROM dues_liabilities WHERE id = $1",
-            &[&replacement_id.parse::<i64>().unwrap()],
-        )
-        .await
-        .unwrap()
-        .get(0);
-    assert_eq!(
-        carried_key.as_deref(),
-        Some(period.as_str()),
-        "re-issue keeps the period key"
-    );
-    let carried_budget: Option<i64> = pool
-        .get()
-        .await
-        .unwrap()
-        .query_one(
-            "SELECT operating_budget_id FROM dues_liabilities WHERE id = $1",
-            &[&replacement_id.parse::<i64>().unwrap()],
-        )
-        .await
-        .unwrap()
-        .get(0);
-    assert_eq!(
-        carried_budget,
-        Some(budget),
-        "re-issue keeps the operating budget"
-    );
+    assert_eq!(approved.replacement_due_ids.len(), 2);
+    for replacement_id in &approved.replacement_due_ids {
+        let row = pool
+            .get()
+            .await
+            .unwrap()
+            .query_one(
+                "SELECT period_key, operating_budget_id FROM dues_liabilities WHERE id = $1",
+                &[&replacement_id.parse::<i64>().unwrap()],
+            )
+            .await
+            .unwrap();
+        let carried_key: Option<String> = row.get(0);
+        let carried_budget: Option<i64> = row.get(1);
+        assert_eq!(carried_key.as_deref(), Some(period.as_str()));
+        assert_eq!(carried_budget, Some(budget));
+        assert_eq!(
+            state
+                .inner
+                .read()
+                .await
+                .dues_budget_basis
+                .get(replacement_id),
+            Some(&budget.to_string())
+        );
+    }
+    let replacement_id = approved.replacement_due_ids[0].clone();
 
     let credited = corrections
         .request(

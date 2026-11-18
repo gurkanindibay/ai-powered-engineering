@@ -57,6 +57,8 @@ def test_epic07_billing_period_linked_scenarios() -> None:
 @pytest.mark.covers("SC-07-09-01")
 @pytest.mark.covers("SC-07-09-02")
 @pytest.mark.covers("SC-07-09-04")
+@pytest.mark.covers("SC-07-09-05")
+@pytest.mark.covers("SC-07-09-06")
 def test_epic07_proration_linked_scenarios() -> None:
     run_suite(["cargo", "test", "--locked", "--test", "occupancy_proration_tests"], BACKEND)
 

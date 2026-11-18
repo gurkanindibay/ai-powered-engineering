@@ -290,8 +290,10 @@ pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Op
     let existing = client
         .query_opt(
             "SELECT 1 FROM dues_liabilities
-             WHERE unit_id = $1 AND period = $2 AND expense_type = $3 AND capital_project_id IS NULL",
-            &[&unit, &due.period, &due.expense_type],
+             WHERE unit_id = $1
+               AND (period_key = $2 OR (period_key IS NULL AND period = $3))
+               AND expense_type = $4 AND capital_project_id IS NULL",
+            &[&unit, &key, &due.period, &due.expense_type],
         )
         .await?;
     if existing.is_some() {
@@ -407,6 +409,7 @@ pub async fn commit_accrual_batch(
                     (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
                      delay_penalty, debtor_type, expense_type, operating_budget_id, grace_days)
                 VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7, $8, $9, $10)
+
                 ON CONFLICT DO NOTHING
                 RETURNING id
                 "#,
