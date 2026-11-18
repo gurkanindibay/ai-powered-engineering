@@ -1,0 +1,24 @@
+{
+  "run_id": "20261118T201520Z-2c7a036",
+  "task": "master",
+  "commit": "2c7a036218e5451a57d0fdb96e0ffe28576fcc40",
+  "shards": 8,
+  "executions": 129,
+  "junit": {
+    "tests": 117,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "passed": 116,
+    "seconds": 1853.5,
+    "files": 8,
+    "unparseable": []
+  },
+  "status": "PASS",
+  "scenario_counts": {
+    "PASS": 127,
+    "SKIPPED": 2
+  },
+  "scenarios_covered": "104/243",
+  "out": "/home/runner/work/_temp/e2e-test-report"
+}
