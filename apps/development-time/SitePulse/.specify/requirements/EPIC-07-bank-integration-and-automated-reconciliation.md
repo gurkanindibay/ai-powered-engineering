@@ -281,7 +281,7 @@ Decisions still open for the product owner or counsel are marked **(decide)**.
 ---
 
 ### STORY-07-13: One Late-Fee Figure Across Dashboard, Statement & Ledger
-- **Status:** `PLANNED`
+- **Status:** `IMPLEMENTED`
 - **Target Role:** Site Manager, Auditor, Resident
 - **Gap today:** The dashboard, debt aging and resident statement calculate the KMK 20 late fee up to
   today. The general ledger and trial balance use the stored fee, which is updated only when a payment

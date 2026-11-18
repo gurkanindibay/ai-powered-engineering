@@ -27,6 +27,7 @@ use crate::services::dunning_service::DunningService;
 use crate::services::finance_common::{Caller, FinanceError};
 use crate::services::heat_share_service::HeatShareService;
 use crate::services::kvkk_service::KvkkService;
+use crate::services::late_fee_service::LateFeeService;
 use crate::services::lease_service::LeaseService;
 use crate::services::notification_service::NotificationService;
 use crate::services::plan_service::PlanService;
@@ -373,6 +374,18 @@ pub async fn dunning_actions(
     Json(
         DunningService::new(&state)
             .actions(&ctx.claims.site_id)
+            .await,
+    )
+}
+
+/// STORY-07-13: sites whose stored late fee differs from the dashboard's evaluation.
+pub async fn late_fee_reconciliation(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+) -> Json<LateFeeReconciliation> {
+    Json(
+        LateFeeService::new(&state)
+            .reconcile(&ctx.claims.site_id)
             .await,
     )
 }

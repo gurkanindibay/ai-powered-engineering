@@ -334,6 +334,7 @@ pub async fn load_finance_book(pool: &Pool) -> DbResult<FinanceBook> {
         plan_installments: rec::load_all(c).await?,
         adjustments: rec::load_all(c).await?,
         corrections: rec::load_all(c).await?,
+        late_fee_accruals: rec::load_all(c).await?,
         heat_periods: rec::load_all(c).await?,
         heat_readings: rec::load_all(c).await?,
         heat_shares: rec::load_all(c).await?,

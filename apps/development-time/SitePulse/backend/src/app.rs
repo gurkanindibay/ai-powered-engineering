@@ -217,6 +217,7 @@ routes! {
     put "/api/v1/dunning/policy" => handlers::set_dunning_policy, Require(FinanceManage);
     post "/api/v1/dunning/run" => handlers::run_dunning, Require(FinanceManage);
     get "/api/v1/dunning/actions" => handlers::dunning_actions, Require(FinanceRead);
+    get "/api/v1/late-fees/reconciliation" => handlers::late_fee_reconciliation, Require(FinanceRead);
     get "/api/v1/dunning/notice-letter/{due_id}" => handlers::dunning_notice_letter, Require(FinanceManage);
     // SPEC-009 R5: resident requests
     get "/api/v1/residents/{unit_id}/virman-requests" => handlers::unit_virman_requests, Require(UnitRead);
