@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-18T20:15:20Z",
- "run_id": "20261118T201520Z-2c7a036",
- "commit": "2c7a036218e5451a57d0fdb96e0ffe28576fcc40",
+ "generated_at": "2026-11-18T20:28:27Z",
+ "run_id": "20261118T202827Z-a34feb0",
+ "commit": "a34feb00de0c99406dca028d750b0f8b5db81cc8",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 116,
-  "seconds": 1853.5,
+  "seconds": 2133.9,
   "files": 8,
   "unparseable": []
  },
@@ -19,12 +19,12 @@
   "stories": 100,
   "stories_with_scenarios": 100,
   "stories_passing": 25,
-  "scenarios": 294,
-  "automated": 243,
+  "scenarios": 296,
+  "automated": 246,
   "passing": 102,
   "failing": 0,
-  "no_result": 141,
-  "planned": 51,
+  "no_result": 144,
+  "planned": 50,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -148,12 +148,12 @@
    "stories": 7,
    "stories_with_scenarios": 7,
    "stories_passing": 2,
-   "scenarios": 22,
-   "automated": 15,
+   "scenarios": 24,
+   "automated": 18,
    "passing": 9,
    "failing": 0,
-   "no_result": 6,
-   "planned": 7,
+   "no_result": 9,
+   "planned": 6,
    "health": "in_progress"
   },
   {
@@ -1359,8 +1359,20 @@
    "story": "STORY-09-04"
   },
   "SC-09-04-05": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Payment dates in the future or beyond the backdating window are rejected",
+   "epic": "EPIC-09",
+   "story": "STORY-09-04"
+  },
+  "SC-09-04-06": {
+   "state": "no_result",
+   "name": "A backdated payment re-evaluates the late fee charged after its payment date",
+   "epic": "EPIC-09",
+   "story": "STORY-09-04"
+  },
+  "SC-09-04-07": {
+   "state": "no_result",
+   "name": "Late fee already paid above the recalculated amount moves to the payer's advance",
    "epic": "EPIC-09",
    "story": "STORY-09-04"
   },
@@ -2115,8 +2127,8 @@
    "epics": 12,
    "stories": 100,
    "stories_with_scenarios": 100,
-   "scenarios": 294,
-   "automated": 243
+   "scenarios": 296,
+   "automated": 246
   }
  ],
  "recent_changes": [
@@ -2125,14 +2137,14 @@
    "epic": "EPIC-09",
    "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
    "new_stories": 0,
-   "new_scenarios": 7,
-   "newly_automated": 1,
-   "items": 7,
+   "new_scenarios": 9,
+   "newly_automated": 4,
+   "items": 10,
    "samples": [
-    "SC-09-05-02: Approver cannot approve their own advance settlement request",
-    "SC-09-05-03: Departing tenant's advance is paid out only after four-eyes approval",
-    "SC-09-05-04: Retrying a timed-out settlement request does not create a duplicate",
-    "SC-09-05-05: Departing tenant's advance transfers only after four-eyes approval"
+    "SC-09-04-05: Payment dates in the future or beyond the backdating window are rejected",
+    "SC-09-04-06: A backdated payment re-evaluates the late fee charged after its payment date",
+    "SC-09-04-07: Late fee already paid above the recalculated amount moves to the payer's advance",
+    "SC-09-05-02: Approver cannot approve their own advance settlement request"
    ]
   },
   {
@@ -2653,5 +2665,5 @@
    ]
   }
  ],
- "href": "reports/44387492289-1/"
+ "href": "reports/44389684578-1/"
 }
