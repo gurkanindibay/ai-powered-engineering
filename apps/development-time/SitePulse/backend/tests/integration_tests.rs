@@ -1492,6 +1492,7 @@ async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent
         tenant_user_id: None,
         virtual_iban: Some("TR410020504213991067000014".to_string()),
         house_type: Some("2+1".to_string()),
+        created_on: None,
     }];
 
     let dues = vec![DuesLiability {
@@ -1968,6 +1969,7 @@ async fn when_homeowner_records_payment_with_no_debt_then_matches_as_advance_pay
                 tenant_user_id: None,
                 virtual_iban: None,
                 house_type: Some("2+1".to_string()),
+                created_on: None,
             });
     }
 
@@ -2076,6 +2078,7 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
                 tenant_user_id: None,
                 virtual_iban: None,
                 house_type: Some("2+1".to_string()),
+                created_on: None,
             });
 
         // Payment 1 for d-14 (has debt ₺1400) of ₺1400
@@ -2658,6 +2661,7 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
             plan_type: PlanType::Standard,
             license_end_date: chrono::NaiveDate::from_ymd_opt(2027, 12, 31).unwrap(),
             timezone: "Europe/Istanbul".to_string(),
+            proration_enabled: false,
             tax_id: None,
             tax_office: None,
         });
@@ -2674,6 +2678,7 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
                 tenant_user_id: None,
                 virtual_iban: None,
                 house_type: None,
+                created_on: None,
             });
     }
 
@@ -2712,6 +2717,7 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
                 tenant_user_id: None,
                 virtual_iban: None,
                 house_type: Some("2+1".to_string()),
+                created_on: None,
             });
     }
 

@@ -6,6 +6,7 @@
 //! Persisted records carry an `i64` id assigned by the store; site, unit and
 //! liability references are the string ids used everywhere else.
 
+use super::DebtorType;
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -87,6 +88,7 @@ pub const ADJUSTMENT_SOURCE_PAYMENT_DATE: &str = "PAYMENT_DATE";
 /// Accrual corrections (STORY-07-11).
 pub const CORRECTION_CANCEL: &str = "CANCEL";
 pub const CORRECTION_REISSUE: &str = "REISSUE";
+pub const CORRECTION_SPLIT_REISSUE: &str = "SPLIT_REISSUE";
 pub const CORRECTION_CREDIT_NOTE: &str = "CREDIT_NOTE";
 
 // ---------------------------------------------------------------------------
@@ -1207,6 +1209,16 @@ pub struct AccrualCorrection {
     pub advance_credited: Option<Decimal>,
     /// The liability that replaced the cancelled one (re-issue).
     pub replacement_due_id: Option<String>,
+    #[serde(default)]
+    pub replacement_shares: Vec<CorrectionReplacementShare>,
+    #[serde(default)]
+    pub replacement_due_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CorrectionReplacementShare {
+    pub debtor_type: DebtorType,
+    pub amount: Decimal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1222,6 +1234,9 @@ pub struct RequestCorrectionRequest {
     /// Re-issue: the corrected debtor, `OWNER` or `TENANT` (default: unchanged).
     #[serde(default)]
     pub debtor_type: Option<String>,
+    /// Split re-issue: replacement shares approved and applied atomically.
+    #[serde(default)]
+    pub replacement_shares: Vec<CorrectionReplacementShare>,
     pub reason: String,
 }
 

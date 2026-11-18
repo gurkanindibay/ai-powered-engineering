@@ -28,16 +28,16 @@ pub struct CorrectionWrite<'a> {
     /// Reference stored on the advance ledger entry (`KOR-<id>`).
     pub reference: &'a str,
     pub description: &'a str,
-    /// The corrected liability of a re-issue.
-    pub replacement: Option<&'a DuesLiability>,
+    /// The corrected liability or liabilities of a re-issue.
+    pub replacements: &'a [DuesLiability],
     /// The correction being approved, with its decision and snapshot fields set.
     pub correction: &'a AccrualCorrection,
 }
 
 /// How an approval ended.
 pub enum Approval {
-    /// Applied; the id of the replacement liability, if any.
-    Applied(Option<i64>),
+    /// Applied; replacement liability ids, if any.
+    Applied(Vec<i64>),
     /// Another approval or rejection won; nothing was changed.
     AlreadyDecided,
 }
@@ -163,11 +163,11 @@ pub async fn apply_accrual_correction(
         .await?;
     }
 
-    let replacement_id = match write.replacement {
-        Some(r) => {
-            let row = tx
-                .query_one(
-                    r#"
+    let mut replacement_ids = Vec::with_capacity(write.replacements.len());
+    for r in write.replacements {
+        let row = tx
+            .query_one(
+                r#"
                     INSERT INTO dues_liabilities
                         (unit_id, period, period_key, dues_period_id, principal_amount, due_date,
                          status, delay_penalty, debtor_type, expense_type, operating_budget_id)
@@ -178,31 +178,28 @@ pub async fn apply_accrual_correction(
                             (SELECT operating_budget_id FROM dues_liabilities WHERE id = $7))
                     RETURNING id
                     "#,
-                    // The replacement keeps the original's canonical period (STORY-07-08),
-                    // so the period-key duplicate guard covers it too, and its operating
-                    // budget, the liability's legal basis (KMK 37).
-                    &[
-                        &unit,
-                        &r.period,
-                        &r.principal_amount,
-                        &r.due_date,
-                        &r.debtor_type,
-                        &r.expense_type,
-                        &due,
-                    ],
-                )
-                .await?;
-            Some(row.get::<_, i64>(0))
-        }
-        None => None,
-    };
-    if let Some(id) = replacement_id {
+                // Preserve the source period and budget basis for every replacement.
+                &[
+                    &unit,
+                    &r.period,
+                    &r.principal_amount,
+                    &r.due_date,
+                    &r.debtor_type,
+                    &r.expense_type,
+                    &due,
+                ],
+            )
+            .await?;
+        replacement_ids.push(row.get::<_, i64>(0));
+    }
+    if let Some(id) = replacement_ids.first() {
+        let ids_json = serde_json::to_value(&replacement_ids)?;
         tx.execute(
-            "UPDATE accrual_corrections SET replacement_due_id = $2 WHERE id = $1",
-            &[&c.id, &id],
+            "UPDATE accrual_corrections SET replacement_due_id = $2, replacement_due_ids = $3 WHERE id = $1",
+            &[&c.id, id, &ids_json],
         )
         .await?;
     }
     tx.commit().await?;
-    Ok(Approval::Applied(replacement_id))
+    Ok(Approval::Applied(replacement_ids))
 }

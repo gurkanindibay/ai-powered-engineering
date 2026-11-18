@@ -12,15 +12,77 @@ use deadpool_postgres::Transaction;
 use crate::db::occupancy_repository::{
     self as repo, ClosedSession, OccupancyError, OpenedSession, TransitionInput, UnitSnapshot,
 };
+use crate::domain::billing_period::BillingPeriod;
+use crate::domain::occupancy_proration::{
+    self as proration, OccupancySpan, ProratedShare, ResponsibleParty,
+};
 use crate::domain::unit_state::{self, Command, CommandKind, SessionRole};
 use crate::models::{
     DebtorType, OccupancyHistoryItem, OccupancyTransitionRequest, OccupancyTransitionResponse,
     UnitOccupancyStateResponse, UnitOccupantDto, UnitOwnerDto,
 };
+use crate::services::correction_service::CorrectionService;
+use crate::services::finance_common::{Caller, FinanceResult};
 use crate::state::AppState;
+use rust_decimal::Decimal;
 
 pub struct OccupancyService {
     state: AppState,
+}
+
+/// Computes one monthly operational dues liability per responsible role.
+/// Invalid historical dates are ignored conservatively; uncovered days remain
+/// the owner's responsibility.
+pub fn accrual_shares(
+    amount: Decimal,
+    period: BillingPeriod,
+    unit_created_on: Option<NaiveDate>,
+    history: &[OccupancyHistoryItem],
+    proration_enabled: bool,
+    accrued_on: NaiveDate,
+) -> Vec<(DebtorType, Decimal)> {
+    let spans: Vec<OccupancySpan> = history
+        .iter()
+        .filter_map(|item| {
+            let starts_on = NaiveDate::parse_from_str(&item.start_date, "%Y-%m-%d").ok()?;
+            let ends_before = item
+                .end_date
+                .as_deref()
+                .and_then(|end| NaiveDate::parse_from_str(end, "%Y-%m-%d").ok());
+            Some(OccupancySpan {
+                party: match item.role {
+                    DebtorType::Owner => ResponsibleParty::Owner,
+                    DebtorType::Tenant => ResponsibleParty::Tenant,
+                },
+                starts_on,
+                ends_before,
+            })
+        })
+        .collect();
+    proration::split_monthly_dues(
+        amount,
+        period.first_day(),
+        unit_created_on,
+        &spans,
+        proration_enabled,
+        accrued_on,
+    )
+    .map(|shares| {
+        shares
+            .into_iter()
+            .filter(|share| share.amount > Decimal::ZERO)
+            .map(map_share)
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+fn map_share(share: ProratedShare) -> (DebtorType, Decimal) {
+    let debtor = match share.party {
+        ResponsibleParty::Owner => DebtorType::Owner,
+        ResponsibleParty::Tenant => DebtorType::Tenant,
+    };
+    (debtor, share.amount)
 }
 
 /// Reads a unit id in any of the forms the API accepts (`14`, `d-14`, `unit-14`).
@@ -52,6 +114,130 @@ fn occupancy_command(kind: CommandKind) -> Result<Command, OccupancyError> {
 impl OccupancyService {
     pub fn new(state: AppState) -> Self {
         Self { state }
+    }
+
+    /// Enables or disables occupancy-aware accrual for one site.
+    pub async fn set_proration_policy(
+        &self,
+        site_id: &str,
+        enabled: bool,
+    ) -> Result<(), OccupancyError> {
+        let exists = self
+            .state
+            .inner
+            .read()
+            .await
+            .sites
+            .iter()
+            .any(|site| crate::auth::same_id(&site.id, site_id));
+        if !exists {
+            return Err(OccupancyError::UnitNotFound);
+        }
+        if let Some(pool) = &self.state.pool {
+            crate::db::site_repository::set_proration_policy(pool, site_id, enabled)
+                .await
+                .map_err(|error| OccupancyError::Storage(error.to_string()))?;
+        }
+        let mut inner = self.state.inner.write().await;
+        let site = inner
+            .sites
+            .iter_mut()
+            .find(|site| crate::auth::same_id(&site.id, site_id))
+            .ok_or(OccupancyError::UnitNotFound)?;
+        site.proration_enabled = enabled;
+        Ok(())
+    }
+
+    /// Requests a four-eyes split correction when a transition changes one
+    /// accrued liability into owner and tenant shares in an open period.
+    pub async fn request_open_period_split(
+        &self,
+        caller: &Caller,
+        unit_id: &str,
+        effective_date: NaiveDate,
+    ) -> FinanceResult<Option<crate::models::AccrualCorrection>> {
+        let period = BillingPeriod::of_date(effective_date);
+        let unit_key = parse_unit_id(unit_id)
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| unit_id.to_string());
+        let candidate = {
+            let inner = self.state.inner.read().await;
+            let enabled = inner
+                .sites
+                .iter()
+                .find(|site| crate::auth::same_id(&site.id, &caller.site_id))
+                .is_some_and(|site| site.proration_enabled);
+            let closed = inner.dues_periods.iter().any(|row| {
+                crate::auth::same_id(&row.site_id, &caller.site_id)
+                    && BillingPeriod::parse(&row.period_name).ok() == Some(period)
+                    && row.status.as_str() == "CLOSED"
+            });
+            let dues: Vec<_> = inner
+                .dues
+                .iter()
+                .filter(|due| {
+                    crate::auth::same_id(&due.unit_id, &unit_key)
+                        && BillingPeriod::parse(&due.period).ok() == Some(period)
+                        && due.expense_type == crate::models::ExpenseType::OperationalDues
+                        && due.status != crate::models::DebtStatus::Cancelled
+                })
+                .cloned()
+                .collect();
+            if !enabled || closed || dues.len() != 1 {
+                None
+            } else {
+                inner
+                    .units
+                    .iter()
+                    .find(|unit| {
+                        crate::auth::same_id(&unit.id, &unit_key)
+                            && crate::auth::same_id(&unit.site_id, &caller.site_id)
+                    })
+                    .map(|unit| {
+                        let history = inner
+                            .unit_occupancies
+                            .get(&unit.id)
+                            .cloned()
+                            .unwrap_or_default();
+                        (dues[0].clone(), unit.created_on, history)
+                    })
+            }
+        };
+        let Some((due, created_on, history)) = candidate else {
+            return Ok(None);
+        };
+        let shares = accrual_shares(
+            due.principal_amount,
+            period,
+            created_on,
+            &history,
+            true,
+            effective_date,
+        );
+        if shares.len() != 2 {
+            return Ok(None);
+        }
+        let request = crate::models::RequestCorrectionRequest {
+            due_id: due.id,
+            kind: crate::models::CORRECTION_SPLIT_REISSUE.to_string(),
+            amount: None,
+            due_date: None,
+            debtor_type: None,
+            replacement_shares: shares
+                .into_iter()
+                .map(
+                    |(debtor_type, amount)| crate::models::CorrectionReplacementShare {
+                        debtor_type,
+                        amount,
+                    },
+                )
+                .collect(),
+            reason: format!("Occupancy changed during open period {}", period.key()),
+        };
+        CorrectionService::new(&self.state)
+            .request(caller, request)
+            .await
+            .map(Some)
     }
 
     async fn today(&self, site_id: &str) -> NaiveDate {
@@ -116,6 +302,26 @@ impl OccupancyService {
             None => None,
         };
         tx.commit().await?;
+        if let Some(closed_item) = closed.as_ref() {
+            let mut inner = self.state.inner.write().await;
+            let history = inner.unit_occupancies.entry(unit.to_string()).or_default();
+            if let Some(existing) = history.iter_mut().find(|item| item.id == closed_item.id) {
+                *existing = closed_item.clone();
+            } else {
+                history.push(closed_item.clone());
+            }
+            if let Some(opened_item) = opened.as_ref() {
+                if !history.iter().any(|item| item.id == opened_item.id) {
+                    history.push(opened_item.clone());
+                }
+            }
+        } else if let Some(opened_item) = opened.as_ref() {
+            let mut inner = self.state.inner.write().await;
+            let history = inner.unit_occupancies.entry(unit.to_string()).or_default();
+            if !history.iter().any(|item| item.id == opened_item.id) {
+                history.push(opened_item.clone());
+            }
+        }
         tracing::info!(
             unit_id = unit,
             command = outcome.plan.command.as_str(),
@@ -133,6 +339,7 @@ impl OccupancyService {
             to_state: outcome.plan.to,
             closed,
             opened,
+            correction_requests: Vec::new(),
         })
     }
 

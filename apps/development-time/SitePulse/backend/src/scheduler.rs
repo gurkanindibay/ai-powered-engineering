@@ -145,14 +145,14 @@ pub async fn run_accrual_with_report(
     // 1. Inspect state with a READ lock and plan one batch per site and period.
     let batches: Vec<SiteBatch> = {
         let inner = state.inner.read().await;
-        let sites: Vec<(String, String)> = inner
+        let sites: Vec<(String, String, bool)> = inner
             .sites
             .iter()
-            .map(|s| (s.id.clone(), s.timezone.clone()))
+            .map(|s| (s.id.clone(), s.timezone.clone(), s.proration_enabled))
             .collect();
         let mut planned = Vec::new();
 
-        for (site_id, timezone) in sites {
+        for (site_id, timezone, proration_enabled) in sites {
             let local = site_local_date(&timezone, now);
             let schedule = inner
                 .site_accrual_schedules
@@ -179,91 +179,56 @@ pub async fn run_accrual_with_report(
             if let Some((first, last)) = plan.limited {
                 tracing::warn!(
                     "[Scheduler] Site {}: periods {} to {} were not accrued because of the catch-up limit of {} months",
-                    site_id,
-                    first.key(),
-                    last.key(),
-                    schedule.catch_up_limit_months
+                    site_id, first.key(), last.key(), schedule.catch_up_limit_months
                 );
                 report.limited.push(LimitedPeriods {
-                    site_id: site_id.clone(),
-                    first_key: first.key(),
-                    last_key: last.key(),
+                    site_id: site_id.clone(), first_key: first.key(), last_key: last.key(),
                 });
             }
             for billing_period in plan.periods {
                 let period = billing_period.label();
                 let due_date = schedule.due_date_for(billing_period);
                 let mut batch = SiteBatch {
-                    site_id: site_id.clone(),
-                    period_key: billing_period.key(),
-                    period: period.clone(),
-                    due_date,
-                    dues: Vec::new(),
-                    skipped: Vec::new(),
+                    site_id: site_id.clone(), period_key: billing_period.key(),
+                    period: period.clone(), due_date, dues: Vec::new(), skipped: Vec::new(),
                 };
-
                 for unit in &units_in_site {
                     let already = inner.dues.iter().any(|d| {
                         d.unit_id == unit.id
                             && BillingPeriod::parse(&d.period).ok() == Some(billing_period)
                             && d.expense_type == ExpenseType::OperationalDues
                     });
-                    if already {
-                        continue;
-                    }
-                    let basis =
-                        match crate::services::operating_budget_service::operational_dues_basis(
-                            &inner, unit, due_date,
-                        ) {
-                            Ok(b) => b,
-                            Err(reason) => {
-                                tracing::warn!(
-                                    "[Scheduler] Unit {} in site {}: dues not accrued: {}",
-                                    unit.id,
-                                    site_id,
-                                    reason
-                                );
-                                batch.skipped.push(format!(
-                                    "{}: {}",
-                                    inner.unit_label(&unit.block_id, unit.unit_number),
-                                    reason
-                                ));
-                                continue;
-                            }
-                        };
-                    let amount = basis.amount;
-                    let let_to_tenant = tenanted
-                        .as_ref()
-                        .map(|t| t.contains(&unit.id))
-                        .unwrap_or(unit.tenant_user_id.is_some());
-                    let debtor = if let_to_tenant {
-                        DebtorType::Tenant
-                    } else {
-                        DebtorType::Owner
+                    if already { continue; }
+                    let basis = match crate::services::operating_budget_service::operational_dues_basis(&inner, unit, due_date) {
+                        Ok(b) => b,
+                        Err(reason) => {
+                            tracing::warn!("[Scheduler] Unit {} in site {}: dues not accrued: {}", unit.id, site_id, reason);
+                            batch.skipped.push(format!("{}: {}", inner.unit_label(&unit.block_id, unit.unit_number), reason));
+                            continue;
+                        }
                     };
-                    batch.dues.push((
-                        DuesLiability {
-                            id: String::new(),
-                            unit_id: unit.id.clone(),
-                            period: period.clone(),
-                            principal_amount: amount,
-                            delay_penalty: Decimal::ZERO,
-                            total_amount: amount,
-                            due_date,
-                            status: DebtStatus::Pending,
-                            paid_principal: Decimal::ZERO,
-                            paid_penalty: Decimal::ZERO,
-                            debtor_type: debtor,
-                            expense_type: ExpenseType::OperationalDues,
-                            penalty_accrued_through: None,
-                            grace_days: schedule.grace_days,
-                        },
-                        basis.operating_budget_id,
-                    ));
+                    let amount = basis.amount;
+                    let let_to_tenant = tenanted.as_ref().map(|t| t.contains(&unit.id)).unwrap_or(unit.tenant_user_id.is_some());
+                    let debtor = if let_to_tenant { DebtorType::Tenant } else { DebtorType::Owner };
+                    let shares = if proration_enabled {
+                        let history = inner.unit_occupancies.get(&unit.id).map(Vec::as_slice).unwrap_or_default();
+                        crate::services::occupancy_service::accrual_shares(amount, billing_period, unit.created_on, history, true, local)
+                    } else { vec![(debtor, amount)] };
+                    for (share_debtor, share_amount) in shares {
+                        batch.dues.push((
+                            DuesLiability {
+                                id: String::new(), unit_id: unit.id.clone(), period: period.clone(),
+                                principal_amount: share_amount, delay_penalty: Decimal::ZERO,
+                                total_amount: share_amount, due_date, status: DebtStatus::Pending,
+                                paid_principal: Decimal::ZERO, paid_penalty: Decimal::ZERO,
+                                debtor_type: share_debtor, expense_type: ExpenseType::OperationalDues,
+                                penalty_accrued_through: None, grace_days: schedule.grace_days,
+                            },
+                            basis.operating_budget_id.clone(),
+                        ));
+                    }
                 }
-                if !batch.dues.is_empty() || !batch.skipped.is_empty() {
-                    planned.push(batch);
-                }
+                if !batch.dues.is_empty() || !batch.skipped.is_empty() { planned.push(batch); }
             }
         }
         planned

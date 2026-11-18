@@ -154,7 +154,7 @@ pub async fn accrue_monthly_dues(
         .map_or(0, |s| s.grace_days);
 
     // 1. Decide every unit's amount and basis under a read lock.
-    let (units_in_site, planned, skipped, budget_id) = {
+    let (units_in_site, planned, skipped, budget_id, proration_enabled, accrued_on) = {
         let inner = state.inner.read().await;
         crate::services::billing_period_service::ensure_open_for_accrual(
             &inner,
@@ -199,17 +199,20 @@ pub async fn accrue_monthly_dues(
                 ),
             ));
         }
-        let mut planned: Vec<(IndependentUnit, Decimal, Option<String>)> = Vec::new();
+        let proration_enabled = inner
+            .sites
+            .iter()
+            .find(|site| crate::auth::same_id(&site.id, &payload.site_id))
+            .is_some_and(|site| site.proration_enabled);
+        let accrued_on = crate::services::finance_common::site_today(&inner, &payload.site_id);
+        let mut planned: Vec<(
+            IndependentUnit,
+            Decimal,
+            Option<String>,
+            Vec<OccupancyHistoryItem>,
+        )> = Vec::new();
         let mut skipped: Vec<String> = Vec::new();
         for unit in &units_in_site {
-            let already = inner.dues.iter().any(|d| {
-                d.unit_id == unit.id
-                    && BillingPeriod::parse(&d.period).ok() == Some(billing_period)
-                    && d.expense_type == ExpenseType::OperationalDues
-            });
-            if already {
-                continue;
-            }
             let basis = if payload.amount > Decimal::ZERO {
                 Ok(budgets::DuesBasis {
                     amount: payload.amount,
@@ -222,7 +225,12 @@ pub async fn accrue_monthly_dues(
             };
             match basis {
                 Ok(b) if b.amount > Decimal::ZERO => {
-                    planned.push((unit.clone(), b.amount, b.operating_budget_id))
+                    let history = inner
+                        .unit_occupancies
+                        .get(&unit.id)
+                        .cloned()
+                        .unwrap_or_default();
+                    planned.push((unit.clone(), b.amount, b.operating_budget_id, history))
                 }
                 Ok(_) => skipped.push(format!(
                     "{}: zero share",
@@ -235,7 +243,14 @@ pub async fn accrue_monthly_dues(
                 )),
             }
         }
-        (units_in_site, planned, skipped, in_force.map(|(id, _)| id))
+        (
+            units_in_site,
+            planned,
+            skipped,
+            in_force.map(|(id, _)| id),
+            proration_enabled,
+            accrued_on,
+        )
     };
     let total_units_in_site = units_in_site.len();
     // With PostgreSQL the occupancy (tenant or not) is read from the units table: a
@@ -254,38 +269,86 @@ pub async fn accrue_monthly_dues(
         None => None,
     };
 
+    let existing_roles: std::collections::HashMap<String, std::collections::HashSet<DebtorType>> = {
+        let inner = state.inner.read().await;
+        let mut roles = std::collections::HashMap::new();
+        for due in &inner.dues {
+            if BillingPeriod::parse(&due.period).ok() == Some(billing_period)
+                && due.expense_type == ExpenseType::OperationalDues
+                && due.status != DebtStatus::Cancelled
+            {
+                roles
+                    .entry(due.unit_id.clone())
+                    .or_insert_with(std::collections::HashSet::new)
+                    .insert(due.debtor_type);
+            }
+        }
+        roles
+    };
+
     // 2. Build every liability; nothing is written yet.
     let mut accrued: Vec<(DuesLiability, Option<String>)> = Vec::new();
-    for (unit, amount, basis) in planned {
-        accrued.push((
-            DuesLiability {
-                id: String::new(),
-                unit_id: unit.id.clone(),
-                period: period_label.clone(),
-                principal_amount: amount,
-                delay_penalty: Decimal::ZERO,
-                total_amount: amount,
-                due_date: payload.due_date,
-                status: DebtStatus::Pending,
-                paid_principal: Decimal::ZERO,
-                paid_penalty: Decimal::ZERO,
-                // Operational dues are the occupant's: the tenant's when the unit is
-                // let, otherwise the owner's (same rule as the scheduler).
-                debtor_type: if tenanted
-                    .as_ref()
-                    .map(|t| t.contains(&unit.id))
-                    .unwrap_or(unit.tenant_user_id.is_some())
-                {
-                    DebtorType::Tenant
-                } else {
-                    DebtorType::Owner
+    for (unit, amount, basis, mut history) in planned {
+        let is_tenant = tenanted
+            .as_ref()
+            .map(|t| t.contains(&unit.id))
+            .unwrap_or(unit.tenant_user_id.is_some());
+        if proration_enabled && history.is_empty() && is_tenant {
+            history.push(OccupancyHistoryItem {
+                id: 0,
+                unit_id: crate::db::parse_id_to_i64(&unit.id).unwrap_or_default(),
+                person_id: 0,
+                person_name: String::new(),
+                person_phone: None,
+                person_email: None,
+                role: DebtorType::Tenant,
+                start_date: billing_period.first_day().to_string(),
+                end_date: None,
+                is_active: true,
+                exit_balance: Decimal::ZERO,
+                notes: None,
+                created_at: chrono::Utc::now(),
+            });
+        }
+        let shares = if proration_enabled {
+            crate::services::occupancy_service::accrual_shares(
+                amount,
+                billing_period,
+                unit.created_on,
+                &history,
+                true,
+                accrued_on,
+            )
+        } else {
+            vec![(
+                if is_tenant { DebtorType::Tenant } else { DebtorType::Owner },
+                amount,
+            )]
+        };
+        if existing_roles.contains_key(&unit.id) {
+            continue;
+        }
+        for (debtor_type, share_amount) in shares {
+            accrued.push((
+                DuesLiability {
+                    id: String::new(),
+                    unit_id: unit.id.clone(),
+                    period: period_label.clone(),
+                    principal_amount: share_amount,
+                    delay_penalty: Decimal::ZERO,
+                    total_amount: share_amount,
+                    due_date: payload.due_date,
+                    status: DebtStatus::Pending,
+                    paid_principal: Decimal::ZERO,
+                    paid_penalty: Decimal::ZERO,
+                    debtor_type,
+                    expense_type: ExpenseType::OperationalDues,
+                    penalty_accrued_through: None,
+                    grace_days: site_grace_days,
                 },
-                expense_type: ExpenseType::OperationalDues,
-                penalty_accrued_through: None,
-                grace_days: site_grace_days,
-            },
-            basis,
-        ));
+                basis.clone(),
+            ));
+        }
     }
 
     // 3. One transaction per site batch: the period row, every liability (linked to it,
@@ -362,7 +425,11 @@ pub async fn accrue_monthly_dues(
 
     let mut inner = state.inner.write().await;
     let mut total_amount_accrued = Decimal::ZERO;
-    let newly_accrued_units_count = accrued.len();
+    let newly_accrued_units_count = accrued
+        .iter()
+        .map(|(due, _)| due.unit_id.as_str())
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     for (mut due, basis) in accrued {
         if due.id.is_empty() {
             due.id = (inner

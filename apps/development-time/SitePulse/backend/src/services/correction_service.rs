@@ -149,6 +149,7 @@ impl CorrectionService {
         let kind = match req.kind.trim().to_ascii_uppercase().as_str() {
             CORRECTION_CANCEL => CORRECTION_CANCEL,
             CORRECTION_REISSUE => CORRECTION_REISSUE,
+            CORRECTION_SPLIT_REISSUE => CORRECTION_SPLIT_REISSUE,
             CORRECTION_CREDIT_NOTE => CORRECTION_CREDIT_NOTE,
             other => return Err(invalid(format!("Unknown correction kind '{}'", other))),
         };
@@ -168,6 +169,42 @@ impl CorrectionService {
         if due.status == DebtStatus::Cancelled {
             return Err(conflict("The liability is already cancelled"));
         }
+        if kind == CORRECTION_SPLIT_REISSUE {
+            if due.expense_type != ExpenseType::OperationalDues {
+                return Err(conflict(
+                    "Only an operational dues liability can be split and re-issued",
+                ));
+            }
+            if req.replacement_shares.len() != 2 {
+                return Err(invalid(
+                    "A split re-issue must include exactly one owner share and one tenant share",
+                ));
+            }
+            let mut roles = std::collections::HashSet::new();
+            let mut total = Decimal::ZERO;
+            for share in &req.replacement_shares {
+                if share.amount <= Decimal::ZERO || share.amount.normalize().scale() > 2 {
+                    return Err(invalid(
+                        "Each replacement share must be a positive amount with at most two decimal places",
+                    ));
+                }
+                if !roles.insert(share.debtor_type) {
+                    return Err(invalid(
+                        "A split re-issue must contain one owner share and one tenant share",
+                    ));
+                }
+                total += share.amount;
+            }
+            if roles.len() != 2 || total > due.principal_amount {
+                return Err(conflict(
+                    "Replacement shares must cover distinct owner and tenant roles and cannot exceed the original principal",
+                ));
+            }
+        } else if !req.replacement_shares.is_empty() {
+            return Err(invalid(
+                "replacement_shares is only allowed for a split re-issue",
+            ));
+        }
         if pending_exists {
             return Err(conflict(
                 "A correction of this liability is already waiting for approval",
@@ -175,6 +212,14 @@ impl CorrectionService {
         }
         let (amount, new_due_date, new_debtor_type) = match kind {
             CORRECTION_CANCEL => (due.principal_amount, None, None),
+            CORRECTION_SPLIT_REISSUE => (
+                req.replacement_shares
+                    .iter()
+                    .map(|share| share.amount)
+                    .sum(),
+                req.due_date,
+                None,
+            ),
             CORRECTION_CREDIT_NOTE => {
                 let amount = money(
                     req.amount
@@ -228,6 +273,8 @@ impl CorrectionService {
             penalty_reversed: None,
             advance_credited: None,
             replacement_due_id: None,
+            replacement_shares: req.replacement_shares,
+            replacement_due_ids: Vec::new(),
         };
         Ok(self.store.insert(correction, col::corrections).await?)
     }
@@ -314,7 +361,26 @@ impl CorrectionService {
             .read(|inner| find_due(inner, &correction.site_id, &correction.due_id).cloned())
             .await?;
         let plan = plan_correction(&due, &correction.kind, correction.amount)?;
-        let replacement = (correction.kind == CORRECTION_REISSUE).then(|| {
+        let replacements: Vec<DuesLiability> = if correction.kind == CORRECTION_SPLIT_REISSUE {
+            correction
+                .replacement_shares
+                .iter()
+                .map(|share| {
+                    let mut next = due.clone();
+                    next.id.clear();
+                    next.principal_amount = share.amount;
+                    next.total_amount = share.amount;
+                    next.delay_penalty = Decimal::ZERO;
+                    next.paid_principal = Decimal::ZERO;
+                    next.paid_penalty = Decimal::ZERO;
+                    next.status = DebtStatus::Pending;
+                    next.due_date = correction.new_due_date.unwrap_or(due.due_date);
+                    next.debtor_type = share.debtor_type;
+                    next.penalty_accrued_through = None;
+                    next
+                })
+                .collect()
+        } else if correction.kind == CORRECTION_REISSUE {
             let debtor = correction
                 .new_debtor_type
                 .as_deref()
@@ -330,8 +396,10 @@ impl CorrectionService {
             next.due_date = correction.new_due_date.unwrap_or(due.due_date);
             next.debtor_type = debtor;
             next.penalty_accrued_through = None;
-            next
-        });
+            vec![next]
+        } else {
+            Vec::new()
+        };
         let reference = format!("KOR-{}", correction.id);
         let description = format!(
             "Accrual correction {}: {}",
@@ -342,8 +410,7 @@ impl CorrectionService {
         correction.paid_before = Some(due.paid_principal + due.paid_penalty);
         correction.penalty_reversed = Some(plan.penalty_reversed);
         correction.advance_credited = Some(plan.advance_credit);
-        let mut replacement_id = None;
-        let mut replacement = replacement;
+        let mut replacement_ids = Vec::new();
         if let Some(pool) = self.state.db_pool() {
             let write = CorrectionWrite {
                 site_id: &correction.site_id,
@@ -358,15 +425,18 @@ impl CorrectionService {
                 advance_credit: plan.advance_credit,
                 reference: &reference,
                 description: &description,
-                replacement: replacement.as_ref(),
+                replacements: &replacements,
                 correction,
             };
-            replacement_id = match apply_accrual_correction(pool, &write).await? {
-                Approval::Applied(id) => id.map(|id| id.to_string()),
+            replacement_ids = match apply_accrual_correction(pool, &write).await? {
+                Approval::Applied(ids) => ids.into_iter().map(|id| id.to_string()).collect(),
                 Approval::AlreadyDecided => return Err(already_decided(correction.id)),
             };
-        } else if replacement.is_some() {
-            replacement_id = Some(format!("due-{}", uuid::Uuid::new_v4().simple()));
+        } else if !replacements.is_empty() {
+            replacement_ids = replacements
+                .iter()
+                .map(|_| format!("due-{}", uuid::Uuid::new_v4().simple()))
+                .collect();
         }
         let mut inner = self.state.inner.write().await;
         if !inner
@@ -384,7 +454,10 @@ impl CorrectionService {
         if plan.advance_credit > Decimal::ZERO {
             inner.adjust_advance(&due.unit_id, due.debtor_type.as_str(), plan.advance_credit);
         }
-        if let (Some(next), Some(id)) = (replacement.as_mut(), replacement_id.clone()) {
+        for (mut next, id) in replacements
+            .into_iter()
+            .zip(replacement_ids.iter().cloned())
+        {
             next.id = id;
             // The re-issued liability keeps the original's legal basis (KMK 37).
             if let Some(basis) = inner.dues_budget_basis.get(&due.id).cloned() {
@@ -392,7 +465,8 @@ impl CorrectionService {
             }
             inner.dues.push(next.clone());
         }
-        correction.replacement_due_id = replacement_id;
+        correction.replacement_due_id = replacement_ids.first().cloned();
+        correction.replacement_due_ids = replacement_ids;
         if let Some(slot) = inner
             .finance
             .corrections
