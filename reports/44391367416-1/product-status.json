@@ -1,0 +1,2668 @@
+{
+ "schema": 1,
+ "generated_at": "2026-11-18T20:37:15Z",
+ "run_id": "20261118T203715Z-c9f574b",
+ "commit": "c9f574b88430cb05e5b3825e78caef860d96677c",
+ "task": "master",
+ "status": "PASS",
+ "junit": {
+  "tests": 117,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 1,
+  "passed": 116,
+  "seconds": 1957.1,
+  "files": 8,
+  "unparseable": []
+ },
+ "totals": {
+  "stories": 100,
+  "stories_with_scenarios": 100,
+  "stories_passing": 25,
+  "scenarios": 296,
+  "automated": 246,
+  "passing": 102,
+  "failing": 0,
+  "no_result": 144,
+  "planned": 50,
+  "epics": 12,
+  "epics_verified": 0,
+  "epics_failing": 0
+ },
+ "epics": [
+  {
+   "id": "EPIC-01",
+   "title": "Resident Dues Management & Financial Transparency",
+   "stories": 6,
+   "stories_with_scenarios": 6,
+   "stories_passing": 5,
+   "scenarios": 9,
+   "automated": 9,
+   "passing": 8,
+   "failing": 0,
+   "no_result": 1,
+   "planned": 0,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-02",
+   "title": "Site Manager Financial Oversight & Community Operations",
+   "stories": 5,
+   "stories_with_scenarios": 5,
+   "stories_passing": 1,
+   "scenarios": 17,
+   "automated": 14,
+   "passing": 13,
+   "failing": 0,
+   "no_result": 1,
+   "planned": 3,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-03",
+   "title": "SaaS Multi-Tenancy & Autonomous Site Onboarding",
+   "stories": 7,
+   "stories_with_scenarios": 7,
+   "stories_passing": 4,
+   "scenarios": 13,
+   "automated": 9,
+   "passing": 9,
+   "failing": 0,
+   "no_result": 0,
+   "planned": 4,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-04",
+   "title": "Digital Resident Self-Registration & Approval Queue",
+   "stories": 7,
+   "stories_with_scenarios": 7,
+   "stories_passing": 4,
+   "scenarios": 10,
+   "automated": 7,
+   "passing": 7,
+   "failing": 0,
+   "no_result": 0,
+   "planned": 3,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-05",
+   "title": "Backend Persistence, REST APIs & Verification Harness",
+   "stories": 6,
+   "stories_with_scenarios": 6,
+   "stories_passing": 0,
+   "scenarios": 6,
+   "automated": 1,
+   "passing": 0,
+   "failing": 0,
+   "no_result": 1,
+   "planned": 5,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-06",
+   "title": "Identity, Authentication & Scoped Permission Model",
+   "stories": 6,
+   "stories_with_scenarios": 6,
+   "stories_passing": 1,
+   "scenarios": 24,
+   "automated": 19,
+   "passing": 17,
+   "failing": 0,
+   "no_result": 2,
+   "planned": 5,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-07",
+   "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
+   "stories": 13,
+   "stories_with_scenarios": 13,
+   "stories_passing": 1,
+   "scenarios": 49,
+   "automated": 33,
+   "passing": 12,
+   "failing": 0,
+   "no_result": 21,
+   "planned": 16,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "stories": 12,
+   "stories_with_scenarios": 12,
+   "stories_passing": 2,
+   "scenarios": 55,
+   "automated": 51,
+   "passing": 8,
+   "failing": 0,
+   "no_result": 43,
+   "planned": 4,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "stories": 7,
+   "stories_with_scenarios": 7,
+   "stories_passing": 2,
+   "scenarios": 24,
+   "automated": 18,
+   "passing": 9,
+   "failing": 0,
+   "no_result": 9,
+   "planned": 6,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-10",
+   "title": "Capital Expenditure & Fixture Dues Management (Demirba\u015f & Yat\u0131r\u0131m Projeleri)",
+   "stories": 7,
+   "stories_with_scenarios": 7,
+   "stories_passing": 4,
+   "scenarios": 15,
+   "automated": 11,
+   "passing": 11,
+   "failing": 0,
+   "no_result": 0,
+   "planned": 4,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-11",
+   "title": "Payments Phase 3 (Compliance Gates, Collections, Accounting and Governance)",
+   "stories": 14,
+   "stories_with_scenarios": 14,
+   "stories_passing": 0,
+   "scenarios": 30,
+   "automated": 30,
+   "passing": 0,
+   "failing": 0,
+   "no_result": 30,
+   "planned": 0,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-12",
+   "title": "Unified People and Unit Directory",
+   "stories": 10,
+   "stories_with_scenarios": 10,
+   "stories_passing": 1,
+   "scenarios": 44,
+   "automated": 44,
+   "passing": 8,
+   "failing": 0,
+   "no_result": 36,
+   "planned": 0,
+   "health": "in_progress"
+  }
+ ],
+ "scenarios": {
+  "SC-01-01-01": {
+   "state": "no_result",
+   "name": "Preserve kurus-level precision in dues calculation",
+   "epic": "EPIC-01",
+   "story": "STORY-01-01"
+  },
+  "SC-01-02-01": {
+   "state": "passing",
+   "name": "Calculate 10-day overdue statutory delay penalty",
+   "epic": "EPIC-01",
+   "story": "STORY-01-02"
+  },
+  "SC-01-03-01": {
+   "state": "passing",
+   "name": "Emit reactive state on dashboard launch",
+   "epic": "EPIC-01",
+   "story": "STORY-01-03"
+  },
+  "SC-01-03-02": {
+   "state": "passing",
+   "name": "Site announcement reaches the resident",
+   "epic": "EPIC-01",
+   "story": "STORY-01-03"
+  },
+  "SC-01-04-01": {
+   "state": "passing",
+   "name": "Render resident hero balance with overdue amount",
+   "epic": "EPIC-01",
+   "story": "STORY-01-04"
+  },
+  "SC-01-04-02": {
+   "state": "passing",
+   "name": "Render zero balance without overdue badge",
+   "epic": "EPIC-01",
+   "story": "STORY-01-04"
+  },
+  "SC-01-04-03": {
+   "state": "passing",
+   "name": "Action buttons meet touch target size and unapproved features are hidden",
+   "epic": "EPIC-01",
+   "story": "STORY-01-04"
+  },
+  "SC-01-05-01": {
+   "state": "passing",
+   "name": "View recent financial movements",
+   "epic": "EPIC-01",
+   "story": "STORY-01-05"
+  },
+  "SC-01-06-01": {
+   "state": "passing",
+   "name": "Display cached dues when network is offline",
+   "epic": "EPIC-01",
+   "story": "STORY-01-06"
+  },
+  "SC-02-01-01": {
+   "state": "passing",
+   "name": "Cockpit shows the accrued total before any payment",
+   "epic": "EPIC-02",
+   "story": "STORY-02-01"
+  },
+  "SC-02-01-02": {
+   "state": "passing",
+   "name": "Cockpit counts a payment as collected",
+   "epic": "EPIC-02",
+   "story": "STORY-02-01"
+  },
+  "SC-02-01-03": {
+   "state": "passing",
+   "name": "Cockpit amounts keep kurus",
+   "epic": "EPIC-02",
+   "story": "STORY-02-01"
+  },
+  "SC-02-01-04": {
+   "state": "passing",
+   "name": "House type tariff is saved and a negative amount is rejected",
+   "epic": "EPIC-02",
+   "story": "STORY-02-01"
+  },
+  "SC-02-01-05": {
+   "state": "passing",
+   "name": "House type tariff rejects more than two decimals",
+   "epic": "EPIC-02",
+   "story": "STORY-02-01"
+  },
+  "SC-02-01-06": {
+   "state": "passing",
+   "name": "Display complex collection progress with the unit status breakdown",
+   "epic": "EPIC-02",
+   "story": "STORY-02-01"
+  },
+  "SC-02-02-01": {
+   "state": "passing",
+   "name": "Overdue filter lists every overdue flat",
+   "epic": "EPIC-02",
+   "story": "STORY-02-02"
+  },
+  "SC-02-02-02": {
+   "state": "planned",
+   "name": "Overdue flats show the exact days overdue in a red badge",
+   "epic": "EPIC-02",
+   "story": "STORY-02-02"
+  },
+  "SC-02-03-01": {
+   "state": "passing",
+   "name": "Manager adds a new home owner manually",
+   "epic": "EPIC-02",
+   "story": "STORY-02-03"
+  },
+  "SC-02-03-02": {
+   "state": "passing",
+   "name": "Adding a resident to an occupied unit warns and saves nothing",
+   "epic": "EPIC-02",
+   "story": "STORY-02-03"
+  },
+  "SC-02-03-03": {
+   "state": "passing",
+   "name": "A resident without ledger history can be deleted",
+   "epic": "EPIC-02",
+   "story": "STORY-02-03"
+  },
+  "SC-02-03-04": {
+   "state": "passing",
+   "name": "A refused delete keeps the resident card",
+   "epic": "EPIC-02",
+   "story": "STORY-02-03"
+  },
+  "SC-02-03-05": {
+   "state": "planned",
+   "name": "Registration shows generated temporary credentials",
+   "epic": "EPIC-02",
+   "story": "STORY-02-03"
+  },
+  "SC-02-04-01": {
+   "state": "passing",
+   "name": "Reminder action is offered for overdue flats",
+   "epic": "EPIC-02",
+   "story": "STORY-02-04"
+  },
+  "SC-02-04-02": {
+   "state": "no_result",
+   "name": "Send reminder to overdue resident",
+   "epic": "EPIC-02",
+   "story": "STORY-02-04"
+  },
+  "SC-02-05-01": {
+   "state": "passing",
+   "name": "Manager creates an announcement",
+   "epic": "EPIC-02",
+   "story": "STORY-02-05"
+  },
+  "SC-02-05-02": {
+   "state": "planned",
+   "name": "Announcement appears on the resident feed",
+   "epic": "EPIC-02",
+   "story": "STORY-02-05"
+  },
+  "SC-03-01-01": {
+   "state": "passing",
+   "name": "Query operations strictly scoped by tenant",
+   "epic": "EPIC-03",
+   "story": "STORY-03-01"
+  },
+  "SC-03-02-01": {
+   "state": "passing",
+   "name": "SaaS Admin views portfolio overview",
+   "epic": "EPIC-03",
+   "story": "STORY-03-02"
+  },
+  "SC-03-02-02": {
+   "state": "passing",
+   "name": "Portfolio statistics agree with the site list",
+   "epic": "EPIC-03",
+   "story": "STORY-03-02"
+  },
+  "SC-03-03-01": {
+   "state": "passing",
+   "name": "SaaS Admin creates new site and provisions first Site Admin",
+   "epic": "EPIC-03",
+   "story": "STORY-03-03"
+  },
+  "SC-03-04-01": {
+   "state": "passing",
+   "name": "Generate temporary password for newly registered Site Admin",
+   "epic": "EPIC-03",
+   "story": "STORY-03-04"
+  },
+  "SC-03-04-02": {
+   "state": "passing",
+   "name": "New manager is forced to change the temporary password",
+   "epic": "EPIC-03",
+   "story": "STORY-03-04"
+  },
+  "SC-03-04-03": {
+   "state": "planned",
+   "name": "SMS credential alert is dispatched to the manager's mobile number",
+   "epic": "EPIC-03",
+   "story": "STORY-03-04"
+  },
+  "SC-03-04-04": {
+   "state": "planned",
+   "name": "Duplicate admin email is rejected",
+   "epic": "EPIC-03",
+   "story": "STORY-03-04"
+  },
+  "SC-03-05-01": {
+   "state": "planned",
+   "name": "REST endpoint returns 201 Created on valid site onboarding",
+   "epic": "EPIC-03",
+   "story": "STORY-03-05"
+  },
+  "SC-03-06-01": {
+   "state": "passing",
+   "name": "Delete site without any related actions",
+   "epic": "EPIC-03",
+   "story": "STORY-03-06"
+  },
+  "SC-03-06-02": {
+   "state": "passing",
+   "name": "Invariant prevents deletion of active site with transactions",
+   "epic": "EPIC-03",
+   "story": "STORY-03-06"
+  },
+  "SC-03-07-01": {
+   "state": "passing",
+   "name": "SaaS Admin renews temporary password for a site manager",
+   "epic": "EPIC-03",
+   "story": "STORY-03-07"
+  },
+  "SC-03-07-02": {
+   "state": "planned",
+   "name": "Password renewal fails for non-existent site",
+   "epic": "EPIC-03",
+   "story": "STORY-03-07"
+  },
+  "SC-04-01-01": {
+   "state": "passing",
+   "name": "Generate 7-day secure invite link",
+   "epic": "EPIC-04",
+   "story": "STORY-04-01"
+  },
+  "SC-04-02-01": {
+   "state": "passing",
+   "name": "Site Admin copies or shares invite link",
+   "epic": "EPIC-04",
+   "story": "STORY-04-02"
+  },
+  "SC-04-02-02": {
+   "state": "planned",
+   "name": "Empty approval queue shows an empty state",
+   "epic": "EPIC-04",
+   "story": "STORY-04-02"
+  },
+  "SC-04-03-01": {
+   "state": "planned",
+   "name": "Home owner submits online registration",
+   "epic": "EPIC-04",
+   "story": "STORY-04-03"
+  },
+  "SC-04-04-01": {
+   "state": "passing",
+   "name": "Site manager views pending applications",
+   "epic": "EPIC-04",
+   "story": "STORY-04-04"
+  },
+  "SC-04-05-01": {
+   "state": "passing",
+   "name": "Approve applicant and provision account",
+   "epic": "EPIC-04",
+   "story": "STORY-04-05"
+  },
+  "SC-04-05-02": {
+   "state": "passing",
+   "name": "Approved resident signs in with the issued password",
+   "epic": "EPIC-04",
+   "story": "STORY-04-05"
+  },
+  "SC-04-06-01": {
+   "state": "passing",
+   "name": "Reject unverified registration",
+   "epic": "EPIC-04",
+   "story": "STORY-04-06"
+  },
+  "SC-04-07-01": {
+   "state": "passing",
+   "name": "Home owner generates unit-scoped invitation link",
+   "epic": "EPIC-04",
+   "story": "STORY-04-07"
+  },
+  "SC-04-07-02": {
+   "state": "planned",
+   "name": "Co-resident registers with unit-scoped permissions",
+   "epic": "EPIC-04",
+   "story": "STORY-04-07"
+  },
+  "SC-05-01-01": {
+   "state": "planned",
+   "name": "SQL migrations execute with strict NUMERIC types",
+   "epic": "EPIC-05",
+   "story": "STORY-05-01"
+  },
+  "SC-05-02-01": {
+   "state": "planned",
+   "name": "Prevent concurrent balance modification race conditions",
+   "epic": "EPIC-05",
+   "story": "STORY-05-02"
+  },
+  "SC-05-03-01": {
+   "state": "planned",
+   "name": "REST endpoint provides real-time calculated dues",
+   "epic": "EPIC-05",
+   "story": "STORY-05-03"
+  },
+  "SC-05-04-01": {
+   "state": "planned",
+   "name": "Verification gate rejects floating-point rounding leaks",
+   "epic": "EPIC-05",
+   "story": "STORY-05-04"
+  },
+  "SC-05-05-01": {
+   "state": "planned",
+   "name": "Run all system verification tests in one command",
+   "epic": "EPIC-05",
+   "story": "STORY-05-05"
+  },
+  "SC-05-06-01": {
+   "state": "no_result",
+   "name": "Validate bidirectional traceability",
+   "epic": "EPIC-05",
+   "story": "STORY-05-06"
+  },
+  "SC-06-01-01": {
+   "state": "passing",
+   "name": "Home resident is restricted from site-wide management",
+   "epic": "EPIC-06",
+   "story": "STORY-06-01"
+  },
+  "SC-06-02-01": {
+   "state": "planned",
+   "name": "User registers and authenticates with password",
+   "epic": "EPIC-06",
+   "story": "STORY-06-02"
+  },
+  "SC-06-02-02": {
+   "state": "passing",
+   "name": "Site manager signs in and reaches the cockpit",
+   "epic": "EPIC-06",
+   "story": "STORY-06-02"
+  },
+  "SC-06-02-03": {
+   "state": "passing",
+   "name": "Home owner signs in and reaches the resident dashboard",
+   "epic": "EPIC-06",
+   "story": "STORY-06-02"
+  },
+  "SC-06-02-04": {
+   "state": "passing",
+   "name": "Wrong password shows an error and stays on the login screen",
+   "epic": "EPIC-06",
+   "story": "STORY-06-02"
+  },
+  "SC-06-02-05": {
+   "state": "passing",
+   "name": "Clearing the login cache empties the credential fields",
+   "epic": "EPIC-06",
+   "story": "STORY-06-02"
+  },
+  "SC-06-02-06": {
+   "state": "passing",
+   "name": "Empty password is rejected without a request",
+   "epic": "EPIC-06",
+   "story": "STORY-06-02"
+  },
+  "SC-06-03-01": {
+   "state": "planned",
+   "name": "Sign in with Google links existing account",
+   "epic": "EPIC-06",
+   "story": "STORY-06-03"
+  },
+  "SC-06-03-02": {
+   "state": "no_result",
+   "name": "Google sign-in button starts the provider flow",
+   "epic": "EPIC-06",
+   "story": "STORY-06-03"
+  },
+  "SC-06-04-01": {
+   "state": "planned",
+   "name": "User inspects their active profile and permissions",
+   "epic": "EPIC-06",
+   "story": "STORY-06-04"
+  },
+  "SC-06-04-02": {
+   "state": "passing",
+   "name": "Home owner changes the password from the profile and signs in again",
+   "epic": "EPIC-06",
+   "story": "STORY-06-04"
+  },
+  "SC-06-04-03": {
+   "state": "passing",
+   "name": "Logout returns to the login screen",
+   "epic": "EPIC-06",
+   "story": "STORY-06-04"
+  },
+  "SC-06-04-04": {
+   "state": "passing",
+   "name": "Browser back after logout does not re-enter the session",
+   "epic": "EPIC-06",
+   "story": "STORY-06-04"
+  },
+  "SC-06-04-05": {
+   "state": "passing",
+   "name": "Manager switches between the cockpit and the own flat",
+   "epic": "EPIC-06",
+   "story": "STORY-06-04"
+  },
+  "SC-06-04-06": {
+   "state": "passing",
+   "name": "Cancelling the logout confirmation keeps the session",
+   "epic": "EPIC-06",
+   "story": "STORY-06-04"
+  },
+  "SC-06-05-01": {
+   "state": "no_result",
+   "name": "Google sign-in option is offered on the login screen",
+   "epic": "EPIC-06",
+   "story": "STORY-06-05"
+  },
+  "SC-06-05-02": {
+   "state": "planned",
+   "name": "Google sign-in completes and the dashboard shows the Google profile",
+   "epic": "EPIC-06",
+   "story": "STORY-06-05"
+  },
+  "SC-06-05-03": {
+   "state": "passing",
+   "name": "Email and password sign-in opens the role dashboard",
+   "epic": "EPIC-06",
+   "story": "STORY-06-05"
+  },
+  "SC-06-06-01": {
+   "state": "passing",
+   "name": "SaaS admin with a temporary password is held at the password change screen",
+   "epic": "EPIC-06",
+   "story": "STORY-06-06"
+  },
+  "SC-06-06-02": {
+   "state": "passing",
+   "name": "Site manager with a temporary password is held at the password change screen",
+   "epic": "EPIC-06",
+   "story": "STORY-06-06"
+  },
+  "SC-06-06-03": {
+   "state": "passing",
+   "name": "Home owner with a temporary password is held at the password change screen",
+   "epic": "EPIC-06",
+   "story": "STORY-06-06"
+  },
+  "SC-06-06-04": {
+   "state": "passing",
+   "name": "Home resident with a temporary password is held at the password change screen",
+   "epic": "EPIC-06",
+   "story": "STORY-06-06"
+  },
+  "SC-06-06-05": {
+   "state": "passing",
+   "name": "Auditor with a temporary password is held at the password change screen",
+   "epic": "EPIC-06",
+   "story": "STORY-06-06"
+  },
+  "SC-06-06-06": {
+   "state": "planned",
+   "name": "Server blocks operations before the password is changed",
+   "epic": "EPIC-06",
+   "story": "STORY-06-06"
+  },
+  "SC-07-01-01": {
+   "state": "no_result",
+   "name": "Automated allocation of a virtual IBAN upon unit setup",
+   "epic": "EPIC-07",
+   "story": "STORY-07-01"
+  },
+  "SC-07-01-02": {
+   "state": "no_result",
+   "name": "Resident dashboard includes the allocated virtual IBAN",
+   "epic": "EPIC-07",
+   "story": "STORY-07-01"
+  },
+  "SC-07-02-01": {
+   "state": "passing",
+   "name": "Site manager uploads a bank statement Excel file",
+   "epic": "EPIC-07",
+   "story": "STORY-07-02"
+  },
+  "SC-07-02-02": {
+   "state": "passing",
+   "name": "Approving a matched row clears the resident's balance",
+   "epic": "EPIC-07",
+   "story": "STORY-07-02"
+  },
+  "SC-07-02-03": {
+   "state": "no_result",
+   "name": "MT940 statement transactions are extracted and matched to dues",
+   "epic": "EPIC-07",
+   "story": "STORY-07-02"
+  },
+  "SC-07-02-04": {
+   "state": "passing",
+   "name": "An unmatched row is assigned to a unit by hand",
+   "epic": "EPIC-07",
+   "story": "STORY-07-02"
+  },
+  "SC-07-02-05": {
+   "state": "planned",
+   "name": "A stored payer-name alias auto-matches a re-uploaded row",
+   "epic": "EPIC-07",
+   "story": "STORY-07-02"
+  },
+  "SC-07-03-01": {
+   "state": "passing",
+   "name": "Real-time incoming transfer clears dues once",
+   "epic": "EPIC-07",
+   "story": "STORY-07-03"
+  },
+  "SC-07-03-02": {
+   "state": "no_result",
+   "name": "A statement row containing the virtual IBAN matches the flat with full confidence",
+   "epic": "EPIC-07",
+   "story": "STORY-07-03"
+  },
+  "SC-07-04-01": {
+   "state": "passing",
+   "name": "Resident chooses the FAST transfer payment method",
+   "epic": "EPIC-07",
+   "story": "STORY-07-04"
+  },
+  "SC-07-04-02": {
+   "state": "passing",
+   "name": "Copy button puts the unspaced IBAN on the clipboard",
+   "epic": "EPIC-07",
+   "story": "STORY-07-04"
+  },
+  "SC-07-05-01": {
+   "state": "passing",
+   "name": "Surplus transfer is allocated to the resident advance balance",
+   "epic": "EPIC-07",
+   "story": "STORY-07-05"
+  },
+  "SC-07-05-02": {
+   "state": "no_result",
+   "name": "A newly accrued period is offset by the advance balance",
+   "epic": "EPIC-07",
+   "story": "STORY-07-05"
+  },
+  "SC-07-06-01": {
+   "state": "no_result",
+   "name": "Configuring the bank account sets the statement format automatically",
+   "epic": "EPIC-07",
+   "story": "STORY-07-06"
+  },
+  "SC-07-06-02": {
+   "state": "passing",
+   "name": "Wrong statement format is rejected and the matching format is accepted",
+   "epic": "EPIC-07",
+   "story": "STORY-07-06"
+  },
+  "SC-07-06-03": {
+   "state": "passing",
+   "name": "Excel upload offers a sample for each catalogued Excel bank",
+   "epic": "EPIC-07",
+   "story": "STORY-07-06"
+  },
+  "SC-07-06-04": {
+   "state": "passing",
+   "name": "Excel sample options exclude banks without an Excel format",
+   "epic": "EPIC-07",
+   "story": "STORY-07-06"
+  },
+  "SC-07-07-01": {
+   "state": "passing",
+   "name": "Manager accrues a period once and the duplicate is blocked",
+   "epic": "EPIC-07",
+   "story": "STORY-07-07"
+  },
+  "SC-07-07-02": {
+   "state": "no_result",
+   "name": "Scheduler batch accrues and prevents duplicate accrual",
+   "epic": "EPIC-07",
+   "story": "STORY-07-07"
+  },
+  "SC-07-07-03": {
+   "state": "no_result",
+   "name": "Accrual confirmation dialog shows the duplicate prevention note",
+   "epic": "EPIC-07",
+   "story": "STORY-07-07"
+  },
+  "SC-07-07-04": {
+   "state": "passing",
+   "name": "Manual accrual charges each unit its tariff, not a fixed amount",
+   "epic": "EPIC-07",
+   "story": "STORY-07-07"
+  },
+  "SC-07-08-01": {
+   "state": "no_result",
+   "name": "Another spelling of an accrued month is a duplicate",
+   "epic": "EPIC-07",
+   "story": "STORY-07-08"
+  },
+  "SC-07-08-02": {
+   "state": "no_result",
+   "name": "A due date outside the period is rejected",
+   "epic": "EPIC-07",
+   "story": "STORY-07-08"
+  },
+  "SC-07-08-03": {
+   "state": "no_result",
+   "name": "A failure partway through a batch writes nothing",
+   "epic": "EPIC-07",
+   "story": "STORY-07-08"
+  },
+  "SC-07-08-04": {
+   "state": "no_result",
+   "name": "Skipped units are reported with their reason",
+   "epic": "EPIC-07",
+   "story": "STORY-07-08"
+  },
+  "SC-07-09-01": {
+   "state": "planned",
+   "name": "A mid-month move-in splits the month between owner and tenant",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-02": {
+   "state": "planned",
+   "name": "A unit created mid-month is charged from its creation date",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-03": {
+   "state": "planned",
+   "name": "A move-out recorded after accrual re-splits the open liability",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-04": {
+   "state": "planned",
+   "name": "With proration switched off the occupant on the accrual date owes the whole month",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-10-01": {
+   "state": "planned",
+   "name": "The site's due day is used for every accrued liability",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-02": {
+   "state": "planned",
+   "name": "A due day beyond the end of the month falls on its last day",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-03": {
+   "state": "planned",
+   "name": "The scheduler catches up months it missed",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-04": {
+   "state": "planned",
+   "name": "Catch-up stops at the configured limit",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-05": {
+   "state": "planned",
+   "name": "A payment inside the grace period carries no late fee",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-06": {
+   "state": "planned",
+   "name": "After the grace period the late fee runs from the due date",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-11-01": {
+   "state": "no_result",
+   "name": "A cancelled liability moves its payment to the advance balance",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-11-02": {
+   "state": "no_result",
+   "name": "A re-issue replaces the amount and links to the original",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-11-03": {
+   "state": "no_result",
+   "name": "A credit note reduces the amount and its late fee in proportion",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-11-04": {
+   "state": "no_result",
+   "name": "The requester cannot approve their own correction",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-11-05": {
+   "state": "no_result",
+   "name": "The resident statement shows the correction",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-12-01": {
+   "state": "planned",
+   "name": "Closing a period shows its summary and stores a snapshot",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-02": {
+   "state": "planned",
+   "name": "A closed period still accepts payments",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-03": {
+   "state": "planned",
+   "name": "A correction to a closed period is booked in the open period",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-04": {
+   "state": "planned",
+   "name": "Accrual into a closed period is refused",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-05": {
+   "state": "planned",
+   "name": "Reopening a period needs a second approver",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-13-01": {
+   "state": "no_result",
+   "name": "Dashboard, statement, aging and trial balance agree on an overdue unit",
+   "epic": "EPIC-07",
+   "story": "STORY-07-13"
+  },
+  "SC-07-13-02": {
+   "state": "no_result",
+   "name": "The daily late-fee job is idempotent",
+   "epic": "EPIC-07",
+   "story": "STORY-07-13"
+  },
+  "SC-07-13-03": {
+   "state": "no_result",
+   "name": "Penalty revenue is booked in the month it accrued",
+   "epic": "EPIC-07",
+   "story": "STORY-07-13"
+  },
+  "SC-07-13-04": {
+   "state": "no_result",
+   "name": "The reconciliation check reports a mismatch",
+   "epic": "EPIC-07",
+   "story": "STORY-07-13"
+  },
+  "SC-08-01-01": {
+   "state": "passing",
+   "name": "Accrue monthly operational dues to tenant and capital project to owner",
+   "epic": "EPIC-08",
+   "story": "STORY-08-01"
+  },
+  "SC-08-02-03": {
+   "state": "no_result",
+   "name": "A possible household person duplicate requires manager confirmation",
+   "epic": "EPIC-08",
+   "story": "STORY-08-02"
+  },
+  "SC-08-02-01": {
+   "state": "passing",
+   "name": "Household members are bound to the active resident session",
+   "epic": "EPIC-08",
+   "story": "STORY-08-02"
+  },
+  "SC-08-02-02": {
+   "state": "passing",
+   "name": "Household members are archived when the resident moves out",
+   "epic": "EPIC-08",
+   "story": "STORY-08-02"
+  },
+  "SC-08-03-01": {
+   "state": "passing",
+   "name": "Move-out preserves historical payment receipts and unsettled debt",
+   "epic": "EPIC-08",
+   "story": "STORY-08-03"
+  },
+  "SC-08-03-02": {
+   "state": "planned",
+   "name": "Move-out can keep the advance without changing the balance",
+   "epic": "EPIC-08",
+   "story": "STORY-08-03"
+  },
+  "SC-08-03-03": {
+   "state": "planned",
+   "name": "Move-out payout is debited only after four-eyes approval",
+   "epic": "EPIC-08",
+   "story": "STORY-08-03"
+  },
+  "SC-08-03-04": {
+   "state": "planned",
+   "name": "Move-out transfer changes debtor only after four-eyes approval",
+   "epic": "EPIC-08",
+   "story": "STORY-08-03"
+  },
+  "SC-08-04-01": {
+   "state": "passing",
+   "name": "New tenant moves in and past occupancy history is retrievable",
+   "epic": "EPIC-08",
+   "story": "STORY-08-04"
+  },
+  "SC-08-04-02": {
+   "state": "passing",
+   "name": "Tenant move-in opens an active tenant session",
+   "epic": "EPIC-08",
+   "story": "STORY-08-04"
+  },
+  "SC-08-05-01": {
+   "state": "passing",
+   "name": "Change property owner upon title deed sale without affecting tenant",
+   "epic": "EPIC-08",
+   "story": "STORY-08-05"
+  },
+  "SC-08-05-02": {
+   "state": "passing",
+   "name": "Capital dues after the transfer are billed to the new owner",
+   "epic": "EPIC-08",
+   "story": "STORY-08-05"
+  },
+  "SC-08-05-03": {
+   "state": "planned",
+   "name": "Previous owner's advance is paid out or transferred only with a second approver",
+   "epic": "EPIC-08",
+   "story": "STORY-08-05"
+  },
+  "SC-08-06-01": {
+   "state": "no_result",
+   "name": "Owner moves into the unit after the tenant left",
+   "epic": "EPIC-08",
+   "story": "STORY-08-06"
+  },
+  "SC-08-06-02": {
+   "state": "no_result",
+   "name": "Owner move-in for a person who is not the owner is rejected",
+   "epic": "EPIC-08",
+   "story": "STORY-08-06"
+  },
+  "SC-08-06-03": {
+   "state": "no_result",
+   "name": "Tenant move-in still accepts a new person",
+   "epic": "EPIC-08",
+   "story": "STORY-08-06"
+  },
+  "SC-08-07-01": {
+   "state": "no_result",
+   "name": "move-out is rejected on a VACANT unit",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-07-02": {
+   "state": "no_result",
+   "name": "tenant move-in is rejected on a OWNER_OCCUPIED unit",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-07-03": {
+   "state": "no_result",
+   "name": "owner move-in is rejected on a OWNER_OCCUPIED unit",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-07-04": {
+   "state": "no_result",
+   "name": "tenant move-in is rejected on a TENANT_OCCUPIED unit",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-07-05": {
+   "state": "no_result",
+   "name": "owner move-in is rejected on a TENANT_OCCUPIED unit",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-07-06": {
+   "state": "no_result",
+   "name": "tenant move-in is rejected on a UNOWNED, VACANT unit",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-07-07": {
+   "state": "no_result",
+   "name": "owner move-in is rejected on a UNOWNED, VACANT unit",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-07-08": {
+   "state": "no_result",
+   "name": "Registration approval respects the unit state",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-07-09": {
+   "state": "no_result",
+   "name": "Resident details cannot change occupancy",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-07-10": {
+   "state": "no_result",
+   "name": "Owner details preserve owner-occupied and vacant states",
+   "epic": "EPIC-08",
+   "story": "STORY-08-07"
+  },
+  "SC-08-08-01": {
+   "state": "no_result",
+   "name": "Replacing a tenant settles the outgoing tenant",
+   "epic": "EPIC-08",
+   "story": "STORY-08-08"
+  },
+  "SC-08-08-02": {
+   "state": "no_result",
+   "name": "Owner takes the unit back from the tenant",
+   "epic": "EPIC-08",
+   "story": "STORY-08-08"
+  },
+  "SC-08-08-03": {
+   "state": "no_result",
+   "name": "A failed second step leaves nothing changed",
+   "epic": "EPIC-08",
+   "story": "STORY-08-08"
+  },
+  "SC-08-09-01": {
+   "state": "no_result",
+   "name": "Selling an owner-occupied unit vacates it",
+   "epic": "EPIC-08",
+   "story": "STORY-08-09"
+  },
+  "SC-08-09-02": {
+   "state": "no_result",
+   "name": "The new owner moves in at transfer",
+   "epic": "EPIC-08",
+   "story": "STORY-08-09"
+  },
+  "SC-08-09-03": {
+   "state": "no_result",
+   "name": "The tenant buys the unit",
+   "epic": "EPIC-08",
+   "story": "STORY-08-09"
+  },
+  "SC-08-09-04": {
+   "state": "no_result",
+   "name": "Selling a vacant unit leaves it vacant",
+   "epic": "EPIC-08",
+   "story": "STORY-08-09"
+  },
+  "SC-08-10-01": {
+   "state": "no_result",
+   "name": "Exit balance counts only the departing tenant's liabilities",
+   "epic": "EPIC-08",
+   "story": "STORY-08-10"
+  },
+  "SC-08-10-02": {
+   "state": "no_result",
+   "name": "Status cannot drift from the occupancy sessions",
+   "epic": "EPIC-08",
+   "story": "STORY-08-10"
+  },
+  "SC-08-10-03": {
+   "state": "no_result",
+   "name": "A transition is all or nothing",
+   "epic": "EPIC-08",
+   "story": "STORY-08-10"
+  },
+  "SC-08-10-04": {
+   "state": "no_result",
+   "name": "Effective date cannot be in the future",
+   "epic": "EPIC-08",
+   "story": "STORY-08-10"
+  },
+  "SC-08-10-05": {
+   "state": "no_result",
+   "name": "Effective date may precede the recorded session start",
+   "epic": "EPIC-08",
+   "story": "STORY-08-10"
+  },
+  "SC-08-10-06": {
+   "state": "no_result",
+   "name": "The leave is recorded after the resident actually left",
+   "epic": "EPIC-08",
+   "story": "STORY-08-10"
+  },
+  "SC-08-11-01": {
+   "state": "no_result",
+   "name": "Workspace actions follow the unit's allowed commands",
+   "epic": "EPIC-08",
+   "story": "STORY-08-11"
+  },
+  "SC-08-11-02": {
+   "state": "no_result",
+   "name": "Workspace information keeps the operating and capital ledgers separate",
+   "epic": "EPIC-08",
+   "story": "STORY-08-11"
+  },
+  "SC-08-11-03": {
+   "state": "no_result",
+   "name": "Returning from unit workspace restores directory context and focus",
+   "epic": "EPIC-08",
+   "story": "STORY-08-11"
+  },
+  "SC-08-12-01": {
+   "state": "no_result",
+   "name": "Tenant move-in and move-out repeated three times keep one history row per tenant",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-02": {
+   "state": "no_result",
+   "name": "Owner rents out and takes back repeatedly",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-03": {
+   "state": "no_result",
+   "name": "Replacing the tenant repeatedly settles each outgoing tenant once",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-04": {
+   "state": "no_result",
+   "name": "Owner move-in and move-out repeated keep the owner and the deed unchanged",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-05": {
+   "state": "no_result",
+   "name": "Title transfer repeated keeps every previous owner in the ownership history",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-06": {
+   "state": "no_result",
+   "name": "Every executed command is audited in order",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-07": {
+   "state": "no_result",
+   "name": "A repeated command that is no longer legal is rejected and changes nothing",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-08": {
+   "state": "no_result",
+   "name": "Household members added, updated and removed repeatedly keep the roster and the primary contact correct",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-09": {
+   "state": "no_result",
+   "name": "Move-out archives the household of the closed session each time",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-10": {
+   "state": "no_result",
+   "name": "When a tenant moves out, all of the tenant's dependents move out with them",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-11": {
+   "state": "no_result",
+   "name": "When an owner who lives in the unit moves out, the owner's dependents move out with them",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-12": {
+   "state": "no_result",
+   "name": "Dependents follow every action that closes a session, repeated",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-13": {
+   "state": "no_result",
+   "name": "A dependent who is also a person card keeps the card when moved out",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-09-01-01": {
+   "state": "passing",
+   "name": "Filter payment stream by tenant payments for current month",
+   "epic": "EPIC-09",
+   "story": "STORY-09-01"
+  },
+  "SC-09-01-02": {
+   "state": "passing",
+   "name": "Debt aging buckets total the overdue sum",
+   "epic": "EPIC-09",
+   "story": "STORY-09-01"
+  },
+  "SC-09-02-01": {
+   "state": "passing",
+   "name": "Settle delay penalty first, then oldest dues, then credit surplus as advance",
+   "epic": "EPIC-09",
+   "story": "STORY-09-02"
+  },
+  "SC-09-02-02": {
+   "state": "no_result",
+   "name": "Owner payment settles capital dues after operational dues",
+   "epic": "EPIC-09",
+   "story": "STORY-09-02"
+  },
+  "SC-09-03-01": {
+   "state": "passing",
+   "name": "Generate itemized sub-ledger statement for a tenant",
+   "epic": "EPIC-09",
+   "story": "STORY-09-03"
+  },
+  "SC-09-03-02": {
+   "state": "passing",
+   "name": "Resident statement ages an overdue due with its penalty",
+   "epic": "EPIC-09",
+   "story": "STORY-09-03"
+  },
+  "SC-09-04-01": {
+   "state": "passing",
+   "name": "Issue sequential payment receipt upon settlement",
+   "epic": "EPIC-09",
+   "story": "STORY-09-04"
+  },
+  "SC-09-04-02": {
+   "state": "passing",
+   "name": "Manager downloads the receipt PDF and reverses the receipt",
+   "epic": "EPIC-09",
+   "story": "STORY-09-04"
+  },
+  "SC-09-04-03": {
+   "state": "passing",
+   "name": "Receipt shows the penalty, principal and advance split",
+   "epic": "EPIC-09",
+   "story": "STORY-09-04"
+  },
+  "SC-09-04-04": {
+   "state": "passing",
+   "name": "Card payment on the provider page issues a receipt",
+   "epic": "EPIC-09",
+   "story": "STORY-09-04"
+  },
+  "SC-09-04-05": {
+   "state": "no_result",
+   "name": "Payment dates in the future or beyond the backdating window are rejected",
+   "epic": "EPIC-09",
+   "story": "STORY-09-04"
+  },
+  "SC-09-04-06": {
+   "state": "no_result",
+   "name": "A backdated payment re-evaluates the late fee charged after its payment date",
+   "epic": "EPIC-09",
+   "story": "STORY-09-04"
+  },
+  "SC-09-04-07": {
+   "state": "no_result",
+   "name": "Late fee already paid above the recalculated amount moves to the payer's advance",
+   "epic": "EPIC-09",
+   "story": "STORY-09-04"
+  },
+  "SC-09-05-01": {
+   "state": "no_result",
+   "name": "Move-out freezes tenant balance and shifts recurring accrual to owner",
+   "epic": "EPIC-09",
+   "story": "STORY-09-05"
+  },
+  "SC-09-05-02": {
+   "state": "planned",
+   "name": "Approver cannot approve their own advance settlement request",
+   "epic": "EPIC-09",
+   "story": "STORY-09-05"
+  },
+  "SC-09-05-03": {
+   "state": "planned",
+   "name": "Departing tenant's advance is paid out only after four-eyes approval",
+   "epic": "EPIC-09",
+   "story": "STORY-09-05"
+  },
+  "SC-09-05-05": {
+   "state": "planned",
+   "name": "Departing tenant's advance transfers only after four-eyes approval",
+   "epic": "EPIC-09",
+   "story": "STORY-09-05"
+  },
+  "SC-09-05-06": {
+   "state": "planned",
+   "name": "Frozen exit dues block advance settlement until the debt is paid",
+   "epic": "EPIC-09",
+   "story": "STORY-09-05"
+  },
+  "SC-09-05-04": {
+   "state": "planned",
+   "name": "Retrying a timed-out settlement request does not create a duplicate",
+   "epic": "EPIC-09",
+   "story": "STORY-09-05"
+  },
+  "SC-09-06-01": {
+   "state": "no_result",
+   "name": "Manager confirms tenant payment for landlord fixture fee",
+   "epic": "EPIC-09",
+   "story": "STORY-09-06"
+  },
+  "SC-09-06-02": {
+   "state": "no_result",
+   "name": "Advance balance is transferred to the owner's capital dues in one click",
+   "epic": "EPIC-09",
+   "story": "STORY-09-06"
+  },
+  "SC-09-06-03": {
+   "state": "planned",
+   "name": "A capital keyword alone does not redirect a tenant payment",
+   "epic": "EPIC-09",
+   "story": "STORY-09-06"
+  },
+  "SC-09-06-04": {
+   "state": "no_result",
+   "name": "Tenant webhook capital intent waits for manager review",
+   "epic": "EPIC-09",
+   "story": "STORY-09-06"
+  },
+  "SC-09-07-01": {
+   "state": "no_result",
+   "name": "Property ownership transfer freezes old owner balance and binds new owner",
+   "epic": "EPIC-09",
+   "story": "STORY-09-07"
+  },
+  "SC-10-01-01": {
+   "state": "passing",
+   "name": "Budget is split by land share without rounding drift",
+   "epic": "EPIC-10",
+   "story": "STORY-10-01"
+  },
+  "SC-10-01-02": {
+   "state": "passing",
+   "name": "Equal allocation gives every unit the same share",
+   "epic": "EPIC-10",
+   "story": "STORY-10-01"
+  },
+  "SC-10-02-01": {
+   "state": "passing",
+   "name": "Accruing an installment charges owners only",
+   "epic": "EPIC-10",
+   "story": "STORY-10-02"
+  },
+  "SC-10-03-01": {
+   "state": "passing",
+   "name": "Owner FAST payment raises the collected amount of the project",
+   "epic": "EPIC-10",
+   "story": "STORY-10-03"
+  },
+  "SC-10-03-02": {
+   "state": "passing",
+   "name": "Tenant payment produces a TBK 314 rent-offset receipt",
+   "epic": "EPIC-10",
+   "story": "STORY-10-03"
+  },
+  "SC-10-04-01": {
+   "state": "passing",
+   "name": "Virman dialog offers the real advance balance of the unit",
+   "epic": "EPIC-10",
+   "story": "STORY-10-04"
+  },
+  "SC-10-04-02": {
+   "state": "planned",
+   "name": "Virman transfer clears a capital due from the advance balance",
+   "epic": "EPIC-10",
+   "story": "STORY-10-04"
+  },
+  "SC-10-05-01": {
+   "state": "passing",
+   "name": "Disbursement within collected cash updates the reserve",
+   "epic": "EPIC-10",
+   "story": "STORY-10-05"
+  },
+  "SC-10-05-02": {
+   "state": "passing",
+   "name": "Disbursement larger than collected cash is refused",
+   "epic": "EPIC-10",
+   "story": "STORY-10-05"
+  },
+  "SC-10-05-03": {
+   "state": "planned",
+   "name": "Disbursement carries its invoice number and warns when overdrawn",
+   "epic": "EPIC-10",
+   "story": "STORY-10-05"
+  },
+  "SC-10-06-01": {
+   "state": "passing",
+   "name": "Owner dashboard shows capital dues separately",
+   "epic": "EPIC-10",
+   "story": "STORY-10-06"
+  },
+  "SC-10-06-02": {
+   "state": "passing",
+   "name": "Capital project is marked as the responsibility of the owner",
+   "epic": "EPIC-10",
+   "story": "STORY-10-06"
+  },
+  "SC-10-06-03": {
+   "state": "planned",
+   "name": "Owner opens the project detail from the capital card",
+   "epic": "EPIC-10",
+   "story": "STORY-10-06"
+  },
+  "SC-10-06-04": {
+   "state": "planned",
+   "name": "Tenant reads the statutory protection guidance",
+   "epic": "EPIC-10",
+   "story": "STORY-10-06"
+  },
+  "SC-10-07-01": {
+   "state": "passing",
+   "name": "Capital segment offers project creation",
+   "epic": "EPIC-10",
+   "story": "STORY-10-07"
+  },
+  "SC-11-01-01": {
+   "state": "no_result",
+   "name": "Budget line split by house type or meter weights",
+   "epic": "EPIC-11",
+   "story": "STORY-11-01"
+  },
+  "SC-11-01-02": {
+   "state": "no_result",
+   "name": "Site in transition accrues the tariff and reports it without basis",
+   "epic": "EPIC-11",
+   "story": "STORY-11-01"
+  },
+  "SC-11-02-01": {
+   "state": "no_result",
+   "name": "Residents acknowledge the privacy notice and set channel consents",
+   "epic": "EPIC-11",
+   "story": "STORY-11-02"
+  },
+  "SC-11-02-02": {
+   "state": "no_result",
+   "name": "Debtor exports are masked for non-staff roles and logged",
+   "epic": "EPIC-11",
+   "story": "STORY-11-02"
+  },
+  "SC-11-02-03": {
+   "state": "no_result",
+   "name": "Ledger records are kept ten years and old logs are purged",
+   "epic": "EPIC-11",
+   "story": "STORY-11-02"
+  },
+  "SC-11-02-04": {
+   "state": "no_result",
+   "name": "Privacy status lists consents per channel in the app",
+   "epic": "EPIC-11",
+   "story": "STORY-11-02"
+  },
+  "SC-11-03-01": {
+   "state": "no_result",
+   "name": "Owner operational debts are claimable from the tenant up to the unpaid rent",
+   "epic": "EPIC-11",
+   "story": "STORY-11-03"
+  },
+  "SC-11-03-02": {
+   "state": "no_result",
+   "name": "Tenant payment of owner capital dues cites KMK 22 and issues a rent certificate",
+   "epic": "EPIC-11",
+   "story": "STORY-11-03"
+  },
+  "SC-11-04-01": {
+   "state": "no_result",
+   "name": "Each due dunning step is sent once and disputed items are paused",
+   "epic": "EPIC-11",
+   "story": "STORY-11-04"
+  },
+  "SC-11-04-02": {
+   "state": "no_result",
+   "name": "SMS opt-out blocks reminders but not legal notices",
+   "epic": "EPIC-11",
+   "story": "STORY-11-04"
+  },
+  "SC-11-04-03": {
+   "state": "no_result",
+   "name": "Debt notices to a group channel are blocked and logged",
+   "epic": "EPIC-11",
+   "story": "STORY-11-04"
+  },
+  "SC-11-05-01": {
+   "state": "no_result",
+   "name": "Tenant virman request settles the owner debt from the tenant advance",
+   "epic": "EPIC-11",
+   "story": "STORY-11-05"
+  },
+  "SC-11-05-02": {
+   "state": "no_result",
+   "name": "Resolving a dispute resumes dunning",
+   "epic": "EPIC-11",
+   "story": "STORY-11-05"
+  },
+  "SC-11-05-03": {
+   "state": "no_result",
+   "name": "Selecting open items enables a designated card payment",
+   "epic": "EPIC-11",
+   "story": "STORY-11-05"
+  },
+  "SC-11-05-04": {
+   "state": "no_result",
+   "name": "Designated amount is the sum of the selected items only",
+   "epic": "EPIC-11",
+   "story": "STORY-11-05"
+  },
+  "SC-11-06-01": {
+   "state": "no_result",
+   "name": "Autopay charges due items once through the ingestion path",
+   "epic": "EPIC-11",
+   "story": "STORY-11-06"
+  },
+  "SC-11-06-02": {
+   "state": "no_result",
+   "name": "Declined card keeps the due open and an expired card suspends the mandate",
+   "epic": "EPIC-11",
+   "story": "STORY-11-06"
+  },
+  "SC-11-07-01": {
+   "state": "no_result",
+   "name": "Expense approval needs four eyes and the auditor threshold",
+   "epic": "EPIC-11",
+   "story": "STORY-11-07"
+  },
+  "SC-11-07-02": {
+   "state": "no_result",
+   "name": "Trial balance balances and receivables equal open dues",
+   "epic": "EPIC-11",
+   "story": "STORY-11-07"
+  },
+  "SC-11-07-03": {
+   "state": "no_result",
+   "name": "Finance desk works over HTTP",
+   "epic": "EPIC-11",
+   "story": "STORY-11-07"
+  },
+  "SC-11-08-01": {
+   "state": "no_result",
+   "name": "Enforcement needs a legal basis and the lawyer reads the pack by token",
+   "epic": "EPIC-11",
+   "story": "STORY-11-08"
+  },
+  "SC-11-08-02": {
+   "state": "no_result",
+   "name": "KMK 25 flag is raised after three enforcements in two years",
+   "epic": "EPIC-11",
+   "story": "STORY-11-08"
+  },
+  "SC-11-09-01": {
+   "state": "no_result",
+   "name": "Transfer bypassing the virtual IBAN is ranked by phone and block-unit hints",
+   "epic": "EPIC-11",
+   "story": "STORY-11-09"
+  },
+  "SC-11-09-02": {
+   "state": "no_result",
+   "name": "Daily reconciliation stores differences and unmatched lines",
+   "epic": "EPIC-11",
+   "story": "STORY-11-09"
+  },
+  "SC-11-10-01": {
+   "state": "no_result",
+   "name": "Waiver approved by a second person lowers what is owed and the ledger balances",
+   "epic": "EPIC-11",
+   "story": "STORY-11-10"
+  },
+  "SC-11-10-02": {
+   "state": "no_result",
+   "name": "Kept plan completes and waives the penalty, a late plan breaks",
+   "epic": "EPIC-11",
+   "story": "STORY-11-10"
+  },
+  "SC-11-11-01": {
+   "state": "no_result",
+   "name": "Approved heating period shares add up and the occupant is billed",
+   "epic": "EPIC-11",
+   "story": "STORY-11-11"
+  },
+  "SC-11-12-01": {
+   "state": "no_result",
+   "name": "Accepted budget item produces a numbered decision that approves the budget",
+   "epic": "EPIC-11",
+   "story": "STORY-11-12"
+  },
+  "SC-11-13-01": {
+   "state": "no_result",
+   "name": "Each period is invoiced once and only members see the portfolio",
+   "epic": "EPIC-11",
+   "story": "STORY-11-13"
+  },
+  "SC-11-14-01": {
+   "state": "no_result",
+   "name": "Analytics report rates, channels, forecast and risky units",
+   "epic": "EPIC-11",
+   "story": "STORY-11-14"
+  },
+  "SC-12-01-01": {
+   "state": "no_result",
+   "name": "Preserve person history while adding normalized identity references",
+   "epic": "EPIC-12",
+   "story": "STORY-12-01"
+  },
+  "SC-12-02-01": {
+   "state": "no_result",
+   "name": "Moving to the next page shows the next unit range",
+   "epic": "EPIC-12",
+   "story": "STORY-12-02"
+  },
+  "SC-12-02-02": {
+   "state": "no_result",
+   "name": "Increasing page density reduces the number of pages",
+   "epic": "EPIC-12",
+   "story": "STORY-12-02"
+  },
+  "SC-12-02-03": {
+   "state": "passing",
+   "name": "The directory pager adapts to a narrow viewport",
+   "epic": "EPIC-12",
+   "story": "STORY-12-02"
+  },
+  "SC-12-02-04": {
+   "state": "no_result",
+   "name": "Large directories build only the visible unit rows",
+   "epic": "EPIC-12",
+   "story": "STORY-12-02"
+  },
+  "SC-12-02-05": {
+   "state": "passing",
+   "name": "Unit search folds Turkish names and phone digits",
+   "epic": "EPIC-12",
+   "story": "STORY-12-02"
+  },
+  "SC-12-02-06": {
+   "state": "passing",
+   "name": "Unit rows expose distinct actions and details targets",
+   "epic": "EPIC-12",
+   "story": "STORY-12-02"
+  },
+  "SC-12-02-07": {
+   "state": "passing",
+   "name": "Compact unit rows adapt from phone to desktop widths",
+   "epic": "EPIC-12",
+   "story": "STORY-12-02"
+  },
+  "SC-12-02-08": {
+   "state": "no_result",
+   "name": "Directory page and density survive app restoration",
+   "epic": "EPIC-12",
+   "story": "STORY-12-02"
+  },
+  "SC-12-02-09": {
+   "state": "no_result",
+   "name": "Unit search survives app restoration",
+   "epic": "EPIC-12",
+   "story": "STORY-12-02"
+  },
+  "SC-12-03-01": {
+   "state": "no_result",
+   "name": "Search through more than one hundred people",
+   "epic": "EPIC-12",
+   "story": "STORY-12-03"
+  },
+  "SC-12-03-02": {
+   "state": "no_result",
+   "name": "Explain why a person cannot take a role",
+   "epic": "EPIC-12",
+   "story": "STORY-12-03"
+  },
+  "SC-12-03-03": {
+   "state": "no_result",
+   "name": "Explain duplicate candidates before creating a person",
+   "epic": "EPIC-12",
+   "story": "STORY-12-03"
+  },
+  "SC-12-03-04": {
+   "state": "passing",
+   "name": "Choose an existing person through the live search API",
+   "epic": "EPIC-12",
+   "story": "STORY-12-03"
+  },
+  "SC-12-04-01": {
+   "state": "passing",
+   "name": "People paging and activation filters use the server query",
+   "epic": "EPIC-12",
+   "story": "STORY-12-04"
+  },
+  "SC-12-04-02": {
+   "state": "passing",
+   "name": "People search and directory position survive restoration",
+   "epic": "EPIC-12",
+   "story": "STORY-12-04"
+  },
+  "SC-12-05-01": {
+   "state": "no_result",
+   "name": "Search offers people with role eligibility for the unit",
+   "epic": "EPIC-12",
+   "story": "STORY-12-05"
+  },
+  "SC-12-05-02": {
+   "state": "no_result",
+   "name": "Creating a card reports possible duplicates unless confirmed",
+   "epic": "EPIC-12",
+   "story": "STORY-12-05"
+  },
+  "SC-12-05-03": {
+   "state": "no_result",
+   "name": "Editing a card needs the current version",
+   "epic": "EPIC-12",
+   "story": "STORY-12-05"
+  },
+  "SC-12-05-04": {
+   "state": "no_result",
+   "name": "Actions accept an existing person or a new card",
+   "epic": "EPIC-12",
+   "story": "STORY-12-05"
+  },
+  "SC-12-05-05": {
+   "state": "no_result",
+   "name": "The primary contact is selected by person",
+   "epic": "EPIC-12",
+   "story": "STORY-12-05"
+  },
+  "SC-12-05-06": {
+   "state": "no_result",
+   "name": "Search accepts numeric paging query parameters",
+   "epic": "EPIC-12",
+   "story": "STORY-12-05"
+  },
+  "SC-12-06-01": {
+   "state": "no_result",
+   "name": "Register a unit with people chosen from person cards",
+   "epic": "EPIC-12",
+   "story": "STORY-12-06"
+  },
+  "SC-12-06-02": {
+   "state": "no_result",
+   "name": "Edit a unit without retyping a person's identity",
+   "epic": "EPIC-12",
+   "story": "STORY-12-06"
+  },
+  "SC-12-06-03": {
+   "state": "no_result",
+   "name": "Choose the primary contact by person id",
+   "epic": "EPIC-12",
+   "story": "STORY-12-06"
+  },
+  "SC-12-06-04": {
+   "state": "passing",
+   "name": "Unit actions started from the residents tab choose people through the person picker",
+   "epic": "EPIC-12",
+   "story": "STORY-12-06"
+  },
+  "SC-12-07-01": {
+   "state": "no_result",
+   "name": "Unit to person to unit navigation keeps list state and focus",
+   "epic": "EPIC-12",
+   "story": "STORY-12-07"
+  },
+  "SC-12-07-02": {
+   "state": "no_result",
+   "name": "A card edit updates every visible unit role",
+   "epic": "EPIC-12",
+   "story": "STORY-12-07"
+  },
+  "SC-12-07-03": {
+   "state": "no_result",
+   "name": "Login and role actions start from the person card",
+   "epic": "EPIC-12",
+   "story": "STORY-12-07"
+  },
+  "SC-12-08-01": {
+   "state": "no_result",
+   "name": "Merge asks for a password check and then merges the card",
+   "epic": "EPIC-12",
+   "story": "STORY-12-08"
+  },
+  "SC-12-08-02": {
+   "state": "no_result",
+   "name": "A card cannot be merged into itself",
+   "epic": "EPIC-12",
+   "story": "STORY-12-08"
+  },
+  "SC-12-09-01": {
+   "state": "no_result",
+   "name": "The Excel template matches the import columns",
+   "epic": "EPIC-12",
+   "story": "STORY-12-09"
+  },
+  "SC-12-09-02": {
+   "state": "no_result",
+   "name": "A file that is not an Excel workbook is rejected",
+   "epic": "EPIC-12",
+   "story": "STORY-12-09"
+  },
+  "SC-12-10-01": {
+   "state": "no_result",
+   "name": "Creating the same person repeatedly never produces a second card",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-02": {
+   "state": "no_result",
+   "name": "Editing a card repeatedly raises the version once per edit and rejects stale versions",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-03": {
+   "state": "no_result",
+   "name": "Opening and removing a login repeatedly keeps the login status correct",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-04": {
+   "state": "no_result",
+   "name": "Opening the login twice in a row reuses the same account",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-05": {
+   "state": "no_result",
+   "name": "A person's card follows the unit actions and keeps the whole relation history",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-06": {
+   "state": "no_result",
+   "name": "Choosing the same existing person for an action repeatedly creates no new card",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-07": {
+   "state": "no_result",
+   "name": "Contact preferences saved repeatedly keep the last values",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-08": {
+   "state": "no_result",
+   "name": "Setting the national id repeatedly keeps it masked and unique",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-09": {
+   "state": "no_result",
+   "name": "Duplicate cards are merged and the surviving card keeps the history",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-10": {
+   "state": "no_result",
+   "name": "Person actions of another site are refused every time",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-11": {
+   "state": "no_result",
+   "name": "A person's move-out also moves out their dependents and the cards show it",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  }
+ },
+ "catalogue_history": [
+  {
+   "date": "2026-09-22",
+   "epics": 5,
+   "stories": 28,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-09-23",
+   "epics": 6,
+   "stories": 34,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-09-25",
+   "epics": 6,
+   "stories": 34,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-09-26",
+   "epics": 7,
+   "stories": 40,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-09-27",
+   "epics": 7,
+   "stories": 42,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-09-30",
+   "epics": 7,
+   "stories": 42,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-10-11",
+   "epics": 7,
+   "stories": 42,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-10-12",
+   "epics": 7,
+   "stories": 43,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-10-24",
+   "epics": 8,
+   "stories": 47,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-10-28",
+   "epics": 9,
+   "stories": 55,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-10-29",
+   "epics": 10,
+   "stories": 62,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-11-08",
+   "epics": 10,
+   "stories": 62,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-11-09",
+   "epics": 11,
+   "stories": 62,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-11-11",
+   "epics": 11,
+   "stories": 63,
+   "stories_with_scenarios": 0,
+   "scenarios": 0,
+   "automated": 0
+  },
+  {
+   "date": "2026-11-14",
+   "epics": 12,
+   "stories": 83,
+   "stories_with_scenarios": 83,
+   "scenarios": 190,
+   "automated": 126
+  },
+  {
+   "date": "2026-11-15",
+   "epics": 12,
+   "stories": 91,
+   "stories_with_scenarios": 91,
+   "scenarios": 225,
+   "automated": 151
+  },
+  {
+   "date": "2026-11-16",
+   "epics": 12,
+   "stories": 91,
+   "stories_with_scenarios": 91,
+   "scenarios": 227,
+   "automated": 200
+  },
+  {
+   "date": "2026-11-17",
+   "epics": 12,
+   "stories": 100,
+   "stories_with_scenarios": 100,
+   "scenarios": 283,
+   "automated": 228
+  },
+  {
+   "date": "2026-11-18",
+   "epics": 12,
+   "stories": 100,
+   "stories_with_scenarios": 100,
+   "scenarios": 296,
+   "automated": 246
+  }
+ ],
+ "recent_changes": [
+  {
+   "date": "2026-11-18",
+   "epic": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "new_stories": 0,
+   "new_scenarios": 9,
+   "newly_automated": 4,
+   "items": 10,
+   "samples": [
+    "SC-09-04-05: Payment dates in the future or beyond the backdating window are rejected",
+    "SC-09-04-06: A backdated payment re-evaluates the late fee charged after its payment date",
+    "SC-09-04-07: Late fee already paid above the recalculated amount moves to the payer's advance",
+    "SC-09-05-02: Approver cannot approve their own advance settlement request"
+   ]
+  },
+  {
+   "date": "2026-11-18",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 0,
+   "new_scenarios": 4,
+   "newly_automated": 0,
+   "items": 4,
+   "samples": [
+    "SC-08-03-02: Move-out can keep the advance without changing the balance",
+    "SC-08-03-03: Move-out payout is debited only after four-eyes approval",
+    "SC-08-03-04: Move-out transfer changes debtor only after four-eyes approval",
+    "SC-08-05-03: Previous owner's advance is paid out or transferred only with a second approver"
+   ]
+  },
+  {
+   "date": "2026-11-18",
+   "epic": "EPIC-07",
+   "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 13,
+   "items": 13,
+   "samples": [
+    "SC-07-08-01: Another spelling of an accrued month is a duplicate",
+    "SC-07-08-02: A due date outside the period is rejected",
+    "SC-07-08-03: A failure partway through a batch writes nothing",
+    "SC-07-08-04: Skipped units are reported with their reason"
+   ]
+  },
+  {
+   "date": "2026-11-18",
+   "epic": "EPIC-02",
+   "title": "Site Manager Financial Oversight & Community Operations",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 1,
+   "items": 1,
+   "samples": [
+    "SC-02-04-02: Send reminder to overdue resident"
+   ]
+  },
+  {
+   "date": "2026-11-17",
+   "epic": "EPIC-12",
+   "title": "Unified People and Unit Directory",
+   "new_stories": 2,
+   "new_scenarios": 13,
+   "newly_automated": 13,
+   "items": 2,
+   "samples": [
+    "STORY-12-09: Person import from Excel",
+    "STORY-12-10: Person actions repeated in cycles"
+   ]
+  },
+  {
+   "date": "2026-11-17",
+   "epic": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "new_stories": 0,
+   "new_scenarios": 1,
+   "newly_automated": 0,
+   "items": 1,
+   "samples": [
+    "SC-09-04-05: Payment dates in the future or beyond the backdating window are rejected"
+   ]
+  },
+  {
+   "date": "2026-11-17",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 1,
+   "new_scenarios": 13,
+   "newly_automated": 13,
+   "items": 1,
+   "samples": [
+    "STORY-08-12: Unit actions repeated in cycles"
+   ]
+  },
+  {
+   "date": "2026-11-17",
+   "epic": "EPIC-07",
+   "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
+   "new_stories": 6,
+   "new_scenarios": 29,
+   "newly_automated": 1,
+   "items": 6,
+   "samples": [
+    "STORY-07-08: Canonical Billing Period & Atomic Accrual Batch",
+    "STORY-07-09: Occupancy-Aware Accrual & Proration",
+    "STORY-07-10: Accrual Schedule, Catch-Up & Grace Period",
+    "STORY-07-11: Accrual Corrections (Cancel, Re-issue, Credit Note)"
+   ]
+  },
+  {
+   "date": "2026-11-17",
+   "epic": "EPIC-02",
+   "title": "Site Manager Financial Oversight & Community Operations",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 1,
+   "items": 1,
+   "samples": [
+    "SC-02-01-06: Display complex collection progress with the unit status breakdown"
+   ]
+  },
+  {
+   "date": "2026-11-16",
+   "epic": "EPIC-12",
+   "title": "Unified People and Unit Directory",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 8,
+   "items": 8,
+   "samples": [
+    "SC-12-01-01: Preserve person history while adding normalized identity references",
+    "SC-12-02-01: Moving to the next page shows the next unit range",
+    "SC-12-02-02: Increasing page density reduces the number of pages",
+    "SC-12-02-03: The directory pager adapts to a narrow viewport"
+   ]
+  },
+  {
+   "date": "2026-11-16",
+   "epic": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 6,
+   "items": 6,
+   "samples": [
+    "SC-09-01-02: Debt aging buckets total the overdue sum",
+    "SC-09-02-02: Owner payment settles capital dues after operational dues",
+    "SC-09-05-01: Move-out freezes tenant balance and shifts recurring accrual to owner",
+    "SC-09-06-01: Tenant pays elevator fixture fee on behalf of landlord"
+   ]
+  },
+  {
+   "date": "2026-11-16",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 31,
+   "items": 31,
+   "samples": [
+    "SC-08-02-02: Household members are archived when the resident moves out",
+    "SC-08-02-03: A possible household person duplicate requires manager confirmation",
+    "SC-08-04-02: Tenant move-in opens an active tenant session",
+    "SC-08-05-02: Capital dues after the transfer are billed to the new owner"
+   ]
+  },
+  {
+   "date": "2026-11-16",
+   "epic": "EPIC-07",
+   "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
+   "new_stories": 0,
+   "new_scenarios": 2,
+   "newly_automated": 2,
+   "items": 2,
+   "samples": [
+    "SC-07-06-03: Excel upload offers a sample for each catalogued Excel bank",
+    "SC-07-06-04: Excel sample options exclude banks without an Excel format"
+   ]
+  },
+  {
+   "date": "2026-11-16",
+   "epic": "EPIC-01",
+   "title": "Resident Dues Management & Financial Transparency",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 2,
+   "items": 2,
+   "samples": [
+    "SC-01-01-01: Preserve kurus-level precision in dues calculation",
+    "SC-01-04-03: Action buttons meet touch target size and unapproved features are hidden"
+   ]
+  },
+  {
+   "date": "2026-11-15",
+   "epic": "EPIC-12",
+   "title": "Unified People and Unit Directory",
+   "new_stories": 7,
+   "new_scenarios": 30,
+   "newly_automated": 23,
+   "items": 7,
+   "samples": [
+    "STORY-12-02: Compact unit directory",
+    "STORY-12-03: Shared person selection components",
+    "STORY-12-04: People directory",
+    "STORY-12-05: Person card API and reference-based commands"
+   ]
+  },
+  {
+   "date": "2026-11-15",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 1,
+   "new_scenarios": 5,
+   "newly_automated": 2,
+   "items": 1,
+   "samples": [
+    "STORY-08-11: Actions-First Unit Workspace"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-12",
+   "title": "Unified People and Unit Directory",
+   "new_stories": 1,
+   "new_scenarios": 1,
+   "newly_automated": 0,
+   "items": 1,
+   "samples": [
+    "STORY-12-01: Person schema foundations"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-11",
+   "title": "Payments Phase 3 (Compliance Gates, Collections, Accounting and Governance)",
+   "new_stories": 14,
+   "new_scenarios": 30,
+   "newly_automated": 30,
+   "items": 14,
+   "samples": [
+    "STORY-11-01: Allocation keys and the 90-day transition",
+    "STORY-11-02: Privacy notice, channel consents and retention",
+    "STORY-11-03: KMK 22 tenant claim cap and rent certificate",
+    "STORY-11-04: Dunning schedule and lawful channels"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-10",
+   "title": "Capital Expenditure & Fixture Dues Management (Demirba\u015f & Yat\u0131r\u0131m Projeleri)",
+   "new_stories": 0,
+   "new_scenarios": 15,
+   "newly_automated": 11,
+   "items": 15,
+   "samples": [
+    "SC-10-01-01: Budget is split by land share without rounding drift",
+    "SC-10-01-02: Equal allocation gives every unit the same share",
+    "SC-10-02-01: Accruing an installment charges owners only",
+    "SC-10-03-01: Owner FAST payment raises the collected amount of the project"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "new_stories": 0,
+   "new_scenarios": 14,
+   "newly_automated": 8,
+   "items": 14,
+   "samples": [
+    "SC-09-01-01: Filter payment stream by tenant payments for current month",
+    "SC-09-01-02: Debt aging buckets total the overdue sum",
+    "SC-09-02-01: Settle delay penalty first, then oldest dues, then credit surplus as advance",
+    "SC-09-02-02: Owner payment settles capital dues after operational dues"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 5,
+   "new_scenarios": 33,
+   "newly_automated": 5,
+   "items": 5,
+   "samples": [
+    "STORY-08-06: Owner Move-In Without Ownership Change",
+    "STORY-08-07: Guarded State Transitions",
+    "STORY-08-08: Compound Transitions Preserve Exit Settlement",
+    "STORY-08-09: Title Deed Transfer Keeps Occupancy Consistent"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-07",
+   "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
+   "new_stories": 0,
+   "new_scenarios": 18,
+   "newly_automated": 17,
+   "items": 18,
+   "samples": [
+    "SC-07-01-01: Automated allocation of a virtual IBAN upon unit setup",
+    "SC-07-01-02: Resident dashboard includes the allocated virtual IBAN",
+    "SC-07-02-01: Site manager uploads a bank statement Excel file",
+    "SC-07-02-02: Approving a matched row clears the resident's balance"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-06",
+   "title": "Identity, Authentication & Scoped Permission Model",
+   "new_stories": 0,
+   "new_scenarios": 24,
+   "newly_automated": 19,
+   "items": 24,
+   "samples": [
+    "SC-06-01-01: Home resident is restricted from site-wide management",
+    "SC-06-02-01: User registers and authenticates with password",
+    "SC-06-02-02: Site manager signs in and reaches the cockpit",
+    "SC-06-02-03: Home owner signs in and reaches the resident dashboard"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-05",
+   "title": "Backend Persistence, REST APIs & Verification Harness",
+   "new_stories": 0,
+   "new_scenarios": 6,
+   "newly_automated": 1,
+   "items": 6,
+   "samples": [
+    "SC-05-01-01: SQL migrations execute with strict NUMERIC types",
+    "SC-05-02-01: Prevent concurrent balance modification race conditions",
+    "SC-05-03-01: REST endpoint provides real-time calculated dues",
+    "SC-05-04-01: Verification gate rejects floating-point rounding leaks"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-04",
+   "title": "Digital Resident Self-Registration & Approval Queue",
+   "new_stories": 0,
+   "new_scenarios": 10,
+   "newly_automated": 7,
+   "items": 10,
+   "samples": [
+    "SC-04-01-01: Generate 7-day secure invite link",
+    "SC-04-02-01: Site Admin copies or shares invite link",
+    "SC-04-02-02: Empty approval queue shows an empty state",
+    "SC-04-03-01: Home owner submits online registration"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-03",
+   "title": "SaaS Multi-Tenancy & Autonomous Site Onboarding",
+   "new_stories": 0,
+   "new_scenarios": 13,
+   "newly_automated": 9,
+   "items": 13,
+   "samples": [
+    "SC-03-01-01: Query operations strictly scoped by tenant",
+    "SC-03-02-01: SaaS Admin views portfolio overview",
+    "SC-03-02-02: Portfolio statistics agree with the site list",
+    "SC-03-03-01: SaaS Admin creates new site and provisions first Site Admin"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-02",
+   "title": "Site Manager Financial Oversight & Community Operations",
+   "new_stories": 0,
+   "new_scenarios": 17,
+   "newly_automated": 12,
+   "items": 17,
+   "samples": [
+    "SC-02-01-01: Cockpit shows the accrued total before any payment",
+    "SC-02-01-02: Cockpit counts a payment as collected",
+    "SC-02-01-03: Cockpit amounts keep kurus",
+    "SC-02-01-04: House type tariff is saved and a negative amount is rejected"
+   ]
+  },
+  {
+   "date": "2026-11-14",
+   "epic": "EPIC-01",
+   "title": "Resident Dues Management & Financial Transparency",
+   "new_stories": 0,
+   "new_scenarios": 9,
+   "newly_automated": 7,
+   "items": 9,
+   "samples": [
+    "SC-01-01-01: Preserve kurus-level precision in dues calculation",
+    "SC-01-02-01: Calculate 10-day overdue statutory delay penalty",
+    "SC-01-03-01: Emit reactive state on dashboard launch",
+    "SC-01-03-02: Site announcement reaches the resident"
+   ]
+  },
+  {
+   "date": "2026-11-11",
+   "epic": "EPIC-06",
+   "title": "Identity, Authentication & Scoped Permission Model",
+   "new_stories": 1,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 1,
+   "samples": [
+    "STORY-06-06: Forced Password Change Gate Before Any Operation"
+   ]
+  },
+  {
+   "date": "2026-10-29",
+   "epic": "EPIC-10",
+   "title": "Capital Expenditure & Fixture Dues Management (Demirba\u015f & Yat\u0131r\u0131m Projeleri)",
+   "new_stories": 7,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 7,
+   "samples": [
+    "STORY-10-01: Capital Project Creation & Budget Allocation Wizard",
+    "STORY-10-02: Multi-Stage Installment Scheduling & Automatic Accrual Batch Generation",
+    "STORY-10-03: Dual-Ledger Capital Payment Ingestion & TBK 314 Rent-Offset Receipts",
+    "STORY-10-04: Inter-Ledger Virman Engine (Advance Balance Offset Against Capital Dues)"
+   ]
+  },
+  {
+   "date": "2026-10-28",
+   "epic": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "new_stories": 7,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 7,
+   "samples": [
+    "STORY-09-01: Unified Payment Inflow Stream & Multi-Channel Transaction Ledger",
+    "STORY-09-02: Dual-Ledger FIFO Payment Allocation & KMK Interest Settlement Engine",
+    "STORY-09-03: Real-Time Debt Aging, Delinquency Tracking & Sub-Ledger (Cari Hesap) Ekstresi",
+    "STORY-09-04: Official Digital Payment Receipt Generation (`#TAH-2026-XXXX`) & Voucher Export"
+   ]
+  },
+  {
+   "date": "2026-10-28",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 1,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 1,
+   "samples": [
+    "STORY-08-05: Title Deed Transfer & Property Ownership Sale Handover (M\u00fclk Sat\u0131\u015f / Malik De\u011fi\u015fikli\u011fi)"
+   ]
+  },
+  {
+   "date": "2026-10-24",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 4,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 4,
+   "samples": [
+    "STORY-08-01: Dual-Ledger Financial Responsibility Separation",
+    "STORY-08-02: Unit Occupancy State Machine & Household Resident Scoping",
+    "STORY-08-03: Zero-Data-Loss Move-Out (Tahliye) & Exit Settlement",
+    "STORY-08-04: Move-In & Historical Occupancy Audit Trail"
+   ]
+  },
+  {
+   "date": "2026-10-12",
+   "epic": "EPIC-07",
+   "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
+   "new_stories": 1,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 1,
+   "samples": [
+    "STORY-07-07: Monthly Dues Periodic Accrual & Duplicate Prevention (Tokio Batch Scheduler & Manager UI Action)"
+   ]
+  },
+  {
+   "date": "2026-09-27",
+   "epic": "EPIC-03",
+   "title": "SaaS Multi-Tenancy & Autonomous Site Onboarding",
+   "new_stories": 2,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 2,
+   "samples": [
+    "STORY-03-06: Deletion of Inactive / Action-Free Sites",
+    "STORY-03-07: Temporary Password Renewal & Recovery for Site Managers"
+   ]
+  },
+  {
+   "date": "2026-09-26",
+   "epic": "EPIC-07",
+   "title": "Bank Account Integration, Virtual IBAN & Automated Dues Reconciliation",
+   "new_stories": 6,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 6,
+   "samples": [
+    "STORY-07-01: Flat-Specific Virtual IBAN (Sanal IBAN) Allocation",
+    "STORY-07-02: Zero-Approval Bank Statement (Excel / CSV / MT940) Parser",
+    "STORY-07-03: Real-Time Bank Webhook & Payment Notification Listener",
+    "STORY-07-04: Dynamic FAST TR-Karekod Generation for Mobile Banking Apps"
+   ]
+  },
+  {
+   "date": "2026-09-23",
+   "epic": "EPIC-06",
+   "title": "Identity, Authentication & Scoped Permission Model",
+   "new_stories": 5,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 5,
+   "samples": [
+    "STORY-06-01: Multi-Role Scoped Permission Matrix (RBAC & Unit Isolation)",
+    "STORY-06-02: Email & Password Registration & Secure Authentication",
+    "STORY-06-03: Google OAuth2 / ID Token Authentication & Account Linking",
+    "STORY-06-04: JWT Token Minting & Claim-Based Authorization"
+   ]
+  },
+  {
+   "date": "2026-09-23",
+   "epic": "EPIC-04",
+   "title": "Digital Resident Self-Registration & Approval Queue",
+   "new_stories": 1,
+   "new_scenarios": 0,
+   "newly_automated": 0,
+   "items": 1,
+   "samples": [
+    "STORY-04-07: Unit-Scoped Co-Resident Invitation Link & Home Permissions"
+   ]
+  }
+ ]
+}
