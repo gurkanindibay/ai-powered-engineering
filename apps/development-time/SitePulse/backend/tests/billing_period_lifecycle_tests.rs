@@ -55,6 +55,7 @@ fn liability(id: &str, amount: &str, paid: &str) -> DuesLiability {
         debtor_type: DebtorType::Owner,
         expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
+        grace_days: 0,
     }
 }
 
