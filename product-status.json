@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-18T04:28:53Z",
- "run_id": "20261118T042852Z-e8c69b6",
- "commit": "e8c69b6258e88b236a8d44333c1e5fe2f167a44a",
+ "generated_at": "2026-11-18T04:37:59Z",
+ "run_id": "20261118T043758Z-5a17636",
+ "commit": "5a17636083daa32351293745a5144ca712c0e381",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 116,
-  "seconds": 1938.3,
+  "seconds": 2189.3,
   "files": 8,
   "unparseable": []
  },
@@ -19,12 +19,12 @@
   "stories": 100,
   "stories_with_scenarios": 100,
   "stories_passing": 27,
-  "scenarios": 283,
-  "automated": 229,
+  "scenarios": 285,
+  "automated": 230,
   "passing": 102,
   "failing": 0,
-  "no_result": 127,
-  "planned": 54,
+  "no_result": 128,
+  "planned": 55,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -148,12 +148,12 @@
    "stories": 7,
    "stories_with_scenarios": 7,
    "stories_passing": 2,
-   "scenarios": 15,
-   "automated": 14,
+   "scenarios": 17,
+   "automated": 15,
    "passing": 9,
    "failing": 0,
-   "no_result": 5,
-   "planned": 1,
+   "no_result": 6,
+   "planned": 2,
    "health": "in_progress"
   },
   {
@@ -1348,13 +1348,25 @@
   },
   "SC-09-06-01": {
    "state": "no_result",
-   "name": "Tenant pays elevator fixture fee on behalf of landlord",
+   "name": "Manager confirms tenant payment for landlord fixture fee",
    "epic": "EPIC-09",
    "story": "STORY-09-06"
   },
   "SC-09-06-02": {
    "state": "no_result",
    "name": "Advance balance is transferred to the owner's capital dues in one click",
+   "epic": "EPIC-09",
+   "story": "STORY-09-06"
+  },
+  "SC-09-06-03": {
+   "state": "planned",
+   "name": "A capital keyword alone does not redirect a tenant payment",
+   "epic": "EPIC-09",
+   "story": "STORY-09-06"
+  },
+  "SC-09-06-04": {
+   "state": "no_result",
+   "name": "Tenant webhook capital intent waits for manager review",
    "epic": "EPIC-09",
    "story": "STORY-09-06"
   },
@@ -2049,11 +2061,24 @@
    "epics": 12,
    "stories": 100,
    "stories_with_scenarios": 100,
-   "scenarios": 283,
-   "automated": 229
+   "scenarios": 285,
+   "automated": 230
   }
  ],
  "recent_changes": [
+  {
+   "date": "2026-11-18",
+   "epic": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "new_stories": 0,
+   "new_scenarios": 2,
+   "newly_automated": 1,
+   "items": 2,
+   "samples": [
+    "SC-09-06-03: A capital keyword alone does not redirect a tenant payment",
+    "SC-09-06-04: Tenant webhook capital intent waits for manager review"
+   ]
+  },
   {
    "date": "2026-11-18",
    "epic": "EPIC-02",
@@ -2542,5 +2567,5 @@
    ]
   }
  ],
- "href": "reports/44236861200-1/"
+ "href": "reports/44237026947-1/"
 }
