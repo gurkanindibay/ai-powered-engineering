@@ -220,3 +220,113 @@ async fn when_the_stored_fee_differs_from_the_evaluation_then_the_check_reports_
     assert!(after.consistent, "{:?}", after.mismatches);
     assert_eq!(after.liabilities_checked, 1);
 }
+
+/// Approves a STORY-07-11 credit note on `due_id` (requested and approved by two
+/// different managers) and returns the stored correction.
+async fn approve_credit_note(state: &AppState, due_id: &str, amount: &str) -> AccrualCorrection {
+    use sitepulse_backend::services::correction_service::CorrectionService;
+    use sitepulse_backend::services::finance_common::Caller;
+    let manager = |user: &str| Caller {
+        site_id: SITE.to_string(),
+        user_id: user.to_string(),
+        email: format!("{}@begonya.com", user),
+        role: Role::SiteManager,
+        unit_id: None,
+    };
+    let corrections = CorrectionService::new(state);
+    let requested = corrections
+        .request(
+            &manager("usr-site-manager-1"),
+            RequestCorrectionRequest {
+                due_id: due_id.into(),
+                kind: "CREDIT_NOTE".into(),
+                amount: Some(d(amount)),
+                due_date: None,
+                debtor_type: None,
+                reason: "budget revision".into(),
+            },
+        )
+        .await
+        .unwrap();
+    corrections
+        .decide(
+            &manager("usr-site-manager-2"),
+            requested.id,
+            DecideRequest {
+                approve: true,
+                note: None,
+            },
+        )
+        .await
+        .unwrap()
+}
+
+// covers: SC-07-13-03
+// A credit note on a fee the daily job already booked day by day: the ledger books
+// the gross fee from the day rows and the correction reverses its share, so the
+// receivable is the reduced liability (STORY-07-11 x STORY-07-13).
+#[tokio::test]
+async fn when_a_credit_note_follows_daily_accruals_then_the_trial_balance_matches_the_liability() {
+    let due = liability("lf-cn-1", "1400.00", today() - Days::new(10));
+    let state = state_with(due).await;
+    LateFeeService::new(&state).run_site(SITE).await;
+    let accrued = stored(&state, "lf-cn-1").await;
+    assert_eq!(accrued.delay_penalty, d("23.33"));
+    assert!(
+        state
+            .inner
+            .read()
+            .await
+            .finance
+            .late_fee_accruals
+            .iter()
+            .any(|a| a.due_id == "lf-cn-1"),
+        "the daily job wrote day rows before the credit note"
+    );
+
+    let correction = approve_credit_note(&state, "lf-cn-1", "700.00").await;
+    assert_eq!(correction.penalty_reversed, Some(d("11.66")));
+    let reduced = stored(&state, "lf-cn-1").await;
+    assert_eq!(reduced.principal_amount, d("700.00"));
+    assert_eq!(reduced.delay_penalty, d("11.67"));
+
+    let tb = AccountingService::new(&state)
+        .trial_balance(SITE, None, None)
+        .await;
+    assert!(tb.balanced);
+    let row = |code: &str| tb.rows.iter().find(|r| r.account_code == code).cloned();
+    assert_eq!(row("120").unwrap().balance, d("711.67"));
+    assert_eq!(row("642").unwrap().balance.abs(), d("11.67"));
+    // The dashboard's live evaluation agrees with the ledger.
+    let live = DuesCalculationService::new().calculate_delay_penalty(reduced, today());
+    assert_eq!(live.total_amount, d("711.67"));
+}
+
+// covers: SC-07-13-02
+// After a credit note the job starts a new segment from the reduced fee; the next
+// day's stored fee must still equal the live evaluation of that day.
+#[tokio::test]
+async fn when_the_job_runs_the_day_after_a_credit_note_then_the_fee_matches_the_evaluation() {
+    let due = liability("lf-cn-2", "1400.00", today() - Days::new(10));
+    let state = state_with(due).await;
+    LateFeeService::new(&state).run_site(SITE).await;
+    approve_credit_note(&state, "lf-cn-2", "700.00").await;
+    let reduced = stored(&state, "lf-cn-2").await;
+    let last = state
+        .inner
+        .read()
+        .await
+        .finance
+        .late_fee_accruals
+        .iter()
+        .filter(|a| a.due_id == "lf-cn-2")
+        .max_by_key(|a| a.accrual_date)
+        .cloned();
+
+    let tomorrow = today().succ_opt().unwrap();
+    let (rows, next) =
+        plan_accruals(SITE, &reduced, last.as_ref(), tomorrow).expect("one new day to accrue");
+    assert_eq!(rows.len(), 1);
+    let live = DuesCalculationService::new().calculate_delay_penalty(reduced, tomorrow);
+    assert_eq!(next.delay_penalty, live.delay_penalty);
+}
