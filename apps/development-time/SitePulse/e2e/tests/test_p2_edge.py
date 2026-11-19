@@ -138,18 +138,25 @@ def test_adding_a_resident_to_an_occupied_unit_warns_and_saves_nothing(login_as,
 @pytest.mark.role_homeowner
 @pytest.mark.covers("SC-04-07-02")
 @pytest.mark.gui_id("GUI-04-07")
-def test_co_resident_joins_through_a_unit_invite(login_page, page, api, actors):
+def test_co_resident_joins_through_a_unit_invite(login_page, page, api, actors, stack):
     owner = api.login(**actors["homeowner"])
     link = api.call("GET", f"/api/v1/home-residents/invite-link/{owner.user['unit_id']}?site_id=1", owner.token)
     joined = api.call("POST", "/api/v1/home-residents/register", body={
         "token": link["token"], "full_name": "Zeynep Kaya", "email": "zeynep.kaya@e2e.test",
         "phone": "+90 542 333 44 55", "relationship": "SPOUSE"})
     zeynep = api.login("zeynep.kaya@e2e.test", joined["temporary_password"])
+    assert zeynep.user["role"] == "HOME_RESIDENT"
     assert zeynep.user["unit_id"] == owner.user["unit_id"]
-    with pytest.raises(ApiError, match="-> 403"):
-        api.call("GET", "/api/v1/residents/1/dashboard", zeynep.token)
-    # A temporary password must be changed before any other operation.
+    # A temporary password must be changed before other authenticated operations.
     api.change_password("zeynep.kaya@e2e.test", joined["temporary_password"], "E2E-Zeynep-Kaya-7")
+    zeynep = api.login("zeynep.kaya@e2e.test", "E2E-Zeynep-Kaya-7")
+    api.call("GET", f"/api/v1/residents/{zeynep.user['unit_id']}/dashboard", zeynep.token)
+    other_unit_id = stack.sql(
+        f"SELECT id FROM units WHERE id <> {int(zeynep.user['unit_id'])} ORDER BY id LIMIT 1;"
+    )
+    assert other_unit_id, "the seed must include another unit for the cross-unit authorization check"
+    with pytest.raises(ApiError, match="-> (403|404)"):
+        api.call("GET", f"/api/v1/residents/{other_unit_id}/dashboard", zeynep.token)
     login_page.login("homeowner", "zeynep.kaya@e2e.test", "E2E-Zeynep-Kaya-7")
     ResidentHome(page).wait()
 
