@@ -279,8 +279,8 @@ def _create_structure(stack: E2EStack, site_id: str, manifest: JourneyManifest) 
         f"INSERT INTO house_types (site_id, type_name, dues_amount, description) VALUES "
         f"({site}, 'Flat', 1500.00, 'Journey reference tariff'), "
         f"({site}, 'Large flat', 2250.00, 'Journey reference tariff'); "
-        "INSERT INTO units (block_id, site_id, unit_number, floor, land_share, occupancy_status, house_type, house_type_id) "
-        f"SELECT b.id, {site}, n.unit_number, 1, 1, 'VACANT', h.type_name, h.id "
+        "INSERT INTO units (block_id, site_id, unit_number, floor, land_share, occupancy_status, house_type, house_type_id, created_at) "
+        f"SELECT b.id, {site}, n.unit_number, 1, 1, 'VACANT', h.type_name, h.id, TIMESTAMPTZ '2026-09-01 00:00:00+00' "
         "FROM blocks b CROSS JOIN (VALUES (1), (2), (3), (4), (5), (6), (7)) AS n(unit_number) "
         "JOIN house_types h ON h.site_id = b.site_id AND h.type_name = CASE WHEN n.unit_number = 6 THEN 'Large flat' ELSE 'Flat' END "
         f"WHERE b.site_id = {site} AND b.block_name = 'A Blok' ORDER BY n.unit_number; "
@@ -327,7 +327,7 @@ def _build_f4(stack: E2EStack, site_id: str | int, unit_ids: tuple[str, ...]) ->
         f"FROM dues_liabilities d WHERE d.unit_id = {u6} AND d.period = 'Ekim 2026'; "
         f"INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, total_amount, payment_channel, allocated_principal, allocated_penalty, allocated_advance, verification_hash, issued_at) "
         f"VALUES ({site}, {u1}, 'TAH-2026-000001', 1, 'Ayşe Kaya', 'OWNER', 1500.00, 'BANK_STATEMENT', 1500.00, 0.00, 0.00, encode(sha256(('receipt-' || {site} || '-1')::bytea), 'hex'), TIMESTAMPTZ '2026-10-10 10:00:00+03'); "
-        f"INSERT INTO receipt_counters (site_id, last_sequence) VALUES ({site}, 1) ON CONFLICT (site_id) DO UPDATE SET last_sequence = EXCLUDED.last_sequence; "
+        f"INSERT INTO receipt_counters (site_id, receipt_type, last_sequence) VALUES ({site}, 'COLLECTION', 1) ON CONFLICT (site_id, receipt_type) DO UPDATE SET last_sequence = EXCLUDED.last_sequence; "
         f"INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, payment_date, created_at) "
         f"SELECT {site}, {u1}, 'Ayşe Kaya', 'OWNER', r.id, 1500.00, 'BANK_STATEMENT', 'SETTLED', 'Ekim 2026 aidat ödemesi', TIMESTAMPTZ '2026-10-10 10:00:00+03', TIMESTAMPTZ '2026-10-10 10:00:00+03' "
         f"FROM payment_receipts r WHERE r.site_id = {site} AND r.sequence_number = 1; "
@@ -438,8 +438,8 @@ def _build_f5(stack: E2EStack, site_id: str | int, unit_ids: tuple[str, ...]) ->
         f"WHERE pe.site_id = {site} AND pe.unit_id = {u6} AND pe.receipt_id = (SELECT id FROM payment_receipts WHERE site_id = {site} AND sequence_number = 9); "
         f"INSERT INTO advance_balances (unit_id, debtor_type, balance) VALUES ({u6}, 'OWNER', 1250.00); "
         f"INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, reference_id, description, created_at) "
-        f"VALUES ({u6}, 'OWNER', 'CREDIT', 1250.00, 'ADV-A6', 'Advance from overpayment', TIMESTAMPTZ '2026-09-01 10:00:00+03'); "
-        f"INSERT INTO receipt_counters (site_id, last_sequence) VALUES ({site}, 9) ON CONFLICT (site_id) DO UPDATE SET last_sequence = EXCLUDED.last_sequence;"
+        f"VALUES ({u6}, 'OWNER', 'PAYMENT_SURPLUS', 1250.00, 'TAH-2026-000009', 'Advance from overpayment', TIMESTAMPTZ '2026-09-01 10:00:00+03'); "
+        f"INSERT INTO receipt_counters (site_id, receipt_type, last_sequence) VALUES ({site}, 'COLLECTION', 9) ON CONFLICT (site_id, receipt_type) DO UPDATE SET last_sequence = EXCLUDED.last_sequence;"
     )
 
     statements.append("COMMIT;")
