@@ -1,7 +1,27 @@
 //! E2E-only deterministic scheduler clock and control endpoint.
 
+use chrono::{DateTime, Utc};
+
+/// Fixture instant published by the E2E control endpoint; `None` until a runner sets the date.
 #[cfg(feature = "e2e")]
-use chrono::{DateTime, NaiveDate, Utc};
+static FIXTURE_NOW: RwLock<Option<DateTime<Utc>>> = RwLock::new(None);
+
+/// Current instant for date-dependent reads and writes.
+///
+/// Returns the E2E fixture time once a runner has set the clock through the control endpoint,
+/// otherwise the system clock. Normal backend builds always use the system clock.
+pub fn now_utc() -> DateTime<Utc> {
+    #[cfg(feature = "e2e")]
+    if let Ok(guard) = FIXTURE_NOW.read() {
+        if let Some(fixture) = *guard {
+            return fixture;
+        }
+    }
+    Utc::now()
+}
+
+#[cfg(feature = "e2e")]
+use chrono::NaiveDate;
 #[cfg(feature = "e2e")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "e2e")]
@@ -198,6 +218,7 @@ pub async fn control(
     let Some(clock) = state.e2e_clock.as_ref() else {
         return Err(E2eClockError::Disabled);
     };
+    let publishes_fixture_time = !matches!(request, ClockRequest::Tick);
     let response = match request {
         ClockRequest::SetDate { date } => {
             clock.set_date(date)?;
@@ -214,6 +235,12 @@ pub async fn control(
             ClockResponse::Ticked { date, report }
         }
     };
+    if publishes_fixture_time {
+        let fixture = clock.now()?;
+        *FIXTURE_NOW
+            .write()
+            .map_err(|_| E2eClockError::LockUnavailable)? = Some(fixture);
+    }
     Ok(axum::Json(response))
 }
 

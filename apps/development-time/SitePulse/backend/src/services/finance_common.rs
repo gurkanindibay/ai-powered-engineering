@@ -163,7 +163,7 @@ pub fn site_name(inner: &AppStateInner, site_id: &str) -> String {
 
 /// Today in the site's time zone.
 pub fn site_today(inner: &AppStateInner, site_id: &str) -> NaiveDate {
-    site_today_at(inner, site_id, Utc::now())
+    site_today_at(inner, site_id, crate::e2e_clock::now_utc())
 }
 
 /// Today's site-local date as of a supplied instant.

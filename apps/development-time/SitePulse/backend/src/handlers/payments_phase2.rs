@@ -313,7 +313,7 @@ pub async fn get_resident_statement(
         &inner,
         unit,
         viewer,
-        Utc::now().date_naive(),
+        crate::e2e_clock::now_utc().date_naive(),
     )))
 }
 
