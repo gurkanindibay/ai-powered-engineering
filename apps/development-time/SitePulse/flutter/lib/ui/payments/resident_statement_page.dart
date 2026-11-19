@@ -170,6 +170,50 @@ class _DebtorCard extends StatelessWidget {
                 ),
               ),
           ],
+          if (debtor.debtorType == 'OWNER' &&
+              debtor.jointlyLiableTotal > Decimal.zero) ...[
+            const Divider(height: 20),
+            Text(
+              'Kiracı borçlarında müşterek sorumluluk',
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: SpFontSize.body,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            for (final item in debtor.jointlyLiableOpenItems)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.period,
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: SpFontSize.body,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      formatTry(item.totalOutstanding),
+                      style: TextStyle(
+                        color: AppColors.textPrimary(context),
+                        fontSize: SpFontSize.body,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            _line(
+              context,
+              'Müşterek sorumluluk toplamı',
+              debtor.jointlyLiableTotal,
+              bold: true,
+              id: 'statement_joint_liability_total',
+            ),
+          ],
         ],
       ),
     ));

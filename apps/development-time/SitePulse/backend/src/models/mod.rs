@@ -2456,6 +2456,9 @@ pub struct RecordManualPaymentRequest {
     /// Description text never grants this authority by itself.
     #[serde(default)]
     pub settles_owner_capital_dues: bool,
+    /// Owner paid toward a tenant liability linked to their title interval.
+    #[serde(default)]
+    pub settles_tenant_joint_liability: bool,
     /// Bank/channel transaction reference, stored on the ledger entry.
     #[serde(default)]
     pub external_reference: Option<String>,

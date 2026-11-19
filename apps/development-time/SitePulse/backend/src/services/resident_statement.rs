@@ -61,6 +61,11 @@ pub fn build_statement(
             .and_then(|id| inner.users.iter().find(|u| &u.id == id))
             .map(|u| u.full_name.clone())
     };
+    let owner_person_id = unit
+        .owner_user_id
+        .as_ref()
+        .and_then(|id| inner.users.iter().find(|user| &user.id == id))
+        .and_then(|user| user.person_id);
     let mut debtors = Vec::new();
     for debtor in [DEBTOR_OWNER, DEBTOR_TENANT] {
         if viewer.map(|v| v != debtor).unwrap_or(false) {
@@ -98,6 +103,48 @@ pub fn build_statement(
             .filter(|i| i.total_outstanding > Decimal::ZERO)
             .collect();
         items.sort_by_key(|i| i.due_date);
+        let mut jointly_liable_open_items = Vec::new();
+        if debtor == DEBTOR_OWNER && viewer != Some(DEBTOR_TENANT) {
+            if let Some(owner_person_id) = owner_person_id {
+                jointly_liable_open_items = inner
+                    .dues
+                    .iter()
+                    .filter(|due| {
+                        crate::auth::same_id(&due.unit_id, &unit.id)
+                            && due.status.is_collectable()
+                            && due.debtor_type.as_str() == DEBTOR_TENANT
+                            && inner
+                                .joint_liability_owners
+                                .get(&due.id)
+                                .is_some_and(|owners| {
+                                    owners
+                                        .iter()
+                                        .any(|owner| owner.person_id == owner_person_id)
+                                })
+                    })
+                    .map(|stored| {
+                        let due = calc.calculate_delay_penalty(stored.clone(), today);
+                        let principal = dues_ledger::outstanding_principal(&due);
+                        let penalty = dues_ledger::outstanding_penalty(&due);
+                        let days_overdue = (today - due.due_date).num_days().max(0);
+                        StatementOpenItem {
+                            due_id: due.id.clone(),
+                            period: due.period.clone(),
+                            expense_type: due.expense_type.as_str().to_string(),
+                            due_date: due.due_date,
+                            days_overdue,
+                            principal_outstanding: principal,
+                            penalty_outstanding: penalty,
+                            total_outstanding: principal + penalty,
+                            operating_budget_id: inner.dues_budget_basis.get(&due.id).cloned(),
+                            limitation_warning: days_overdue > LIMITATION_DAYS,
+                        }
+                    })
+                    .filter(|item| item.total_outstanding > Decimal::ZERO)
+                    .collect();
+                jointly_liable_open_items.sort_by_key(|item| item.due_date);
+            }
+        }
         // Pending exit settlements reserve part of the advance; the statement shows
         // only what the debtor can still use.
         let advance = inner.available_advance_of(&unit.id, debtor);
@@ -129,6 +176,11 @@ pub fn build_statement(
             total_outstanding: Decimal::ZERO,
             advance_balance: advance,
             open_items: Vec::new(),
+            jointly_liable_total: jointly_liable_open_items
+                .iter()
+                .map(|item| item.total_outstanding)
+                .sum(),
+            jointly_liable_open_items,
         };
         for i in &items {
             let bucket = match i.days_overdue {

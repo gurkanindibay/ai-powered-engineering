@@ -174,22 +174,37 @@ impl CardPaymentService {
             ));
         }
         let requested = req.debtor_type.as_deref().map(|d| d.trim().to_uppercase());
-        let debtor = match (caller_role, requested.as_deref()) {
-            (Some(own), Some(asked)) if asked != own => {
-                return Err(CardPaymentError::Invalid(format!(
-                    "You can only pay your own ({}) debts",
-                    own
-                )));
+        let pays_tenant_liability = req.pays_tenant_liability;
+        if pays_tenant_liability && caller_role != Some("OWNER") {
+            return Err(CardPaymentError::Invalid(
+                "Only the titled owner can pay a jointly liable tenant balance".into(),
+            ));
+        }
+        if pays_tenant_liability && requested.as_deref().is_some_and(|role| role != "TENANT") {
+            return Err(CardPaymentError::Invalid(
+                "A jointly liable owner payment must target tenant liabilities".into(),
+            ));
+        }
+        let debtor = if pays_tenant_liability {
+            "TENANT".to_string()
+        } else {
+            match (caller_role, requested.as_deref()) {
+                (Some(own), Some(asked)) if asked != own => {
+                    return Err(CardPaymentError::Invalid(format!(
+                        "You can only pay your own ({}) debts",
+                        own
+                    )));
+                }
+                (Some(own), _) => own.to_string(),
+                (None, Some(asked)) if asked == "OWNER" || asked == "TENANT" => asked.to_string(),
+                (None, Some(asked)) => {
+                    return Err(CardPaymentError::Invalid(format!(
+                        "debtor_type must be OWNER or TENANT, got '{}'",
+                        asked
+                    )))
+                }
+                (None, None) => "OWNER".to_string(),
             }
-            (Some(own), _) => own.to_string(),
-            (None, Some(asked)) if asked == "OWNER" || asked == "TENANT" => asked.to_string(),
-            (None, Some(asked)) => {
-                return Err(CardPaymentError::Invalid(format!(
-                    "debtor_type must be OWNER or TENANT, got '{}'",
-                    asked
-                )))
-            }
-            (None, None) => "OWNER".to_string(),
         };
         let (unit, payer_name) = {
             let inner = self.state.inner.read().await;
@@ -199,13 +214,60 @@ impl CardPaymentService {
                 .find(|u| crate::auth::same_id(&u.id, unit_id))
                 .cloned()
                 .ok_or_else(|| CardPaymentError::NotFound(format!("Unit {} not found", unit_id)))?;
-            let holder = if debtor == "TENANT" {
-                unit.tenant_user_id.clone()
-            } else {
+            let holder = if pays_tenant_liability || debtor == "OWNER" {
                 unit.owner_user_id.clone()
+            } else {
+                unit.tenant_user_id.clone()
             };
-            if debtor == "TENANT" && holder.is_none() {
+            if !pays_tenant_liability && debtor == "TENANT" && holder.is_none() {
                 return Err(CardPaymentError::Invalid("The unit has no tenant".into()));
+            }
+            let owner_person_id = holder.as_ref().and_then(|id| {
+                inner
+                    .users
+                    .iter()
+                    .find(|u| &u.id == id)
+                    .and_then(|u| u.person_id)
+            });
+            if pays_tenant_liability {
+                let eligible_due_ids = owner_person_id
+                    .map(|person_id| {
+                        inner
+                            .joint_liability_owners
+                            .iter()
+                            .filter(|(_, owners)| {
+                                owners.iter().any(|owner| owner.person_id == person_id)
+                            })
+                            .filter_map(|(due_id, _)| {
+                                inner
+                                    .dues
+                                    .iter()
+                                    .any(|due| {
+                                        due.id == *due_id
+                                            && crate::auth::same_id(&due.unit_id, &unit.id)
+                                            && due.debtor_type == crate::models::DebtorType::Tenant
+                                            && due.status.is_collectable()
+                                    })
+                                    .then_some(due_id.clone())
+                            })
+                            .collect::<std::collections::HashSet<_>>()
+                    })
+                    .unwrap_or_default();
+                if eligible_due_ids.is_empty() {
+                    return Err(CardPaymentError::Invalid(
+                        "No jointly liable tenant balance is available for this owner".into(),
+                    ));
+                }
+                if req.designation.as_ref().is_some_and(|designation| {
+                    designation
+                        .due_ids
+                        .iter()
+                        .any(|id| !eligible_due_ids.contains(id))
+                }) {
+                    return Err(CardPaymentError::Invalid(
+                        "A selected liability is not jointly linked to this owner".into(),
+                    ));
+                }
             }
             let name = holder
                 .and_then(|id| {
@@ -216,7 +278,7 @@ impl CardPaymentService {
                         .map(|u| u.full_name.clone())
                 })
                 .unwrap_or_else(|| {
-                    if debtor == "TENANT" {
+                    if debtor == "TENANT" && !pays_tenant_liability {
                         "Kiracı"
                     } else {
                         "Kat Maliki"
@@ -231,6 +293,7 @@ impl CardPaymentService {
             site_id: unit.site_id.clone(),
             unit_id: unit.id.clone(),
             debtor_type: debtor,
+            pays_tenant_liability,
             payer_name: req
                 .payer_name
                 .clone()
@@ -361,7 +424,11 @@ impl CardPaymentService {
                         unit_id: intent.unit_id.clone(),
                         amount: intent.amount,
                         payer_name: intent.payer_name.clone(),
-                        payer_role: crate::models::DebtorType::from_str_loose(&intent.debtor_type),
+                        payer_role: if intent.pays_tenant_liability {
+                            crate::models::DebtorType::Owner
+                        } else {
+                            crate::models::DebtorType::from_str_loose(&intent.debtor_type)
+                        },
                         payment_channel: crate::models::PaymentChannel::CreditCard,
                         description: Some(format!("Kredi kartı ile ödeme ({})", intent.provider)),
                         payment_date: None,
@@ -371,6 +438,7 @@ impl CardPaymentService {
                         )),
                         designation: intent.designation.clone(),
                         settles_owner_capital_dues: false,
+                        settles_tenant_joint_liability: intent.pays_tenant_liability,
                         external_reference: Some(intent.provider_ref.clone()),
                         designate_from_description: false,
                         settles_unmatched_entry_id: None,

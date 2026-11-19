@@ -81,6 +81,9 @@ pub struct AppStateInner {
     pub budget_required_sites: Vec<String>,
     /// Dues liability id -> operating budget id (its legal basis).
     pub dues_budget_basis: HashMap<String, String>,
+    /// Tenant liabilities mapped to the titled owners who are jointly liable
+    /// for each ownership interval under KMK m.22/1.
+    pub joint_liability_owners: HashMap<String, Vec<crate::models::JointLiabilityOwner>>,
     /// Accrual day, due day, grace period and catch-up limit per site (STORY-07-10); a site
     /// without an entry uses the defaults.
     pub site_accrual_schedules: HashMap<String, crate::domain::accrual_schedule::AccrualSchedule>,
@@ -147,6 +150,7 @@ impl AppStateInner {
             revaluation_rates: HashMap::new(),
             budget_required_sites: Vec::new(),
             dues_budget_basis: HashMap::new(),
+            joint_liability_owners: HashMap::new(),
             site_accrual_schedules: HashMap::new(),
             payment_intents: Vec::new(),
             account_activations: HashMap::new(),

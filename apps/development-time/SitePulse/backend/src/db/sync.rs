@@ -388,6 +388,29 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
         );
     }
 
+    // 4a. Jointly liable titled owners remain attached to the tenant's one liability.
+    {
+        let rows = client
+            .query(
+                "SELECT due_id, owner_person_id, tenant_person_id, liable_from, liable_through FROM dues_liability_joint_owners ORDER BY due_id, liable_from, owner_person_id",
+                &[],
+            )
+            .await?;
+        for row in rows {
+            let due_id: i64 = row.get(0);
+            state
+                .joint_liability_owners
+                .entry(due_id.to_string())
+                .or_default()
+                .push(JointLiabilityOwner {
+                    person_id: row.get(1),
+                    tenant_person_id: row.get(2),
+                    start_date: row.get(3),
+                    end_date: Some(row.get(4)),
+                });
+        }
+    }
+
     // 4b. Load Dues Periods
     {
         let rows = client.query("SELECT id, site_id, period_name, due_date, status, created_at FROM dues_periods ORDER BY due_date ASC",

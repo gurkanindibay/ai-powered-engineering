@@ -2,11 +2,15 @@
 // budget (işletme projesi). Amounts are Decimal, parsed from the API's strings.
 import 'package:decimal/decimal.dart';
 
-Decimal _dec(dynamic v) => Decimal.tryParse(v?.toString() ?? '') ?? Decimal.zero;
-Decimal? _decOrNull(dynamic v) => v == null ? null : Decimal.tryParse(v.toString());
-DateTime? _date(dynamic v) => v == null ? null : DateTime.tryParse(v.toString());
-List<Map<String, dynamic>> _list(dynamic v) =>
-    (v as List<dynamic>? ?? const []).map((e) => e as Map<String, dynamic>).toList();
+Decimal _dec(dynamic v) =>
+    Decimal.tryParse(v?.toString() ?? '') ?? Decimal.zero;
+Decimal? _decOrNull(dynamic v) =>
+    v == null ? null : Decimal.tryParse(v.toString());
+DateTime? _date(dynamic v) =>
+    v == null ? null : DateTime.tryParse(v.toString());
+List<Map<String, dynamic>> _list(dynamic v) => (v as List<dynamic>? ?? const [])
+    .map((e) => e as Map<String, dynamic>)
+    .toList();
 
 class StatementOpenItem {
   final String dueId;
@@ -37,7 +41,8 @@ class StatementOpenItem {
     required this.limitationWarning,
   });
 
-  factory StatementOpenItem.fromJson(Map<String, dynamic> j) => StatementOpenItem(
+  factory StatementOpenItem.fromJson(Map<String, dynamic> j) =>
+      StatementOpenItem(
         dueId: j['due_id']?.toString() ?? '',
         period: j['period']?.toString() ?? '',
         expenseType: j['expense_type']?.toString() ?? '',
@@ -66,6 +71,8 @@ class StatementDebtor {
   final Decimal totalOutstanding;
   final Decimal advanceBalance;
   final List<StatementOpenItem> openItems;
+  final Decimal jointlyLiableTotal;
+  final List<StatementOpenItem> jointlyLiableOpenItems;
 
   const StatementDebtor({
     required this.debtorType,
@@ -80,22 +87,28 @@ class StatementDebtor {
     required this.totalOutstanding,
     required this.advanceBalance,
     required this.openItems,
+    required this.jointlyLiableTotal,
+    required this.jointlyLiableOpenItems,
   });
 
   factory StatementDebtor.fromJson(Map<String, dynamic> j) => StatementDebtor(
-        debtorType: j['debtor_type']?.toString() ?? 'OWNER',
-        name: j['name']?.toString() ?? '',
-        currentDue: _dec(j['current_due']),
-        overdue1To30: _dec(j['overdue_1_30_days']),
-        overdue31To60: _dec(j['overdue_31_60_days']),
-        overdue61To90: _dec(j['overdue_61_90_days']),
-        overdue90Plus: _dec(j['overdue_90_plus_days']),
-        principalOutstanding: _dec(j['principal_outstanding']),
-        penaltyOutstanding: _dec(j['penalty_outstanding']),
-        totalOutstanding: _dec(j['total_outstanding']),
-        advanceBalance: _dec(j['advance_balance']),
-        openItems: _list(j['open_items']).map(StatementOpenItem.fromJson).toList(),
-      );
+    debtorType: j['debtor_type']?.toString() ?? 'OWNER',
+    name: j['name']?.toString() ?? '',
+    currentDue: _dec(j['current_due']),
+    overdue1To30: _dec(j['overdue_1_30_days']),
+    overdue31To60: _dec(j['overdue_31_60_days']),
+    overdue61To90: _dec(j['overdue_61_90_days']),
+    overdue90Plus: _dec(j['overdue_90_plus_days']),
+    principalOutstanding: _dec(j['principal_outstanding']),
+    penaltyOutstanding: _dec(j['penalty_outstanding']),
+    totalOutstanding: _dec(j['total_outstanding']),
+    advanceBalance: _dec(j['advance_balance']),
+    openItems: _list(j['open_items']).map(StatementOpenItem.fromJson).toList(),
+    jointlyLiableTotal: _dec(j['jointly_liable_total']),
+    jointlyLiableOpenItems: _list(j['jointly_liable_open_items'])
+        .map(StatementOpenItem.fromJson)
+        .toList(),
+  );
 }
 
 class StatementReceipt {
@@ -120,14 +133,14 @@ class StatementReceipt {
   bool get isReversal => receiptType == 'REVERSAL';
 
   factory StatementReceipt.fromJson(Map<String, dynamic> j) => StatementReceipt(
-        receiptNumber: j['receipt_number']?.toString() ?? '',
-        receiptType: j['receipt_type']?.toString() ?? 'COLLECTION',
-        issuedAt: _date(j['issued_at']),
-        payerRole: j['payer_role']?.toString() ?? '',
-        paymentChannel: j['payment_channel']?.toString() ?? '',
-        totalAmount: _dec(j['total_amount']),
-        reversed: j['reversed'] == true,
-      );
+    receiptNumber: j['receipt_number']?.toString() ?? '',
+    receiptType: j['receipt_type']?.toString() ?? 'COLLECTION',
+    issuedAt: _date(j['issued_at']),
+    payerRole: j['payer_role']?.toString() ?? '',
+    paymentChannel: j['payment_channel']?.toString() ?? '',
+    totalAmount: _dec(j['total_amount']),
+    reversed: j['reversed'] == true,
+  );
 }
 
 class ResidentStatement {
@@ -145,7 +158,8 @@ class ResidentStatement {
     required this.receipts,
   });
 
-  factory ResidentStatement.fromJson(Map<String, dynamic> j) => ResidentStatement(
+  factory ResidentStatement.fromJson(Map<String, dynamic> j) =>
+      ResidentStatement(
         unitId: j['unit_id']?.toString() ?? '',
         unitLabel: j['unit_label']?.toString() ?? '',
         asOf: _date(j['as_of']),
@@ -177,7 +191,8 @@ class CardPaymentIntent {
   bool get isFailed => status == 'FAILED';
   bool get isFinished => isCaptured || isFailed || status == 'REFUNDED';
 
-  factory CardPaymentIntent.fromJson(Map<String, dynamic> j) => CardPaymentIntent(
+  factory CardPaymentIntent.fromJson(Map<String, dynamic> j) =>
+      CardPaymentIntent(
         id: j['id']?.toString() ?? '',
         amount: _dec(j['amount']),
         status: j['status']?.toString() ?? 'CREATED',
@@ -217,21 +232,27 @@ class BudgetLine {
   final Decimal annualAmount;
   final String allocationKey;
 
-  const BudgetLine({required this.category, this.description, required this.annualAmount, required this.allocationKey});
+  const BudgetLine({
+    required this.category,
+    this.description,
+    required this.annualAmount,
+    required this.allocationKey,
+  });
 
   factory BudgetLine.fromJson(Map<String, dynamic> j) => BudgetLine(
-        category: j['category']?.toString() ?? 'OTHER',
-        description: j['description']?.toString(),
-        annualAmount: _dec(j['annual_amount']),
-        allocationKey: j['allocation_key']?.toString() ?? 'LAND_SHARE',
-      );
+    category: j['category']?.toString() ?? 'OTHER',
+    description: j['description']?.toString(),
+    annualAmount: _dec(j['annual_amount']),
+    allocationKey: j['allocation_key']?.toString() ?? 'LAND_SHARE',
+  );
 
   Map<String, dynamic> toJson() => {
-        'category': category,
-        if (description != null && description!.trim().isNotEmpty) 'description': description,
-        'annual_amount': annualAmount.toStringAsFixed(2),
-        'allocation_key': allocationKey,
-      };
+    'category': category,
+    if (description != null && description!.trim().isNotEmpty)
+      'description': description,
+    'annual_amount': annualAmount.toStringAsFixed(2),
+    'allocation_key': allocationKey,
+  };
 }
 
 class BudgetUnitShare {
@@ -250,12 +271,12 @@ class BudgetUnitShare {
   });
 
   factory BudgetUnitShare.fromJson(Map<String, dynamic> j) => BudgetUnitShare(
-        unitId: j['unit_id']?.toString() ?? '',
-        unitLabel: j['unit_label']?.toString() ?? '',
-        landShare: (j['land_share'] as num?)?.toInt() ?? 1,
-        annualAmount: _dec(j['annual_amount']),
-        monthlyAmount: _dec(j['monthly_amount']),
-      );
+    unitId: j['unit_id']?.toString() ?? '',
+    unitLabel: j['unit_label']?.toString() ?? '',
+    landShare: (j['land_share'] as num?)?.toInt() ?? 1,
+    annualAmount: _dec(j['annual_amount']),
+    monthlyAmount: _dec(j['monthly_amount']),
+  );
 }
 
 class BudgetObjection {
@@ -276,13 +297,13 @@ class BudgetObjection {
   });
 
   factory BudgetObjection.fromJson(Map<String, dynamic> j) => BudgetObjection(
-        id: j['id']?.toString() ?? '',
-        unitId: j['unit_id']?.toString() ?? '',
-        objectorName: j['objector_name']?.toString() ?? '',
-        filedOn: _date(j['filed_on']),
-        reason: j['reason']?.toString() ?? '',
-        status: j['status']?.toString() ?? 'OPEN',
-      );
+    id: j['id']?.toString() ?? '',
+    unitId: j['unit_id']?.toString() ?? '',
+    objectorName: j['objector_name']?.toString() ?? '',
+    filedOn: _date(j['filed_on']),
+    reason: j['reason']?.toString() ?? '',
+    status: j['status']?.toString() ?? 'OPEN',
+  );
 }
 
 class OperatingBudget {
@@ -319,24 +340,27 @@ class OperatingBudget {
   });
 
   String get statusLabel => budgetStatusLabels[status] ?? status;
-  bool get isInForce => status == 'INTERIM' || status == 'APPROVED' || status == 'FINAL';
+  bool get isInForce =>
+      status == 'INTERIM' || status == 'APPROVED' || status == 'FINAL';
 
   factory OperatingBudget.fromJson(Map<String, dynamic> j) => OperatingBudget(
-        id: j['id']?.toString() ?? '',
-        fiscalYear: (j['fiscal_year'] as num?)?.toInt() ?? 0,
-        status: j['status']?.toString() ?? 'DRAFT',
-        baselineAnnualAmount: _dec(j['baseline_annual_amount']),
-        totalAnnualAmount: _dec(j['total_annual_amount']),
-        increaseRate: _decOrNull(j['increase_rate']),
-        capRate: _decOrNull(j['cap_rate']),
-        assemblyDecisionRef: j['assembly_decision_ref']?.toString(),
-        interimDeadline: _date(j['interim_deadline']),
-        objectionDeadline: _date(j['objection_deadline']),
-        lines: _list(j['lines']).map(BudgetLine.fromJson).toList(),
-        unitShares: _list(j['unit_shares']).map(BudgetUnitShare.fromJson).toList(),
-        servedUnitIds: _list(j['service_records']).map((r) => r['unit_id']?.toString() ?? '').toSet(),
-        objections: _list(j['objections']).map(BudgetObjection.fromJson).toList(),
-      );
+    id: j['id']?.toString() ?? '',
+    fiscalYear: (j['fiscal_year'] as num?)?.toInt() ?? 0,
+    status: j['status']?.toString() ?? 'DRAFT',
+    baselineAnnualAmount: _dec(j['baseline_annual_amount']),
+    totalAnnualAmount: _dec(j['total_annual_amount']),
+    increaseRate: _decOrNull(j['increase_rate']),
+    capRate: _decOrNull(j['cap_rate']),
+    assemblyDecisionRef: j['assembly_decision_ref']?.toString(),
+    interimDeadline: _date(j['interim_deadline']),
+    objectionDeadline: _date(j['objection_deadline']),
+    lines: _list(j['lines']).map(BudgetLine.fromJson).toList(),
+    unitShares: _list(j['unit_shares']).map(BudgetUnitShare.fromJson).toList(),
+    servedUnitIds: _list(j['service_records'])
+        .map((r) => r['unit_id']?.toString() ?? '')
+        .toSet(),
+    objections: _list(j['objections']).map(BudgetObjection.fromJson).toList(),
+  );
 }
 
 class BudgetCompliance {
@@ -344,13 +368,21 @@ class BudgetCompliance {
   final OperatingBudget? budgetInForce;
   final List<String> warnings;
 
-  const BudgetCompliance({required this.requireOperatingBudget, required this.budgetInForce, required this.warnings});
+  const BudgetCompliance({
+    required this.requireOperatingBudget,
+    required this.budgetInForce,
+    required this.warnings,
+  });
 
   factory BudgetCompliance.fromJson(Map<String, dynamic> j) => BudgetCompliance(
-        requireOperatingBudget: j['require_operating_budget'] == true,
-        budgetInForce: j['budget_in_force'] == null
-            ? null
-            : OperatingBudget.fromJson(j['budget_in_force'] as Map<String, dynamic>),
-        warnings: (j['warnings'] as List<dynamic>? ?? const []).map((e) => e.toString()).toList(),
-      );
+    requireOperatingBudget: j['require_operating_budget'] == true,
+    budgetInForce: j['budget_in_force'] == null
+        ? null
+        : OperatingBudget.fromJson(
+            j['budget_in_force'] as Map<String, dynamic>,
+          ),
+    warnings: (j['warnings'] as List<dynamic>? ?? const [])
+        .map((e) => e.toString())
+        .toList(),
+  );
 }

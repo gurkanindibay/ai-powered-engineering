@@ -224,8 +224,18 @@ impl FinanceStore {
         &self,
         mut due: crate::models::DuesLiability,
     ) -> DbResult<Option<crate::models::DuesLiability>> {
+        let due_site_id = self
+            .state
+            .inner
+            .read()
+            .await
+            .units
+            .iter()
+            .find(|unit| crate::auth::same_id(&unit.id, &due.unit_id))
+            .map(|unit| unit.site_id.clone())
+            .ok_or_else(|| format!("Unit {} not found", due.unit_id))?;
         match self.pool() {
-            Some(pool) => match super::insert_accrued_due(pool, &due).await? {
+            Some(pool) => match super::insert_accrued_due(pool, &due, &due_site_id).await? {
                 Some(id) => due.id = id.to_string(),
                 None => return Ok(None),
             },
@@ -241,7 +251,58 @@ impl FinanceStore {
                 due.id = format!("due-{}", uuid::Uuid::new_v4().simple());
             }
         }
-        self.state.inner.write().await.dues.push(due.clone());
+        let joint_owners = if due.debtor_type == crate::models::DebtorType::Tenant {
+            match self.pool() {
+                Some(pool) => {
+                    super::load_joint_liability_owners(pool, &due.id, &due_site_id).await?
+                }
+                None => {
+                    let inner = self.state.inner.read().await;
+                    inner
+                        .units
+                        .iter()
+                        .find(|unit| crate::auth::same_id(&unit.id, &due.unit_id))
+                        .and_then(|unit| {
+                            unit.owner_user_id
+                            .as_ref()
+                            .and_then(|id| inner.users.iter().find(|user| &user.id == id))
+                            .and_then(|owner| owner.person_id)
+                            .map(|person_id| {
+                                let period = crate::domain::billing_period::BillingPeriod::parse(
+                                    &due.period,
+                                )
+                                .unwrap_or_else(|_| {
+                                    crate::domain::billing_period::BillingPeriod::of_date(
+                                        due.due_date,
+                                    )
+                                });
+                                vec![crate::models::JointLiabilityOwner {
+                                    person_id,
+                                    tenant_person_id: unit
+                                        .tenant_user_id
+                                        .as_ref()
+                                        .and_then(|id| {
+                                            inner.users.iter().find(|user| &user.id == id)
+                                        })
+                                        .and_then(|tenant| tenant.person_id),
+                                    start_date: period.first_day(),
+                                    end_date: Some(period.last_day()),
+                                }]
+                            })
+                        })
+                        .unwrap_or_default()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+        let mut inner = self.state.inner.write().await;
+        if !joint_owners.is_empty() {
+            inner
+                .joint_liability_owners
+                .insert(due.id.clone(), joint_owners);
+        }
+        inner.dues.push(due.clone());
         Ok(Some(due))
     }
 

@@ -37,6 +37,12 @@ struct SiteBatch {
     skipped: Vec<String>,
 }
 
+struct CommittedSiteBatch {
+    batch: SiteBatch,
+    period_db_id: Option<String>,
+    joint_owners: std::collections::HashMap<String, Vec<crate::models::JointLiabilityOwner>>,
+}
+
 /// Today's date in a site's time zone (falls back to Europe/Istanbul).
 pub fn site_local_date(timezone: &str, now: chrono::DateTime<Utc>) -> NaiveDate {
     let tz: chrono_tz::Tz = timezone.parse().unwrap_or(chrono_tz::Europe::Istanbul);
@@ -293,9 +299,10 @@ pub async fn run_accrual_with_report(
 
     // 2. One transaction per site batch, without holding the global memory lock: a failure
     //    leaves that site with no liability at all, in the database or in memory.
-    let mut committed_batches: Vec<(SiteBatch, Option<String>)> = Vec::new();
+    let mut committed_batches: Vec<CommittedSiteBatch> = Vec::new();
     for mut batch in batches {
         let mut period_db_id = None;
+        let mut joint_owners = std::collections::HashMap::new();
         if let Some(ref pool) = state.pool {
             let outcome = crate::db::commit_accrual_batch(
                 pool,
@@ -313,6 +320,7 @@ pub async fn run_accrual_with_report(
             match outcome {
                 Ok(committed) => {
                     period_db_id = committed.period_id.map(|id| id.to_string());
+                    joint_owners = committed.joint_owners;
                     let mut kept = Vec::new();
                     for ((mut due, basis), id) in batch.dues.drain(..).zip(committed.due_ids) {
                         if let Some(id) = id {
@@ -334,7 +342,11 @@ pub async fn run_accrual_with_report(
             }
         }
         if !batch.dues.is_empty() {
-            committed_batches.push((batch, period_db_id));
+            committed_batches.push(CommittedSiteBatch {
+                batch,
+                period_db_id,
+                joint_owners,
+            });
         }
     }
 
@@ -343,17 +355,22 @@ pub async fn run_accrual_with_report(
     }
 
     // 3. Briefly acquire WRITE lock to record the committed liabilities (no I/O under it)
-    for (batch, _) in &committed_batches {
+    for committed in &committed_batches {
         report.periods.push(AccruedPeriod {
-            site_id: batch.site_id.clone(),
-            period_key: batch.period_key.clone(),
-            liabilities: batch.dues.len(),
+            site_id: committed.batch.site_id.clone(),
+            period_key: committed.batch.period_key.clone(),
+            liabilities: committed.batch.dues.len(),
         });
     }
 
     {
         let mut inner = state.inner.write().await;
-        for (batch, period_db_id) in committed_batches {
+        for committed in committed_batches {
+            let CommittedSiteBatch {
+                batch,
+                period_db_id,
+                joint_owners,
+            } = committed;
             let known = inner.dues_periods.iter().any(|p| {
                 crate::auth::same_id(&p.site_id, &batch.site_id)
                     && BillingPeriod::parse(&p.period_name).ok()
@@ -400,6 +417,7 @@ pub async fn run_accrual_with_report(
                 );
                 inner.dues.push(due);
             }
+            inner.joint_liability_owners.extend(joint_owners);
         }
     }
 

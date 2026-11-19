@@ -280,15 +280,22 @@ pub async fn record_due_allocation(
 /// Inserts an accrued liability and returns its id, or `None` when the unit
 /// already has one for this period and expense type. The canonical period key is set
 /// when the label is a month.
-pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Option<i64>> {
+pub async fn insert_accrued_due(
+    pool: &Pool,
+    due: &DuesLiability,
+    site_id: &str,
+) -> DbResult<Option<i64>> {
     let unit = require_id("unit", &due.unit_id)?;
+    let site = require_id("site", site_id)?;
     let key = crate::domain::billing_period::BillingPeriod::parse(&due.period)
         .ok()
         .map(|p| p.key());
-    let client = pool.get().await?;
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
     // The unique index ignores cancelled rows (a re-issue replaces one), but
     // accrual never charges a period again once any liability of it exists.
-    let existing = client
+    let existing = tx
         .query_opt(
             "SELECT 1 FROM dues_liabilities
              WHERE unit_id = $1
@@ -298,20 +305,108 @@ pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Op
         )
         .await?;
     if existing.is_some() {
+        tx.rollback().await?;
         return Ok(None);
     }
-    let row = client
+    let row = tx
         .query_opt(
             r#"
-            INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type, grace_days, effective_due_date)
-            VALUES ($1, $2, $3, $4, $5, 'PENDING', 0, $6, $7, $8, $9)
+            INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type, grace_days, effective_due_date, liable_person_id)
+            VALUES ($1, $2, $3, $4, $5, 'PENDING', 0, $6, $7, $8, $9,
+                    CASE WHEN $6::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) END)
             ON CONFLICT DO NOTHING
             RETURNING id
             "#,
             &[&unit, &due.period, &key, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type, &i32::try_from(due.grace_days).unwrap_or(0), &due.fee_due_date()],
         )
         .await?;
-    Ok(row.map(|r| r.get(0)))
+    let Some(row) = row else {
+        tx.commit().await?;
+        return Ok(None);
+    };
+    let due_id: i64 = row.get(0);
+    if due.debtor_type == crate::models::DebtorType::Tenant {
+        let unit_row = tx
+            .query_one(
+                "SELECT site_id, tenant_person_id FROM units WHERE id = $1",
+                &[&unit],
+            )
+            .await?;
+        let site: i64 = unit_row.get(0);
+        let tenant_person_id: Option<i64> = unit_row.get(1);
+        let period = crate::domain::billing_period::BillingPeriod::parse(&due.period)
+            .unwrap_or_else(|_| {
+                crate::domain::billing_period::BillingPeriod::of_date(due.due_date)
+            });
+        let start = period.first_day();
+        let end = period.last_day();
+        let owners = tx
+            .query(
+                r#"
+                SELECT person_id, GREATEST(start_date, $2::date),
+                       LEAST(COALESCE(end_date, $3::date), $3::date)
+                FROM unit_ownerships
+                WHERE unit_id = $1 AND start_date <= $3
+                  AND COALESCE(end_date, 'infinity'::date) >= $2
+                ORDER BY start_date, person_id
+                "#,
+                &[&unit, &start, &end],
+            )
+            .await?;
+        for owner in owners {
+            let owner_person_id: i64 = owner.get(0);
+            let liable_from: NaiveDate = owner.get(1);
+            let liable_through: NaiveDate = owner.get(2);
+            tx.execute(
+                r#"
+                INSERT INTO dues_liability_joint_owners
+                    (site_id, due_id, owner_person_id, tenant_person_id, liable_from, liable_through)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (due_id, owner_person_id, liable_from, liable_through) DO NOTHING
+                "#,
+                &[
+                    &site,
+                    &due_id,
+                    &owner_person_id,
+                    &tenant_person_id,
+                    &liable_from,
+                    &liable_through,
+                ],
+            )
+            .await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(Some(due_id))
+}
+
+pub async fn load_joint_liability_owners(
+    pool: &Pool,
+    due_id: &str,
+    site_id: &str,
+) -> DbResult<Vec<crate::models::JointLiabilityOwner>> {
+    let due = require_id("dues liability", due_id)?;
+    let site = require_id("site", site_id)?;
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
+    let rows = tx
+        .query(
+            "SELECT owner_person_id, tenant_person_id, liable_from, liable_through FROM dues_liability_joint_owners WHERE due_id = $1 ORDER BY liable_from, owner_person_id",
+            &[&due],
+        )
+        .await?;
+    let owners = rows
+        .iter()
+        .map(|row| crate::models::JointLiabilityOwner {
+            person_id: row.get(0),
+            tenant_person_id: row.get(1),
+            start_date: row.get(2),
+            end_date: Some(row.get(3)),
+        })
+        .collect();
+    tx.commit().await?;
+    Ok(owners)
 }
 
 /// What one site's accrual commits: the period row, every liability with its budget
@@ -333,6 +428,8 @@ pub struct CommittedAccrual {
     pub period_id: Option<i64>,
     /// The new id per input liability, `None` when the unit already had one for the period.
     pub due_ids: Vec<Option<i64>>,
+    /// Jointly liable owners and date ranges for newly created tenant liabilities.
+    pub joint_owners: std::collections::HashMap<String, Vec<crate::models::JointLiabilityOwner>>,
 }
 
 /// Commits one site's accrual atomically (STORY-07-08): a database error at any liability
@@ -422,6 +519,11 @@ pub async fn commit_accrual_batch(
         })
     };
     let mut due_ids = Vec::with_capacity(batch.dues.len());
+    let mut joint_owners = std::collections::HashMap::new();
+    let period = crate::domain::billing_period::BillingPeriod::parse(batch.period_key)
+        .map_err(std::io::Error::other)?;
+    let period_start = period.first_day();
+    let period_end = period.last_day();
     for (due, basis) in batch.dues {
         let unit = require_id("unit", &due.unit_id)?;
         if existing_liability_keys.contains(&(unit, due.expense_type.as_str().to_string())) {
@@ -437,8 +539,9 @@ pub async fn commit_accrual_batch(
                 r#"
                 INSERT INTO dues_liabilities
                     (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
-                     delay_penalty, debtor_type, expense_type, operating_budget_id, grace_days, effective_due_date)
-                VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7, $8, $9, $10, $11)
+                     delay_penalty, debtor_type, expense_type, operating_budget_id, grace_days, effective_due_date, liable_person_id)
+                VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7, $8, $9, $10, $11,
+                        CASE WHEN $7::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) END)
                 ON CONFLICT DO NOTHING
                 RETURNING id
                 "#,
@@ -457,7 +560,52 @@ pub async fn commit_accrual_batch(
                 ],
             )
             .await?;
-        due_ids.push(row.map(|r| r.get::<_, i64>(0)));
+        let created_id = row.map(|r| r.get::<_, i64>(0));
+        if due.debtor_type == crate::models::DebtorType::Tenant {
+            if let Some(due_id) = created_id {
+                let owner_rows = tx
+                    .query(
+                        r#"
+                        SELECT person_id, GREATEST(start_date, $2::date),
+                               LEAST(COALESCE(end_date, $3::date), $3::date),
+                               (SELECT tenant_person_id FROM units WHERE id = $1)
+                        FROM unit_ownerships
+                        WHERE unit_id = $1 AND start_date <= $3
+                          AND COALESCE(end_date, 'infinity'::date) >= $2
+                        ORDER BY start_date, person_id
+                        "#,
+                        &[&unit, &period_start, &period_end],
+                    )
+                    .await?;
+                let mut owners = Vec::with_capacity(owner_rows.len());
+                for owner in owner_rows {
+                    let person_id: i64 = owner.get(0);
+                    let liable_from: NaiveDate = owner.get(1);
+                    let liable_through: NaiveDate = owner.get(2);
+                    let tenant_person_id: Option<i64> = owner.get(3);
+                    tx.execute(
+                        r#"
+                        INSERT INTO dues_liability_joint_owners
+                            (site_id, due_id, owner_person_id, tenant_person_id, liable_from, liable_through)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                        ON CONFLICT (due_id, owner_person_id, liable_from, liable_through) DO NOTHING
+                        "#,
+                        &[&site, &due_id, &person_id, &tenant_person_id, &liable_from, &liable_through],
+                    )
+                    .await?;
+                    owners.push(crate::models::JointLiabilityOwner {
+                        person_id,
+                        tenant_person_id,
+                        start_date: liable_from,
+                        end_date: Some(liable_through),
+                    });
+                }
+                if !owners.is_empty() {
+                    joint_owners.insert(due_id.to_string(), owners);
+                }
+            }
+        }
+        due_ids.push(created_id);
     }
     let accrued = due_ids.iter().flatten().count() as i32;
     tx.execute(
@@ -475,7 +623,11 @@ pub async fn commit_accrual_batch(
     )
     .await?;
     tx.commit().await?;
-    Ok(CommittedAccrual { period_id, due_ids })
+    Ok(CommittedAccrual {
+        period_id,
+        due_ids,
+        joint_owners,
+    })
 }
 
 /// One accrual run as the manager sees it.
