@@ -1884,6 +1884,10 @@ pub struct ConfirmReconciliationRequest {
     /// Match ids explicitly approved for owner capital allocation by the manager.
     #[serde(default)]
     pub owner_capital_match_ids: Vec<String>,
+    /// Debtor chosen by the manager for a transfer held for several open debtors
+    /// (match id to `OWNER` or `TENANT`).
+    #[serde(default)]
+    pub debtor_assignments: std::collections::HashMap<String, DebtorType>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

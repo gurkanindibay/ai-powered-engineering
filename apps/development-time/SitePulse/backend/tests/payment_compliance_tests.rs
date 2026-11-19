@@ -370,6 +370,7 @@ async fn when_a_statement_line_is_confirmed_twice_then_it_is_settled_once() {
                 optional_message: None,
                 remember_sender_iban: None,
                 owner_capital_match_ids: Vec::new(),
+                debtor_assignments: Default::default(),
             }),
         )
         .await

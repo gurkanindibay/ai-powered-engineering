@@ -250,8 +250,39 @@ pub async fn confirm_reconciliation(
                     ),
                 ));
             }
-            let (payer_role, payer_name) =
+            let queued = inner
+                .reconciliation_queue
+                .iter()
+                .find(|q| q.match_id == *match_id);
+            if match_id.starts_with(DEBTOR_REVIEW_PREFIX)
+                && queued.is_some_and(|q| q.status == ReconciliationStatus::Approved)
+            {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("Match {} is already approved", match_id),
+                ));
+            }
+            let assigned = payload.debtor_assignments.get(match_id).copied();
+            if assigned.is_none()
+                && queued.is_some_and(|q| {
+                    q.status == ReconciliationStatus::Unmatched
+                        && q.notes.as_deref() == Some(SEVERAL_OPEN_DEBTORS_REASON)
+                })
+            {
+                return Err((
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    format!(
+                        "Match {} needs a debtor assignment (several open debtors)",
+                        match_id
+                    ),
+                ));
+            }
+            let (resolved_role, resolved_name) =
                 resolve_payer(&inner, &unit, m.transaction.sender_name.as_deref());
+            let (payer_role, payer_name) = match assigned {
+                Some(role) => (role, resolved_name),
+                None => (resolved_role, resolved_name),
+            };
             // A due id is only trusted when it names a real due of the matched unit;
             // client-built rows may carry placeholders, which fall back to oldest-first.
             let matched_due_id = m.matched_due_id.clone().filter(|due_id| {
@@ -1294,6 +1325,75 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
         }
     };
 
+    // A unit-level transfer with no payer identity must not guess between debtors.
+    if is_virtual_iban
+        && open_debtor_types(&inner, &unit.id).len() > 1
+        && !payer_identified(&inner, &unit, payload.sender_name.as_deref())
+    {
+        let match_id = format!("{}{}", DEBTOR_REVIEW_PREFIX, payload.transaction_id);
+        let receipt_id = format!("DKN-UNM-{}", inner.reconciliation_queue.len() + 1);
+        let txn_desc = payload
+            .description
+            .clone()
+            .unwrap_or_else(|| format!("Sanal IBAN FAST Transferi: {}", payload.virtual_iban));
+        let held = ReconciliationMatch {
+            match_id,
+            site_id: unit.site_id.clone(),
+            transaction: BankTransactionItem {
+                transaction_id: payload.transaction_id.clone(),
+                date: Utc::now().date_naive(),
+                amount: payload.amount,
+                currency: payload
+                    .currency
+                    .clone()
+                    .unwrap_or_else(|| "TRY".to_string()),
+                description: txn_desc,
+                sender_name: payload.sender_name.clone(),
+                sender_iban: payload.sender_iban.clone(),
+                reference_no: Some(payload.transaction_id.clone()),
+            },
+            matched_unit_id: Some(unit.id.clone()),
+            matched_block: Some(unit.block_id.clone()),
+            matched_unit_number: Some(unit.unit_number),
+            matched_resident_name: None,
+            confidence_score: 0,
+            matched_due_id: None,
+            outstanding_balance: None,
+            amount_matches_balance: false,
+            status: ReconciliationStatus::Unmatched,
+            status_code: ReconciliationStatus::Unmatched.as_str().to_string(),
+            notes: Some(SEVERAL_OPEN_DEBTORS_REASON.to_string()),
+        };
+        drop(inner);
+        if let Some(p) = state.db_pool() {
+            crate::db::save_reconciliation_match_for_site(p, &held, &held.site_id, account_scope)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        crate::error::sanitized("Database write failed", &e),
+                    )
+                })?;
+        }
+        state.inner.write().await.reconciliation_queue.push(held);
+        return Ok((
+            StatusCode::OK,
+            Json(BankIncomingWebhookResponse {
+                status: "UNMATCHED".to_string(),
+                transaction_id: payload.transaction_id,
+                matched_unit_id: unit.id,
+                matched_block: unit.block_id,
+                matched_unit_number: unit.unit_number,
+                cleared_due_period: None,
+                cleared_amount: Decimal::ZERO,
+                remaining_debt: Decimal::ZERO,
+                advance_payment: Decimal::ZERO,
+                receipt_id,
+                message: SEVERAL_OPEN_DEBTORS_REASON.to_string(),
+            }),
+        ));
+    }
+
     // 2. Settle through the canonical ingestion path (SPEC-005 R1): TAH- receipt,
     // allocation rows, penalty-first waterfall, idempotent on the bank transaction.
     let (payer_role, payer_name) = resolve_payer(&inner, &unit, payload.sender_name.as_deref());
@@ -1540,4 +1640,47 @@ pub(crate) fn resolve_payer(
         .or_else(|| name_of(&unit.owner_user_id))
         .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
     (DebtorType::Owner, name)
+}
+
+/// Match id prefix of a transfer held for the manager to pick one debtor; such an
+/// item is approved exactly once.
+pub(crate) const DEBTOR_REVIEW_PREFIX: &str = "DEBTOR-REVIEW:";
+
+/// Stored reason of a transfer held back because the unit has several open debtors.
+pub(crate) const SEVERAL_OPEN_DEBTORS_REASON: &str = "several open debtors";
+
+/// The debtors (owner, tenant) that currently have an open charge on the unit.
+pub(crate) fn open_debtor_types(
+    inner: &crate::state::AppStateInner,
+    unit_id: &str,
+) -> Vec<DebtorType> {
+    let mut debtors: Vec<DebtorType> = Vec::new();
+    for due in inner.dues.iter().filter(|d| {
+        crate::auth::same_id(&d.unit_id, unit_id) && crate::services::finance_common::is_open(d)
+    }) {
+        if !debtors.contains(&due.debtor_type) {
+            debtors.push(due.debtor_type);
+        }
+    }
+    debtors
+}
+
+/// True when the sender name points at the unit's tenant or owner.
+fn payer_identified(
+    inner: &crate::state::AppStateInner,
+    unit: &crate::models::IndependentUnit,
+    sender_name: Option<&str>,
+) -> bool {
+    let Some(sender) = sender_name.map(str::trim).filter(|s| !s.is_empty()) else {
+        return false;
+    };
+    let folded = crate::services::dues_ledger::fold_turkish(sender);
+    [&unit.tenant_user_id, &unit.owner_user_id]
+        .into_iter()
+        .filter_map(|uid| uid.as_ref())
+        .filter_map(|id| inner.users.iter().find(|u| &u.id == id))
+        .any(|u| {
+            let name = crate::services::dues_ledger::fold_turkish(&u.full_name);
+            folded.contains(&name) || name.contains(&folded)
+        })
 }

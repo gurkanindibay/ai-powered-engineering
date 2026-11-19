@@ -59,6 +59,7 @@ async fn test_cross_tenant_reconciliation_confirmation_blocked() {
         optional_message: None,
         remember_sender_iban: None,
         owner_capital_match_ids: Vec::new(),
+        debtor_assignments: Default::default(),
     };
 
     let req = Request::builder()
