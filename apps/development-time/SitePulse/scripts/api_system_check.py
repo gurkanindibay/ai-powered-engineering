@@ -27,6 +27,10 @@ local port (the backend applies the migrations), seeds it, and checks over HTTP:
   budget_accrual_legal_basis       accrual from an approved işletme projesi records the budget on each liability (R5)
   finance_desk_over_http           SPEC-009: balanced ledger, dunning, analytics, four-eyes invoices, isolation, lawyer token
   exit_settlement_self_approval_audited requester self-approval is denied, preserves advance, and writes an AUTHZ_DENIED event
+  late_fee_reconciliation_http     reconciliation response reports the seeded liability's stored fee
+  accrual_schedule_http             schedule GET/PUT, invalid-value response and write permission
+  accrual_corrections_http          correction request, audited self-approval denial and second-manager approval
+  billing_period_lifecycle_http     period close, closed-period accrual refusal, four-eyes reopen and write permission
   person_records_and_import        person F7-F10: hashed national ID (step-up, audited), preferences, duplicates, CSV import
   ledger_integrity_clean           v_integrity_violations is empty after all checks
 
@@ -94,6 +98,7 @@ CHECKS = [
     "receipt_pdf_and_verification", "card_payment_via_provider", "budget_accrual_legal_basis", "ledger_integrity_clean",
     "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "household_members_persisted", "invitation_atomic_registration",
     "finance_desk_over_http", "exit_settlement_self_approval_audited",
+    "late_fee_reconciliation_http", "accrual_schedule_http", "accrual_corrections_http", "billing_period_lifecycle_http",
     "person_tenant_isolation", "person_activation_lifecycle", "person_directory_and_export",
     "person_records_and_import",
 ]
@@ -311,6 +316,12 @@ class Context:
         self.other_manager = ""
         self.receipt_before_restart: Optional[int] = None
         self.unit_id: str = "1"
+        self.accrual_check_due_id: str = ""
+        self.accrual_check_period_id: str = ""
+        self.accrual_check_period_key: str = ""
+        self.site_id: str = ""
+        self.second_site_manager: str = ""
+        self.write_denied_user: str = ""
 
 
 def check_unauthenticated(ctx: Context) -> Tuple[bool, str]:
@@ -780,6 +791,126 @@ def check_exit_settlement_self_approval_audited(ctx: Context) -> Tuple[bool, str
     ).strip() == "t"
     ok = decision_status == 403 and before == after and audited
     return ok, f"self-approval {decision_status}, balance unchanged {before == after}, denied audit event {audited}"
+
+
+def check_late_fee_reconciliation_http(ctx: Context) -> Tuple[bool, str]:
+    """STORY-07-13: the reconciliation route reports stored values for seeded overdue dues."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    status, body = http("GET", f"{b}/api/v1/late-fees/reconciliation", token=ctx.manager)
+    if status != 200:
+        return False, f"reconciliation {status} {body[:200]}"
+    report = json.loads(body)
+    stored = ctx.psql.run(db, f"SELECT delay_penalty FROM dues_liabilities WHERE id={ctx.accrual_check_due_id};")
+    mismatch = next((row for row in report.get("mismatches", []) if row.get("due_id") == ctx.accrual_check_due_id), None)
+    matched = mismatch is not None and Decimal(str(mismatch.get("stored_fee"))) == Decimal(stored)
+    ok = (report.get("site_id") == ctx.site_id and report.get("liabilities_checked", 0) >= 1 and matched
+          and Decimal(str(mismatch.get("evaluated_fee"))) > Decimal(stored))
+    return ok, (f"status {status}, checked {report.get('liabilities_checked')}, seeded stored fee {stored}, "
+                f"mismatch returned {matched}, evaluated fee {mismatch and mismatch.get('evaluated_fee')}")
+
+
+def check_accrual_schedule_http(ctx: Context) -> Tuple[bool, str]:
+    """STORY-07-10: read, validate and persist schedule changes over HTTP."""
+    b = ctx.backend.base
+    read_status, read_body = http("GET", f"{b}/api/v1/accrual-schedule", token=ctx.manager)
+    if read_status != 200:
+        return False, f"schedule read {read_status} {read_body[:160]}"
+    schedule = json.loads(read_body)
+    invalid = http("PUT", f"{b}/api/v1/accrual-schedule", token=ctx.manager,
+                   body={**schedule, "accrual_day": 0})
+    updated_schedule = {**schedule, "accrual_day": 2, "due_day": 7, "grace_days": 3}
+    update_status, update_body = http("PUT", f"{b}/api/v1/accrual-schedule", token=ctx.manager,
+                                      body=updated_schedule)
+    if update_status not in (200, 204):
+        return False, f"schedule update {update_status} {update_body[:160]}"
+    verify_status, verify_body = http("GET", f"{b}/api/v1/accrual-schedule", token=ctx.manager)
+    verify = json.loads(verify_body) if verify_status == 200 else {}
+    denied = http("PUT", f"{b}/api/v1/accrual-schedule", token=ctx.write_denied_user,
+                  body=updated_schedule)[0]
+    ok = invalid[0] == 400 and verify_status == 200 and verify == updated_schedule and denied == 403
+    return ok, f"read {read_status}, invalid day {invalid[0]}, update {update_status}, persisted {verify == updated_schedule}, resident write {denied}"
+
+
+def check_accrual_corrections_http(ctx: Context) -> Tuple[bool, str]:
+    """STORY-07-11: create, list and decide a correction through HTTP with four-eyes audit."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    original = ctx.psql.run(db, f"SELECT principal_amount FROM dues_liabilities WHERE id={ctx.accrual_check_due_id};")
+    request_status, request_body = http("POST", f"{b}/api/v1/accrual-corrections", token=ctx.manager, body={
+        "due_id": ctx.accrual_check_due_id, "kind": "CREDIT_NOTE", "amount": "700.00",
+        "reason": "API system check credit note",
+    })
+    if request_status != 201:
+        return False, f"correction request {request_status} {request_body[:200]}"
+    correction_id = json.loads(request_body)["id"]
+    listed_status, listed_body = http("GET", f"{b}/api/v1/accrual-corrections", token=ctx.manager)
+    listed = json.loads(listed_body) if listed_status == 200 else []
+    visible = any(item.get("id") == correction_id and item.get("status") == "PENDING" for item in listed)
+    self_status = http("POST", f"{b}/api/v1/accrual-corrections/{correction_id}/decide", token=ctx.manager,
+                       body={"approve": True, "note": "self approval must fail"})[0]
+    user_id = ctx.psql.run(db, "SELECT id FROM users WHERE lower(email)=lower('mehmet.demir@begonya.com') LIMIT 1;")
+    audited = ctx.psql.run(db, "SELECT count(*) > 0 FROM audit_events WHERE action='AUTHZ_DENIED' "
+                           "AND outcome='DENIED' AND resource_type='http_request' "
+                           "AND resource_id='/api/v1/accrual-corrections/{id}/decide' "
+                           f"AND actor_id='{user_id}' AND request_id <> 'database';") == "t"
+    unchanged = ctx.psql.run(db, f"SELECT principal_amount FROM dues_liabilities WHERE id={ctx.accrual_check_due_id};") == original
+    second_status, second_body = http("POST", f"{b}/api/v1/accrual-corrections/{correction_id}/decide",
+                                      token=ctx.second_site_manager,
+                                      body={"approve": True, "note": "approved by second manager"})
+    result = json.loads(second_body) if second_status == 200 else {}
+    after = ctx.psql.run(db, f"SELECT principal_amount FROM dues_liabilities WHERE id={ctx.accrual_check_due_id};")
+    denied_request = http("POST", f"{b}/api/v1/accrual-corrections", token=ctx.write_denied_user,
+                          body={"due_id": ctx.accrual_check_due_id, "kind": "CANCEL", "reason": "no access"})[0]
+    denied_decision = http("POST", f"{b}/api/v1/accrual-corrections/{correction_id}/decide",
+                           token=ctx.write_denied_user, body={"approve": False})[0]
+    ok = (visible and listed_status == 200 and self_status == 403 and audited and unchanged
+          and second_status == 200 and result.get("status") == "APPROVED" and Decimal(after) == Decimal(original) - Decimal("700.00")
+          and denied_request == 403 and denied_decision == 403)
+    return ok, (f"create/list {request_status}/{visible}, self approval {self_status} audited {audited}, unchanged {unchanged}, "
+                f"second approval {second_status}, amount {original}->{after}, resident writes {denied_request}/{denied_decision}")
+
+
+def check_billing_period_lifecycle_http(ctx: Context) -> Tuple[bool, str]:
+    """STORY-07-12: close and reopen a period through HTTP and refuse accrual while closed."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    period = ctx.accrual_check_period_id
+    close_status, close_body = http("POST", f"{b}/api/v1/dues/periods/{period}/close", token=ctx.manager)
+    if close_status != 200:
+        return False, f"period close {close_status} {close_body[:200]}"
+    snapshot = json.loads(close_body)
+    accrual_status = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.manager, body={
+        "site_id": ctx.site_id, "period": ctx.accrual_check_period_key, "amount": "0.00",
+        "due_date": time.strftime("%Y-%m-%d"),
+    })[0]
+    request_status, request_body = http("POST", f"{b}/api/v1/dues/periods/{period}/reopen", token=ctx.manager,
+                                        body={"reason": "missed invoice API check"})
+    if request_status != 201:
+        return False, f"reopen request {request_status} {request_body[:200]}"
+    reopen = json.loads(request_body)
+    stayed_closed = ctx.psql.run(db, f"SELECT status FROM dues_periods WHERE id={period};") == "CLOSED"
+    self_approval = http("POST", f"{b}/api/v1/dues/period-reopen-requests/{reopen['id']}/decide",
+                         token=ctx.manager, body={"approve": True, "decision_note": "must be second manager"})[0]
+    approve_status, approve_body = http("POST", f"{b}/api/v1/dues/period-reopen-requests/{reopen['id']}/decide",
+                                        token=ctx.second_site_manager,
+                                        body={"approve": True, "decision_note": "second manager approved"})
+    approved = json.loads(approve_body) if approve_status == 200 else {}
+    resident_close = http("POST", f"{b}/api/v1/dues/periods/{period}/close", token=ctx.write_denied_user)[0]
+    resident_reopen = http("POST", f"{b}/api/v1/dues/periods/{period}/reopen", token=ctx.write_denied_user,
+                           body={"reason": "no access"})[0]
+    resident_decide = http("POST", f"{b}/api/v1/dues/period-reopen-requests/{reopen['id']}/decide",
+                           token=ctx.write_denied_user, body={"approve": False})[0]
+    resident_accrual = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.write_denied_user, body={
+        "site_id": ctx.site_id, "period": ctx.accrual_check_period_key, "amount": "0.00",
+        "due_date": time.strftime("%Y-%m-%d"),
+    })[0]
+    ok = (snapshot.get("period_key") == ctx.accrual_check_period_key and accrual_status == 409
+          and request_status == 201 and stayed_closed and self_approval == 403
+          and approve_status == 200 and approved.get("status") == "APPROVED"
+          and ctx.psql.run(db, f"SELECT status FROM dues_periods WHERE id={period};") == "OPEN"
+          and resident_close == 403 and resident_reopen == 403 and resident_decide == 403
+          and resident_accrual == 403)
+    return ok, (f"close {close_status}, accrual while closed {accrual_status}, reopen requested {request_status}, "
+                f"closed pending approval {stayed_closed}, requester approval {self_approval}, second approval {approve_status}, "
+                f"resident writes {resident_close}/{resident_reopen}/{resident_decide}/{resident_accrual}")
 
 
 def check_receipt_pdf(ctx: Context) -> Tuple[bool, str]:
@@ -1291,6 +1422,10 @@ CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "ledger_integrity_clean": check_ledger_integrity,
     "finance_desk_over_http": check_finance_desk,
     "exit_settlement_self_approval_audited": check_exit_settlement_self_approval_audited,
+    "late_fee_reconciliation_http": check_late_fee_reconciliation_http,
+    "accrual_schedule_http": check_accrual_schedule_http,
+    "accrual_corrections_http": check_accrual_corrections_http,
+    "billing_period_lifecycle_http": check_billing_period_lifecycle_http,
 }
 
 
@@ -1311,6 +1446,50 @@ def seed(ctx: Context) -> None:
         INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status)
         VALUES ({ctx.unit_id}, 'System Check Dues', 100.00, CURRENT_DATE, 'PENDING');
     """)
+    ctx.site_id = ctx.psql.run(db, "SELECT id FROM sites WHERE slug='begonya-sitesi' AND deleted_at IS NULL LIMIT 1;")
+    ctx.accrual_check_period_key = ctx.psql.run(db, "SELECT to_char(CURRENT_DATE - interval '1 month', 'YYYY-MM');")
+    # A previous-month period on another unit keeps these rows out of the current-month budget accrual
+    # and the shared unit's advance/allocation checks that run earlier in the suite.
+    accrual_unit_id = ctx.psql.run(db, f"SELECT id FROM units WHERE site_id={ctx.site_id} AND id <> {ctx.unit_id} ORDER BY id LIMIT 1;")
+    ctx.accrual_check_period_id = ctx.psql.run(db, f"""
+        INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status)
+        VALUES ({ctx.site_id}, '{ctx.accrual_check_period_key}', '{ctx.accrual_check_period_key}',
+                date_trunc('month', CURRENT_DATE - interval '1 month')::date, 'OPEN')
+        ON CONFLICT (site_id, period_name) DO UPDATE SET status='OPEN'
+        RETURNING id;
+    """)
+    ctx.accrual_check_due_id = ctx.psql.run(db, f"""
+        INSERT INTO dues_liabilities
+            (unit_id, dues_period_id, period, period_key, debtor_type, expense_type, principal_amount,
+             due_date, status, delay_penalty, paid_principal, paid_penalty, grace_days)
+        VALUES ({accrual_unit_id}, {ctx.accrual_check_period_id}, '{ctx.accrual_check_period_key}',
+                '{ctx.accrual_check_period_key}', 'OWNER', 'OPERATIONAL_DUES', 1400.00,
+                CURRENT_DATE - 5, 'OVERDUE', 0.00, 0.00, 0.00, 0)
+        RETURNING id;
+    """)
+    second_manager_person_id = ctx.psql.run(db, f"""
+        INSERT INTO persons (site_id, full_name, email, person_type)
+        VALUES ({ctx.site_id}, 'API System Check Second Manager',
+                'api-system-second-manager@example.com', 'SITE_MANAGER')
+        RETURNING id;
+    """)
+    ctx.psql.run(db, f"""
+        INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+        VALUES ({ctx.site_id}, {second_manager_person_id}, 'api-system-second-manager@example.com',
+                '{hash_password("API-System-Second-Manager-123")}', 'SITE_MANAGER', false);
+    """)
+    # A dedicated resident: other checks revoke or change the seeded residents' sessions and passwords.
+    resident_person_id = ctx.psql.run(db, f"""
+        INSERT INTO persons (site_id, full_name, email, person_type)
+        VALUES ({ctx.site_id}, 'API System Check Resident',
+                'api-system-resident@example.com', 'HOME_OWNER')
+        RETURNING id;
+    """)
+    ctx.psql.run(db, f"""
+        INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+        VALUES ({ctx.site_id}, {resident_person_id}, 'api-system-resident@example.com',
+                '{hash_password("API-System-Resident-123")}', 'HOME_OWNER', false);
+    """)
 
 
 def run(selected: List[str], container: str, keep: bool, log_dir: Path) -> Dict[str, object]:
@@ -1327,6 +1506,8 @@ def run(selected: List[str], container: str, keep: bool, log_dir: Path) -> Dict[
         backend.restart()          # load the seeded data
         ctx.manager = login(backend, "mehmet.demir@begonya.com", "mehmet123")
         ctx.other_manager = login(backend, "other.manager@syscheck.test", "OtherManager-123")
+        ctx.second_site_manager = login(backend, "api-system-second-manager@example.com", "API-System-Second-Manager-123")
+        ctx.write_denied_user = login(backend, "api-system-resident@example.com", "API-System-Resident-123")
         for name in CHECKS:
             if name not in selected:
                 continue
