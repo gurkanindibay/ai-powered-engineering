@@ -100,7 +100,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Given unit "A-3" is owned and vacant on the first day of "<period>" and has tariff 1500.00
     And the clock is set to "<move_in>" and a tenant moves in on that date
     When the manager accrues period "<period>"
-    Then the owner owes <owner_share> and the tenant owes <tenant_share>
+    Then owner "Burak Şahin" owes <owner_share> and tenant "Selin Demir" owes <tenant_share>
     And the two shares add up to 1500.00
 
     Examples:
@@ -163,7 +163,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Given unit "A-3" is owned and vacant on "2026-10-01" with monthly tariff 1500.00
     And proration is <setting>
     When a tenant moves in on "2026-10-11" and the period is accrued on "2026-10-20"
-    Then owner principal is <owner_share> and tenant principal is <tenant_share>
+    Then owner "Burak Şahin" principal is <owner_share> and tenant "Oya Çelik" principal is <tenant_share>
 
     Examples:
       | setting  | owner_share | tenant_share |
