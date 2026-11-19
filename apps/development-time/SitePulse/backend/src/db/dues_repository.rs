@@ -312,7 +312,7 @@ pub async fn insert_accrued_due(
         .query_opt(
             r#"
             INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type, grace_days, effective_due_date, liable_person_id)
-            VALUES ($1, $2, $3, $4, $5, 'PENDING', 0, $6, $7, $8, $9,
+            VALUES ($1, $2, $3, $4, $5, 'PENDING', 0, $6::text, $7, $8, $9,
                     CASE WHEN $6::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) END)
             ON CONFLICT DO NOTHING
             RETURNING id
@@ -540,7 +540,7 @@ pub async fn commit_accrual_batch(
                 INSERT INTO dues_liabilities
                     (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
                      delay_penalty, debtor_type, expense_type, operating_budget_id, grace_days, effective_due_date, liable_person_id)
-                VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7, $8, $9, $10, $11,
+                VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7::text, $8, $9, $10, $11,
                         CASE WHEN $7::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) END)
                 ON CONFLICT DO NOTHING
                 RETURNING id
