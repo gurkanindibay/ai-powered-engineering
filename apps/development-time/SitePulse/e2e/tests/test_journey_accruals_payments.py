@@ -52,8 +52,21 @@ def test_late_fee_follows_clock_day_by_day(request, api, actors, stack):
         item = next(i for i in debtor["open_items"] if Decimal(str(i["principal_outstanding"])) == Decimal("1500.00"))
         assert Decimal(str(item["penalty_outstanding"])) == Decimal("102.50")
 
-        overview = ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-02-03")
-        assert Decimal(str(overview["summary"]["total_overdue_with_interest"])) == Decimal("8813.75")
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-02-03")
+        october_outstanding = Decimal("0.00")
+        for unit_id in fixture.unit_ids:
+            statement = api.resident_statement(fixture.manager, unit_id)
+            october_outstanding += sum(
+                (
+                    Decimal(str(item["principal_outstanding"]))
+                    + Decimal(str(item["penalty_outstanding"]))
+                    for debtor in statement["debtors"]
+                    for item in debtor["open_items"]
+                    if item["period"] == "Ekim 2026"
+                ),
+                Decimal("0.00"),
+            )
+        assert october_outstanding == Decimal("8813.75")
     except BaseException as failure:
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
     else:
@@ -154,12 +167,12 @@ def test_payment_clears_oldest_period_first(request, api, actors, stack):
         assert "Kasım 2026" in periods
 
         ekim_item = next(i for i in open_items if i["period"] == "Ekim 2026")
-        assert Decimal(str(ekim_item["principal_outstanding"])) == Decimal("1275.00")
+        assert Decimal(str(ekim_item["principal_outstanding"])) == Decimal("1297.50")
         assert Decimal(str(ekim_item["penalty_outstanding"])) == Decimal("0.00")
 
         kasim_item = next(i for i in open_items if i["period"] == "Kasım 2026")
         assert Decimal(str(kasim_item["principal_outstanding"])) == Decimal("1500.00")
-        assert Decimal(str(kasim_item["penalty_outstanding"])) == Decimal("22.50")
+        assert Decimal(str(kasim_item["penalty_outstanding"])) == Decimal("0.00")
 
         assert Decimal(str(debtor["total_outstanding"])) == Decimal("2797.50")
 

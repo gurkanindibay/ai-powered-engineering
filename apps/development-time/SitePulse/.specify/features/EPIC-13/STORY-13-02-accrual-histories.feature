@@ -33,7 +33,7 @@ Feature: Accrual histories F4, F5 and F7
     Given the site is in state F4
     When the clock moves forward one day to "2026-11-20"
     Then the late fee for a 1500.00 liability is 102.50
-    And the total outstanding is 8813.75, which is 8800.00 plus 4 x 2.50 and 1 x 3.75
+    And the outstanding from the "Ekim 2026" liabilities is 8813.75, which is 8800.00 plus 4 x 2.50 and 1 x 3.75
 
   # -------------------------------------------------------- F5 MULTI_PERIOD
 

@@ -12,8 +12,9 @@ Feature: Paying, allocation and advance across periods
   Scenario: A payment clears the oldest period first
     Given the site is in state F5
     When the manager records a manual payment of 2000.00 for unit "A-5"
-    Then the "Eylül 2026" late fee 175.00 and principal 1500.00 are settled
-    And the remaining 325.00 goes to the "Ekim 2026" late fee 100.00 and then 225.00 of its principal
+    Then late fees are settled oldest first: 175.00 for "Eylül 2026", 100.00 for "Ekim 2026" and 22.50 for "Kasım 2026"
+    And the remaining 1702.50 settles all 1500.00 of "Eylül 2026" principal and 202.50 of "Ekim 2026" principal
+    And "Ekim 2026" has 1297.50 principal open, while "Kasım 2026" has 1500.00 principal open and no late fee
     And unit "A-5" owes 2797.50
     And the ledger invariants hold
 
