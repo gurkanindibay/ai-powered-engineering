@@ -171,7 +171,9 @@ pub async fn run_accrual_with_report(
                     d.expense_type == ExpenseType::OperationalDues
                         && units_in_site.iter().any(|u| u.id == d.unit_id)
                 })
-                .filter_map(|d| BillingPeriod::parse(&d.period).ok())
+                .filter_map(|d| {
+                    crate::services::supplementary_charge_service::billed_period(&inner, d)
+                })
                 .collect();
             let plan = schedule.catch_up_plan(local, accrued_periods.iter().min().copied(), |p| {
                 accrued_periods.contains(&p)
@@ -201,7 +203,9 @@ pub async fn run_accrual_with_report(
                 for unit in &units_in_site {
                     let already = inner.dues.iter().any(|d| {
                         d.unit_id == unit.id
-                            && BillingPeriod::parse(&d.period).ok() == Some(billing_period)
+                            && crate::services::supplementary_charge_service::billed_period(
+                                &inner, d,
+                            ) == Some(billing_period)
                             && d.expense_type == ExpenseType::OperationalDues
                     });
                     if already {

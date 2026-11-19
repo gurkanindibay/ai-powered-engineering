@@ -36,6 +36,7 @@ use crate::services::person_record_service::{
     SetNationalIdRequest,
 };
 use crate::services::site_admin_service as service;
+use crate::services::supplementary_charge_service::SupplementaryChargeService;
 use crate::services::AccountActivationService;
 use crate::services::SiteAdminService;
 use crate::state::AppState;
@@ -316,11 +317,18 @@ pub async fn apply_occupancy_transition(
             .unwrap_or_else(|| crate::scheduler::site_local_date(timezone, chrono::Utc::now()))
     };
     payload.effective_date = Some(accrued_on);
-    let service = OccupancyService::new(state);
+    let service = OccupancyService::new(state.clone());
     let mut response = service
         .transition(&site_id, &id, payload)
         .await
         .map_err(occupancy_error)?;
+    if let Some(opened) = response.opened.clone() {
+        let today = service.site_today(&site_id).await;
+        response.supplementary_charges = SupplementaryChargeService::new(state.clone())
+            .post_for_opened_session(&site_id, &opened, today)
+            .await
+            .map_err(correction_error)?;
+    }
     if let Some(correction) = service
         .request_open_period_split(&Caller::from_claims(&ctx.claims), &id, accrued_on)
         .await

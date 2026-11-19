@@ -314,6 +314,64 @@ pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Op
     Ok(row.map(|r| r.get(0)))
 }
 
+/// One supplementary charge to persist: the liability (posted in `due.period`) and the key of
+/// the month it bills.
+pub struct SupplementaryInsert<'a> {
+    pub due: &'a DuesLiability,
+    pub source_period_key: &'a str,
+}
+
+/// Persists supplementary charges (STORY-07-13) in one transaction and returns each new id,
+/// or `None` where an identical charge already exists. The charge is linked to the billing
+/// period row it is posted in, when that row exists.
+pub async fn insert_supplementary_dues(
+    pool: &Pool,
+    site_id: &str,
+    charges: &[SupplementaryInsert<'_>],
+) -> DbResult<Vec<Option<i64>>> {
+    let site = require_id("site", site_id)?;
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
+    let mut ids = Vec::with_capacity(charges.len());
+    for charge in charges {
+        let due = charge.due;
+        let unit = require_id("unit", &due.unit_id)?;
+        let key = crate::domain::billing_period::BillingPeriod::parse(&due.period)
+            .ok()
+            .map(|period| period.key());
+        let row = tx
+            .query_opt(
+                r#"
+                INSERT INTO dues_liabilities
+                    (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
+                     delay_penalty, debtor_type, expense_type, grace_days, source_period)
+                VALUES ($1, $2, $3,
+                        (SELECT id FROM dues_periods WHERE site_id = $4 AND period_key = $3),
+                        $5, $6, 'PENDING', 0, $7, $8, $9, $10)
+                ON CONFLICT DO NOTHING
+                RETURNING id
+                "#,
+                &[
+                    &unit,
+                    &due.period,
+                    &key,
+                    &site,
+                    &due.principal_amount,
+                    &due.due_date,
+                    &due.debtor_type,
+                    &due.expense_type,
+                    &i32::try_from(due.grace_days).unwrap_or(0),
+                    &charge.source_period_key,
+                ],
+            )
+            .await?;
+        ids.push(row.map(|r| r.get::<_, i64>(0)));
+    }
+    tx.commit().await?;
+    Ok(ids)
+}
+
 /// What one site's accrual commits: the period row, every liability with its budget
 /// basis, and the run report, in a single transaction.
 pub struct AccrualBatch<'a> {

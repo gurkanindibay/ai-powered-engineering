@@ -153,6 +153,38 @@ pub fn split_monthly_dues(
     .collect())
 }
 
+/// The amount owed for the days of `period_start`'s month that nobody was billed for,
+/// counted from `start_date` (the responsible party's start residing date) to the end of
+/// the month. A unit created later limits the chargeable days. Returns `None` when no
+/// day of the month is chargeable or the amount is zero.
+pub fn unbilled_days_amount(
+    monthly_amount: Decimal,
+    period_start: NaiveDate,
+    unit_created_on: Option<NaiveDate>,
+    start_date: NaiveDate,
+) -> Result<Option<Decimal>, ProrationError> {
+    if monthly_amount < Decimal::ZERO {
+        return Err(ProrationError::NegativeAmount);
+    }
+    if monthly_amount.normalize().scale() > 2 {
+        return Err(ProrationError::InvalidScale);
+    }
+    let Some(period_end) = last_day_of_month(period_start) else {
+        return Ok(None);
+    };
+    let charge_start = start_date
+        .max(unit_created_on.unwrap_or(period_start))
+        .max(period_start);
+    if charge_start > period_end {
+        return Ok(None);
+    }
+    let days = period_end.signed_duration_since(charge_start).num_days() + 1;
+    let days_in_month = i64::from(period_end.day());
+    let amount = (monthly_amount * Decimal::from(days) / Decimal::from(days_in_month))
+        .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
+    Ok((amount > Decimal::ZERO).then_some(amount))
+}
+
 fn contains(span: &OccupancySpan, date: NaiveDate) -> bool {
     span.starts_on <= date && span.ends_before.is_none_or(|end| date < end)
 }
@@ -289,5 +321,53 @@ mod tests {
                 amount: money("1400.00")
             }]
         );
+    }
+
+    #[test]
+    fn unbilled_days_run_from_the_start_date_to_the_month_end() {
+        let amount = unbilled_days_amount(
+            money("1500.00"),
+            date("2026-10-01"),
+            None,
+            date("2026-10-11"),
+        )
+        .expect("valid amount");
+        assert_eq!(amount, Some(money("1016.13")));
+    }
+
+    #[test]
+    fn unbilled_days_before_the_month_charge_the_whole_month() {
+        let amount = unbilled_days_amount(
+            money("1500.00"),
+            date("2026-11-01"),
+            None,
+            date("2026-10-11"),
+        )
+        .expect("valid amount");
+        assert_eq!(amount, Some(money("1500.00")));
+    }
+
+    #[test]
+    fn unbilled_days_after_the_month_charge_nothing() {
+        let amount = unbilled_days_amount(
+            money("1500.00"),
+            date("2026-10-01"),
+            None,
+            date("2026-11-02"),
+        )
+        .expect("valid amount");
+        assert_eq!(amount, None);
+    }
+
+    #[test]
+    fn unbilled_days_respect_the_unit_creation_date() {
+        let amount = unbilled_days_amount(
+            money("1500.00"),
+            date("2026-10-01"),
+            Some(date("2026-10-16")),
+            date("2026-10-11"),
+        )
+        .expect("valid amount");
+        assert_eq!(amount, Some(money("774.19")));
     }
 }

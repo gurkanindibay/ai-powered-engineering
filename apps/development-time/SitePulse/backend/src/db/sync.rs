@@ -337,7 +337,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 4. Load Dues Liabilities
     {
-        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through, grace_days, effective_due_date FROM dues_liabilities d WHERE d.status <> 'CANCELLED' AND EXISTS (SELECT 1 FROM units u WHERE u.id = d.unit_id AND u.deleted_at IS NULL)",
+        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through, grace_days, effective_due_date, source_period FROM dues_liabilities d WHERE d.status <> 'CANCELLED' AND EXISTS (SELECT 1 FROM units u WHERE u.id = d.unit_id AND u.deleted_at IS NULL)",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -354,6 +354,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let penalty_accrued_through: Option<NaiveDate> = row.get(11);
             let grace_days = u32::try_from(row.get::<_, i32>(12)).unwrap_or(0);
             let effective_due_date: Option<NaiveDate> = row.get(13);
+            let source_period: Option<String> = row.get(14);
 
             let status = match status_str.to_uppercase().as_str() {
                 "PAID" => DebtStatus::Paid,
@@ -380,6 +381,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 effective_due_date,
             };
             crate::services::dues_ledger::refresh(&mut due);
+            if let Some(source) = source_period {
+                state.dues_source_period.insert(due.id.clone(), source);
+            }
             upsert_by_id(&mut state.dues, due, |x| &x.id);
         }
         info!(
