@@ -36,6 +36,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+import urllib.parse
 import uuid
 from dataclasses import asdict, dataclass
 from typing import Callable
@@ -138,7 +140,7 @@ def add_labels(run: Runner, repo: str, number: int, names: list[str]) -> None:
 
 
 def remove_label(run: Runner, repo: str, number: int, name: str) -> None:
-    quoted = name.replace(" ", "%20")
+    quoted = urllib.parse.quote(name, safe="")  # `/` and `:` must not split the path
     try:
         run(["api", "-X", "DELETE", f"repos/{repo}/issues/{number}/labels/{quoted}"])
     except ClaimError as exc:
@@ -146,20 +148,36 @@ def remove_label(run: Runner, repo: str, number: int, name: str) -> None:
             raise
 
 
-def claim_order(run: Runner, repo: str, number: int, labels: list[str]) -> list[str]:
+EVENT_RETRIES = 5
+EVENT_RETRY_SECONDS = 1.0
+
+
+def claim_order(run: Runner, repo: str, number: int, labels: list[str], own: str) -> list[str]:
     """Claim labels still on the issue, oldest first by GitHub's own event order.
 
     The server assigns `labeled` event ids in the order the writes landed, so
     every session that re-reads after its own write agrees on who was first.
+    The events API can lag a label write by a few seconds, so retry until our
+    own `labeled` event is listed; only then is the order trustworthy.
     """
-    out = run(["api", "--paginate", f"repos/{repo}/issues/{number}/events",
-               "--jq", r'.[] | select(.event=="labeled") | "\(.id) \(.label.name)"'])
     order: list[str] = []
-    for line in sorted((l for l in out.splitlines() if l.strip()), key=lambda l: int(l.split(" ", 1)[0])):
-        name = line.split(" ", 1)[1]
-        if name.startswith(CLAIM_PREFIX) and name in labels and name not in order:
-            order.append(name)
-    return order or [l for l in sorted(labels) if l.startswith(CLAIM_PREFIX)]
+    for attempt in range(EVENT_RETRIES):
+        out = run(["api", "--paginate", f"repos/{repo}/issues/{number}/events",
+                   "--jq", r'.[] | select(.event=="labeled") | "\(.id) \(.label.name)"'])
+        order = []
+        for line in sorted((l for l in out.splitlines() if l.strip()), key=lambda l: int(l.split(" ", 1)[0])):
+            name = line.split(" ", 1)[1]
+            if name.startswith(CLAIM_PREFIX) and name in labels and name not in order:
+                order.append(name)
+        if own in order:
+            return order
+        if attempt < EVENT_RETRIES - 1:
+            time.sleep(EVENT_RETRY_SECONDS)
+    # Our event never showed up: do not guess an order that could disagree
+    # with the other session's. If anyone else holds a claim label, treat
+    # ours as lost (safe: we back off); if nobody does, we are the only claimer.
+    others = sorted(l for l in labels if l.startswith(CLAIM_PREFIX) and l != own)
+    return others + [own]
 
 
 def claim(run: Runner, repo: str, number: int, harness: str, session: str, force: bool) -> tuple[bool, str]:
@@ -181,7 +199,7 @@ def claim(run: Runner, repo: str, number: int, harness: str, session: str, force
     # Concurrent claims: the earliest claim label by server event order wins.
     # A loser removes only its own claim label; `in progress` stays for the winner.
     current = read_labels(run, repo, number)
-    first = claim_order(run, repo, number, current)[0]
+    first = claim_order(run, repo, number, current, mine_label)[0]
     if first != mine_label:
         remove_label(run, repo, number, mine_label)
         drop_unused_claim_label(run, repo, mine_label)
@@ -193,7 +211,7 @@ def drop_unused_claim_label(run: Runner, repo: str, label: str) -> None:
     """Delete a repo-level claim label once no issue or PR carries it."""
     if not label.startswith(CLAIM_PREFIX):
         return
-    quoted = label.replace(":", "%3A").replace("/", "%2F")
+    quoted = urllib.parse.quote(label, safe="")
     users = run(["api", f"repos/{repo}/issues?state=all&per_page=1&labels={quoted}", "--jq", "length"]).strip()
     if users == "0":
         try:

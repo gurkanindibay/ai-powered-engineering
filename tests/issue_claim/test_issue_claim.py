@@ -2,6 +2,7 @@ import io
 import json
 import sys
 import unittest
+import urllib.parse
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -16,6 +17,8 @@ class FakeGh:
         self.labels = []
         self.events = []
         self.repo_labels_deleted = []
+        self.event_reads = 0
+        self.lag = []  # per-read count of newest events hidden (API lag)
         self.add(list(labels))
 
     def add(self, names):
@@ -31,14 +34,19 @@ class FakeGh:
         if "issues?state=all" in joined:
             return "0"
         if "/events" in joined:
-            return "\n".join(f"{i} {n}" for i, n in self.events)
+            self.event_reads += 1
+            visible = self.events[: max(0, len(self.events) - self.lag.pop(0))] if self.lag else self.events
+            return "\n".join(f"{i} {n}" for i, n in visible)
         if "--jq" in args and "/issues/" in joined:
             return json.dumps(self.labels)
         if "-X" in args and args[args.index("-X") + 1] == "DELETE":
             if "/issues/" not in args[-1]:
                 self.repo_labels_deleted.append(args[-1])
                 return ""
-            name = args[-1].rsplit("/labels/", 1)[1].replace("%20", " ")
+            raw = args[-1].rsplit("/labels/", 1)[1]
+            if "/" in raw or ":" in raw or " " in raw:
+                raise ic.ClaimError("404")  # GitHub reads an unencoded `/` as a path separator
+            name = urllib.parse.unquote(raw)
             if name not in self.labels:
                 raise ic.ClaimError("404")
             self.labels.remove(name)
@@ -134,6 +142,25 @@ class IssueClaimTests(unittest.TestCase):
         self.assertEqual(len(ic.resolve_session("codex", None, {})), 12)
         self.assertEqual(ic.resolve_session("codex", None, {"CODEX_SESSION_ID": "Q 1"}), "q-1")
         self.assertLessEqual(len(ic.claim_label("antigravity", ic.resolve_session("antigravity", "x" * 80, {}))), 50)
+
+    def test_events_api_lag_is_retried_until_own_event_shows(self):
+        ic.EVENT_RETRY_SECONDS = 0
+        self.addCleanup(setattr, ic, "EVENT_RETRY_SECONDS", 1.0)
+        fake = FakeGh()
+        fake.lag = [2, 1]  # our two new events are hidden on the first reads
+        code, _ = run_cli(fake, "claim", "1", "--harness", "claude", "--session", "a")
+        self.assertEqual(code, 0)
+        self.assertEqual(fake.event_reads, 3)
+
+    def test_missing_own_event_backs_off_when_another_claim_exists(self):
+        ic.EVENT_RETRY_SECONDS = 0
+        self.addCleanup(setattr, ic, "EVENT_RETRY_SECONDS", 1.0)
+        fake = FakeGh(["in progress", "claim:codex/z"])
+        self.stale_first_read()
+        fake.lag = [9] * ic.EVENT_RETRIES
+        code, _ = run_cli(fake, "claim", "1", "--harness", "claude", "--session", "a")
+        self.assertEqual(code, 1)
+        self.assertEqual(sorted(fake.labels), ["claim:codex/z", "in progress"])
 
     def test_ensure_label_only_ignores_already_exists(self):
         def bad(args):
