@@ -20,7 +20,8 @@ Usage:
 
 Session id resolution: --session, then $AGENT_SESSION_ID, then the harness
 variable ($CLAUDE_SESSION_ID, $CODEX_SESSION_ID, $ANTIGRAVITY_SESSION_ID),
-then a generated id that is printed so it can be reused for `release`.
+then a generated id that is printed. Keep it: `release` needs the same id
+(the harness variables may not be set by every harness).
 
 Exit codes: 0 ok, 1 claim refused (owned by someone else), 2 usage/gh error.
 Uses the REST API: `gh issue edit --add-label` fails on the classic-Projects
@@ -109,7 +110,7 @@ def ensure_label(run: Runner, repo: str, name: str) -> None:
     try:
         run(["api", "-X", "POST", f"repos/{repo}/labels", "-f", f"name={name}", "-f", f"color={color}"])
     except ClaimError as exc:
-        if "already_exists" not in str(exc) and "422" not in str(exc):
+        if "already_exists" not in str(exc):
             raise
 
 
@@ -138,19 +139,37 @@ def claim(run: Runner, repo: str, number: int, harness: str, session: str, force
     if owner.in_progress and not mine and not force:
         who = f"{owner.harness}/{owner.session}" if owner.owned else "an unidentified agent (bare `in progress`)"
         return False, f"#{number} is already in progress, owned by {who}; pick another issue"
-    stale = [l for l in labels if (l.startswith(HARNESS_PREFIX) or l.startswith(SESSION_PREFIX))]
     wanted = [IN_PROGRESS, f"{HARNESS_PREFIX}{harness}", f"{SESSION_PREFIX}{session}"]
-    for label in stale:
-        if label not in wanted:
-            remove_label(run, repo, number, label)
+    if force:
+        for label in labels:
+            if (label.startswith(HARNESS_PREFIX) or label.startswith(SESSION_PREFIX)) and label not in wanted:
+                remove_label(run, repo, number, label)
+                drop_unused_session_label(run, repo, label)
     add_labels(run, repo, number, [l for l in wanted if l not in labels])
-    # Re-read to detect a concurrent claim that landed between read and write.
-    sessions = [l for l in read_labels(run, repo, number) if l.startswith(SESSION_PREFIX)]
-    if len(sessions) > 1 and not force:
+    # Concurrent claims: the lexicographically smallest session id wins, so
+    # exactly one session keeps the claim. The loser removes only its own
+    # session label; the shared harness label and `in progress` stay because
+    # the winner depends on them.
+    sessions = sorted(l[len(SESSION_PREFIX):] for l in read_labels(run, repo, number) if l.startswith(SESSION_PREFIX))
+    if not force and sessions and sessions[0] != session:
         remove_label(run, repo, number, f"{SESSION_PREFIX}{session}")
-        remove_label(run, repo, number, f"{HARNESS_PREFIX}{harness}")
-        return False, f"#{number} was claimed concurrently by another session; backed off"
+        drop_unused_session_label(run, repo, f"{SESSION_PREFIX}{session}")
+        return False, f"#{number} was claimed concurrently by session {sessions[0]}; backed off"
     return True, f"#{number} claimed by {harness}/{session}"
+
+
+def drop_unused_session_label(run: Runner, repo: str, label: str) -> None:
+    """Delete a repo-level session label once no issue or PR carries it."""
+    if not label.startswith(SESSION_PREFIX):
+        return
+    quoted = label.replace(":", "%3A")
+    users = run(["api", f"repos/{repo}/issues?state=all&per_page=1&labels={quoted}", "--jq", "length"]).strip()
+    if users == "0":
+        try:
+            run(["api", "-X", "DELETE", f"repos/{repo}/labels/{quoted}"])
+        except ClaimError as exc:
+            if "404" not in str(exc):
+                raise
 
 
 def release(run: Runner, repo: str, number: int, harness: str, session: str, force: bool) -> tuple[bool, str]:
@@ -161,6 +180,7 @@ def release(run: Runner, repo: str, number: int, harness: str, session: str, for
         if label.endswith(":None"):
             continue
         remove_label(run, repo, number, label)
+        drop_unused_session_label(run, repo, label)
     return True, f"#{number} released"
 
 

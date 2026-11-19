@@ -18,10 +18,14 @@ class FakeGh:
     def __call__(self, args):
         if args[0] == "repo":
             return "o/r\n"
+        if len(args) > 1 and "issues?state=all" in args[1]:
+            return "0"
         if args[:1] == ["api"] and "--jq" in args:
             return json.dumps(self.labels)
         if "-X" in args and args[args.index("-X") + 1] == "DELETE":
-            name = args[-1].rsplit("/labels/", 1)[1].replace("%20", " ")
+            name = args[-1].rsplit("/labels/", 1)[1].replace("%20", " ").replace("%3A", ":")
+            if "/issues/" not in args[-1]:
+                return ""  # repo-level label deletion
             if name not in self.labels:
                 raise ic.ClaimError("404")
             self.labels.remove(name)
@@ -65,6 +69,50 @@ class IssueClaimTests(unittest.TestCase):
         code, _ = run_cli(fake, "claim", "7", "--harness", "codex", "--session", "s9", "--force")
         self.assertEqual(code, 0)
         self.assertEqual(sorted(fake.labels), ["harness:codex", "in progress", "session:s9"])
+
+    def test_same_harness_race_keeps_exactly_one_winner(self):
+        # Session "a" already won; "b" (same harness) loses and must not
+        # strip the shared harness label or `in progress`.
+        fake = FakeGh(["in progress", "harness:claude", "session:a"])
+        real_read = ic.read_labels
+        calls = {"n": 0}
+
+        def racing(run, repo, number):
+            calls["n"] += 1
+            # first read: issue looked free to "b"
+            return [] if calls["n"] == 1 else real_read(run, repo, number)
+
+        ic.read_labels = racing
+        try:
+            code, out = run_cli(fake, "claim", "1", "--harness", "claude", "--session", "b")
+        finally:
+            ic.read_labels = real_read
+        self.assertEqual(code, 1)
+        self.assertIn("session a", out["message"])
+        self.assertEqual(ic.parse_owner(fake.labels), ic.Owner(True, "claude", "a"))
+        self.assertEqual(run_cli(fake, "release", "1", "--harness", "claude", "--session", "a")[0], 0)
+
+    def test_smallest_session_wins_when_racing_claim_is_ours(self):
+        fake = FakeGh(["in progress", "harness:claude", "session:b"])
+        real_read = ic.read_labels
+        calls = {"n": 0}
+
+        def racing(run, repo, number):
+            calls["n"] += 1
+            return [] if calls["n"] == 1 else real_read(run, repo, number)
+
+        ic.read_labels = racing
+        try:
+            code, _ = run_cli(fake, "claim", "1", "--harness", "claude", "--session", "a")
+        finally:
+            ic.read_labels = real_read
+        self.assertEqual(code, 0)
+
+    def test_ensure_label_only_ignores_already_exists(self):
+        def bad(args):
+            raise ic.ClaimError("gh api failed: 422 Validation Failed invalid color")
+        with self.assertRaises(ic.ClaimError):
+            ic.ensure_label(bad, "o/r", "session:x")
 
     def test_release_only_by_owner(self):
         fake = FakeGh(["in progress", "harness:claude", "session:s1"])
