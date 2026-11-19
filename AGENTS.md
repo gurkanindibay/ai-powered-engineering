@@ -62,6 +62,7 @@ The workspace centers on **SitePulse**, a residential site platform built using 
 10. **Issue Selection & Concurrent Agent Work**:
    - When choosing an issue to work on, select only issues without the `in progress` label. An issue with this label may already be under active work by another agent.
    - Recheck the issue's current labels immediately before starting work. If it is labeled `in progress`, skip it and choose another eligible issue.
+   - **Claim with harness identity.** When you take an issue (or PR), add the `in progress` label together with `harness:<name>` (`codex`, `claude`, `antigravity`, ...) and `session:<id>` (your harness's own session identifier) so other harnesses can tell who owns it and find that session. Use `python3 scripts/issue_claim.py claim <n> --harness <name> --session <id>`; it refuses an issue another session owns (a bare `in progress` with no owner counts as owned). `status <n>` shows the owner; `release <n> ...` removes your three labels when the work is merged or set aside. Never use `--force` to take over a claim unless the user says so.
 
 11. **Worktree Lifecycle (Start From Latest Master, Clean Up After the PR)**:
    - **Before starting each task**, pull the latest `master` and create a new worktree on it, with a new branch for that task:

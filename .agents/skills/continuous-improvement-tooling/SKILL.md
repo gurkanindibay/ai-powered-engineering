@@ -128,6 +128,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `dependency_audit.py` | `apps/development-time/SitePulse/scripts/dependency_audit.py` | Audits `Cargo.lock` and `pubspec.lock` against OSV advisories; allowlist with expiry (`dependency_audit_allowlist.json`); workflow `Security audit` |
 | `db_verify.py` | `apps/development-time/SitePulse/scripts/db_verify.py` | Inspecting and auditing a database (parameterised; non-zero exit on issues) |
 | `token_guard.py` | `scripts/token_guard.py` | Claude Code hook (`.claude/settings.json`) that denies context-flooding calls (large `cat`/`Read`, `ls -R`, unfiltered `find`, full-size screenshots) and warns on oversized Bash output |
+| `issue_claim.py` | `scripts/issue_claim.py` | Claim/release/inspect issues with `in progress` + `harness:<name>` + `session:<id>` labels so concurrent agent harnesses identify each other |
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
 | `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |
 

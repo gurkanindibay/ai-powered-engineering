@@ -346,6 +346,18 @@ echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command"
 python3 -m unittest discover -s tests/token_guard
 ```
 
+## 5c-3. Issue Claim Labels (`issue_claim.py`)
+
+- **Executable Script:** [scripts/issue_claim.py](file:///scripts/issue_claim.py)
+- **Purpose:** Lets different agent harnesses identify each other. A claim is three labels: `in progress`, `harness:<name>` (codex, claude, antigravity) and `session:<id>`. `claim` refuses an issue owned by another session (or a legacy bare `in progress`), `release` only removes the caller's own claim, `status` reports the owner. Session id: `--session`, else `$AGENT_SESSION_ID`, else `$<HARNESS>_SESSION_ID`, else generated and printed.
+
+```bash
+python3 scripts/issue_claim.py claim 123 --harness claude --session <id>
+python3 scripts/issue_claim.py status 123 --json
+python3 scripts/issue_claim.py release 123 --harness claude --session <id>
+python3 -m unittest discover -s tests/issue_claim
+```
+
 ## 5d. Harness CLI (`harness/harness_cli.py`)
 
 - **Purpose:** Task DAG scheduler and verification loop. `verify --task <id>` runs the global build gates, the task's `gates` and its named `acceptance_tests` (read-only). `--record` (CI only) writes `.specify/evidence/<task>.json` (git SHA, gate results, timestamps) and updates the status with a retry budget (FAILED, then BLOCKED). `python3 harness/rtm_validator.py` accepts a VERIFIED requirement only with passing evidence from the current commit.
