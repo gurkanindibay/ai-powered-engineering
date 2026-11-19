@@ -277,8 +277,11 @@ async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_du
         .await
         .unwrap();
 
+    assert_eq!(receipt.total_amount, d("1522.50"));
     assert_eq!(receipt.allocation_breakdown.len(), 1);
     assert_eq!(receipt.allocation_breakdown[0].period, "Kasım 2026");
+    assert_eq!(receipt.allocation_breakdown[0].principal_paid, d("1500.00"));
+    assert_eq!(receipt.allocation_breakdown[0].penalty_paid, d("22.50"));
     let inner = state.inner.read().await;
     assert_eq!(
         inner.dues.iter().find(|x| x.id == "nov").unwrap().status,
@@ -287,6 +290,15 @@ async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_du
     let november = inner.dues.iter().find(|x| x.id == "nov").unwrap();
     assert_eq!(november.paid_principal, d("1500.00"));
     assert_eq!(november.paid_penalty, d("22.50"));
+    assert_eq!(november.principal_amount, d("1500.00"));
+    assert_eq!(november.total_amount, Decimal::ZERO);
+    for id in ["sep", "oct"] {
+        let older = inner.dues.iter().find(|due| due.id == id).unwrap();
+        assert_eq!(
+            older.total_amount - older.paid_principal - older.paid_penalty,
+            d("1500.00")
+        );
+    }
     assert!(inner
         .dues
         .iter()

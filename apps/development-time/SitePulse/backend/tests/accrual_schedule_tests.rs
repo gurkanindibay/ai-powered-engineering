@@ -95,9 +95,11 @@ async fn when_the_due_day_is_5_then_every_liability_of_the_period_is_due_on_the_
 // covers: SC-13-05-02
 #[tokio::test]
 async fn when_the_due_day_is_beyond_the_month_end_then_it_falls_on_the_last_day() {
-    for (year, month, accrual_day, expected_day) in
-        [(2027, 2, 2, 28), (2028, 2, 2, 29), (2026, 11, 2, 30)]
-    {
+    for (year, month, accrual_day, expected_day, period) in [
+        (2027, 2, 2, 28, "Şubat 2027"),
+        (2028, 2, 2, 29, "Şubat 2028"),
+        (2026, 11, 2, 30, "Kasım 2026"),
+    ] {
         let state = clean_site(AccrualSchedule {
             due_day: 31,
             ..AccrualSchedule::default()
@@ -105,10 +107,16 @@ async fn when_the_due_day_is_beyond_the_month_end_then_it_falls_on_the_last_day(
         .await;
         run_accrual_with_report(&state, at(year, month, accrual_day)).await;
         let dues = site_dues(&state).await;
-        assert!(!dues.is_empty(), "month {year}-{month:02}");
+        assert_eq!(dues.len(), 1, "one liability for month {year}-{month:02}");
         assert!(dues
             .iter()
             .all(|x| x.due_date == day(year, month, expected_day)));
+        let due = &dues[0];
+        assert_eq!(due.period, period);
+        assert_eq!(due.principal_amount, d("1800.00"));
+        assert_eq!(due.total_amount, d("1800.00"));
+        assert_eq!(due.paid_principal, Decimal::ZERO);
+        assert_eq!(due.paid_penalty, Decimal::ZERO);
     }
 }
 

@@ -156,7 +156,7 @@ async fn a_closed_period_still_accepts_payment_and_books_it_on_its_receipt_date(
 // covers: SC-13-09-04
 #[tokio::test]
 async fn a_correction_to_a_closed_period_posts_later_and_preserves_the_close_report() {
-    let state = fixture(DuesPeriodStatus::Active, "1000.00", "0.00").await;
+    let state = fixture(DuesPeriodStatus::Active, "1500.00", "0.00").await;
     state.inner.write().await.dues_periods.push(DuesPeriod {
         id: "period-nov-2026".to_string(),
         site_id: SITE.to_string(),
@@ -176,7 +176,7 @@ async fn a_correction_to_a_closed_period_posts_later_and_preserves_the_close_rep
             RequestCorrectionRequest {
                 due_id: "due-oct".to_string(),
                 kind: "CREDIT_NOTE".to_string(),
-                amount: Some(d("200.00")),
+                amount: Some(d("300.00")),
                 due_date: None,
                 debtor_type: None,
                 reason: "approved invoice correction".to_string(),
@@ -185,7 +185,20 @@ async fn a_correction_to_a_closed_period_posts_later_and_preserves_the_close_rep
         )
         .await
         .unwrap();
-    corrections
+    assert_eq!(request.status, "PENDING");
+    assert_eq!(
+        state.inner.read().await.dues[0].principal_amount,
+        d("1500.00")
+    );
+    assert_eq!(
+        BillingPeriodService::new(&state)
+            .summary(SITE, PERIOD_ID)
+            .await
+            .unwrap()
+            .status,
+        DuesPeriodStatus::Closed
+    );
+    let decided = corrections
         .decide(
             &manager("manager-approve"),
             request.id,
@@ -196,6 +209,16 @@ async fn a_correction_to_a_closed_period_posts_later_and_preserves_the_close_rep
         )
         .await
         .unwrap();
+    assert_eq!(decided.status, "APPROVED");
+    assert_ne!(
+        decided.decided_by.as_deref(),
+        Some(request.requested_by.as_str())
+    );
+
+    assert_eq!(
+        state.inner.read().await.dues[0].principal_amount,
+        d("1200.00")
+    );
 
     let monthly_trial_balance = AccountingService::new(&state)
         .trial_balance(
@@ -212,7 +235,7 @@ async fn a_correction_to_a_closed_period_posts_later_and_preserves_the_close_rep
         .summary(SITE, PERIOD_ID)
         .await
         .unwrap();
-    assert_eq!(account_report.accrued, d("1000.00"));
+    assert_eq!(account_report.accrued, d("1500.00"));
     assert_eq!(account_report.status, DuesPeriodStatus::Closed);
     let correction_entry = AccountingService::new(&state)
         .journal(SITE, None, None)
@@ -261,8 +284,20 @@ fn active_periods_use_the_open_contract_while_accepting_legacy_active_values() {
 #[tokio::test]
 // covers: SC-13-09-05
 async fn reopening_requires_a_second_manager_and_keeps_an_audit_record() {
-    let state = fixture(DuesPeriodStatus::Active, "", "").await;
+    let state = fixture(DuesPeriodStatus::Active, "1000.00", "0.00").await;
     let service = BillingPeriodService::new(&state);
+    let receipt = PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(RecordManualPaymentRequest {
+            site_id: Some(SITE.to_string()),
+            unit_id: UNIT.to_string(),
+            amount: d("200.00"),
+            payer_name: "A-14 owner".to_string(),
+            payer_role: DebtorType::Owner,
+            payment_channel: PaymentChannel::VirtualIban,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
     service
         .close(&manager("manager-close"), PERIOD_ID, "close-request")
         .await
@@ -283,6 +318,9 @@ async fn reopening_requires_a_second_manager_and_keeps_an_audit_record() {
         state.inner.read().await.dues_periods[0].status,
         DuesPeriodStatus::Closed
     );
+    assert_eq!(state.inner.read().await.dues.len(), 1);
+    assert_eq!(state.inner.read().await.payment_receipts.len(), 1);
+    assert_eq!(state.inner.read().await.payment_receipts[0].id, receipt.id);
     let self_decision = service
         .decide_reopen(
             &manager("manager-request"),
@@ -295,6 +333,12 @@ async fn reopening_requires_a_second_manager_and_keeps_an_audit_record() {
         )
         .await;
     assert!(matches!(self_decision, Err(FinanceError::Forbidden(_))));
+    assert_eq!(
+        state.inner.read().await.dues_periods[0].status,
+        DuesPeriodStatus::Closed
+    );
+    assert_eq!(state.inner.read().await.dues.len(), 1);
+    assert_eq!(state.inner.read().await.payment_receipts.len(), 1);
 
     let decided = service
         .decide_reopen(
@@ -317,4 +361,12 @@ async fn reopening_requires_a_second_manager_and_keeps_an_audit_record() {
         state.inner.read().await.dues_period_reopen_requests.len(),
         1
     );
+    assert_ne!(
+        decided.requested_by,
+        decided.decided_by.as_deref().unwrap_or_default()
+    );
+    assert_eq!(decided.reason, "missed invoice");
+    assert_eq!(state.inner.read().await.dues.len(), 1);
+    assert_eq!(state.inner.read().await.payment_receipts.len(), 1);
+    assert_eq!(state.inner.read().await.payment_receipts[0].id, receipt.id);
 }
