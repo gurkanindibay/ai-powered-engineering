@@ -190,3 +190,12 @@ def test_admin_password_reset_issues_a_new_password_and_retires_the_old(saas_ui,
     assert api.login(manager["email"], new_password).user["must_change_password"] is True
     with pytest.raises(ApiError):
         api.login(manager["email"], manager["password"])
+
+
+@pytest.mark.covers("SC-03-07-02")
+@pytest.mark.role_saas
+def test_reset_admin_password_non_existent_site_fails(api, saas_ready):
+    api.call("POST", "/api/v1/auth/step-up", saas_ready.token, body={"password": SAAS_PASSWORD})
+    with pytest.raises(ApiError) as exc_info:
+        api.call("POST", "/api/v1/saas/sites/999999/reset-admin-password", saas_ready.token)
+    assert "404" in str(exc_info.value)

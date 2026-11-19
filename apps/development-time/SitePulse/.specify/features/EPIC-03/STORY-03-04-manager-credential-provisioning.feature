@@ -19,7 +19,7 @@ Feature: Automated site manager account creation and credential provisioning
     When a new site is registered with admin phone "0532 444 55 66"
     Then an SMS credential alert is triggered to that number
 
-  @SC-03-04-04 @layer:gui @pending
+  @SC-03-04-04 @layer:backend @linked
   Scenario: Duplicate admin email is rejected
     Given a user with email "murat@palmiyesitesi.com" already exists
     When a new site is registered with admin email "murat@palmiyesitesi.com"

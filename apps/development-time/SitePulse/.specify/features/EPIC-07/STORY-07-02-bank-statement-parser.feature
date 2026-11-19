@@ -30,7 +30,7 @@ Feature: Zero-approval bank statement parser
     When the manager resolves the unmatched transaction and picks unit "A Blok D:14"
     Then the unmatched bank transactions banner count goes down
 
-  @SC-07-02-05 @GUI-07-06 @layer:gui @pending @edge @role_manager
+  @SC-07-02-05 @GUI-07-06 @layer:gui @linked @edge @role_manager
   Scenario: A stored payer-name alias auto-matches a re-uploaded row
     Given the manager adds a payer-name alias for unit "A Blok D:14"
     When the same statement is uploaded again

@@ -340,6 +340,7 @@ async fn mandatory_password_change_and_step_up_are_server_enforced() {
         StatusCode::OK
     );
 }
+// covers: SC-06-06-06
 #[tokio::test]
 async fn when_password_change_required_then_business_routes_are_blocked() {
     let state = AppState::new_with_test_fixtures();

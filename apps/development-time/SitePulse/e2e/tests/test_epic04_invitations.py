@@ -44,3 +44,12 @@ def test_approving_a_registration_creates_an_active_account(login_as, page, two_
                            "?.textContent.trim() === '1'", timeout=10_000)
     assert stack.sql("SELECT count(*) FROM users WHERE email = 'kerem.yilmaz@e2e.test';") == "1"
     assert api.login("kerem.yilmaz@e2e.test", temporary_password).user["must_change_password"] is True
+
+
+@pytest.mark.core
+@pytest.mark.covers("SC-04-03-01")
+def test_home_owner_submits_online_registration(api):
+    req = api.submit_registration("begonya-sitesi", "Kerem Yılmaz", "kerem.submit@e2e.test", "B Blok", 18)
+    assert req.get("status") == "PENDING"
+    assert req.get("request_id") is not None
+

@@ -9,7 +9,7 @@ Feature: Quick action and modal bottom sheet link sharing
     Then display the invitation URL with copy and WhatsApp share buttons
     And tapping "Linki Kopyala" copies the URL to the clipboard with confirmation
 
-  @SC-04-02-02 @GUI-04-08 @pending @edge @role_manager
+  @SC-04-02-02 @GUI-04-08 @layer:gui @linked @edge @role_manager
   Scenario: Empty approval queue shows an empty state
     Given no pending registration requests
     When the site manager views the dashboard

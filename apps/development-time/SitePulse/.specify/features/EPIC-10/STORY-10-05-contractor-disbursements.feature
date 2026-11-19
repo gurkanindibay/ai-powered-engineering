@@ -21,7 +21,7 @@ Feature: Contractor milestone disbursements and capital reserve
     When the manager records disbursement "1. Hakediş" of 120000.00 to "Yıldız Asansör Ltd."
     Then no contractor disbursement is stored
 
-  @SC-10-05-03 @layer:gui @pending
+  @SC-10-05-03 @layer:backend @linked
   Scenario: Disbursement carries its invoice number and warns when overdrawn
     Given capital project "Asansör Revizyonu" has collected 220000.00 and disbursed 50000.00
     When the site manager authorizes "2. Hakediş (Motor & Halat Montajı)" of 120000.00 to "Otis Asansör San. Tic."

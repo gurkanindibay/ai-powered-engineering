@@ -2,7 +2,7 @@
 Feature: Google ID token authentication and account linking
   Sign in with Google links an existing account by email or provisions a new one.
 
-  @SC-06-03-01 @layer:gui @pending
+  @SC-06-03-01 @layer:backend @linked
   Scenario: Sign in with Google links existing account
     Given an existing user registered with email "ahmet.yilmaz@gmail.com"
     When they authenticate using a verified Google ID token with matching email
