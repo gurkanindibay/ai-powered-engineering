@@ -163,13 +163,22 @@ pub fn site_name(inner: &AppStateInner, site_id: &str) -> String {
 
 /// Today in the site's time zone.
 pub fn site_today(inner: &AppStateInner, site_id: &str) -> NaiveDate {
+    site_today_at(inner, site_id, Utc::now())
+}
+
+/// Today's site-local date as of a supplied instant.
+pub fn site_today_at(
+    inner: &AppStateInner,
+    site_id: &str,
+    now: chrono::DateTime<Utc>,
+) -> NaiveDate {
     let tz = inner
         .sites
         .iter()
         .find(|s| crate::auth::same_id(&s.id, site_id))
         .map(|s| s.timezone.clone())
         .unwrap_or_else(crate::models::default_site_timezone);
-    crate::scheduler::site_local_date(&tz, Utc::now())
+    crate::scheduler::site_local_date(&tz, now)
 }
 
 /// A timestamp's calendar date in the site's time zone (receipts are stored in

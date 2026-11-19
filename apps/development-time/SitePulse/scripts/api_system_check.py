@@ -169,13 +169,15 @@ def free_port() -> int:
 
 class Backend:
     def __init__(self, db_name: str, port: int, log_dir: Path, extra_env: Optional[Dict[str, str]] = None,
-                 profile: str = "debug", log_prefix: str = "api_system_check"):
+                 profile: str = "debug", log_prefix: str = "api_system_check",
+                 features: tuple[str, ...] = ()):
         self.db_name = db_name
         self.port = port
         self.log_dir = log_dir
         self.extra_env = extra_env or {}
         self.profile = profile
         self.log_prefix = log_prefix
+        self.features = features
         self.proc: Optional[subprocess.Popen] = None
         self.boots = 0
 
@@ -185,7 +187,11 @@ class Backend:
 
     def binary(self) -> Path:
         path = BACKEND / "target" / self.profile / "sitepulse-backend"
-        argv = ["cargo", "build", "--locked", "--bin", "sitepulse-backend"] + (["--release"] if self.profile == "release" else [])
+        argv = ["cargo", "build", "--locked", "--bin", "sitepulse-backend"]
+        if self.profile == "release":
+            argv.append("--release")
+        if self.features:
+            argv.extend(["--features", ",".join(self.features)])
         build = subprocess.run(argv, cwd=BACKEND, capture_output=True, text=True)
         if build.returncode != 0:
             raise SetupError("cargo build failed:\n" + build.stderr[-3000:])

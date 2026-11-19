@@ -1,9 +1,10 @@
 """Backend client and Arrange-step data builders for GUI tests.
 
 Builders prefer real REST endpoints. Where the API has no way to express the
-needed state (e.g. a dues liability that is already overdue, since the backend
-has no clock control) the builder writes SQL and restarts the backend so its
-in-memory state reloads; such builders are marked "SQL arrange".
+needed state (e.g. a dues liability with a specific starting status) the
+builder writes SQL and restarts the backend so its in-memory state reloads;
+such builders are marked "SQL arrange". Date-driven scheduled jobs use
+`E2EClock`.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from datetime import date as CalendarDate
 from decimal import Decimal
 
 from .stack import WEBHOOK_SECRET, E2EStack, api_base
@@ -29,9 +31,34 @@ class Session:
     user: dict
 
 
+class E2EClock:
+    """Controls date-driven backend jobs through the E2E-only scheduler API."""
+
+    def __init__(self, api: Api):
+        self.api = api
+
+    @staticmethod
+    def _date_text(value: CalendarDate | str) -> str:
+        return value.isoformat() if isinstance(value, CalendarDate) else value
+
+    def set_date(self, value: CalendarDate | str) -> dict:
+        return self.api.call("POST", "/__e2e/clock", body={
+            "action": "set_date", "date": self._date_text(value),
+        })
+
+    def advance_to(self, value: CalendarDate | str) -> dict:
+        return self.api.call("POST", "/__e2e/clock", body={
+            "action": "advance_to", "date": self._date_text(value),
+        })
+
+    def tick(self) -> dict:
+        return self.api.call("POST", "/__e2e/clock", body={"action": "tick"})
+
+
 class Api:
     def __init__(self, base: str | None = None):
         self.base = base or api_base()
+        self.clock = E2EClock(self)
 
     def call(self, method: str, path: str, token: str | None = None, body: object | None = None) -> object:
         data = json.dumps(body).encode() if body is not None else (b"{}" if method in ("POST", "PUT") else None)

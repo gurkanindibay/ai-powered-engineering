@@ -111,12 +111,14 @@ class E2EStack:
         self.db_name = f"sitepulse_e2e_{os.getpid()}"
         self.backend = asc.Backend(
             self.db_name, E2E_API_PORT, log_dir, profile="release", log_prefix="gui_e2e_backend",
+            features=("e2e",),
             extra_env={
                 "SITEPULSE_JWT_SECRET": JWT_SECRET,
                 "SITEPULSE_BANK_WEBHOOK_SECRET": WEBHOOK_SECRET,
                 "SITEPULSE_BOOTSTRAP_ADMIN_EMAIL": SAAS_ADMIN_EMAIL,
                 "SITEPULSE_BOOTSTRAP_ADMIN_PASSWORD": SAAS_ADMIN_PASSWORD,
                 "SITEPULSE_ENABLE_DEV_ROUTES": "false",
+                "SITEPULSE_E2E": "true",
                 "SITEPULSE_SEED_TEST_DATA": "false",
             })
         self.web = WebServer()

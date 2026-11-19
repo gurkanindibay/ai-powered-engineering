@@ -12,7 +12,7 @@
 //! previous day's total. Rounding every day separately would drift
 //! (₺2.33 × 16 days = ₺37.28, not ₺37.33).
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::{Decimal, RoundingStrategy};
 
 use crate::db::finance_records as rec;
@@ -200,10 +200,23 @@ impl LateFeeService {
     /// up to its local today. Idempotent: a second run on the same day changes
     /// nothing. Returns the number of liabilities updated.
     pub async fn run_site(&self, site_id: &str) -> usize {
+        self.run_site_through(site_id, None).await
+    }
+
+    /// Runs the daily job through a specific date for a controlled E2E tick.
+    #[cfg(feature = "e2e")]
+    pub async fn run_site_at(&self, site_id: &str, now: DateTime<Utc>) -> usize {
+        self.run_site_through(site_id, Some(now)).await
+    }
+
+    async fn run_site_through(&self, site_id: &str, through: Option<DateTime<Utc>>) -> usize {
         let work: Vec<(DuesLiability, Vec<LateFeeAccrual>)> = self
             .store
             .read(|inner| {
-                let today = site_today(inner, site_id);
+                let today = through.map_or_else(
+                    || site_today(inner, site_id),
+                    |now| crate::services::finance_common::site_today_at(inner, site_id, now),
+                );
                 site_dues(inner, site_id)
                     .filter_map(|d| {
                         let last = inner
@@ -243,13 +256,23 @@ impl LateFeeService {
 
     /// Runs every site (the scheduler's daily job).
     pub async fn run_all(&self) -> usize {
+        self.run_all_through(None).await
+    }
+
+    /// Runs the daily job through a specific date for a controlled E2E tick.
+    #[cfg(feature = "e2e")]
+    pub async fn run_all_at(&self, now: DateTime<Utc>) -> usize {
+        self.run_all_through(Some(now)).await
+    }
+
+    async fn run_all_through(&self, through: Option<DateTime<Utc>>) -> usize {
         let sites: Vec<String> = self
             .store
             .read(|inner| inner.sites.iter().map(|s| s.id.clone()).collect())
             .await;
         let mut updated = 0;
         for site in sites {
-            updated += self.run_site(&site).await;
+            updated += self.run_site_through(&site, through).await;
         }
         updated
     }
