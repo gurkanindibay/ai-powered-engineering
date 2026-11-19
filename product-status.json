@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-19T18:17:10Z",
- "run_id": "20261119T181709Z-b896e4d",
- "commit": "b896e4de5c932d2ebf6a03a6ece2c368548c1b8f",
+ "generated_at": "2026-11-19T18:46:04Z",
+ "run_id": "20261119T184604Z-2cea424",
+ "commit": "2cea4246496b6bb7c26f7bfa8b96e1b75b549728",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 122,
-  "seconds": 2099.2,
+  "seconds": 2452.2,
   "files": 8,
   "unparseable": []
  },
@@ -19,11 +19,11 @@
   "stories": 100,
   "stories_with_scenarios": 100,
   "stories_passing": 33,
-  "scenarios": 302,
-  "automated": 291,
+  "scenarios": 303,
+  "automated": 292,
   "passing": 113,
   "failing": 0,
-  "no_result": 178,
+  "no_result": 179,
   "planned": 11,
   "epics": 12,
   "epics_verified": 2,
@@ -120,11 +120,11 @@
    "stories": 13,
    "stories_with_scenarios": 13,
    "stories_passing": 1,
-   "scenarios": 55,
-   "automated": 55,
+   "scenarios": 56,
+   "automated": 56,
    "passing": 13,
    "failing": 0,
-   "no_result": 42,
+   "no_result": 43,
    "planned": 0,
    "health": "in_progress"
   },
@@ -905,6 +905,12 @@
   "SC-07-10-06": {
    "state": "no_result",
    "name": "After the grace period the late fee runs from the due date",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-07": {
+   "state": "no_result",
+   "name": "A charge created after its period due date owes no fee for days before it existed",
    "epic": "EPIC-07",
    "story": "STORY-07-10"
   },
@@ -2171,8 +2177,8 @@
    "epics": 12,
    "stories": 100,
    "stories_with_scenarios": 100,
-   "scenarios": 302,
-   "automated": 291
+   "scenarios": 303,
+   "automated": 292
   }
  ],
  "recent_changes": [
@@ -2224,9 +2230,9 @@
    "epic": "EPIC-07",
    "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
    "new_stories": 0,
-   "new_scenarios": 6,
-   "newly_automated": 22,
-   "items": 22,
+   "new_scenarios": 7,
+   "newly_automated": 23,
+   "items": 23,
    "samples": [
     "SC-07-02-05: A stored payer-name alias auto-matches a re-uploaded row",
     "SC-07-03-03: A transfer to a unit with several open debtors waits for the manager",
@@ -2822,5 +2828,5 @@
    ]
   }
  ],
- "href": "reports/44584115209-1/"
+ "href": "reports/44588871413-1/"
 }
