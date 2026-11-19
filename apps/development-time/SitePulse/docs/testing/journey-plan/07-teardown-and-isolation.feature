@@ -1,10 +1,10 @@
 @EPIC-13 @STORY-13-07
 Feature: Journey setup, teardown and isolation
   The harness contract of README section 5, tested like product behaviour so a leaking fixture
-  fails a named scenario. These run before any other EPIC-13 scenario in CI.
+  fails a named scenario. Run the harness contract as a separate CI test group. The group has no scenario-order dependency.
 
   @SC-13-07-01 @J-14 @layer:backend @smoke @core @pending
-  Scenario Outline: Every starting state can be created through the public API and is what the catalogue says
+  Scenario Outline: Every starting state can be built using the documented fixture path
     When a site is created in state <state>
     Then its units, people, periods, liabilities, payments and balances equal the catalogue values of <state>
     And the ledger invariants hold
@@ -25,7 +25,7 @@ Feature: Journey setup, teardown and isolation
     Given a site in state F5
     When the teardown runs
     Then every table keyed by the site id has 0 rows for it
-    And no user with an "@e2e.test" email exists
+    And no journey-exclusive user ID in the manifest exists
     And no person created for the journey exists
 
   @SC-13-07-03 @J-14 @layer:backend @core @pending
@@ -39,7 +39,7 @@ Feature: Journey setup, teardown and isolation
   Scenario: Teardown runs when the journey fails
     Given a site in state F5
     When a step of the journey raises an error
-    Then a SQL dump of the site and the network log are saved as artifacts first
+    Then the redacted site snapshot and redacted network evidence are saved first
     And the teardown still removes the site
 
   @SC-13-07-05 @J-14 @layer:backend @core @pending
@@ -58,13 +58,23 @@ Feature: Journey setup, teardown and isolation
   @SC-13-07-07 @J-14 @layer:backend @core @pending
   Scenario: A finished run leaves the database as it started
     Given the database tables hold only the shared seed
-    When the whole EPIC-13 suite has run and every teardown has finished
-    Then no site whose slug starts with "e2e-" exists
+    When this run finishes on an exclusive seeded stack and every teardown has finished
+    Then no site ID recorded by this run exists
     And the row count of every table equals its count before the run
     And the backend has been restarted once after the last teardown
 
   @SC-13-07-08 @J-14 @layer:backend @edge @pending
   Scenario: A leftover site from a crashed earlier run is cleaned before the next run starts
-    Given a site "e2e-stale-1" from an earlier crashed run exists
-    When the next run starts
-    Then the leftover site is removed and reported in the run log
+    Given the manifests identify a crashed run and a second run that is still active
+    When stale-run reclamation runs
+    Then only the crashed run's site and journey-exclusive identities are removed
+    And the active run's site, identities and balances remain unchanged
+
+  @SC-13-07-09 @J-14 @layer:backend @edge @pending
+  Scenario: Cleanup is safe to retry after an evidence capture failure
+    Given an attempt has created a site and identities recorded in its manifest
+    And another attempt on the same stack has its own site and identities
+    When evidence capture fails and teardown executes twice using the first manifest
+    Then both teardowns leave the first attempt fully removed
+    And the original test failure remains visible alongside the evidence capture failure
+    And the second attempt and shared seed are unchanged

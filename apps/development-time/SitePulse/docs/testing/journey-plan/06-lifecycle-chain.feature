@@ -1,78 +1,37 @@
 @EPIC-13 @STORY-13-06
 Feature: One site from zero to a closed period (interconnected chain)
-  Chain "site-lifecycle": the stages run in order on ONE site, and the end state of a stage is the
-  start state of the next. Each stage ends with the ledger invariants. A failure names the stage.
-  Layer is GUI because the point is that an admin can walk the whole path on screen.
+  Run this as one scenario. Report each numbered checkpoint using the existing journey
+  reporter. The fixture finalizer runs even if a checkpoint fails.
 
-  Background:
-    Given the clock is frozen at "2026-09-01 09:00" Europe/Istanbul
-    And a SaaS admin has onboarded a site "e2e-chain-lifecycle" with manager "manager@e2e.test"
+  @SC-13-06-01 @J-13 @chain:site-lifecycle @state:F0 @layer:gui @smoke @core @role_manager @pending
+  Scenario: A manager grows a new site, collects dues and closes a period
+    Given the clock is set to "2026-09-01 09:00" Europe/Istanbul
+    And a SaaS admin has onboarded a site and manager unique to this scenario attempt
     And the manager has signed in with a permanent password
     And proration is enabled for the site
-
-  @SC-13-06-01 @J-13 @chain:site-lifecycle @stage:1 @state:F0 @layer:gui @smoke @role_manager @pending
-  Scenario: Stage 1, a new site gets its structure (F0 to F1)
-    Given the site is in state F0
+    And the site is in state F0
     When the manager adds block "A Blok" with units A-1 to A-7 and tariffs 1500.00 (A-6: 2250.00)
-    Then the site is equal to state F1
-    And the ledger invariants hold
-
-  @SC-13-06-02 @J-13 @chain:site-lifecycle @stage:2 @layer:gui @smoke @role_manager @pending
-  Scenario: Stage 2, owners and tenants are added (F1 to F2)
-    Given the previous stage passed
+    Then checkpoint 1 shows state F1 and the ledger invariants hold
     When the manager adds the owners and tenants of state F2
-    Then the site is equal to state F2
-    And the ledger invariants hold
-
-  @SC-13-06-03 @J-13 @chain:site-lifecycle @stage:3 @layer:gui @smoke @role_manager @pending
-  Scenario: Stage 3, the first period is accrued
-    Given the previous stage passed
+    Then checkpoint 2 shows state F2 and the ledger invariants hold
     When the manager creates and accrues "Eylül 2026" due "2026-09-10"
-    Then every charged unit owes its tariff and total outstanding is 9750.00 for A-1 to A-6
+    Then checkpoint 3 shows 6 charged units and total outstanding 9750.00
     And the ledger invariants hold
-
-  @SC-13-06-04 @J-13 @chain:site-lifecycle @stage:4 @layer:gui @core @role_manager @pending
-  Scenario: Stage 4, some residents pay and an advance appears
-    Given the previous stage passed
     When "Ayşe Kaya" pays 1500.00 and "Elif Aydın" pays 8000.00 on "2026-09-01"
-    Then "Ayşe Kaya" owes 0.00 and "Elif Aydın" holds an advance of 5750.00
-    And the other units still owe their full tariff
+    Then checkpoint 4 shows "Ayşe Kaya" owes 0.00 and "Elif Aydın" holds advance 5750.00
     And the ledger invariants hold
-
-  @SC-13-06-05 @J-13 @chain:site-lifecycle @stage:5 @layer:gui @core @role_manager @pending
-  Scenario: Stage 5, time passes and the second and third periods accrue (F5 reached)
-    Given the previous stage passed
-    When the clock advances to "2026-11-19" and "Ekim 2026" and "Kasım 2026" are accrued
-    And "Selin Demir" pays 1500.00 for "Eylül 2026" and "Ahmet Yılmaz" pays "Eylül 2026" and "Ekim 2026" for "A-4"
-    Then the site balances equal state F5 where it applies, with the same late fees
+    When the manager accrues October and November in order and the remaining F5 payments are made on their dates
+    And the clock advances to "2026-11-19 12:00" Europe/Istanbul
+    Then checkpoint 5 shows state F5 including outstanding 11117.50 and advance 1250.00
     And the ledger invariants hold
-
-  @SC-13-06-06 @J-13 @chain:site-lifecycle @stage:6 @layer:gui @core @role_manager @pending
-  Scenario: Stage 6, a tenant changes and a title is transferred (F6 behaviour)
-    Given the previous stage passed
-    When tenant "Selin Demir" is replaced by "Mert Kılıç" on "2026-11-15" and "A-4" is sold to "Gül Tanrıverdi"
-    Then "Selin Demir" keeps her old debt and "Mert Kılıç" starts at 0.00
-    And "Gül Tanrıverdi" starts at 0.00 and "Ahmet Yılmaz" keeps his old debt
+    When the manager closes "Eylül 2026"
+    Then checkpoint 6 shows a saved CLOSED snapshot, rejects a second accrual and keeps September debt collectable
     And the ledger invariants hold
-
-  @SC-13-06-07 @J-13 @chain:site-lifecycle @stage:7 @layer:gui @core @role_manager @pending
-  Scenario: Stage 7, the oldest period is closed
-    Given the previous stage passed
-    When the manager closes period "Eylül 2026"
-    Then it is CLOSED and a new accrual of it is refused
-    And open debts of that period remain collectable
-    And the ledger invariants hold
-
-  @SC-13-06-08 @J-13 @chain:site-lifecycle @stage:8 @layer:gui @core @role_manager @pending
-  Scenario: Stage 8, every surface agrees at the end of the chain
-    Given the previous stage passed
-    When the backend is restarted
-    Then the admin dashboard, each unit workspace, each resident dashboard and the payment stream show the same balances as before the restart
-    And each resident sees only their own data and the manager of another site sees none of it
-
-  @SC-13-06-09 @J-13 @chain:site-lifecycle @stage:9 @layer:gui @core @role_manager @pending
-  Scenario: Stage 9, teardown leaves nothing behind
-    Given the previous stage passed
-    When the journey teardown runs
-    Then the site, its people, users, units, periods, liabilities and payments no longer exist
-    And the shared seed data is unchanged
+    When the clock advances to "2026-12-01" and tenant "Selin Demir" is replaced by "Mert Kılıç" in "A-2"
+    And the manager transfers title of "A-4" from "Ahmet Yılmaz" to "Gül Tanrıverdi" with the same effective date
+    Then checkpoint 7 shows the outgoing debtors' pre-December debts still attached to them
+    And neither incoming debtor inherits the outgoing debtor's balance or advance
+    And the closed snapshot is unchanged and the ledger invariants hold
+    When the backend is restarted at the same clock instant
+    Then checkpoint 8 shows the same scoped balances and close snapshot in the API and on the screens visited
+    And separate sessions verify each resident sees only their own scope and another manager sees no site data

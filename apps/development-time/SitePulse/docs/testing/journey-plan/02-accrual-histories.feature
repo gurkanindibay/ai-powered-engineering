@@ -4,8 +4,8 @@ Feature: Accrual histories F4, F5 and F7
   Balances are principal + KMK late fee at the frozen clock 2026-11-19 (README section 2).
 
   Background:
-    Given the clock is frozen at "2026-11-19 12:00" Europe/Istanbul
-    And a SaaS admin has onboarded a site "e2e-j02" with manager "manager@e2e.test"
+    Given the scenario clock follows the fixture timeline in Europe/Istanbul
+    And a SaaS admin has onboarded a site and manager unique to this scenario attempt
     And the manager has signed in with a permanent password
 
   # ------------------------------------------------------ F4 SINGLE_PERIOD
@@ -49,13 +49,13 @@ Feature: Accrual histories F4, F5 and F7
     Given the site is in state F5
     Then unit "A-3" has exactly one open liability: period "Eylül 2026", principal 1500.00, late fee 175.00
     And unit "A-3" has no open liability for "Ekim 2026" or "Kasım 2026"
-    And the aging report puts 1675.00 in the "61 days and more" bucket
+    And the admin aging report puts principal 1500.00 in the "61 days and more" bucket and shows 175.00 separately as late fee
 
   @SC-13-02-06 @J-08 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: A single debt in the current month is the only one in the youngest bucket
     Given the site is in state F5
     Then unit "A-4" has exactly one open liability: period "Kasım 2026", principal 1500.00, late fee 22.50
-    And the aging report puts 1522.50 in the "0 to 30 days" bucket
+    And the admin aging report puts principal 1500.00 in the "1 to 30 days" bucket and shows 22.50 separately as late fee
 
   @SC-13-02-07 @J-08 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: Multiple debts across periods are listed oldest first with a fee each
@@ -83,18 +83,21 @@ Feature: Accrual histories F4, F5 and F7
 
   # ------------------------------------------------------ F7 CLOSED_HISTORY
 
-  @SC-13-02-10 @J-09 @state:F7 @decision @layer:backend @core @role_manager @pending
+  @SC-13-02-10 @J-09 @state:F7 @layer:backend @core @role_manager @pending
   Scenario: A closed period accepts no new accrual or edit but keeps its open debts
     Given the site is in state F7
     Then period "Eylül 2026" is CLOSED
     When the manager accrues period "Eylül 2026" again
     Then the request is rejected because the period is closed
     And unit "A-3" still owes its "Eylül 2026" liability of 1500.00
-    And its late fee keeps growing with the clock until it is paid
+    When the clock advances one day to "2026-11-20" and the late-fee job runs
+    Then the live fee of unit "A-3" increases from 175.00 to 177.50
+    And the fee is booked in the open November period and the September snapshot is unchanged
 
   @SC-13-02-11 @J-09 @state:F7 @layer:backend @edge @role_manager @pending
   Scenario: A payment toward a closed period is still allocated to its oldest debt
     Given the site is in state F7
     When the manager records a manual payment of 1675.00 for unit "A-3"
     Then the "Eylül 2026" liability is settled
+    And the payment is booked in the open November period and the September snapshot is unchanged
     And the ledger invariants hold

@@ -4,8 +4,8 @@ Feature: Site admin starting points F0 to F3
   without billing, or billing without people. State definitions: README sections 2 and 3.
 
   Background:
-    Given the clock is frozen at "2026-11-19 12:00" Europe/Istanbul
-    And a SaaS admin has onboarded a site "e2e-j01" with manager "manager@e2e.test"
+    Given the scenario clock follows the fixture timeline in Europe/Istanbul
+    And a SaaS admin has onboarded a site and manager unique to this scenario attempt
     And the manager has signed in with a permanent password
 
   # ---------------------------------------------------------------- F0 ZERO
@@ -29,7 +29,7 @@ Feature: Site admin starting points F0 to F3
   @SC-13-01-03 @J-01 @state:F0 @layer:backend @edge @role_manager @pending
   Scenario: A payment arriving at a site with no units is not lost
     Given the site is in state F0
-    When the bank webhook sends a transfer of 1500.00 to an unknown virtual IBAN
+    When a transfer of 1500.00 with an unknown virtual IBAN is imported through this site's bank statement feed
     Then the transfer is stored as unmatched and appears in the manager's unmatched list
     And no balance anywhere changes
 
@@ -47,7 +47,8 @@ Feature: Site admin starting points F0 to F3
   Scenario: The manager can add the first owner and tenant from an empty unit
     Given the site is in state F1
     When the manager assigns owner "Ayşe Kaya" to unit "A-1"
-    And the manager moves tenant "Selin Demir" into unit "A-2" owned by "Ahmet Yılmaz"
+    And assigns owner "Ahmet Yılmaz" to unit "A-2"
+    And moves tenant "Selin Demir" into unit "A-2"
     Then unit "A-1" shows owner "Ayşe Kaya" and unit "A-2" shows tenant "Selin Demir"
     And the people directory lists 3 people
     And no liability exists because no period was accrued
@@ -97,13 +98,13 @@ Feature: Site admin starting points F0 to F3
     When the manager adds owner "Ayşe Kaya" as primary resident of unit "A-1" with start residing date "2026-11-02"
     Then period "Ekim 2026" still has 0 liabilities for unit "A-1"
     When the manager accrues period "Kasım 2026" due "2026-11-10"
-    Then unit "A-1" owes 1450.00 for "Kasım 2026", which is 29 of 30 days
+    Then unit "A-1" is charged principal of 1450.00 for "Kasım 2026", which is 29 of 30 days
     And the ledger invariants hold
 
-  @SC-13-01-14 @J-04 @state:F3 @layer:backend @edge @role_manager @pending
+  @SC-13-01-14 @J-04 @state:F3 @decision @layer:backend @edge @role_manager @pending
   Scenario: A back-dated start residing date creates the charge for an already accrued period
     Given the site is in state F3
-    When the manager adds tenant "Selin Demir" as primary resident of unit "A-2" with start residing date "2026-10-11"
+    When the manager assigns "Selin Demir" as owner and primary resident of unit "A-2" effective "2026-10-11"
     Then period "Ekim 2026" now holds a liability of 1016.13 for "Selin Demir", which is 21 of 31 days
     And the days before 2026-10-11 are charged to nobody because the unit had no responsible party
     And the ledger invariants hold
@@ -114,7 +115,7 @@ Feature: Site admin starting points F0 to F3
     And owners and tenants are added as in state F2
     When the manager accrues period "Ekim 2026" again
     Then the duplicate is rejected with the duplicate-prevention message
-    And no liability is created
+    And the retry creates no additional liability beyond the activity recorded before the retry
     And the ledger invariants hold
 
   # ------------------------------------------------- navigation across states
@@ -128,7 +129,7 @@ Feature: Site admin starting points F0 to F3
     Then the site is equal to state F2
     And the units page, the people directory and each unit workspace agree on every owner and occupant
 
-  @SC-13-01-13 @J-06 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-01-13 @J-06 @layer:backend @edge @role_manager @pending
   Scenario Outline: Every starting state survives a backend restart unchanged
     Given the site is in state <state>
     When the backend is restarted

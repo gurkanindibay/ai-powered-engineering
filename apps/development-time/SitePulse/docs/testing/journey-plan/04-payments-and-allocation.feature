@@ -4,8 +4,8 @@ Feature: Paying, allocation and advance across periods
   principal, oldest liability first; any remainder is an advance. Uses states F4 and F5.
 
   Background:
-    Given the clock is frozen at "2026-11-19 12:00" Europe/Istanbul
-    And a SaaS admin has onboarded a site "e2e-j04" with manager "manager@e2e.test"
+    Given the scenario clock follows the fixture timeline in Europe/Istanbul
+    And a SaaS admin has onboarded a site and manager unique to this scenario attempt
     And the manager has signed in with a permanent password
 
   @SC-13-04-01 @J-11 @state:F5 @layer:backend @smoke @core @role_manager @pending
@@ -46,7 +46,7 @@ Feature: Paying, allocation and advance across periods
     Given the site is in state F5
     When the manager records a manual payment of <amount> for unit "A-5"
     Then the request is rejected with "<reason>"
-    And no payment exists and every balance is unchanged
+    And no new payment, receipt or allocation exists and every balance is unchanged
 
     Examples:
       | amount  | reason                     |
@@ -77,33 +77,34 @@ Feature: Paying, allocation and advance across periods
     And both payments are listed and no allocation is counted twice
 
   @SC-13-04-09 @J-11 @state:F5 @layer:backend @edge @role_manager @pending
-  Scenario: A transfer to an unknown or other-site virtual IBAN is parked, not applied
+  Scenario: A transfer matched to another site is applied only there
     Given the site is in state F5
-    And another site "e2e-j04-other" exists with its own units
-    When the bank webhook sends 1500.00 to the virtual IBAN of a unit of "e2e-j04-other"
-    Then the transfer appears only in the other site's list
-    And no balance of site "e2e-j04" changes
+    And another site exists with its own units and one 1500.00 current liability
+    When the bank webhook sends 1500.00 to the virtual IBAN for that liability
+    Then the other site's liability is settled and only its payment stream shows the transfer
+    And no balance of the original site changes
 
-  @SC-13-04-10 @J-11 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-04-10 @J-11 @layer:backend @edge @role_manager @pending
   Scenario Outline: The grace boundary decides whether a late fee is charged
     Given the site has a grace period of 5 days and the clock is frozen at "<paid_on>"
     And unit "A-5" has a 1500.00 liability due "2026-11-10"
     When the manager records a manual payment of 1500.00 for unit "A-5" dated "<paid_on>"
-    Then the late fee charged is <fee>
+    Then <fee> of the payment clears the accrued fee and <remaining> principal remains open
 
     Examples:
-      | paid_on    | fee   |
-      | 2026-11-10 | 0.00  |
-      | 2026-11-15 | 0.00  |
-      | 2026-11-16 | 15.00 |
+      | paid_on    | fee   | remaining |
+      | 2026-11-10 | 0.00  | 0.00      |
+      | 2026-11-15 | 0.00  | 0.00      |
+      | 2026-11-16 | 15.00 | 15.00     |
 
-  @SC-13-04-11 @J-11 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-04-11 @J-11 @state:F2 @layer:backend @core @role_manager @pending
   Scenario: A correction after a partial payment moves the paid amount to the advance
-    Given the site is in state F5
-    And the manager recorded a manual payment of 1500.00 for unit "A-5"
-    When the manager requests cancelling liability "Kasım 2026" of unit "A-5" and a second manager approves
+    Given the site was built from F2 with only September accrued
+    And the manager recorded a 600.00 manual payment for unit "A-5" on "2026-09-10"
+    When the manager requests cancelling liability "Eylül 2026" of unit "A-5" and a second manager approves
     Then the liability is cancelled with nothing outstanding
-    And the amount that had been allocated to it moves to the advance balance
+    And exactly 600.00 is credited to the payer's advance at cancellation
+    And the original receipt remains available with its original amount
     And the ledger invariants hold
 
   @SC-13-04-12 @J-11 @state:F5 @layer:backend @edge @role_manager @pending
@@ -115,9 +116,10 @@ Feature: Paying, allocation and advance across periods
     And the liability is unchanged
 
   @SC-13-04-13 @J-11 @state:F5 @layer:gui @core @role_homeowner @pending
-  Scenario: A resident's payment shows up in their statement and in the admin view at once
+  Scenario: A resident's confirmed payment appears in their statement and the admin view
     Given the site is in state F5
-    When tenant "Deniz Arslan" transfers 1675.00 via the virtual IBAN
+    When a bank webhook confirms a transfer of 1675.00 for tenant "Deniz Arslan"
+    And the resident and manager refresh their respective views
     Then her dashboard balance drops by 1675.00
     And the admin collection page total outstanding drops by 1675.00
     And a receipt exists for the payment
