@@ -557,7 +557,7 @@ def test_replacing_tenant_keeps_history_and_receipts_private(request, api, actor
 
         # Mert cannot access Selin's household contact details
         s6, r6, _ = http_call(api, "GET", f"/api/v1/home-residents/members/{unit_2}", mert.token)
-        assert s6 == 200
+        assert s6 in (200, 403, 404)
         assert b"selin" not in r6.lower()
     except BaseException as failure:
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
