@@ -731,10 +731,12 @@ pub async fn get_payment_receipt(
 
 pub async fn transfer_unit_ownership(
     State(state): State<AppState>,
+    ctx: crate::authorization::AuthzContext,
     scope: crate::tenancy::TenantScope,
     Path(unit_id): Path<String>,
     Json(mut payload): Json<crate::models::TransferOwnershipRequest>,
 ) -> Result<Json<crate::models::TransferOwnershipResponse>, crate::error::AppError> {
+    use crate::services::finance_common::Caller;
     // A site-scoped manager must use the site from their authenticated scope;
     // a stale client selection must not block an operation on an authorized unit.
     if let Some(site_id) = scope.own_site() {
@@ -744,12 +746,70 @@ pub async fn transfer_unit_ownership(
     }
     payload.unit_id = unit_id;
     apply_new_owner_ref(&state, &mut payload).await?;
-    let service = crate::services::PaymentTrackingService::new(state);
-    service
+    let override_reason = payload
+        .seller_pays_override_reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+        .map(str::to_string);
+    if override_reason.is_some() && payload.new_owner_person_id.is_none() {
+        return Err(crate::error::AppError::validation(
+            "A seller-pays override needs the buyer as an existing person or a new card",
+        ));
+    }
+    let mut caller = Caller::from_claims(&ctx.claims);
+    if let Some(site_id) = payload.site_id.clone() {
+        caller.site_id = site_id;
+    }
+    let occupancy = crate::services::occupancy_service::OccupancyService::new(state.clone());
+    // Who sells, and whether the seller lives in the unit, is known only before the transfer.
+    let seller = occupancy
+        .seller_before_transfer(&caller.site_id, &payload.unit_id)
+        .await;
+    let transfer_date = match payload.transfer_date {
+        Some(date) => date,
+        None => occupancy.site_today(&caller.site_id).await,
+    };
+    let buyer_person_id = payload.new_owner_person_id;
+    let moves_in = payload.new_owner_moves_in;
+    let unit_ref = payload.unit_id.clone();
+    let service = crate::services::PaymentTrackingService::new(state.clone());
+    let mut response = service
         .transfer_ownership(payload)
         .await
-        .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e).into())
+        .map_err(|e| crate::error::AppError::from((StatusCode::BAD_REQUEST, e)))?;
+    let correction_error = |e: crate::services::finance_common::FinanceError| {
+        crate::error::AppError::from((StatusCode::CONFLICT, e.to_string()))
+    };
+    if let (Some(seller), Some(buyer)) = (seller, buyer_person_id) {
+        if seller.owner_occupied && moves_in {
+            if let Some(correction) = occupancy
+                .request_sale_split(&caller, &unit_ref, seller.person_id, buyer, transfer_date)
+                .await
+                .map_err(correction_error)?
+            {
+                response.correction_requests.push(correction);
+            }
+        }
+        if let Some(reason) = override_reason {
+            response.seller_pays_override = Some(
+                crate::services::sale_clearance_service::SaleClearanceService::new(&state)
+                    .request_for_seller(
+                        &caller,
+                        &unit_ref,
+                        seller.person_id,
+                        crate::models::RequestSellerPaysOverrideRequest {
+                            buyer_person_id: buyer,
+                            transfer_date,
+                            reason,
+                        },
+                    )
+                    .await
+                    .map_err(correction_error)?,
+            );
+        }
+    }
+    Ok(Json(response))
 }
 
 /// Maps `new_owner` onto the legacy buyer fields. A new card is created first, so

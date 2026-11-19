@@ -783,10 +783,12 @@ async fn corrections_round_trip_through_postgresql() {
         CorrectionReplacementShare {
             debtor_type: DebtorType::Owner,
             amount: d("600.00"),
+            ..Default::default()
         },
         CorrectionReplacementShare {
             debtor_type: DebtorType::Tenant,
             amount: d("600.00"),
+            ..Default::default()
         },
     ];
     let requested = corrections.request(&first, split_request).await.unwrap();
@@ -937,10 +939,12 @@ async fn corrections_round_trip_through_postgresql() {
                     CorrectionReplacementShare {
                         debtor_type: DebtorType::Tenant,
                         amount: d("903.23"),
+                        ..Default::default()
                     },
                     CorrectionReplacementShare {
                         debtor_type: DebtorType::Owner,
                         amount: d("496.77"),
+                        ..Default::default()
                     },
                 ],
                 reason: "Move-out changed the responsible days".to_string(),

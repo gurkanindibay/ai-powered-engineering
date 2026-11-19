@@ -30,6 +30,14 @@ pub struct OccupancyService {
     state: AppState,
 }
 
+/// The owner on record before a sale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Seller {
+    pub person_id: i64,
+    /// The owner has an active session in the unit (the unit is owner-occupied).
+    pub owner_occupied: bool,
+}
+
 /// Computes one monthly operational dues liability per responsible role.
 /// Invalid historical dates are ignored conservatively; uncovered days remain
 /// the owner's responsibility.
@@ -232,6 +240,7 @@ impl OccupancyService {
                     |(debtor_type, amount)| crate::models::CorrectionReplacementShare {
                         debtor_type,
                         amount,
+                        ..Default::default()
                     },
                 )
                 .collect(),
@@ -241,6 +250,111 @@ impl OccupancyService {
             .request(caller, request)
             .await
             .map(Some)
+    }
+
+    /// Requests the four-eyes split of the sale month's operational dues of an owner-occupied
+    /// unit between seller and buyer, by calendar days (STORY-08-05). The seller keeps the days
+    /// before `transfer_date` and the original due date; the buyer owes the rest from
+    /// `transfer_date` (or the original due date, if later). Returns `None` when the month has
+    /// no single open operational liability to split, is closed, or the transfer is on its
+    /// first day.
+    pub async fn request_sale_split(
+        &self,
+        caller: &Caller,
+        unit_id: &str,
+        seller_person_id: i64,
+        buyer_person_id: i64,
+        transfer_date: NaiveDate,
+    ) -> FinanceResult<Option<crate::models::AccrualCorrection>> {
+        let period = BillingPeriod::of_date(transfer_date);
+        let unit_key = parse_unit_id(unit_id)
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| unit_id.to_string());
+        let due = {
+            let inner = self.state.inner.read().await;
+            let closed = inner.dues_periods.iter().any(|row| {
+                crate::auth::same_id(&row.site_id, &caller.site_id)
+                    && BillingPeriod::parse(&row.period_name).ok() == Some(period)
+                    && row.status.as_str() == "CLOSED"
+            });
+            let mut dues = inner.dues.iter().filter(|due| {
+                crate::auth::same_id(&due.unit_id, &unit_key)
+                    && BillingPeriod::parse(&due.period).ok() == Some(period)
+                    && due.expense_type == crate::models::ExpenseType::OperationalDues
+                    && due.debtor_type == DebtorType::Owner
+                    && due.status != crate::models::DebtStatus::Cancelled
+            });
+            match (closed, dues.next(), dues.next()) {
+                (false, Some(only), None) => Some(only.clone()),
+                _ => None,
+            }
+        };
+        let Some(due) = due else {
+            return Ok(None);
+        };
+        let Some((seller_share, buyer_share)) = crate::domain::sale_clearance::split_month_by_days(
+            due.principal_amount,
+            period.first_day(),
+            transfer_date,
+        ) else {
+            return Ok(None);
+        };
+        let request = crate::models::RequestCorrectionRequest {
+            due_id: due.id.clone(),
+            kind: crate::models::CORRECTION_SPLIT_REISSUE.to_string(),
+            amount: None,
+            due_date: None,
+            debtor_type: None,
+            replacement_shares: vec![
+                crate::models::CorrectionReplacementShare {
+                    debtor_type: DebtorType::Owner,
+                    amount: seller_share,
+                    liable_person_id: Some(seller_person_id),
+                    due_date: None,
+                },
+                crate::models::CorrectionReplacementShare {
+                    debtor_type: DebtorType::Owner,
+                    amount: buyer_share,
+                    liable_person_id: Some(buyer_person_id),
+                    due_date: Some(due.due_date.max(transfer_date)),
+                },
+            ],
+            reason: format!(
+                "Title transfer effective {} splits period {}",
+                transfer_date,
+                period.key()
+            ),
+        };
+        CorrectionService::new(&self.state)
+            .request(caller, request)
+            .await
+            .map(Some)
+    }
+
+    /// The owner on record and whether they live in the unit, read before a title transfer
+    /// replaces them. `None` without a database or an owner on record.
+    pub async fn seller_before_transfer(&self, site_id: &str, unit_id: &str) -> Option<Seller> {
+        let pool = self.state.db_pool()?;
+        let site = crate::db::require_id("site", site_id).ok()?;
+        let unit = parse_unit_id(unit_id)?;
+        let client = pool.get().await.ok()?;
+        let row = client
+            .query_opt(
+                "SELECT u.owner_person_id,
+                        EXISTS (SELECT 1 FROM unit_occupancies o
+                                 WHERE o.unit_id = u.id AND o.is_active AND o.end_date IS NULL
+                                   AND o.occupancy_type = 'OWNER'
+                                   AND o.person_id = u.owner_person_id)
+                   FROM units u WHERE u.id = $1 AND u.site_id = $2",
+                &[&unit, &site],
+            )
+            .await
+            .ok()??;
+        let person_id: Option<i64> = row.get(0);
+        person_id.map(|person_id| Seller {
+            person_id,
+            owner_occupied: row.get(1),
+        })
     }
 
     /// Today's date in the site's time zone.

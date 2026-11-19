@@ -22,3 +22,34 @@ Feature: Title deed transfer and ownership sale handover
     When the Site Manager requests a 500.00 transfer of that advance to the tenant ledger
     Then the request stays pending until a different authorized person approves it
     And approval moves 500.00 from the owner advance to the tenant advance in one audited transaction
+
+  @SC-08-05-04 @layer:backend @linked @core @role_manager
+  Scenario: The sale clearance statement shows what stays with the seller and what goes to the buyer
+    Given the seller owes "Kasım 2026" 1500.00 with fee 100.00, "Aralık 2026" 1500.00 with fee 25.00 and installment 1 of 2000.00 with fee 33.33
+    And installments 2 and 3 of the capital project are not accrued
+    When the manager opens the sale clearance of the unit effective 2026-12-20
+    Then it shows open debt 5158.33 with principal 5000.00 and fee 158.33 apart, and the seller's advance
+    And it lists installments 2 and 3 of 2000.00 each as not yet accrued
+    And the total equals the sum of the seller's outstanding liabilities in the ledger
+    And the statement can be downloaded as CSV
+
+  @SC-08-05-05 @layer:backend @linked @core @role_manager
+  Scenario: A mid-month sale of an owner-occupied unit splits that month by days through the split correction
+    Given the unit is owner-occupied and "Aralık 2026" operational dues of 1500.00 are due 2026-12-10
+    When the manager transfers title effective 2026-12-20 and the buyer moves in
+    Then a four-eyes split correction proposes 919.35 to the seller and 580.65 to the buyer
+    And approval by a different manager re-issues the two shares, the buyer's due 2026-12-20, adding up to 1500.00
+
+  @SC-08-05-06 @layer:backend @linked @core @role_manager
+  Scenario: Capital installments follow the owner at accrual unless a seller-pays override is approved
+    Given the unit was sold and the buyer is the owner on record
+    When an installment is accrued with no override, with a pending request or with a rejected request
+    Then it is billed to the buyer
+    When a different manager approves the seller-pays override and the next installment is accrued
+    Then that installment is billed to the seller and earlier installments stay where they were
+
+  @SC-08-05-07 @layer:backend @linked @edge @role_manager
+  Scenario: The seller-pays override cannot be approved by its requester
+    Given a seller-pays override request is pending
+    When its requester tries to approve it
+    Then it is refused and the request stays pending

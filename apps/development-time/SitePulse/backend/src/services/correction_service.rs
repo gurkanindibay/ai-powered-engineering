@@ -180,24 +180,32 @@ impl CorrectionService {
                     "A split re-issue must include exactly one owner share and one tenant share",
                 ));
             }
-            let mut roles = std::collections::HashSet::new();
+            // A share is told apart by its role and, when two persons share a role, by person.
+            let mut keys = std::collections::HashSet::new();
             let mut total = Decimal::ZERO;
+            let same_role =
+                req.replacement_shares[0].debtor_type == req.replacement_shares[1].debtor_type;
             for share in &req.replacement_shares {
                 if share.amount <= Decimal::ZERO || share.amount.normalize().scale() > 2 {
                     return Err(invalid(
                         "Each replacement share must be a positive amount with at most two decimal places",
                     ));
                 }
-                if !roles.insert(share.debtor_type) {
+                if same_role && share.liable_person_id.is_none() {
                     return Err(invalid(
-                        "A split re-issue must contain one owner share and one tenant share",
+                        "Shares of the same role must each name the liable person",
+                    ));
+                }
+                if !keys.insert((share.debtor_type, share.liable_person_id)) {
+                    return Err(invalid(
+                        "A split re-issue must contain two different shares: one owner and one tenant, or two persons of one role",
                     ));
                 }
                 total += share.amount;
             }
-            if roles.len() != 2 || total > due.principal_amount {
+            if total > due.principal_amount {
                 return Err(conflict(
-                    "Replacement shares must cover distinct owner and tenant roles and cannot exceed the original principal",
+                    "Replacement shares cannot exceed the original principal",
                 ));
             }
         } else if !req.replacement_shares.is_empty() {
@@ -379,7 +387,10 @@ impl CorrectionService {
                     next.paid_principal = Decimal::ZERO;
                     next.paid_penalty = Decimal::ZERO;
                     next.status = DebtStatus::Pending;
-                    next.due_date = correction.new_due_date.unwrap_or(due.due_date);
+                    next.due_date = share
+                        .due_date
+                        .or(correction.new_due_date)
+                        .unwrap_or(due.due_date);
                     next.debtor_type = share.debtor_type;
                     next.penalty_accrued_through = None;
                     next.effective_due_date = Some(DuesLiability::effective_due_date_for(
@@ -389,6 +400,7 @@ impl CorrectionService {
                     if share.debtor_type == due.debtor_type
                         && share.amount < due.principal_amount
                         && correction.new_due_date.is_none()
+                        && share.due_date.is_none()
                     {
                         // A reduced share keeps its effective due date; its late fee is the
                         // original's, recalculated on the reduced principal.

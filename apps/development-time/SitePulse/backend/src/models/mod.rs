@@ -2539,11 +2539,21 @@ pub struct TransferOwnershipRequest {
     /// The new owner moves in at transfer (owner-occupied units only, A4).
     #[serde(default)]
     pub new_owner_moves_in: bool,
+    /// Asks that the seller pays the capital installments accruing after the sale. It takes
+    /// effect only when a different manager approves it; the buyer must be an existing person.
+    #[serde(default)]
+    pub seller_pays_override_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferOwnershipResponse {
     pub success: bool,
+    /// Four-eyes split of the sale month's dues, when an owner-occupied unit was sold mid-month.
+    #[serde(default)]
+    pub correction_requests: Vec<AccrualCorrection>,
+    /// The seller-pays override requested with the transfer.
+    #[serde(default)]
+    pub seller_pays_override: Option<SellerPaysOverride>,
     pub message: String,
     pub unit_id: String,
     pub old_owner_name: String,

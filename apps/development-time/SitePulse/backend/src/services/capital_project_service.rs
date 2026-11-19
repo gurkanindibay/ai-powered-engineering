@@ -461,6 +461,14 @@ impl CapitalProjectService {
                 if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
                     for (unit, share) in &unit_shares {
                         if let Some(u_id) = crate::db::parse_id_to_i64(&unit.id) {
+                            // The owner on record at accrual owes the installment, unless an
+                            // approved seller-pays override names the seller (STORY-08-05).
+                            let seller =
+                                crate::services::sale_clearance_service::approved_seller_for_unit(
+                                    &client, u_id,
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
                             client
                                 .execute(
                                     r#"
@@ -472,7 +480,7 @@ impl CapitalProjectService {
                                     )
                                     VALUES (
                                         $1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00, $5, $6, $7,
-                                        (SELECT owner_person_id FROM units WHERE id = $1)
+                                        COALESCE($8::bigint, (SELECT owner_person_id FROM units WHERE id = $1))
                                     )
                                     "#,
                                     &[
@@ -483,6 +491,7 @@ impl CapitalProjectService {
                                         &p_id,
                                         &installment_number,
                                         &now,
+                                        &seller,
                                     ],
                                 )
                                 .await.map_err(|e| e.to_string())?;

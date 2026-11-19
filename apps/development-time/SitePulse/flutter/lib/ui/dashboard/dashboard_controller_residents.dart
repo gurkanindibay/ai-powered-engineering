@@ -1510,9 +1510,13 @@ extension DashboardControllerResidents on DashboardController {
     String? siteId,
     bool newOwnerMovesIn = false,
     PersonRef? newOwner,
+    String? sellerPaysOverrideReason,
   }) async {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     final payload = {
+      // STORY-08-05: the seller pays the later installments once a second manager approves.
+      if (sellerPaysOverrideReason != null && sellerPaysOverrideReason.isNotEmpty)
+        'seller_pays_override_reason': sellerPaysOverrideReason,
       // STORY-08-09: an owner-occupied unit becomes vacant unless the new owner moves in.
       'new_owner_moves_in': newOwnerMovesIn,
       if (newOwner?.personId != null) 'new_owner_person_id': newOwner!.personId,
