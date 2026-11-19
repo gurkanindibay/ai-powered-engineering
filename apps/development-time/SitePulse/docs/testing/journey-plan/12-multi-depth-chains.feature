@@ -127,6 +127,7 @@ Feature: Multi-depth chains across the decided responsibility rules
     And the ledger invariants hold
 
   @SC-13-12-05 @J-19 @depth:3 @chain:multi-debtor-transfer @state:F6 @layer:backend @core @role_manager @pending
+  # Backend coverage: backend/tests/bank_multi_debtor_tests.rs (SC-07-03-04)
   Scenario: An unmatched transfer on a unit with several debtors is assigned once and never applied twice
     Given the site is in state F6
     # Stage 1: no automatic match

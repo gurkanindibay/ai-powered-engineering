@@ -962,6 +962,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
         optional_message: None,
         remember_sender_iban: None,
         owner_capital_match_ids: Vec::new(),
+        debtor_assignments: Default::default(),
     };
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -1034,6 +1035,7 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
         ),
         remember_sender_iban: None,
         owner_capital_match_ids: Vec::new(),
+        debtor_assignments: Default::default(),
     };
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -2206,6 +2208,7 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
         optional_message: None,
         remember_sender_iban: None,
         owner_capital_match_ids: Vec::new(),
+        debtor_assignments: Default::default(),
     };
 
     let (status, axum::Json(res)) = sitepulse_backend::handlers::confirm_reconciliation(

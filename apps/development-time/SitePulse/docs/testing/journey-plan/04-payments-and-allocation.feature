@@ -141,6 +141,7 @@ Feature: Paying, allocation and advance across periods
     And the ledger invariants hold
 
   @SC-13-04-15 @J-11 @depth:2 @state:F6 @layer:backend @core @role_manager @pending
+  # Backend coverage: backend/tests/bank_multi_debtor_tests.rs (SC-07-03-03)
   Scenario: A unit-level transfer on a unit with several debtors waits for the manager
     Given the site is in state F6
     And unit "A-2" has open shares for "Ahmet Yılmaz", "Selin Demir" and "Mert Kılıç"
