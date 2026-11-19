@@ -349,7 +349,7 @@ python3 -m unittest discover -s tests/token_guard
 ## 5c-3. Issue Claim Labels (`issue_claim.py`)
 
 - **Executable Script:** [scripts/issue_claim.py](file:///scripts/issue_claim.py)
-- **Purpose:** Lets different agent harnesses identify each other. A claim is three labels: `in progress`, `harness:<name>` (codex, claude, antigravity) and `session:<id>`. `claim` refuses an issue owned by another session (or a legacy bare `in progress`), `release` only removes the caller's own claim, `status` reports the owner. Session id: `--session`, else `$AGENT_SESSION_ID`, else `$<HARNESS>_SESSION_ID`, else generated and printed.
+- **Purpose:** Lets different agent harnesses identify each other. A claim is two labels: `in progress` and one owner label `claim:<harness>/<session-id>` (harness: codex, claude, antigravity), so harness and session can't drift apart. Concurrent claims are settled by GitHub's labeled-event order: the first claim wins and the loser removes only its own label. `claim` refuses an issue owned by another session (or a legacy bare `in progress`), `release` only removes the caller's own claim, `status` reports the owner. Session id: `--session`, else `$AGENT_SESSION_ID`, else `$<HARNESS>_SESSION_ID`, else generated and printed.
 
 ```bash
 python3 scripts/issue_claim.py claim 123 --harness claude --session <id>

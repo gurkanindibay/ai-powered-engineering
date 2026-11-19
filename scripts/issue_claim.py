@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Claim issues (and PRs) so different agent harnesses can identify each other.
 
-A claim is three GitHub labels applied together:
+A claim is two GitHub labels applied together:
 
     in progress            the work is taken (AGENTS.md rule 10)
-    harness:<name>         which harness owns it: codex, claude, antigravity, ...
-    session:<id>           the harness's own session identifier
+    claim:<harness>/<id>   owner: harness (codex, claude, antigravity, ...) and
+                           its session id in ONE label, so they can't drift apart
 
 Any agent can read the labels to see who is working on an issue and, with the
 session id, find that session. `claim` refuses an issue another session owns
@@ -41,10 +41,9 @@ from dataclasses import asdict, dataclass
 from typing import Callable
 
 IN_PROGRESS = "in progress"
-HARNESS_PREFIX = "harness:"
-SESSION_PREFIX = "session:"
+CLAIM_PREFIX = "claim:"
 KNOWN_HARNESSES = ("codex", "claude", "antigravity")
-LABEL_COLORS = {IN_PROGRESS: "fbca04", HARNESS_PREFIX: "5319e7", SESSION_PREFIX: "c5def5"}
+LABEL_COLORS = {IN_PROGRESS: "fbca04", CLAIM_PREFIX: "5319e7"}
 MAX_LABEL = 50  # GitHub label name limit
 _SLUG = re.compile(r"[^a-z0-9._-]+")
 
@@ -74,16 +73,31 @@ def resolve_session(harness: str, explicit: str | None, env: dict[str, str]) -> 
     candidates = [explicit, env.get("AGENT_SESSION_ID"), env.get(f"{harness.upper()}_SESSION_ID")]
     value = next((c for c in candidates if c and c.strip()), None)
     session = slug(value) if value else uuid.uuid4().hex[:12]
-    session = session[: MAX_LABEL - len(SESSION_PREFIX)]
+    session = session[: MAX_LABEL - len(CLAIM_PREFIX) - len(harness) - 1].strip("-")
     if not session:
         raise ClaimError("session id is empty after normalisation")
     return session
 
 
+def claim_label(harness: str, session: str) -> str:
+    return f"{CLAIM_PREFIX}{harness}/{session}"
+
+
+def claims_in(labels: list[str]) -> list[tuple[str, str]]:
+    found = []
+    for label in sorted(labels):
+        if label.startswith(CLAIM_PREFIX) and "/" in label:
+            harness, session = label[len(CLAIM_PREFIX):].split("/", 1)
+            found.append((harness, session))
+    return found
+
+
 def parse_owner(labels: list[str]) -> Owner:
-    harness = next((l[len(HARNESS_PREFIX):] for l in labels if l.startswith(HARNESS_PREFIX)), None)
-    session = next((l[len(SESSION_PREFIX):] for l in labels if l.startswith(SESSION_PREFIX)), None)
-    return Owner(IN_PROGRESS in labels, harness, session)
+    """The owner is encoded in ONE label, `claim:<harness>/<session>`, so a
+    harness and its session can never be separated or mismatched."""
+    claims = claims_in(labels)
+    harness, session = claims[0] if claims else (None, None)
+    return Owner(IN_PROGRESS in labels or bool(claims), harness, session)
 
 
 def gh(args: list[str]) -> str:
@@ -106,7 +120,7 @@ def read_labels(run: Runner, repo: str, number: int) -> list[str]:
 
 
 def ensure_label(run: Runner, repo: str, name: str) -> None:
-    color = LABEL_COLORS.get(IN_PROGRESS if name == IN_PROGRESS else name.split(":")[0] + ":", "ededed")
+    color = LABEL_COLORS.get(IN_PROGRESS if name == IN_PROGRESS else CLAIM_PREFIX, "ededed")
     try:
         run(["api", "-X", "POST", f"repos/{repo}/labels", "-f", f"name={name}", "-f", f"color={color}"])
     except ClaimError as exc:
@@ -132,37 +146,54 @@ def remove_label(run: Runner, repo: str, number: int, name: str) -> None:
             raise
 
 
+def claim_order(run: Runner, repo: str, number: int, labels: list[str]) -> list[str]:
+    """Claim labels still on the issue, oldest first by GitHub's own event order.
+
+    The server assigns `labeled` event ids in the order the writes landed, so
+    every session that re-reads after its own write agrees on who was first.
+    """
+    out = run(["api", "--paginate", f"repos/{repo}/issues/{number}/events",
+               "--jq", r'.[] | select(.event=="labeled") | "\(.id) \(.label.name)"'])
+    order: list[str] = []
+    for line in sorted((l for l in out.splitlines() if l.strip()), key=lambda l: int(l.split(" ", 1)[0])):
+        name = line.split(" ", 1)[1]
+        if name.startswith(CLAIM_PREFIX) and name in labels and name not in order:
+            order.append(name)
+    return order or [l for l in sorted(labels) if l.startswith(CLAIM_PREFIX)]
+
+
 def claim(run: Runner, repo: str, number: int, harness: str, session: str, force: bool) -> tuple[bool, str]:
     labels = read_labels(run, repo, number)
     owner = parse_owner(labels)
+    mine_label = claim_label(harness, session)
     mine = owner.harness == harness and owner.session == session
     if owner.in_progress and not mine and not force:
         who = f"{owner.harness}/{owner.session}" if owner.owned else "an unidentified agent (bare `in progress`)"
         return False, f"#{number} is already in progress, owned by {who}; pick another issue"
-    wanted = [IN_PROGRESS, f"{HARNESS_PREFIX}{harness}", f"{SESSION_PREFIX}{session}"]
     if force:
         for label in labels:
-            if (label.startswith(HARNESS_PREFIX) or label.startswith(SESSION_PREFIX)) and label not in wanted:
+            if label.startswith(CLAIM_PREFIX) and label != mine_label:
                 remove_label(run, repo, number, label)
-                drop_unused_session_label(run, repo, label)
-    add_labels(run, repo, number, [l for l in wanted if l not in labels])
-    # Concurrent claims: the lexicographically smallest session id wins, so
-    # exactly one session keeps the claim. The loser removes only its own
-    # session label; the shared harness label and `in progress` stay because
-    # the winner depends on them.
-    sessions = sorted(l[len(SESSION_PREFIX):] for l in read_labels(run, repo, number) if l.startswith(SESSION_PREFIX))
-    if not force and sessions and sessions[0] != session:
-        remove_label(run, repo, number, f"{SESSION_PREFIX}{session}")
-        drop_unused_session_label(run, repo, f"{SESSION_PREFIX}{session}")
-        return False, f"#{number} was claimed concurrently by session {sessions[0]}; backed off"
+                drop_unused_claim_label(run, repo, label)
+    add_labels(run, repo, number, [l for l in (IN_PROGRESS, mine_label) if l not in labels])
+    if force:
+        return True, f"#{number} claimed by {harness}/{session}"
+    # Concurrent claims: the earliest claim label by server event order wins.
+    # A loser removes only its own claim label; `in progress` stays for the winner.
+    current = read_labels(run, repo, number)
+    first = claim_order(run, repo, number, current)[0]
+    if first != mine_label:
+        remove_label(run, repo, number, mine_label)
+        drop_unused_claim_label(run, repo, mine_label)
+        return False, f"#{number} was claimed first by {first[len(CLAIM_PREFIX):]}; backed off"
     return True, f"#{number} claimed by {harness}/{session}"
 
 
-def drop_unused_session_label(run: Runner, repo: str, label: str) -> None:
-    """Delete a repo-level session label once no issue or PR carries it."""
-    if not label.startswith(SESSION_PREFIX):
+def drop_unused_claim_label(run: Runner, repo: str, label: str) -> None:
+    """Delete a repo-level claim label once no issue or PR carries it."""
+    if not label.startswith(CLAIM_PREFIX):
         return
-    quoted = label.replace(":", "%3A")
+    quoted = label.replace(":", "%3A").replace("/", "%2F")
     users = run(["api", f"repos/{repo}/issues?state=all&per_page=1&labels={quoted}", "--jq", "length"]).strip()
     if users == "0":
         try:
@@ -173,14 +204,13 @@ def drop_unused_session_label(run: Runner, repo: str, label: str) -> None:
 
 
 def release(run: Runner, repo: str, number: int, harness: str, session: str, force: bool) -> tuple[bool, str]:
-    owner = parse_owner(read_labels(run, repo, number))
+    labels = read_labels(run, repo, number)
+    owner = parse_owner(labels)
     if owner.in_progress and not force and not (owner.harness == harness and owner.session == session):
         return False, f"#{number} is owned by {owner.harness}/{owner.session}, not {harness}/{session}"
-    for label in (IN_PROGRESS, f"{HARNESS_PREFIX}{owner.harness}", f"{SESSION_PREFIX}{owner.session}"):
-        if label.endswith(":None"):
-            continue
+    for label in [IN_PROGRESS, *(l for l in labels if l.startswith(CLAIM_PREFIX))]:
         remove_label(run, repo, number, label)
-        drop_unused_session_label(run, repo, label)
+        drop_unused_claim_label(run, repo, label)
     return True, f"#{number} released"
 
 
