@@ -376,12 +376,13 @@ async fn skipped_units_are_recorded_where_the_manager_can_read_them() {
 #[ignore = "needs PostgreSQL and DB_PASS"]
 async fn two_sites_accrue_in_a_row_each_with_its_own_period_row() {
     let env = Env::new("twosites").await;
-    // The second site gets two units with a tariff of its own.
+    // The second site gets two units with a tariff of its own and an owner.
     env.exec(&format!(
         "WITH b AS (INSERT INTO blocks (site_id, block_name) VALUES ({site}, 'K Blok') RETURNING id),
-              h AS (INSERT INTO house_types (site_id, type_name, dues_amount) VALUES ({site}, '2+1', 1100.00) ON CONFLICT (site_id, type_name) DO UPDATE SET dues_amount = EXCLUDED.dues_amount RETURNING id)
-         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, house_type, house_type_id)
-         SELECT b.id, {site}, n, 1, 1, '2+1', h.id FROM b, h, generate_series(1, 2) n",
+              h AS (INSERT INTO house_types (site_id, type_name, dues_amount) VALUES ({site}, '2+1', 1100.00) ON CONFLICT (site_id, type_name) DO UPDATE SET dues_amount = EXCLUDED.dues_amount RETURNING id),
+              p AS (INSERT INTO persons (site_id, full_name, email, person_type) VALUES ({site}, 'Owner K', 'owner_k{site}@tenant.test', 'HOME_OWNER') RETURNING id)
+         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, house_type, house_type_id, owner_person_id)
+         SELECT b.id, {site}, n, 1, 1, '2+1', h.id, p.id FROM b, h, p, generate_series(1, 2) n",
         site = env.other_site
     ))
     .await;

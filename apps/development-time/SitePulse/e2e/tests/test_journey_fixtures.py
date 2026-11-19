@@ -16,15 +16,16 @@ from support.journey_attempts import (
 
 E2E = Path(__file__).resolve().parents[1]
 EXPECTED = {
-    "F0": {"blocks": 0, "units": 0, "people": 0, "accounts": 0},
-    "F1": {"blocks": 1, "units": 7, "people": 0, "accounts": 0},
-    "F2": {"blocks": 1, "units": 7, "people": 7, "accounts": 7},
+    "F0": {"blocks": 0, "units": 0, "people": 0, "accounts": 0, "periods": 0},
+    "F1": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 0},
+    "F2": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 0},
+    "F3": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 1},
 }
 
 
 @pytest.mark.covers("SC-13-07-01")
 @pytest.mark.core
-@pytest.mark.parametrize("state", ["F0", "F1", "F2"])
+@pytest.mark.parametrize("state", ["F0", "F1", "F2", "F3"])
 def test_site_admin_reference_fixtures(state, request, api, actors, stack):
     saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
     manifest = JourneyManifest.create(
@@ -43,7 +44,7 @@ def test_site_admin_reference_fixtures(state, request, api, actors, stack):
         assert stack.sql(f"SELECT COUNT(*) FROM blocks WHERE site_id = {int(fixture.site_id)};") == str(expected["blocks"])
         assert Decimal(str(overview["summary"]["total_overdue_with_interest"])) == Decimal("0.00")
         assert Decimal(str(overview["summary"]["total_advance_balance"])) == Decimal("0.00")
-        assert not overview["available_periods"]
+        assert len(overview["available_periods"]) == expected["periods"]
         assert stack.sql(
             f"SELECT COUNT(*) FROM persons WHERE site_id = {int(fixture.site_id)} "
             "AND person_type IN ('HOME_OWNER', 'HOME_RESIDENT');"
@@ -52,7 +53,7 @@ def test_site_admin_reference_fixtures(state, request, api, actors, stack):
             f"SELECT COUNT(*) FROM users WHERE site_id = {int(fixture.site_id)} "
             "AND role IN ('HOME_OWNER', 'HOME_RESIDENT') AND is_active AND NOT must_change_password;"
         ) == str(expected["accounts"])
-        assert stack.sql(f"SELECT COUNT(*) FROM dues_periods WHERE site_id = {int(fixture.site_id)};") == "0"
+        assert stack.sql(f"SELECT COUNT(*) FROM dues_periods WHERE site_id = {int(fixture.site_id)};") == str(expected["periods"])
         assert stack.sql(
             "SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
             f"WHERE u.site_id = {int(fixture.site_id)};"

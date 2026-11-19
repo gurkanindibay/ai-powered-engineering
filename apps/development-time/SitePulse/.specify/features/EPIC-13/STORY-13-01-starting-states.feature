@@ -10,6 +10,7 @@ Feature: Site admin starting points F0 to F3
 
   # ---------------------------------------------------------------- F0 ZERO
 
+  # Pending: GUI screen verification
   @SC-13-01-01 @J-01 @depth:1 @state:F0 @layer:gui @smoke @role_manager @pending
   Scenario: A site with no data shows empty states, not errors
     Given the site is in state F0
@@ -19,14 +20,14 @@ Feature: Site admin starting points F0 to F3
     And the dashboard shows total outstanding 0.00, collected 0.00 and 0 units
     And the ledger invariants hold
 
-  @SC-13-01-02 @J-01 @depth:1 @state:F0 @layer:backend @core @role_manager @pending
+  @SC-13-01-02 @J-01 @depth:1 @state:F0 @layer:backend @core @role_manager @linked
   Scenario: Accruing a period on a site with no units is refused with a clear reason
     Given the site is in state F0
     When the manager accrues period "Kasım 2026" with amount 1500.00 and due date "2026-11-10"
     Then the request is rejected with a "no units to accrue" error
     And no period, no liability and no payment exists for the site
 
-  @SC-13-01-03 @J-01 @depth:1 @state:F0 @layer:backend @edge @role_manager @pending
+  @SC-13-01-03 @J-01 @depth:1 @state:F0 @layer:backend @edge @role_manager @linked
   Scenario: A payment arriving at a site with no units is not lost
     Given the site is in state F0
     When a transfer of 1500.00 with an unknown virtual IBAN is imported through this site's bank statement feed
@@ -35,6 +36,7 @@ Feature: Site admin starting points F0 to F3
 
   # ----------------------------------------------------- F1 NO_RESIDENTS
 
+  # Pending: GUI screen verification
   @SC-13-01-04 @J-02 @depth:1 @state:F1 @layer:gui @core @role_manager @pending
   Scenario: Units with no people show as unassigned and cannot be billed to anyone
     Given the site is in state F1
@@ -43,6 +45,7 @@ Feature: Site admin starting points F0 to F3
     And the people directory is empty
     And the collection dashboard shows total outstanding 0.00
 
+  # Pending: GUI screen verification
   @SC-13-01-05 @J-02 @depth:1 @state:F1 @layer:gui @core @role_manager @pending
   Scenario: The manager can add the first owner and tenant from an empty unit
     Given the site is in state F1
@@ -56,6 +59,7 @@ Feature: Site admin starting points F0 to F3
 
   # ------------------------------------------- F2 RESIDENTS_NO_PERIOD
 
+  # Pending: GUI screen verification
   @SC-13-01-06 @J-03 @depth:2 @state:F2 @layer:gui @core @role_manager @pending
   Scenario: People without a billing period have no debt and a clear first action
     Given the site is in state F2
@@ -65,7 +69,7 @@ Feature: Site admin starting points F0 to F3
     When the home owner "Ayşe Kaya" signs in
     Then her dashboard shows balance 0.00 and an empty statement, not an error
 
-  @SC-13-01-07 @J-03 @depth:1 @state:F2 @layer:backend @core @role_manager @pending
+  @SC-13-01-07 @J-03 @depth:1 @state:F2 @layer:backend @core @role_manager @linked
   Scenario: The first accrual charges each unit its tariff and the right debtor
     Given the site is in state F2
     When the manager creates and accrues period "Ekim 2026" due "2026-10-10"
@@ -74,7 +78,7 @@ Feature: Site admin starting points F0 to F3
     And unit "A-6" owes 2250.00 and every other charged unit owes 1500.00
     And the ledger invariants hold
 
-  @SC-13-01-08 @J-03 @depth:1 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-01-08 @J-03 @depth:1 @state:F2 @layer:backend @edge @role_manager @linked
   Scenario: Units without an owner are reported separately from the accrual
     Given the site is in state F2
     When the manager creates and accrues period "Ekim 2026" due "2026-10-10"
@@ -85,13 +89,14 @@ Feature: Site admin starting points F0 to F3
 
   # ------------------------------------------ F3 PERIOD_NO_RESIDENTS
 
-  @SC-13-01-09 @J-04 @depth:1 @state:F3 @layer:backend @core @role_manager @pending
+  @SC-13-01-09 @J-04 @depth:1 @state:F3 @layer:backend @core @role_manager @linked
   Scenario: A period accrued before anyone lived in the units leaves nothing to collect
     Given the site is in state F3
     Then period "Ekim 2026" exists and is OPEN
     And 0 liabilities exist for it
     And the dashboard shows total outstanding 0.00
 
+  # Pending: blocked on #210 supplementary charges and #211 clock integration
   @SC-13-01-10 @J-04 @depth:2 @state:F3 @layer:backend @edge @role_manager @pending
   Scenario: A primary resident is charged from their start residing date, not before
     Given the site is in state F3
@@ -101,7 +106,8 @@ Feature: Site admin starting points F0 to F3
     Then unit "A-1" is charged principal of 1450.00 for "Kasım 2026", which is 29 of 30 days
     And the ledger invariants hold
 
-  @SC-13-01-14 @J-04 @depth:2 @state:F3 @layer:backend @edge @role_manager @pending
+  # Pending: blocked on #210 supplementary charges and #211 clock integration
+  @SC-13-01-15 @J-04 @depth:2 @state:F3 @layer:backend @edge @role_manager @pending
   Scenario: A back-dated start residing date creates the charge for an already accrued period
     Given the site is in state F3
     When the manager assigns "Burak Şahin" as owner and primary resident of unit "A-3" effective "2026-10-11"
@@ -113,6 +119,7 @@ Feature: Site admin starting points F0 to F3
     Then its late fee is 16.94, which is 1016.13 x 5% x 10 / 30
     And the ledger invariants hold
 
+  # Pending: GUI screen verification
   @SC-13-01-11 @J-04 @depth:1 @state:F3 @layer:gui @edge @role_manager @pending
   Scenario: Accruing the same period again after residents arrive is blocked, not doubled
     Given the site is in state F3
@@ -125,6 +132,7 @@ Feature: Site admin starting points F0 to F3
 
   # ------------------------------------------------- navigation across states
 
+  # Pending: GUI screen verification
   @SC-13-01-12 @J-05 @depth:2 @state:F0 @layer:gui @core @role_manager @pending
   Scenario: Growing the site from F0 to F2 through the screens keeps every page consistent
     Given the site is in state F0
@@ -134,7 +142,7 @@ Feature: Site admin starting points F0 to F3
     Then the site is equal to state F2
     And the units page, the people directory and each unit workspace agree on every owner and occupant
 
-  @SC-13-01-13 @J-06 @depth:1 @layer:backend @edge @role_manager @pending
+  @SC-13-01-13 @J-06 @depth:1 @layer:backend @edge @role_manager @linked
   Scenario Outline: Every starting state survives a backend restart unchanged
     Given the site is in state <state>
     When the backend is restarted
