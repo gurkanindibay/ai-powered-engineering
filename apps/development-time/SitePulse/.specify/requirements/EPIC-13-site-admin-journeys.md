@@ -19,3 +19,21 @@ As a test author, I need named site fixtures, reusable ledger invariant checks, 
 - SQL test-support teardown deletes only resources recorded for that attempt, is safe to retry, and runs after evidence capture even when capture fails.
 - Failures retain redacted site and network evidence; stale-run reclamation only removes confirmed inactive attempts.
 - File 07 scenarios automate the backend boundaries and leave no rows belonging to completed attempts.
+
+### STORY-13-01: Back-dated start residing date and late fees
+
+As a manager, I need the supplementary charge created for a back-dated start residing date to count its late fee from the day it was created, so a resident owes no fee for days before the charge existed.
+
+#### Acceptance criteria
+
+- The supplementary charge keeps the referred month's period due date and stores the creation date as its effective due date.
+- The late fee is 0.00 at creation and counts from the effective due date afterwards (16.94 ten days later for the 1016.13 charge).
+
+### STORY-13-12: Back-dated owner into a closed month
+
+As a manager, I need a back-dated owner in a closed month to receive supplementary charges in the open period without changing the closed snapshot, with late fees counted from creation.
+
+#### Acceptance criteria
+
+- Both supplementary charges have the creation date as effective due date and a late fee of 0.00 at creation.
+- Ten days later the late fees are 16.94 and 25.00.
