@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-19T20:03:35Z",
- "run_id": "20261119T200334Z-2bcb9b8",
- "commit": "2bcb9b865c3411ceb15524365322e1e090661bab",
+ "generated_at": "2026-11-19T20:56:51Z",
+ "run_id": "20261119T205651Z-20689b0",
+ "commit": "20689b00ba0df48af0a5f669482c8b798b2b6374",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 126,
+  "tests": 136,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 125,
-  "seconds": 2048.4,
+  "passed": 135,
+  "seconds": 2193.5,
   "files": 8,
   "unparseable": []
  },
@@ -19,12 +19,12 @@
   "stories": 103,
   "stories_with_scenarios": 103,
   "stories_passing": 33,
-  "scenarios": 319,
-  "automated": 299,
-  "passing": 114,
+  "scenarios": 333,
+  "automated": 305,
+  "passing": 120,
   "failing": 0,
   "no_result": 185,
-  "planned": 20,
+  "planned": 28,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 0
@@ -204,12 +204,12 @@
    "stories": 3,
    "stories_with_scenarios": 3,
    "stories_passing": 0,
-   "scenarios": 12,
-   "automated": 3,
-   "passing": 1,
+   "scenarios": 26,
+   "automated": 9,
+   "passing": 7,
    "failing": 0,
    "no_result": 2,
-   "planned": 9,
+   "planned": 17,
    "health": "in_progress"
   }
  ],
@@ -2062,6 +2062,90 @@
    "epic": "EPIC-13",
    "story": "STORY-13-01"
   },
+  "SC-13-01-01": {
+   "state": "planned",
+   "name": "A site with no data shows empty states, not errors",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-02": {
+   "state": "passing",
+   "name": "Accruing a period on a site with no units is refused with a clear reason",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-03": {
+   "state": "passing",
+   "name": "A payment arriving at a site with no units is not lost",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-04": {
+   "state": "planned",
+   "name": "Units with no people show as unassigned and cannot be billed to anyone",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-05": {
+   "state": "planned",
+   "name": "The manager can add the first owner and tenant from an empty unit",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-06": {
+   "state": "planned",
+   "name": "People without a billing period have no debt and a clear first action",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-07": {
+   "state": "passing",
+   "name": "The first accrual charges each unit its tariff and the right debtor",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-08": {
+   "state": "passing",
+   "name": "Units without an owner are reported separately from the accrual",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-09": {
+   "state": "passing",
+   "name": "A period accrued before anyone lived in the units leaves nothing to collect",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-10": {
+   "state": "planned",
+   "name": "A primary resident is charged from their start residing date, not before",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-15": {
+   "state": "planned",
+   "name": "A back-dated start residing date creates the charge for an already accrued period",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-11": {
+   "state": "planned",
+   "name": "Accruing the same period again after residents arrive is blocked, not doubled",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-12": {
+   "state": "planned",
+   "name": "Growing the site from F0 to F2 through the screens keeps every page consistent",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
+  "SC-13-01-13": {
+   "state": "passing",
+   "name": "Every starting state survives a backend restart unchanged",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
   "SC-13-07-01": {
    "state": "passing",
    "name": "Every starting state can be built using the documented fixture path",
@@ -2287,8 +2371,8 @@
    "epics": 13,
    "stories": 103,
    "stories_with_scenarios": 103,
-   "scenarios": 319,
-   "automated": 299
+   "scenarios": 333,
+   "automated": 305
   }
  ],
  "recent_changes": [
@@ -2297,8 +2381,8 @@
    "epic": "EPIC-13",
    "title": "Site Admin Journeys",
    "new_stories": 3,
-   "new_scenarios": 12,
-   "newly_automated": 3,
+   "new_scenarios": 26,
+   "newly_automated": 9,
    "items": 3,
    "samples": [
     "STORY-13-01: Back-dated start residing date and late fees",
@@ -2952,5 +3036,5 @@
    ]
   }
  ],
- "href": "reports/44599317189-1/"
+ "href": "reports/44610725718-1/"
 }
