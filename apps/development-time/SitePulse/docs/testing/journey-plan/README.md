@@ -96,7 +96,7 @@ Proration is on. Start with F2 except A-2 is vacant and A-5 remains tenant-occup
 no payments. Build in chronological order, using these local dates. Each accrual runs on the
 date of its step, after that step's occupancy change, so the accrual sees the final occupancy
 of the month. October and November are therefore accrued after their due dates; the due date
-and late fee of those shares follow Q9. F6 scenarios assert principal unless they cite Q9.
+and late fee of those shares follow the open part of Q9. F6 scenarios assert principal unless they cite Q9.
 A tenant session's end date is exclusive, so the incoming party pays the handover day.
 
 1. 2026-09-01: A-2 vacant, owner Ahmet. `Eylül 2026` accrued: Ahmet owes 1500.00 for A-2.
@@ -106,7 +106,7 @@ A tenant session's end date is exclusive, so the incoming party pays the handove
    of A-4 and Gül moves in as owner-occupant on the same date.
 4. 2026-11-15: Selin moves out, tenant Mert Kılıç moves in. `Kasım 2026` accrued: Selin owes 700.00
    (14 days), Mert owes 800.00 (16 days). For A-4, Ahmet owes 200.00 (4 days) and Gül 1300.00
-   (26 days), subject to Q10.
+   (26 days), because an owner-occupied sale splits by days (Q10).
 5. 2026-11-18: A-3 (vacant so far) gets tenant Oya Çelik with start residing date 2026-11-18.
    `Kasım 2026` already exists, so a split correction is requested and a second manager approves
    it, as in SC-13-05-09. After approval Oya owes 650.00 (13 days) and owner Burak 850.00 (17 days).
@@ -126,7 +126,7 @@ and empty rows.
 | I3 | Compare dashboard and workspace debt for the same site, unit, debtor and ledger type; reconcile payment history by movement and allocation, including advances and reversals |
 | I4 | Each accepted payment is counted once. Allocations and remaining credit reconcile to the payment net of approved refunds and reversals; advances stay scoped to the debtor and unit |
 | I5 | For each unit and period, shares sum to the tariff prorated for chargeable days; pre-creation and unassigned days contribute zero. Check original charges before approved corrections |
-| I6 | Every liability has exactly one debtor; a cancelled liability has zero outstanding and remains in audit history |
+| I6 | Every liability has exactly one primary debtor. For a tenant's liability the unit owner on the same dates is recorded and shown as jointly liable (KMK m.22), never as a second liability. A cancelled liability has zero outstanding and remains in audit history |
 | I7 | Historical debt stays with its original debtor; approved dated corrections preserve the original audit trail and affect only the authorized dates and amounts |
 | I8 | Every balance is identical after a backend restart (memory and PostgreSQL agree) |
 | I9 | Sum of the amounts shown to a user equals what the API returns, to the kuruş |
@@ -203,9 +203,31 @@ Covered in files `03`, `04`, `05`:
 | Q6 | Is the 5% / 30-day late-fee rule the only one (no cap, no compounding)? | Yes, as in STORY-01-02 |
 | Q7 | Is deleting a site allowed in the API, or is teardown SQL only? | SQL only, test-support code, never an API |
 | Q8 | One site per journey costs a backend restart per SQL Arrange. Accept, or add a "reload state" endpoint behind the e2e flag? | Use an exclusive test stack when setup requires a restart. |
-| Q9 | A share created after the period due date (late accrual, catch-up, back-dated move-in, re-split): which due date does it get? | **Open.** Today each liability keeps its period's due date (SC-07-10-03), so a resident who moved in on 2026-11-18 owes a fee from 2026-11-10. Plan assumption: due date = max(period due date, responsibility start, share creation date). SC-13-01-14, SC-13-03-02, SC-13-03-17 |
-| Q10 | A sale in the middle of the month: is that month's operational liability split between seller and buyer by days? | **Open.** STORY-08-05 covers capital dues and the tenant only. Plan assumption: split by days like occupancy, with the seller up to the day before the effective date. SC-13-03-16 |
-| Q11 | A transfer to the unit's virtual IBAN with no payer identity, on a unit with several open debtors (F6 A-2): whose debt does it pay? | **Open.** Options: current occupant first, or the unit's oldest liability whatever the debtor. SC-13-04-15 |
+| Q9 | Who owes days around a tenant's stay, and what happens to a departing tenant's debt? | **Decided.** Days before the tenant's start residing date and after their release belong to the owner, also in late accruals and re-splits. Departure goes through a check-out that shows the tenant's open debt (exit settlement). That debt stays on the tenant as primary debtor and the owner stays jointly liable for it (section 8.1). If the tenant left without telling the manager, the manager records the move-out with its real date; days after it are re-split to the owner and the tenant's earlier debt is still collectable from the owner. **Still open:** the due date and first late-fee day of a share created after the period due date. Plan assumption: the latest of the period due date, the responsibility start and the share creation date. SC-13-01-14, SC-13-03-02, SC-13-03-17, SC-13-05-06, SC-13-05-17, SC-13-05-18 |
+| Q10 | A sale in the middle of the month: who owes that month? | **Decided for operational dues:** they follow the occupant. A tenant-occupied unit whose tenant does not change is not split; the tenant owes the whole month. An owner-occupied unit is split by days between seller and buyer. **Open for fixed-asset (capital or demirbaş) charges:** candidates are the owner on record when the charge is accrued (today's STORY-08-05 behaviour), the owner on record on the general assembly decision date, or a split agreed in the sale. Seller and buyer settle anything else between themselves. SC-13-03-05, SC-13-03-16, SC-13-03-18 |
+| Q11 | A transfer to the unit's virtual IBAN with no payer identity, on a unit with several open debtors (F6 A-2): whose debt does it pay? | **Decided:** it is not matched automatically. It goes to the reconciliation queue as UNMATCHED and the manager assigns it to a debtor. SC-13-04-15 |
+
+### 8.1 Legal basis for debt responsibility (Q9, Q10)
+
+Summary of Law No. 634 (Kat Mülkiyeti Kanunu, KMK) as published on mevzuat.gov.tr, for test design only. This is
+not legal advice. Confirm with a lawyer before the product rule ships.
+
+- **The owner is the primary debtor.** KMK m.20 obliges every owner to pay their share of common
+  expenses and advances. An owner who does not pay in full owes a late fee of 5% per month.
+- **A tenant is jointly and severally liable with the owner.** KMK m.22/1 makes anyone who uses the unit
+  continuously (by lease, right of residence or otherwise) liable jointly and severally with the owner for the
+  owner's expense share, advance and late fee. A tenant's liability is capped at the rent they owe, and what
+  they pay is deducted from that rent.
+- **Consequence for SitePulse:** whatever the tenant leaves unpaid, the management can always collect from
+  the owner, with or without a check-out. Notice only changes when the tenant's responsibility ends. SitePulse
+  does not hold the rent, so it cannot apply the tenant's cap. It should keep billing the tenant as primary
+  debtor and show the owner as jointly liable. It should not move or duplicate the liability.
+- **Unit lien.** If the debt still cannot be collected, a court-determined debt can be registered as a statutory
+  mortgage (kanuni ipotek) on the unit in favour of the other owners (KMK m.22/2). Old debt does not move to
+  a buyer automatically; it can follow the unit only through that registered lien.
+- **Between owner and tenant**, the lease decides who bears the dues. Usage-related costs such as heating,
+  lighting and water fall on the tenant (TBK m.341). Structural repairs and fixed-asset costs generally stay
+  with the owner (TBK m.303 and Yargıtay case law). The management's claim under KMK m.22 does not change.
 
 ## 9. Files
 

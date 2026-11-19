@@ -21,7 +21,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
   Scenario: A tenant replaced mid-month leaves the old debt with the old tenant
     Given the site is in state F6
     Then the "Kasım 2026" principal shares for "A-2" are "Selin Demir" 700.00 and "Mert Kılıç" 800.00
-    And "Selin Demir" still owes her "Ekim 2026" share of 1016.13 plus its late fee, counted from the due date that decision Q9 sets
+    And "Selin Demir" still owes her "Ekim 2026" share of 1016.13 plus its late fee, counted from the due date that the open part of Q9 sets
     And "Mert Kılıç" owes nothing for "Eylül 2026" or "Ekim 2026"
 
   @SC-13-03-03 @J-10 @state:F6 @layer:gui @core @role_resident @pending
@@ -44,7 +44,8 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then tenant "Oya Çelik" owes 1500.00 for "Aralık 2026"
     And owner "Burak Şahin" owes nothing for "Aralık 2026" operational dues
 
-  @SC-13-03-05 @J-10 @state:F6 @layer:backend @core @role_manager @pending
+  # Fixed-asset charges are still open under Q10; this pins the current STORY-08-05 rule.
+  @SC-13-03-05 @J-10 @state:F6 @decision @layer:backend @core @role_manager @pending
   Scenario: A title deed transfer moves future capital dues but not old debt
     Given the site is in state F6
     And installment 1 of the capital project "Cephe" (6000.00 for unit "A-4" in 2 installments) was accrued before the sale
@@ -159,7 +160,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then the unit's owner is charged 750.00 principal for 15 days
     And the ledger invariants hold
 
-  @SC-13-03-16 @J-10 @state:F6 @decision @layer:backend @core @role_manager @pending
+  @SC-13-03-16 @J-10 @state:F6 @layer:backend @core @role_manager @pending
   Scenario: A mid-month sale of an owner-occupied unit splits that month between seller and buyer
     Given the site is in state F6
     Then the "Kasım 2026" operational principal of "A-4" is 200.00 for "Ahmet Yılmaz" (days 1 to 4)
@@ -170,14 +171,27 @@ Feature: Residents and owners change after periods were accrued (state F6)
   @SC-13-03-17 @J-10 @decision @layer:backend @edge @role_manager @pending
   Scenario Outline: A share whose responsibility starts after the period due date is not late before it existed
     Given unit "A-3" is owned and vacant with tariff 1500.00 and the period "Kasım 2026" is due "2026-11-10"
+    And the days before the tenant's start belong to the owner (Q9, decided)
     And a tenant's responsibility for "Kasım 2026" starts on "<start>" and the share is created on "<created>"
     When the late fee is evaluated on "2026-11-19"
     Then the tenant share is <share> due on "<share_due>" and its late fee is <fee>
 
-    # Assumption for Q9: due date = max(period due date, responsibility start, share creation date).
+    # Open part of Q9: due date = max(period due date, responsibility start, share creation date).
     # Today the share would keep "2026-11-10" (SC-07-10-03) and owe a fee for days before it existed.
     Examples:
       | start      | created    | share   | share_due  | fee   |
       | 2026-11-05 | 2026-11-05 | 1300.00 | 2026-11-10 | 19.50 |
       | 2026-11-15 | 2026-11-15 | 800.00  | 2026-11-15 | 5.33  |
       | 2026-11-18 | 2026-11-18 | 650.00  | 2026-11-18 | 1.08  |
+
+  @SC-13-03-18 @J-10 @state:F5 @layer:backend @core @role_manager @pending
+  Scenario: A sale of a tenant-occupied unit with the same tenant is not split
+    Given the site is in state F5
+    And the clock has advanced to "2026-12-15"
+    When the manager transfers title of "A-2" from "Ahmet Yılmaz" to "Gül Tanrıverdi" effective "2026-12-15"
+    And tenant "Selin Demir" stays in "A-2"
+    And the manager accrues period "Aralık 2026" due "2026-12-10"
+    Then "Selin Demir" owes the whole 1500.00 "Aralık 2026" operational principal for "A-2"
+    And neither "Ahmet Yılmaz" nor "Gül Tanrıverdi" has an "Aralık 2026" operational liability for "A-2"
+    And the jointly liable owner shown on that liability is "Ahmet Yılmaz" for days 1 to 14 and "Gül Tanrıverdi" from day 15
+    And the ledger invariants hold

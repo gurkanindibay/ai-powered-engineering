@@ -69,7 +69,8 @@ Feature: Corner cases around accrual, occupancy, access and time
     When tenant "Deniz Arslan" moves out of unit "A-5" effective "2026-12-01"
     Then "Deniz Arslan" still owes the same 4500.00 principal plus the accrued fee as of the move-out date
     And the move-out settlement shows that debt with no payout
-    And unit "A-5" is vacant and its owner "Can Öztürk" is not charged for the tenant's debt
+    And unit "A-5" is vacant and the debt stays a single liability with "Deniz Arslan" as primary debtor
+    And owner "Can Öztürk" is shown as jointly liable for it (KMK m.22), without a second liability
 
   @SC-13-05-07 @J-12 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: Moving out with an advance requires a decision before the advance leaves
@@ -165,3 +166,30 @@ Feature: Corner cases around accrual, occupancy, access and time
       | F5    |
       | F6    |
       | F7    |
+
+  # ------------------------------------------------- tenant departure (Q9)
+
+  @SC-13-05-17 @J-12 @state:F5 @layer:gui @core @role_manager @pending
+  Scenario: Check-out shows the tenant's debt and the owner can still be collected from
+    Given the site is in state F5
+    When the manager starts the check-out of tenant "Deniz Arslan" from "A-5" effective "2026-11-19"
+    Then the check-out screen shows open debt 4797.50, split into principal 4500.00 and late fee 297.50
+    And the manager confirms the check-out with that debt open
+    When owner "Can Öztürk" pays 1675.00 toward the tenant's debt
+    Then the "Eylül 2026" liability of "Deniz Arslan" is settled
+    And the receipt names payer "Can Öztürk" and debtor "Deniz Arslan"
+    And the owner's own statement shows the remaining jointly liable amount 3122.50
+    And the owner does not see the tenant's own receipts or contact details
+    And the ledger invariants hold
+
+  @SC-13-05-18 @J-12 @state:F6 @layer:backend @core @role_manager @pending
+  Scenario: A tenant who left without notice is moved out at the real date and the owner takes over
+    Given the site is in state F6
+    And the clock has advanced to "2026-12-05" after "Aralık 2026" was accrued to "Mert Kılıç"
+    When the manager records that "Mert Kılıç" left "A-2" effective "2026-11-25" without check-out
+    And a different manager approves the resulting split corrections
+    Then the "Kasım 2026" principal is 700.00 to "Selin Demir", 500.00 to "Mert Kılıç" and 300.00 to owner "Ahmet Yılmaz"
+    And the whole "Aralık 2026" principal of 1500.00 moves to owner "Ahmet Yılmaz"
+    And the unpaid 500.00 of "Mert Kılıç" stays his, with "Ahmet Yılmaz" shown as jointly liable
+    And the audit log records the late notice, both actors and the original shares
+    And the ledger invariants hold

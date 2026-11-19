@@ -140,13 +140,15 @@ Feature: Paying, allocation and advance across periods
     And a second reversal of the same payment is refused and changes nothing
     And the ledger invariants hold
 
-  @SC-13-04-15 @J-11 @state:F6 @decision @layer:backend @core @role_manager @pending
-  Scenario: A unit-level transfer on a unit with several debtors pays the right person
+  @SC-13-04-15 @J-11 @state:F6 @layer:backend @core @role_manager @pending
+  Scenario: A unit-level transfer on a unit with several debtors waits for the manager
     Given the site is in state F6
     And unit "A-2" has open shares for "Ahmet Yılmaz", "Selin Demir" and "Mert Kılıç"
     When the bank webhook sends 800.00 to the virtual IBAN of unit "A-2" with no payer identity
-    Then the allocation follows decision Q11
-    And no share of another debtor is reduced unless Q11 allows it
+    Then the transfer is stored as UNMATCHED in the reconciliation queue with the reason "several open debtors"
+    And no share of any debtor is reduced and no receipt exists
+    When the manager assigns the item to "Mert Kılıç" and approves it
+    Then the "Kasım 2026" share of "Mert Kılıç" is settled and the other shares are unchanged
     And the ledger invariants hold
 
   @SC-13-04-16 @J-11 @state:F5 @layer:backend @edge @role_manager @pending

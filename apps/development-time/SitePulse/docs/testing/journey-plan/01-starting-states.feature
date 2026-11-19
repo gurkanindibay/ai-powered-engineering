@@ -107,7 +107,7 @@ Feature: Site admin starting points F0 to F3
     When the manager assigns "Burak Şahin" as owner and primary resident of unit "A-3" effective "2026-10-11"
     Then period "Ekim 2026" now holds a liability of 1016.13 for "Burak Şahin", which is 21 of 31 days
     And the days before 2026-10-11 are charged to nobody because the unit had no responsible party
-    And the new liability's due date and first late-fee day follow decision Q9, not the period due date "2026-10-10"
+    And the new liability's due date and first late-fee day follow the open part of Q9, not the period due date "2026-10-10"
     And the ledger invariants hold
 
   @SC-13-01-11 @J-04 @state:F3 @layer:gui @edge @role_manager @pending
