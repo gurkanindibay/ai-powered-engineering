@@ -353,8 +353,10 @@ python3 -m unittest discover -s tests/token_guard
 
 ```bash
 python3 scripts/issue_claim.py claim 123 --harness claude --session <id>
+python3 scripts/issue_claim.py sync 123 --pr 130   # copy the issue labels to its PR
+python3 scripts/issue_claim.py claim 123 --harness claude --session <id> --pr 130   # claim + label PR
 python3 scripts/issue_claim.py status 123 --json
-python3 scripts/issue_claim.py release 123 --harness claude --session <id>
+python3 scripts/issue_claim.py release 123 --harness claude --session <id> --pr 130   # clears issue and PR
 python3 -m unittest discover -s tests/issue_claim
 ```
 
