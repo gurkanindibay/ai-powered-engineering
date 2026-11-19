@@ -107,7 +107,7 @@ Feature: Site admin starting points F0 to F3
     And the ledger invariants hold
 
   # Pending: blocked on #210 supplementary charges and #211 clock integration
-  @SC-13-01-14 @J-04 @depth:2 @state:F3 @layer:backend @edge @role_manager @pending
+  @SC-13-01-15 @J-04 @depth:2 @state:F3 @layer:backend @edge @role_manager @pending
   Scenario: A back-dated start residing date creates the charge for an already accrued period
     Given the site is in state F3
     When the manager assigns "Burak Şahin" as owner and primary resident of unit "A-3" effective "2026-10-11"
