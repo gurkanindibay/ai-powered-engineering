@@ -798,6 +798,9 @@ pub struct AccrueDuesPeriodResponse {
     /// Units that were not accrued, with the reason.
     #[serde(default)]
     pub skipped_units: Vec<String>,
+    /// Units that were not accrued because no owner is on record.
+    #[serde(default)]
+    pub units_without_owner: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

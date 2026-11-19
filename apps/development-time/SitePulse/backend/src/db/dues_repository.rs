@@ -449,38 +449,34 @@ pub async fn commit_accrual_batch(
     {
         return Err(std::io::Error::other("cannot accrue into a closed billing period").into());
     }
-    let period_id: Option<i64> = if batch.dues.is_empty() {
-        None
-    } else {
-        Some(match existing {
-            Some(row) => {
-                let id: i64 = row.get(0);
-                tx.execute(
-                    "UPDATE dues_periods SET status='OPEN' WHERE id=$1 AND site_id=$2",
-                    &[&id, &site],
-                )
-                .await?;
-                id
-            }
-            None => tx
-                .query_one(
-                    r#"
-                INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status)
-                VALUES ($1, $2, $3, $4, 'OPEN')
-                ON CONFLICT (site_id, period_name) DO UPDATE SET period_key = EXCLUDED.period_key
-                RETURNING id
-                "#,
-                    &[
-                        &site,
-                        &batch.period_label,
-                        &batch.period_key,
-                        &batch.due_date,
-                    ],
-                )
-                .await?
-                .get(0),
-        })
-    };
+    let period_id: Option<i64> = Some(match existing {
+        Some(row) => {
+            let id: i64 = row.get(0);
+            tx.execute(
+                "UPDATE dues_periods SET status='OPEN' WHERE id=$1 AND site_id=$2",
+                &[&id, &site],
+            )
+            .await?;
+            id
+        }
+        None => tx
+            .query_one(
+                r#"
+            INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status)
+            VALUES ($1, $2, $3, $4, 'OPEN')
+            ON CONFLICT (site_id, period_name) DO UPDATE SET period_key = EXCLUDED.period_key, status = 'OPEN'
+            RETURNING id
+            "#,
+                &[
+                    &site,
+                    &batch.period_label,
+                    &batch.period_key,
+                    &batch.due_date,
+                ],
+            )
+            .await?
+            .get(0),
+    });
     let mut due_ids = Vec::with_capacity(batch.dues.len());
     for (due, basis) in batch.dues {
         let unit = require_id("unit", &due.unit_id)?;
@@ -599,6 +595,30 @@ pub async fn tenanted_unit_ids(
     let rows = client
         .query(
             "SELECT id FROM units WHERE ($1::bigint = 0 OR site_id = $1) AND tenant_person_id IS NOT NULL AND deleted_at IS NULL",
+            &[&site],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|r| r.get::<_, i64>(0).to_string())
+        .collect())
+}
+
+/// Ids of a site's units that currently have an owner on record.
+/// An empty `site_id` means every site.
+pub async fn owned_unit_ids(
+    pool: &Pool,
+    site_id: &str,
+) -> DbResult<std::collections::HashSet<String>> {
+    let site: i64 = if site_id.is_empty() {
+        0
+    } else {
+        require_id("site", site_id)?
+    };
+    let client = pool.get().await?;
+    let rows = client
+        .query(
+            "SELECT id FROM units WHERE ($1::bigint = 0 OR site_id = $1) AND owner_person_id IS NOT NULL AND deleted_at IS NULL",
             &[&site],
         )
         .await?;

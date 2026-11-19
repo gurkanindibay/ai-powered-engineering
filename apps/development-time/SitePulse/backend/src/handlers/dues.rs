@@ -255,18 +255,39 @@ pub async fn accrue_monthly_dues(
     let total_units_in_site = units_in_site.len();
     // With PostgreSQL the occupancy (tenant or not) is read from the units table: a
     // tenant moved in without a user account has no in-memory tenant user.
-    let tenanted: Option<std::collections::HashSet<String>> = match state.pool {
-        Some(ref pool) => Some(
-            crate::db::tenanted_unit_ids(pool, &payload.site_id)
+    let (tenanted, owned): (
+        Option<std::collections::HashSet<String>>,
+        Option<std::collections::HashSet<String>>,
+    ) = match state.pool {
+        Some(ref pool) => {
+            let t = crate::db::tenanted_unit_ids(pool, &payload.site_id)
                 .await
                 .map_err(|e| {
                     (
                         StatusCode::SERVICE_UNAVAILABLE,
                         crate::error::sanitized("Database unavailable", &e),
                     )
-                })?,
-        ),
-        None => None,
+                })?;
+            let o = crate::db::owned_unit_ids(pool, &payload.site_id)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        crate::error::sanitized("Database unavailable", &e),
+                    )
+                })?;
+            (Some(t), Some(o))
+        }
+        None => (None, None),
+    };
+
+    let period_already_exists = {
+        let inner = state.inner.read().await;
+        inner.dues_periods.iter().any(|p| {
+            crate::auth::same_id(&p.site_id, &payload.site_id)
+                && BillingPeriod::parse(&p.period_name).ok() == Some(billing_period)
+                && (p.status == DuesPeriodStatus::Active || p.status == DuesPeriodStatus::Closed)
+        })
     };
 
     let existing_units: std::collections::HashSet<String> = {
@@ -285,7 +306,33 @@ pub async fn accrue_monthly_dues(
 
     // 2. Build every liability; nothing is written yet.
     let mut accrued: Vec<(DuesLiability, Option<String>)> = Vec::new();
+    let mut units_without_owner: Vec<String> = Vec::new();
     for (unit, amount, basis, mut history) in planned {
+        let is_owned = owned
+            .as_ref()
+            .map(|o| o.contains(&unit.id))
+            .unwrap_or(unit.owner_user_id.is_some());
+        if !is_owned {
+            let unit_code = {
+                let inner = state.inner.read().await;
+                let block_name = inner
+                    .blocks
+                    .iter()
+                    .find(|b| crate::auth::same_id(&b.id, &unit.block_id))
+                    .map(|b| b.block_name.as_str())
+                    .unwrap_or(&unit.block_id);
+                let block_code = block_name
+                    .trim()
+                    .strip_suffix("Blok")
+                    .or_else(|| block_name.trim().strip_suffix("blok"))
+                    .unwrap_or(block_name)
+                    .trim();
+                format!("{}-{}", block_code, unit.unit_number)
+            };
+            units_without_owner.push(unit_code);
+            continue;
+        }
+
         let is_tenant = tenanted
             .as_ref()
             .map(|t| t.contains(&unit.id))
@@ -361,7 +408,7 @@ pub async fn accrue_monthly_dues(
     //    Memory follows from the committed result only.
     let mut period_db_id: Option<String> = None;
     if let Some(ref pool) = state.pool {
-        if !accrued.is_empty() || !skipped.is_empty() {
+        if !accrued.is_empty() || !skipped.is_empty() || !units_without_owner.is_empty() {
             let committed = crate::db::commit_accrual_batch(
                 pool,
                 &crate::db::AccrualBatch {
@@ -395,36 +442,34 @@ pub async fn accrue_monthly_dues(
 
     {
         let mut inner = state.inner.write().await;
-        if !accrued.is_empty() {
-            let known = inner.dues_periods.iter().any(|p| {
-                crate::auth::same_id(&p.site_id, &payload.site_id)
-                    && BillingPeriod::parse(&p.period_name).ok() == Some(billing_period)
+        let known = inner.dues_periods.iter().any(|p| {
+            crate::auth::same_id(&p.site_id, &payload.site_id)
+                && BillingPeriod::parse(&p.period_name).ok() == Some(billing_period)
+        });
+        if !known {
+            let id = period_db_id.unwrap_or_else(|| {
+                (inner
+                    .dues_periods
+                    .iter()
+                    .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                    .max()
+                    .unwrap_or(0)
+                    + 1)
+                .to_string()
             });
-            if !known {
-                let id = period_db_id.unwrap_or_else(|| {
-                    (inner
-                        .dues_periods
-                        .iter()
-                        .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
-                        .max()
-                        .unwrap_or(0)
-                        + 1)
-                    .to_string()
-                });
-                inner.dues_periods.push(DuesPeriod {
-                    id,
-                    site_id: payload.site_id.clone(),
-                    period_name: period_label.clone(),
-                    due_date: payload.due_date,
-                    status: DuesPeriodStatus::Active,
-                    created_at: Some(chrono::Utc::now()),
-                });
-            } else if let Some(period) = inner.dues_periods.iter_mut().find(|period| {
-                crate::auth::same_id(&period.site_id, &payload.site_id)
-                    && BillingPeriod::parse(&period.period_name).ok() == Some(billing_period)
-            }) {
-                period.status = DuesPeriodStatus::Active;
-            }
+            inner.dues_periods.push(DuesPeriod {
+                id,
+                site_id: payload.site_id.clone(),
+                period_name: period_label.clone(),
+                due_date: payload.due_date,
+                status: DuesPeriodStatus::Active,
+                created_at: Some(chrono::Utc::now()),
+            });
+        } else if let Some(period) = inner.dues_periods.iter_mut().find(|period| {
+            crate::auth::same_id(&period.site_id, &payload.site_id)
+                && BillingPeriod::parse(&period.period_name).ok() == Some(billing_period)
+        }) {
+            period.status = DuesPeriodStatus::Active;
         }
     }
 
@@ -469,9 +514,15 @@ pub async fn accrue_monthly_dues(
                 auto_settled_units_count: 0,
                 total_amount_accrued: Decimal::ZERO,
                 total_amount_offset_from_advance: Decimal::ZERO,
-                already_accrued: skipped.is_empty(),
-                message: if skipped.is_empty() {
+                already_accrued: period_already_exists,
+                message: if period_already_exists {
                     format!("'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.", period_label)
+                } else if !units_without_owner.is_empty() {
+                    format!(
+                        "'{}' dönemi için aidat tahakkuku tamamlandı. {} dairede kat maliki bulunmadığından tahakkuk yapılmadı.",
+                        period_label,
+                        units_without_owner.len()
+                    )
                 } else {
                     format!(
                         "'{}' dönemi için tahakkuk yapılamadı: {}",
@@ -482,6 +533,7 @@ pub async fn accrue_monthly_dues(
                 operating_budget_id: budget_id,
                 legal_basis_warning: None,
                 skipped_units: skipped,
+                units_without_owner,
             }),
         ));
     }
@@ -515,6 +567,12 @@ pub async fn accrue_monthly_dues(
                     "'{}' dönemi için {} daireye başarıyla aidat tahakkuk ettirildi. {} daire avanstan otomatik kapatıldı.",
                     period_label, newly_accrued_units_count, auto_settled_count
                 );
+                if !units_without_owner.is_empty() {
+                    message.push_str(&format!(
+                        " Kat maliki bulunmayan daireler: {}",
+                        units_without_owner.join(", ")
+                    ));
+                }
                 if !skipped.is_empty() {
                     message.push_str(&format!(
                         " {} daire atlandı: {}",
@@ -527,6 +585,7 @@ pub async fn accrue_monthly_dues(
             operating_budget_id: budget_id,
             legal_basis_warning,
             skipped_units: skipped,
+            units_without_owner,
         }),
     ))
 }
