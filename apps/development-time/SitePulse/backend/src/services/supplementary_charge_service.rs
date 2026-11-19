@@ -6,7 +6,8 @@
 //!
 //! - posted in that month while it is open, otherwise in the current open period, so a
 //!   closed month's snapshot never changes (as for late fees after close, STORY-07-12);
-//! - due on the original month's due date, which keeps FIFO settling the oldest month first;
+//! - due on the original month's due date (FIFO settles the oldest month first), with an
+//!   effective due date of the creation day, so no late fee runs for days before it existed;
 //! - days already billed to someone are not touched here: they go through the four-eyes
 //!   split correction (`OccupancyService::request_open_period_split`).
 
@@ -122,6 +123,11 @@ pub fn plan_supplementary_charges(
                 expense_type: ExpenseType::OperationalDues,
                 penalty_accrued_through: None,
                 grace_days,
+                // Created today: its late fee counts from today, not from the old month.
+                effective_due_date: Some(DuesLiability::effective_due_date_for(
+                    row.due_date,
+                    today,
+                )),
             },
             source_period_key: month.key(),
         });

@@ -345,10 +345,11 @@ pub async fn insert_supplementary_dues(
                 r#"
                 INSERT INTO dues_liabilities
                     (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
-                     delay_penalty, debtor_type, expense_type, grace_days, source_period)
+                     delay_penalty, debtor_type, expense_type, grace_days, source_period,
+                     effective_due_date)
                 VALUES ($1, $2, $3,
                         (SELECT id FROM dues_periods WHERE site_id = $4 AND period_key = $3),
-                        $5, $6, 'PENDING', 0, $7, $8, $9, $10)
+                        $5, $6, 'PENDING', 0, $7, $8, $9, $10, $11)
                 ON CONFLICT DO NOTHING
                 RETURNING id
                 "#,
@@ -363,6 +364,7 @@ pub async fn insert_supplementary_dues(
                     &due.expense_type,
                     &i32::try_from(due.grace_days).unwrap_or(0),
                     &charge.source_period_key,
+                    &due.effective_due_date,
                 ],
             )
             .await?;

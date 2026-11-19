@@ -117,6 +117,8 @@ async fn when_the_month_is_open_then_the_charge_is_posted_in_that_month() {
     assert_eq!(posted[0].principal_amount, amount("1016.13"));
     assert_eq!(posted[0].debtor_type, DebtorType::Owner);
     assert_eq!(posted[0].due_date, date("2026-10-10"));
+    assert_eq!(posted[0].effective_due_date, Some(date("2026-11-19")));
+    assert_eq!(posted[0].fee_due_date(), date("2026-11-19"));
     let inner = state.inner.read().await;
     assert_eq!(
         inner
@@ -195,6 +197,7 @@ async fn when_a_month_was_already_billed_then_nothing_is_posted_and_a_repeat_is_
         expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
         grace_days: 0,
+        effective_due_date: None,
     });
     assert!(post(&state, "2026-10-11", "2026-11-19").await.is_empty());
 
