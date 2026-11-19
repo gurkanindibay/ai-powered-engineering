@@ -14,8 +14,10 @@ Feature: Journey setup, teardown and isolation
       | F0    |
       | F1    |
       | F2    |
+      | F4    |
+      | F5    |
 
-  # Pending: historical fixture construction is in progress; F3-F7 need #211's test clock integration.
+  # Pending: historical fixture construction is in progress; F3, F6, F7 need later journey fixture builders.
   @SC-13-07-10 @J-14 @depth:1 @layer:backend @pending
   Scenario Outline: Every historical starting state can be built using the documented fixture path
     When a site is created in state <state>
@@ -25,8 +27,6 @@ Feature: Journey setup, teardown and isolation
     Examples:
       | state |
       | F3    |
-      | F4    |
-      | F5    |
       | F6    |
       | F7    |
 

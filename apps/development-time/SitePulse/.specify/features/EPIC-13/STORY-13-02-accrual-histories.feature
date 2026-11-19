@@ -10,6 +10,7 @@ Feature: Accrual histories F4, F5 and F7
 
   # ------------------------------------------------------ F4 SINGLE_PERIOD
 
+  # Pending: GUI automation for collection tracking page with F4 is pending.
   @SC-13-02-01 @J-07 @depth:1 @state:F4 @layer:gui @smoke @core @role_manager @pending
   Scenario: Residents with a single accrual period show one debt each on every screen
     Given the site is in state F4
@@ -19,6 +20,7 @@ Feature: Accrual histories F4, F5 and F7
     And the debtors are tenant "Selin Demir" 1600.00, owner "Burak Şahin" 1600.00, owner "Ahmet Yılmaz" 1600.00, tenant "Deniz Arslan" 1600.00, owner "Elif Aydın" 2400.00
     And the ledger invariants hold
 
+  # Pending: Resident dashboard GUI automation for F4 is pending.
   @SC-13-02-02 @J-07 @depth:1 @state:F4 @layer:gui @core @role_resident @pending
   Scenario: The resident sees exactly what the admin sees for the same unit
     Given the site is in state F4
@@ -26,7 +28,7 @@ Feature: Accrual histories F4, F5 and F7
     Then her dashboard shows principal 1500.00, late fee 100.00, total 1600.00 and 40 days overdue
     And the admin unit workspace of "A-2" shows the same three numbers
 
-  @SC-13-02-03 @J-07 @depth:1 @state:F4 @layer:backend @edge @role_manager @pending
+  @SC-13-02-03 @J-07 @depth:1 @state:F4 @layer:backend @edge @role_manager @linked
   Scenario: The late fee follows the clock day by day
     Given the site is in state F4
     When the clock moves forward one day to "2026-11-20"
@@ -35,6 +37,7 @@ Feature: Accrual histories F4, F5 and F7
 
   # -------------------------------------------------------- F5 MULTI_PERIOD
 
+  # Pending: GUI automation for collection tracking page with F5 is pending.
   @SC-13-02-04 @J-08 @depth:1 @state:F5 @layer:gui @smoke @core @role_manager @pending
   Scenario: Multiple periods with mixed debts add up per unit and per site
     Given the site is in state F5
@@ -44,7 +47,7 @@ Feature: Accrual histories F4, F5 and F7
     And unit "A-6" shows an advance balance of 1250.00
     And the ledger invariants hold
 
-  @SC-13-02-05 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-02-05 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: A single debt in a previous month stays attached to that month
     Given the site is in state F5
     Then unit "A-3" has exactly one open liability: period "Eylül 2026", principal 1500.00, late fee 175.00
@@ -52,12 +55,13 @@ Feature: Accrual histories F4, F5 and F7
     And the admin aging report puts principal 1500.00 in bucket "60+" (field `overdue_60_plus_days`) and shows 175.00 separately as late fee
     And the resident statement of "A-3" puts the same 1500.00 in bucket "61-90"
 
-  @SC-13-02-06 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-02-06 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: A single debt in the current month is the only one in the youngest bucket
     Given the site is in state F5
     Then unit "A-4" has exactly one open liability: period "Kasım 2026", principal 1500.00, late fee 22.50
     And the admin aging report puts principal 1500.00 in bucket "1-30" and shows 22.50 separately as late fee
 
+  # Pending: Multiple debts listing order verification pending.
   @SC-13-02-07 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: Multiple debts across periods are listed oldest first with a fee each
     Given the site is in state F5
@@ -65,6 +69,7 @@ Feature: Accrual histories F4, F5 and F7
     And their late fees are 175.00, 100.00 and 22.50
     And the total is 4797.50
 
+  # Pending: Advance balance automatic offset during next accrual pending.
   @SC-13-02-08 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: An advance balance has already offset later periods
     Given the site is in state F5
@@ -74,6 +79,7 @@ Feature: Accrual histories F4, F5 and F7
     And the advance becomes 0.00 and 1000.00 of that liability remains open
     And the ledger invariants hold
 
+  # Pending: Subsequent accrual idempotence verification pending.
   @SC-13-02-09 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: A fourth accrual adds exactly one liability per responsible debtor
     Given the site is in state F5
@@ -84,6 +90,7 @@ Feature: Accrual histories F4, F5 and F7
 
   # ------------------------------------------------------ F7 CLOSED_HISTORY
 
+  # Pending: F7 closed period accrual rejection pending.
   @SC-13-02-10 @J-09 @depth:2 @state:F7 @layer:backend @core @role_manager @pending
   Scenario: A closed period accepts no new accrual or edit but keeps its open debts
     Given the site is in state F7
@@ -95,6 +102,7 @@ Feature: Accrual histories F4, F5 and F7
     Then the live fee of unit "A-3" increases from 175.00 to 177.50
     And the fee is booked in the open November period and the September snapshot is unchanged
 
+  # Pending: F7 closed period payment allocation pending.
   @SC-13-02-11 @J-09 @depth:1 @state:F7 @layer:backend @edge @role_manager @pending
   Scenario: A payment toward a closed period is still allocated to its oldest debt
     Given the site is in state F7

@@ -96,6 +96,12 @@ class Api:
                          {"site_id": session.user.get("site_id", ""), **filters}.items())
         return self.call("GET", f"/api/v1/payments/stream?{query}", session.token)
 
+    def debt_aging_report(self, session: Session, site_id: str) -> dict:
+        return self.call("GET", f"/api/v1/payments/debt-aging?site_id={site_id}", session.token)
+
+    def resident_statement(self, session: Session, unit_id: str) -> dict:
+        return self.call("GET", f"/api/v1/residents/{unit_id}/statement", session.token)
+
     def e2e_clock(self, action: str, date: str | None = None) -> dict:
         """Control the E2E-only backend clock; unavailable in normal backend builds."""
         if action not in {"set_date", "advance_to", "tick"}:

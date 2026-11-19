@@ -200,7 +200,7 @@ Each journey is one test that follows a single user from the first sign-in with 
 
 ### Excluded (no GUI surface)
 EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered by `run_tests.py` gates, `schema_integrity_check.py`, `api_system_check.py` and `harness/tests`.
-| — | 13-07 | — | — | — | **Excluded:** Backend-only journey fixture, invariant and teardown contract, covered by journey tests and `run_tests.py` gates. | | |
+| — | 13-02, 13-04, 13-07 | — | — | — | **Excluded:** Backend-only journey contract for accruals, payments and teardown, covered by test_journey_accruals_payments.py and test_journey_fixtures.py. | | |
 | — | 13-01, 13-12 | — | — | — | **Excluded:** Backend-only late-fee rule for supplementary charges, covered by `backend/tests/supplementary_charge_tests.rs`. | | |
 
 ## 4. API data builders (`e2e/support/api.py`), confirmed against `backend/src/app.rs`

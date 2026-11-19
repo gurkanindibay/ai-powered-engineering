@@ -11,7 +11,13 @@ E2E = Path(__file__).resolve().parents[2] / "e2e"
 sys.path.insert(0, str(E2E))
 
 from support.api import Api  # noqa: E402
-from support.journey_attempts import JourneyClock, JourneyManifest, teardown_sites, teardown_with_evidence  # noqa: E402
+from support.journey_attempts import (  # noqa: E402
+    JourneyClock,
+    JourneyManifest,
+    make_viban,
+    teardown_sites,
+    teardown_with_evidence,
+)
 
 
 class FakeStack:
@@ -80,6 +86,7 @@ class JourneyAttemptTests(unittest.TestCase):
             for statement in stack.statements:
                 self.assertIn("SET LOCAL sitepulse.allow_ledger_purge", statement)
                 self.assertIn("DELETE FROM sites WHERE id = 41", statement)
+                self.assertIn("DELETE FROM late_fee_accruals WHERE site_id = 41", statement)
                 self.assertNotIn("TRUNCATE", statement.upper())
                 self.assertNotIn("DELETE FROM sites WHERE id = 1", statement)
 
@@ -125,6 +132,17 @@ class JourneyAttemptTests(unittest.TestCase):
 
             self.assertIs(raised.exception, original)
             self.assertEqual(stack.restarts, 1)
+
+    def test_make_viban_generates_valid_checksum(self) -> None:
+        iban = make_viban("00205", "1", "A", 14)
+        self.assertTrue(iban.startswith("TR"))
+        self.assertEqual(len(iban), 26)
+        rearranged = f"{iban[4:]}2927{iban[2:4]}"
+        self.assertEqual(int(rearranged) % 97, 1)
+
+    def test_make_viban_matches_reference_vector(self) -> None:
+        iban = make_viban("00205", "site-1", "A", 14)
+        self.assertEqual(iban, "TR410020504213991067000014")
 
 
 if __name__ == "__main__":

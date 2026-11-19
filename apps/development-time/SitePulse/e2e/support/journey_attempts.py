@@ -37,6 +37,7 @@ _SITE_SCOPED_DELETES = (
     "reconciliation_queue WHERE site_id = {site}",
     "unit_sender_ibans WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
     "unit_payer_names WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
+    "late_fee_accruals WHERE site_id = {site}",
     "dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
     "operating_budgets WHERE site_id = {site}",
     "occupancy_transitions WHERE site_id = {site}",
@@ -178,7 +179,7 @@ def site_in_state(
     """
     if state not in {f"F{number}" for number in range(8)}:
         raise ValueError(f"Unknown Site Admin reference state: {state!r}")
-    if state not in {"F0", "F1", "F2"}:
+    if state not in {"F0", "F1", "F2", "F4", "F5"}:
         raise JourneyFixturePending(f"{state} is pending the later journey fixture builders and #211 clock integration")
 
     attempt = _slug(manifest.attempt_id)
@@ -202,13 +203,21 @@ def site_in_state(
         # F0 deliberately removes that empty structure to match the catalogue.
         stack.sql(f"DELETE FROM blocks WHERE site_id = {site};")
         requires_restart = True
-    if state in {"F1", "F2"}:
+    if state in {"F1", "F2", "F4", "F5"}:
         unit_ids = _create_structure(stack, site_id, manifest)
         requires_restart = True
-    if state == "F2":
+    if state in {"F2", "F4", "F5"}:
         person_ids = _create_residents(stack, site_id, manager_user_id, manifest)
+    if state == "F4":
+        _build_f4(stack, site_id, unit_ids)
+        requires_restart = True
+    elif state == "F5":
+        _build_f5(stack, site_id, unit_ids)
+        requires_restart = True
     if requires_restart:
         stack.restart_backend()
+    if state in {"F4", "F5"}:
+        api.clock.set_date("2026-11-19")
 
     manager = api.login(manager_email, manager_password)
     return JourneyFixture(state, site_id, manager, manager_email, manager_password, unit_ids, person_ids)
@@ -242,8 +251,27 @@ def ledger_invariants(api: Api, manager: Session, site_id: str, *, stage: str) -
     return overview
 
 
+def make_viban(bank_code: str | int, site_id: str | int, block_name: str, unit_number: int) -> str:
+    """Generate deterministic flat virtual IBAN matching VirtualIbanService."""
+    bank_code_str = str(bank_code).strip().zfill(5)
+    site_id_str = str(site_id)
+    site_hash = 9863791
+    for b in site_id_str.encode("ascii"):
+        site_hash = ((site_hash * 31) + b) & 0xFFFFFFFFFFFFFFFF
+    block_hash = sum(block_name.encode("ascii")) & 0xFFFFFFFFFFFFFFFF
+    site_prefix = f"{(site_hash + block_hash) % 10_000_000_000:010d}"
+    bban = f"{bank_code_str}0{site_prefix}{unit_number:06d}"
+    rem = int(f"{bban}292700") % 97
+    check = f"{98 - rem:02d}"
+    return f"TR{check}{bban}"
+
+
 def _create_structure(stack: E2EStack, site_id: str, manifest: JourneyManifest) -> tuple[str, ...]:
     site = _safe_id(site_id)
+    viban_updates = " ".join(
+        f"UPDATE units SET virtual_iban = '{make_viban('00205', site, 'A', unit_no)}' WHERE site_id = {site} AND unit_number = {unit_no};"
+        for unit_no in range(1, 8)
+    )
     stack.sql(
         "BEGIN; "
         f"DELETE FROM blocks WHERE site_id = {site}; "
@@ -255,7 +283,9 @@ def _create_structure(stack: E2EStack, site_id: str, manifest: JourneyManifest) 
         f"SELECT b.id, {site}, n.unit_number, 1, 1, 'VACANT', h.type_name, h.id "
         "FROM blocks b CROSS JOIN (VALUES (1), (2), (3), (4), (5), (6), (7)) AS n(unit_number) "
         "JOIN house_types h ON h.site_id = b.site_id AND h.type_name = CASE WHEN n.unit_number = 6 THEN 'Large flat' ELSE 'Flat' END "
-        f"WHERE b.site_id = {site} AND b.block_name = 'A Blok' ORDER BY n.unit_number; COMMIT;"
+        f"WHERE b.site_id = {site} AND b.block_name = 'A Blok' ORDER BY n.unit_number; "
+        f"{viban_updates} "
+        "COMMIT;"
     )
     unit_ids = tuple(stack.sql(f"SELECT id FROM units WHERE site_id = {site} ORDER BY unit_number;").splitlines())
     if len(unit_ids) != 7:
@@ -263,6 +293,157 @@ def _create_structure(stack: E2EStack, site_id: str, manifest: JourneyManifest) 
     for unit_id in unit_ids:
         manifest.record("unit_ids", unit_id)
     return unit_ids
+
+
+def _build_f4(stack: E2EStack, site_id: str | int, unit_ids: tuple[str, ...]) -> None:
+    site = _safe_id(site_id)
+    u1, u2, u3, u4, u5, u6, u7 = [_safe_id(uid) for uid in unit_ids]
+    sql = (
+        "BEGIN; "
+        f"INSERT INTO dues_periods (site_id, period_name, due_date, status) VALUES ({site}, 'Ekim 2026', DATE '2026-10-10', 'ACTIVE'); "
+        "INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, occupancy_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, payment_date, created_at) "
+        f"SELECT {u1}, 'Ekim 2026', 'OWNER', 'OPERATIONAL_DUES', u.owner_person_id, o.id, 1500.00, DATE '2026-10-10', DATE '2026-10-10', 'PAID', 0.00, 1500.00, 0.00, 1500.00, TIMESTAMPTZ '2026-10-10 10:00:00+03', TIMESTAMPTZ '2026-10-01 08:00:00+03' "
+        f"FROM units u LEFT JOIN unit_occupancies o ON o.unit_id = u.id AND o.is_active WHERE u.id = {u1}; "
+        "INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, occupancy_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, penalty_accrued_through, created_at) "
+        f"SELECT {u2}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', u.tenant_person_id, o.id, 1500.00, DATE '2026-10-10', DATE '2026-10-10', 'OVERDUE', 100.00, 0.00, 0.00, 0.00, DATE '2026-11-19', TIMESTAMPTZ '2026-10-01 08:00:00+03' "
+        f"FROM units u LEFT JOIN unit_occupancies o ON o.unit_id = u.id AND o.is_active WHERE u.id = {u2}; "
+        "INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, occupancy_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, penalty_accrued_through, created_at) "
+        f"SELECT {u3}, 'Ekim 2026', 'OWNER', 'OPERATIONAL_DUES', u.owner_person_id, NULL, 1500.00, DATE '2026-10-10', DATE '2026-10-10', 'OVERDUE', 100.00, 0.00, 0.00, 0.00, DATE '2026-11-19', TIMESTAMPTZ '2026-10-01 08:00:00+03' "
+        f"FROM units u WHERE u.id = {u3}; "
+        "INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, occupancy_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, penalty_accrued_through, created_at) "
+        f"SELECT {u4}, 'Ekim 2026', 'OWNER', 'OPERATIONAL_DUES', u.owner_person_id, o.id, 1500.00, DATE '2026-10-10', DATE '2026-10-10', 'OVERDUE', 100.00, 0.00, 0.00, 0.00, DATE '2026-11-19', TIMESTAMPTZ '2026-10-01 08:00:00+03' "
+        f"FROM units u LEFT JOIN unit_occupancies o ON o.unit_id = u.id AND o.is_active WHERE u.id = {u4}; "
+        "INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, occupancy_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, penalty_accrued_through, created_at) "
+        f"SELECT {u5}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', u.tenant_person_id, o.id, 1500.00, DATE '2026-10-10', DATE '2026-10-10', 'OVERDUE', 100.00, 0.00, 0.00, 0.00, DATE '2026-11-19', TIMESTAMPTZ '2026-10-01 08:00:00+03' "
+        f"FROM units u LEFT JOIN unit_occupancies o ON o.unit_id = u.id AND o.is_active WHERE u.id = {u5}; "
+        "INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, occupancy_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, penalty_accrued_through, created_at) "
+        f"SELECT {u6}, 'Ekim 2026', 'OWNER', 'OPERATIONAL_DUES', u.owner_person_id, o.id, 2250.00, DATE '2026-10-10', DATE '2026-10-10', 'OVERDUE', 150.00, 0.00, 0.00, 0.00, DATE '2026-11-19', TIMESTAMPTZ '2026-10-01 08:00:00+03' "
+        f"FROM units u LEFT JOIN unit_occupancies o ON o.unit_id = u.id AND o.is_active WHERE u.id = {u6}; "
+        f"INSERT INTO late_fee_accruals (site_id, due_id, accrual_date, outstanding_principal, segment_start, segment_base, cumulative_fee, daily_amount) "
+        f"SELECT {site}, d.id, DATE '2026-11-19', 1500.00, DATE '2026-10-10', 0.00, 100.00, 2.50 "
+        f"FROM dues_liabilities d WHERE d.unit_id IN ({u2}, {u3}, {u4}, {u5}) AND d.period = 'Ekim 2026'; "
+        f"INSERT INTO late_fee_accruals (site_id, due_id, accrual_date, outstanding_principal, segment_start, segment_base, cumulative_fee, daily_amount) "
+        f"SELECT {site}, d.id, DATE '2026-11-19', 2250.00, DATE '2026-10-10', 0.00, 150.00, 3.75 "
+        f"FROM dues_liabilities d WHERE d.unit_id = {u6} AND d.period = 'Ekim 2026'; "
+        f"INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, total_amount, payment_channel, allocated_principal, allocated_penalty, allocated_advance, verification_hash, issued_at) "
+        f"VALUES ({site}, {u1}, 'TAH-2026-000001', 1, 'Ayşe Kaya', 'OWNER', 1500.00, 'BANK_STATEMENT', 1500.00, 0.00, 0.00, encode(sha256(('receipt-' || {site} || '-1')::bytea), 'hex'), TIMESTAMPTZ '2026-10-10 10:00:00+03'); "
+        f"INSERT INTO receipt_counters (site_id, last_sequence) VALUES ({site}, 1) ON CONFLICT (site_id) DO UPDATE SET last_sequence = EXCLUDED.last_sequence; "
+        f"INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, payment_date, created_at) "
+        f"SELECT {site}, {u1}, 'Ayşe Kaya', 'OWNER', r.id, 1500.00, 'BANK_STATEMENT', 'SETTLED', 'Ekim 2026 aidat ödemesi', TIMESTAMPTZ '2026-10-10 10:00:00+03', TIMESTAMPTZ '2026-10-10 10:00:00+03' "
+        f"FROM payment_receipts r WHERE r.site_id = {site} AND r.sequence_number = 1; "
+        f"INSERT INTO payment_allocations (payment_entry_id, dues_liability_id, principal_amount, penalty_amount, created_at) "
+        f"SELECT pe.id, dl.id, 1500.00, 0.00, TIMESTAMPTZ '2026-10-10 10:00:00+03' "
+        f"FROM payment_entries pe JOIN dues_liabilities dl ON dl.unit_id = pe.unit_id AND dl.period = 'Ekim 2026' "
+        f"WHERE pe.site_id = {site} AND pe.unit_id = {u1}; "
+        "COMMIT;"
+    )
+    stack.sql(sql)
+
+
+def _build_f5(stack: E2EStack, site_id: str | int, unit_ids: tuple[str, ...]) -> None:
+    site = _safe_id(site_id)
+    u1, u2, u3, u4, u5, u6, u7 = [_safe_id(uid) for uid in unit_ids]
+
+    statements = [
+        "BEGIN;",
+        f"INSERT INTO dues_periods (site_id, period_name, due_date, status) VALUES "
+        f"({site}, 'Eylül 2026', DATE '2026-09-10', 'ACTIVE'), "
+        f"({site}, 'Ekim 2026', DATE '2026-10-10', 'ACTIVE'), "
+        f"({site}, 'Kasım 2026', DATE '2026-11-10', 'ACTIVE');",
+    ]
+
+    liabilities = [
+        # Eylül 2026
+        (u1, "Eylül 2026", "OWNER", "1500.00", "2026-09-10", "PAID", "0.00", "1500.00", None, "TIMESTAMPTZ '2026-09-10 10:00:00+03'"),
+        (u2, "Eylül 2026", "TENANT", "1500.00", "2026-09-10", "PAID", "0.00", "1500.00", None, "TIMESTAMPTZ '2026-09-10 10:00:00+03'"),
+        (u3, "Eylül 2026", "OWNER", "1500.00", "2026-09-10", "OVERDUE", "175.00", "0.00", "DATE '2026-11-19'", "NULL"),
+        (u4, "Eylül 2026", "OWNER", "1500.00", "2026-09-10", "PAID", "0.00", "1500.00", None, "TIMESTAMPTZ '2026-09-10 10:00:00+03'"),
+        (u5, "Eylül 2026", "TENANT", "1500.00", "2026-09-10", "OVERDUE", "175.00", "0.00", "DATE '2026-11-19'", "NULL"),
+        (u6, "Eylül 2026", "OWNER", "2250.00", "2026-09-10", "PAID", "0.00", "2250.00", None, "TIMESTAMPTZ '2026-09-01 10:00:00+03'"),
+        # Ekim 2026
+        (u1, "Ekim 2026", "OWNER", "1500.00", "2026-10-10", "PAID", "0.00", "1500.00", None, "TIMESTAMPTZ '2026-10-10 10:00:00+03'"),
+        (u2, "Ekim 2026", "TENANT", "1500.00", "2026-10-10", "OVERDUE", "100.00", "0.00", "DATE '2026-11-19'", "NULL"),
+        (u3, "Ekim 2026", "OWNER", "1500.00", "2026-10-10", "PAID", "0.00", "1500.00", None, "TIMESTAMPTZ '2026-10-10 10:00:00+03'"),
+        (u4, "Ekim 2026", "OWNER", "1500.00", "2026-10-10", "PAID", "0.00", "1500.00", None, "TIMESTAMPTZ '2026-10-10 10:00:00+03'"),
+        (u5, "Ekim 2026", "TENANT", "1500.00", "2026-10-10", "OVERDUE", "100.00", "0.00", "DATE '2026-11-19'", "NULL"),
+        (u6, "Ekim 2026", "OWNER", "2250.00", "2026-10-10", "PAID", "0.00", "2250.00", None, "TIMESTAMPTZ '2026-09-01 10:00:00+03'"),
+        # Kasım 2026
+        (u1, "Kasım 2026", "OWNER", "1500.00", "2026-11-10", "PAID", "0.00", "1500.00", None, "TIMESTAMPTZ '2026-11-10 10:00:00+03'"),
+        (u2, "Kasım 2026", "TENANT", "1500.00", "2026-11-10", "OVERDUE", "22.50", "0.00", "DATE '2026-11-19'", "NULL"),
+        (u3, "Kasım 2026", "OWNER", "1500.00", "2026-11-10", "PAID", "0.00", "1500.00", None, "TIMESTAMPTZ '2026-11-10 10:00:00+03'"),
+        (u4, "Kasım 2026", "OWNER", "1500.00", "2026-11-10", "OVERDUE", "22.50", "0.00", "DATE '2026-11-19'", "NULL"),
+        (u5, "Kasım 2026", "TENANT", "1500.00", "2026-11-10", "OVERDUE", "22.50", "0.00", "DATE '2026-11-19'", "NULL"),
+        (u6, "Kasım 2026", "OWNER", "2250.00", "2026-11-10", "PAID", "0.00", "2250.00", None, "TIMESTAMPTZ '2026-09-01 10:00:00+03'"),
+    ]
+
+    for uid, period, debtor, principal, due_date, status, penalty, paid_p, pen_through, p_date in liabilities:
+        pen_through_sql = pen_through if pen_through is not None else "NULL"
+        created_at_month = "09" if "Eylül" in period else ("10" if "Ekim" in period else "11")
+        statements.append(
+            f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, occupancy_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, payment_date, penalty_accrued_through, created_at) "
+            f"SELECT {uid}, '{period}', '{debtor}', 'OPERATIONAL_DUES', "
+            f"{'u.tenant_person_id' if debtor == 'TENANT' else 'u.owner_person_id'}, "
+            f"{'NULL' if uid == u3 else 'o.id'}, {principal}, DATE '{due_date}', DATE '{due_date}', '{status}', {penalty}, {paid_p}, 0.00, {paid_p}, {p_date}, {pen_through_sql}, TIMESTAMPTZ '2026-{created_at_month}-01 08:00:00+03' "
+            f"FROM units u LEFT JOIN unit_occupancies o ON o.unit_id = u.id AND o.is_active WHERE u.id = {uid};"
+        )
+
+    overdue_accruals = [
+        (u2, "Ekim 2026", "1500.00", "2026-10-10", "100.00", "2.50"),
+        (u2, "Kasım 2026", "1500.00", "2026-11-10", "22.50", "2.50"),
+        (u3, "Eylül 2026", "1500.00", "2026-09-10", "175.00", "2.50"),
+        (u4, "Kasım 2026", "1500.00", "2026-11-10", "22.50", "2.50"),
+        (u5, "Eylül 2026", "1500.00", "2026-09-10", "175.00", "2.50"),
+        (u5, "Ekim 2026", "1500.00", "2026-10-10", "100.00", "2.50"),
+        (u5, "Kasım 2026", "1500.00", "2026-11-10", "22.50", "2.50"),
+    ]
+    for uid, period, princ, seg_start, cum_fee, daily in overdue_accruals:
+        statements.append(
+            f"INSERT INTO late_fee_accruals (site_id, due_id, accrual_date, outstanding_principal, segment_start, segment_base, cumulative_fee, daily_amount) "
+            f"SELECT {site}, d.id, DATE '2026-11-19', {princ}, DATE '{seg_start}', 0.00, {cum_fee}, {daily} "
+            f"FROM dues_liabilities d WHERE d.unit_id = {uid} AND d.period = '{period}';"
+        )
+
+    receipt_data = [
+        (1, u1, "Eylül 2026", "Ayşe Kaya", "OWNER", "1500.00", "2026-09-10"),
+        (2, u1, "Ekim 2026", "Ayşe Kaya", "OWNER", "1500.00", "2026-10-10"),
+        (3, u1, "Kasım 2026", "Ayşe Kaya", "OWNER", "1500.00", "2026-11-10"),
+        (4, u2, "Eylül 2026", "Selin Demir", "TENANT", "1500.00", "2026-09-10"),
+        (5, u3, "Ekim 2026", "Burak Şahin", "OWNER", "1500.00", "2026-10-10"),
+        (6, u3, "Kasım 2026", "Burak Şahin", "OWNER", "1500.00", "2026-11-10"),
+        (7, u4, "Eylül 2026", "Ahmet Yılmaz", "OWNER", "1500.00", "2026-09-10"),
+        (8, u4, "Ekim 2026", "Ahmet Yılmaz", "OWNER", "1500.00", "2026-10-10"),
+    ]
+    for seq, uid, period, payer, role, amount, pdate in receipt_data:
+        statements.append(
+            f"INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, total_amount, payment_channel, allocated_principal, allocated_penalty, allocated_advance, verification_hash, issued_at) "
+            f"VALUES ({site}, {uid}, 'TAH-2026-00000{seq}', {seq}, '{payer}', '{role}', {amount}, 'BANK_STATEMENT', {amount}, 0.00, 0.00, encode(sha256(('receipt-' || {site} || '-{seq}')::bytea), 'hex'), TIMESTAMPTZ '{pdate} 10:00:00+03'); "
+            f"INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, payment_date, created_at) "
+            f"SELECT {site}, {uid}, '{payer}', '{role}', r.id, {amount}, 'BANK_STATEMENT', 'SETTLED', '{period} aidat ödemesi', TIMESTAMPTZ '{pdate} 10:00:00+03', TIMESTAMPTZ '{pdate} 10:00:00+03' "
+            f"FROM payment_receipts r WHERE r.site_id = {site} AND r.sequence_number = {seq}; "
+            f"INSERT INTO payment_allocations (payment_entry_id, dues_liability_id, principal_amount, penalty_amount, created_at) "
+            f"SELECT pe.id, dl.id, {amount}, 0.00, TIMESTAMPTZ '{pdate} 10:00:00+03' "
+            f"FROM payment_entries pe JOIN dues_liabilities dl ON dl.unit_id = pe.unit_id AND dl.period = '{period}' "
+            f"WHERE pe.site_id = {site} AND pe.unit_id = {uid} AND pe.receipt_id = (SELECT id FROM payment_receipts WHERE site_id = {site} AND sequence_number = {seq});"
+        )
+
+    statements.append(
+        f"INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, total_amount, payment_channel, allocated_principal, allocated_penalty, allocated_advance, verification_hash, issued_at) "
+        f"VALUES ({site}, {u6}, 'TAH-2026-000009', 9, 'Elif Aydın', 'OWNER', 8000.00, 'BANK_STATEMENT', 6750.00, 0.00, 1250.00, encode(sha256(('receipt-' || {site} || '-9')::bytea), 'hex'), TIMESTAMPTZ '2026-09-01 10:00:00+03'); "
+        f"INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, payment_date, created_at) "
+        f"SELECT {site}, {u6}, 'Elif Aydın', 'OWNER', r.id, 8000.00, 'BANK_STATEMENT', 'SETTLED', 'Eylül, Ekim, Kasım aidatı ve avans', TIMESTAMPTZ '2026-09-01 10:00:00+03', TIMESTAMPTZ '2026-09-01 10:00:00+03' "
+        f"FROM payment_receipts r WHERE r.site_id = {site} AND r.sequence_number = 9; "
+        f"INSERT INTO payment_allocations (payment_entry_id, dues_liability_id, principal_amount, penalty_amount, created_at) "
+        f"SELECT pe.id, dl.id, 2250.00, 0.00, TIMESTAMPTZ '2026-09-01 10:00:00+03' "
+        f"FROM payment_entries pe JOIN dues_liabilities dl ON dl.unit_id = pe.unit_id "
+        f"WHERE pe.site_id = {site} AND pe.unit_id = {u6} AND pe.receipt_id = (SELECT id FROM payment_receipts WHERE site_id = {site} AND sequence_number = 9); "
+        f"INSERT INTO advance_balances (unit_id, debtor_type, balance) VALUES ({u6}, 'OWNER', 1250.00); "
+        f"INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, reference_id, description, created_at) "
+        f"VALUES ({u6}, 'OWNER', 'CREDIT', 1250.00, 'ADV-A6', 'Advance from overpayment', TIMESTAMPTZ '2026-09-01 10:00:00+03'); "
+        f"INSERT INTO receipt_counters (site_id, last_sequence) VALUES ({site}, 9) ON CONFLICT (site_id) DO UPDATE SET last_sequence = EXCLUDED.last_sequence;"
+    )
+
+    statements.append("COMMIT;")
+    stack.sql(" ".join(statements))
 
 
 def _create_residents(stack: E2EStack, site_id: str, manager_user_id: str | int,
