@@ -312,7 +312,7 @@ pub async fn accrue_monthly_dues(
             .as_ref()
             .map(|o| o.contains(&unit.id))
             .unwrap_or(unit.owner_user_id.is_some());
-        if !is_owned {
+        if proration_enabled && !is_owned {
             let unit_code = {
                 let inner = state.inner.read().await;
                 let block_name = inner
