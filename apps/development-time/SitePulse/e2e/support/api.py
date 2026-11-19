@@ -60,10 +60,27 @@ class Api:
     def saas_stats(self, session: Session) -> dict:
         return self.call("GET", "/api/v1/saas/stats", session.token)
 
+    def site_overview(self, session: Session, site_id: str) -> dict:
+        query = urllib.parse.urlencode({"site_id": site_id})
+        return self.call("GET", f"/api/v1/site-admin/overview?{query}", session.token)
+
     def payment_stream(self, session: Session, **filters: str) -> dict:
         query = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in
                          {"site_id": session.user.get("site_id", ""), **filters}.items())
         return self.call("GET", f"/api/v1/payments/stream?{query}", session.token)
+
+    def e2e_clock(self, action: str, date: str | None = None) -> dict:
+        """Control the E2E-only backend clock; unavailable in normal backend builds."""
+        if action not in {"set_date", "advance_to", "tick"}:
+            raise ValueError(f"Unsupported E2E clock action: {action}")
+        if action == "tick" and date is not None:
+            raise ValueError("The E2E clock tick action does not accept a date")
+        if action != "tick" and date is None:
+            raise ValueError(f"The E2E clock action {action!r} requires a date")
+        body: dict[str, str] = {"action": action}
+        if date is not None:
+            body["date"] = date
+        return self.call("POST", "/__e2e/clock", body=body)
 
     # -- writes used by Arrange steps ---------------------------------------
     def change_password(self, email: str, current: str, new: str) -> Session:
