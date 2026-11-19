@@ -7,6 +7,7 @@ pub mod auth;
 pub mod authorization;
 pub mod db;
 pub mod domain;
+pub mod e2e_clock;
 pub mod error;
 pub mod finance_book;
 pub mod handlers;

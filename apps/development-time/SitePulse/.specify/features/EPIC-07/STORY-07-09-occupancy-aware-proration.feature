@@ -65,3 +65,33 @@ Feature: Occupancy-aware accrual and proration
       | setting  |
       | disabled |
       | enabled  |
+
+  @SC-07-09-07 @layer:backend @linked @core @role_manager
+  Scenario: A back-dated start date in an open accrued month posts a supplementary charge there
+    Given proration is enabled
+    And period "2026-10" is open and unit "A-3" with monthly dues of 1500.00 was not billed for it
+    When the manager assigns an owner to unit "A-3" effective "2026-10-11" on "2026-11-19"
+    Then period "2026-10" holds a supplementary charge of 1016.13 for the owner, which is 21 of 31 days
+    And the charge refers to period "2026-10" and keeps that period's due date
+
+  @SC-07-09-08 @layer:backend @linked @core @role_manager
+  Scenario: A back-dated start date in a closed month posts supplementary charges in the open period
+    Given proration is enabled
+    And period "2026-10" is closed and period "2026-11" is open, and unit "A-3" was billed for neither
+    When the manager assigns an owner to unit "A-3" effective "2026-10-11" on "2026-11-19"
+    Then period "2026-11" holds two supplementary charges for the owner
+    And one refers to period "2026-10" with 1016.13 and one refers to period "2026-11" with 1500.00
+    And period "2026-10" gains no liability and its snapshot is unchanged
+
+  @SC-07-09-09 @layer:backend @linked @edge @role_manager
+  Scenario: Days already billed to someone are not charged again
+    Given proration is enabled
+    And unit "A-3" already has an operational liability for period "2026-10"
+    When the manager assigns an owner to unit "A-3" effective "2026-10-11" on "2026-11-19"
+    Then no supplementary charge is posted and the split goes through a four-eyes correction
+
+  @SC-07-09-10 @layer:backend @linked @edge @role_manager
+  Scenario: FIFO settles the charge that refers to the oldest month first
+    Given unit "A-3" owes a supplementary charge for "2026-10" and its own charge for "2026-11"
+    When 1016.13 is received for unit "A-3"
+    Then the charge that refers to "2026-10" is paid and the "2026-11" charge is untouched

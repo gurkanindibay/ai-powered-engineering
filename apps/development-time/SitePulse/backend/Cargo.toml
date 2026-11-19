@@ -5,6 +5,10 @@ edition = "2021"
 default-run = "sitepulse-backend"
 description = "SitePulse High-Performance Residential Management Platform - Rust & Axum Backend"
 
+[features]
+default = []
+e2e = []
+
 [dependencies]
 axum = "0.8"
 tokio = { version = "1.38", features = ["full"] }

@@ -177,7 +177,9 @@ pub async fn run_accrual_with_report(
                     d.expense_type == ExpenseType::OperationalDues
                         && units_in_site.iter().any(|u| u.id == d.unit_id)
                 })
-                .filter_map(|d| BillingPeriod::parse(&d.period).ok())
+                .filter_map(|d| {
+                    crate::services::supplementary_charge_service::billed_period(&inner, d)
+                })
                 .collect();
             let plan = schedule.catch_up_plan(local, accrued_periods.iter().min().copied(), |p| {
                 accrued_periods.contains(&p)
@@ -207,7 +209,9 @@ pub async fn run_accrual_with_report(
                 for unit in &units_in_site {
                     let already = inner.dues.iter().any(|d| {
                         d.unit_id == unit.id
-                            && BillingPeriod::parse(&d.period).ok() == Some(billing_period)
+                            && crate::services::supplementary_charge_service::billed_period(
+                                &inner, d,
+                            ) == Some(billing_period)
                             && d.expense_type == ExpenseType::OperationalDues
                     });
                     if already {
@@ -657,4 +661,65 @@ pub async fn run_daily_collections(state: &AppState) -> (usize, usize, usize, us
         }
     };
     (plans, charges, dunning, reminders)
+}
+
+/// Summary of the scheduled jobs completed by one deterministic E2E clock tick.
+#[cfg(feature = "e2e")]
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct E2eTickReport {
+    pub date: NaiveDate,
+    pub accrued_sites: usize,
+    pub accrued_liabilities: usize,
+    pub late_fee_liabilities: usize,
+    pub aging_rows: usize,
+    pub reminders_sent: usize,
+}
+
+/// Runs date-driven scheduled jobs once using the enabled E2E clock.
+///
+/// Timer workers are not spawned while E2E mode is active, so the test runner
+/// controls precisely when accrual, late fees, aging and reminders execute.
+#[cfg(feature = "e2e")]
+pub async fn run_e2e_tick(
+    state: &AppState,
+) -> Result<E2eTickReport, crate::e2e_clock::E2eClockError> {
+    let clock = state
+        .e2e_clock
+        .as_ref()
+        .ok_or(crate::e2e_clock::E2eClockError::Disabled)?;
+    let _tick_guard = clock.begin_tick()?;
+    let now = clock.now()?;
+    let date = now.date_naive();
+    let enabled = state.inner.read().await.auto_scheduler_enabled;
+    let mut report = E2eTickReport {
+        date,
+        ..E2eTickReport::default()
+    };
+
+    if enabled {
+        let (sites, liabilities) = run_periodic_accrual_for_all_sites(state, now).await;
+        report.accrued_sites = sites;
+        report.accrued_liabilities = liabilities;
+        report.late_fee_liabilities = crate::services::late_fee_service::LateFeeService::new(state)
+            .run_all_at(now)
+            .await;
+        report.reminders_sent =
+            match crate::services::budget_compliance_service::BudgetComplianceService::new(state)
+                .remind_interim_deadlines_at(now)
+                .await
+            {
+                Ok(sent) => sent,
+                Err(error) => {
+                    tracing::error!("[Scheduler] E2E interim budget reminders failed: {}", error);
+                    0
+                }
+            };
+    }
+
+    report.aging_rows = crate::services::PaymentTrackingService::new(state.clone())
+        .snapshot_debt_aging_at(None, now)
+        .await
+        .map_err(|error| crate::e2e_clock::E2eClockError::Scheduler(error.to_string()))?;
+
+    Ok(report)
 }

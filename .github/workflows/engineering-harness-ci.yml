@@ -5,6 +5,8 @@ on:
       - 'scripts/engineering_harness/**'
       - 'scripts/development_harness.py'
       - 'scripts/team_orchestrator.py'
+      - 'scripts/issue_claim.py'
+      - 'tests/issue_claim/**'
       - 'tests/engineering_harness/**'
       - 'config/engineering-harness/**'
       - '.github/workflows/engineering-harness-ci.yml'
@@ -36,5 +38,7 @@ jobs:
           HARNESS_DOCKER_IMAGE=$(docker image inspect --format '{{.Id}}' engineering-harness-fixture:ci) python3 -m unittest discover -s tests/engineering_harness -v
       - name: Routing regression evaluation
         run: python3 scripts/development_harness.py --json evaluate --cases config/engineering-harness/routing-cases.json
+      - name: Issue claim label tests
+        run: python3 -m unittest discover -s tests/issue_claim -v
       - name: Existing SitePulse harness regression tests
         run: python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests

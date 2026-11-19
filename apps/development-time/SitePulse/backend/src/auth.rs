@@ -678,14 +678,7 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
         .map(|p| p.as_str())
         .unwrap_or("")
         .to_string();
-    let policy = crate::app::ROUTES
-        .iter()
-        .find(|r| {
-            r.path == template
-                && (r.method.eq_ignore_ascii_case(req.method().as_str())
-                    || req.method() == Method::HEAD && r.method == "get")
-        })
-        .map(|r| r.policy);
+    let policy = crate::app::route_policy(req.method().as_str(), &template);
     let Some(policy) = policy else {
         return SecurityError::NotFound.into_response();
     };

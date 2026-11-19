@@ -35,6 +35,8 @@ pub struct AppState {
     pub security: Arc<tokio::sync::Mutex<crate::security::MemorySecurity>>,
     pub inner: Arc<RwLock<AppStateInner>>,
     pub pool: Option<deadpool_postgres::Pool>,
+    #[cfg(feature = "e2e")]
+    pub e2e_clock: Option<Arc<crate::e2e_clock::E2eClock>>,
 }
 
 #[derive(Clone)]
@@ -84,6 +86,10 @@ pub struct AppStateInner {
     /// Tenant liabilities mapped to the titled owners who are jointly liable
     /// for each ownership interval under KMK m.22/1.
     pub joint_liability_owners: HashMap<String, Vec<crate::models::JointLiabilityOwner>>,
+    /// Supplementary charge id -> the key (`2026-10`) of the month it refers to. A charge posted in
+    /// another period than the month it bills (a back-dated start date, STORY-07-13) has an
+    /// entry; every other liability bills its own `period`.
+    pub dues_source_period: HashMap<String, String>,
     /// Accrual day, due day, grace period and catch-up limit per site (STORY-07-10); a site
     /// without an entry uses the defaults.
     pub site_accrual_schedules: HashMap<String, crate::domain::accrual_schedule::AccrualSchedule>,
@@ -151,6 +157,7 @@ impl AppStateInner {
             budget_required_sites: Vec::new(),
             dues_budget_basis: HashMap::new(),
             joint_liability_owners: HashMap::new(),
+            dues_source_period: HashMap::new(),
             site_accrual_schedules: HashMap::new(),
             payment_intents: Vec::new(),
             account_activations: HashMap::new(),
@@ -655,6 +662,7 @@ impl AppStateInner {
         self.payment_entries.clear();
         self.operating_budgets.clear();
         self.dues_budget_basis.clear();
+        self.dues_source_period.clear();
         self.site_accrual_schedules.clear();
         self.payment_intents.clear();
         self.finance = crate::finance_book::FinanceBook::default();
@@ -673,6 +681,7 @@ impl AppStateInner {
         self.payment_entries.clear();
         self.operating_budgets.clear();
         self.dues_budget_basis.clear();
+        self.dues_source_period.clear();
         self.site_accrual_schedules.clear();
         self.payment_intents.clear();
         self.finance = crate::finance_book::FinanceBook::default();
@@ -836,6 +845,8 @@ impl AppState {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(AppStateInner::new())),
             pool: None,
+            #[cfg(feature = "e2e")]
+            e2e_clock: None,
         }
     }
 
@@ -853,7 +864,20 @@ impl AppState {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),
             pool,
+            #[cfg(feature = "e2e")]
+            e2e_clock: crate::e2e_clock::validate_e2e_configuration()
+                .ok()
+                .filter(|enabled| *enabled)
+                .map(|_| Arc::new(crate::e2e_clock::E2eClock::new(Utc::now().date_naive()))),
         }
+    }
+
+    /// Creates an in-memory state with an enabled E2E clock for deterministic tests.
+    #[cfg(feature = "e2e")]
+    pub fn with_e2e_test_clock(date: NaiveDate) -> Self {
+        let mut state = Self::new();
+        state.e2e_clock = Some(Arc::new(crate::e2e_clock::E2eClock::new(date)));
+        state
     }
 
     /// Rebuilds the in-memory read model from PostgreSQL without holding the
@@ -884,6 +908,8 @@ impl AppState {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),
             pool: None,
+            #[cfg(feature = "e2e")]
+            e2e_clock: None,
         }
     }
 
@@ -895,6 +921,8 @@ impl AppState {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),
             pool: None,
+            #[cfg(feature = "e2e")]
+            e2e_clock: None,
         }
     }
 }

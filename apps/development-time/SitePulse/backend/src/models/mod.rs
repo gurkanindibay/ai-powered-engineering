@@ -1342,6 +1342,10 @@ pub struct OccupancyTransitionResponse {
     /// Corrections requested when this transition changed an accrued open-period share.
     #[serde(default)]
     pub correction_requests: Vec<AccrualCorrection>,
+    /// Supplementary charges posted for days of already accrued months that nobody was billed
+    /// for (a back-dated start residing date, STORY-07-13).
+    #[serde(default)]
+    pub supplementary_charges: Vec<DuesLiability>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
