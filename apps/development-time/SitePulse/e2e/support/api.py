@@ -182,6 +182,12 @@ class Builders:
         self.stack.restart_backend()
         return {"unit_id": unit_id, "liability_id": liability_id, "principal": principal}
 
+    def overdue_since_period_due_date(self, period: str) -> None:
+        """SQL arrange: charges of `period` that were created on time, so late fee and aging count
+        from their period due date (an accrual run after the due date counts from its own day)."""
+        self.stack.sql(f"UPDATE dues_liabilities SET effective_due_date = due_date WHERE period = '{period}';")
+        self.stack.restart_backend()
+
     def tenant_debt(self, unit_id: str, amount: Decimal, period: str = "Ekim 2026") -> dict:
         """SQL arrange: an unpaid TENANT liability tied to the unit's active tenant occupancy."""
         row = self.stack.sql(

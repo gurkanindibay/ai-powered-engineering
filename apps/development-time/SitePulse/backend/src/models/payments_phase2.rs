@@ -315,7 +315,12 @@ pub struct StatementOpenItem {
     pub due_id: String,
     pub period: String,
     pub expense_type: String,
+    /// Period due date (month and FIFO order).
     pub due_date: NaiveDate,
+    /// Date the late fee and `days_overdue` count from (never before `due_date`).
+    pub effective_due_date: NaiveDate,
+    /// The charge was created after its period due date, so the two dates differ.
+    pub charge_created_late: bool,
     pub days_overdue: i64,
     pub principal_outstanding: Decimal,
     pub penalty_outstanding: Decimal,

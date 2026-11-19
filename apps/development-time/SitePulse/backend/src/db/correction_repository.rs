@@ -170,12 +170,14 @@ pub async fn apply_accrual_correction(
                 r#"
                     INSERT INTO dues_liabilities
                         (unit_id, period, period_key, dues_period_id, principal_amount, due_date,
-                         status, delay_penalty, debtor_type, expense_type, operating_budget_id)
+                         status, delay_penalty, debtor_type, expense_type, operating_budget_id,
+                         penalty_accrued_through, effective_due_date)
                     VALUES ($1, $2,
                             (SELECT period_key FROM dues_liabilities WHERE id = $7),
                             (SELECT dues_period_id FROM dues_liabilities WHERE id = $7),
-                            $3, $4, 'PENDING', 0, $5, $6,
-                            (SELECT operating_budget_id FROM dues_liabilities WHERE id = $7))
+                            $3, $4, 'PENDING', $8, $5, $6,
+                            (SELECT operating_budget_id FROM dues_liabilities WHERE id = $7),
+                            $9, $10)
                     RETURNING id
                     "#,
                 // Preserve the source period and budget basis for every replacement.
@@ -187,6 +189,9 @@ pub async fn apply_accrual_correction(
                     &r.debtor_type,
                     &r.expense_type,
                     &due,
+                    &r.delay_penalty,
+                    &r.penalty_accrued_through,
+                    &r.fee_due_date(),
                 ],
             )
             .await?;

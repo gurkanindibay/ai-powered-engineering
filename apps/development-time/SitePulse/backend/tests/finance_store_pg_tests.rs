@@ -203,6 +203,7 @@ async fn every_spec009_record_round_trips_through_postgresql() {
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
             grace_days: 0,
+            effective_due_date: None,
         })
         .await
         .unwrap()

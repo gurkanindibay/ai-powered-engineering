@@ -345,6 +345,10 @@ pub async fn accrue_monthly_dues(
                     expense_type: ExpenseType::OperationalDues,
                     penalty_accrued_through: None,
                     grace_days: site_grace_days,
+                    effective_due_date: Some(DuesLiability::effective_due_date_for(
+                        payload.due_date,
+                        accrued_on,
+                    )),
                 },
                 basis.clone(),
             ));

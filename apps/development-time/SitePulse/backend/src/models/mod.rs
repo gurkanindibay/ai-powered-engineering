@@ -741,6 +741,25 @@ pub struct DuesLiability {
     /// (STORY-07-10): a later change of the site's setting never touches it.
     #[serde(default)]
     pub grace_days: u32,
+    /// The date the late fee, grace period and aging count from: the later of the period
+    /// `due_date` and the date the charge was created (an approved correction counts as created
+    /// on its approval date). `None` means the same as `due_date`. FIFO allocation keeps using
+    /// `due_date`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_due_date: Option<NaiveDate>,
+}
+
+impl DuesLiability {
+    /// The date late fees, grace and aging are counted from.
+    pub fn fee_due_date(&self) -> NaiveDate {
+        self.effective_due_date
+            .map_or(self.due_date, |e| e.max(self.due_date))
+    }
+
+    /// The effective due date of a charge with period due date `due_date` created on `created_on`.
+    pub fn effective_due_date_for(due_date: NaiveDate, created_on: NaiveDate) -> NaiveDate {
+        due_date.max(created_on)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

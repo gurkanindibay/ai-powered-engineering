@@ -911,6 +911,7 @@ pub async fn provision_site_units(
                 expense_type: ExpenseType::OperationalDues,
                 penalty_accrued_through: None,
                 grace_days: 0,
+                effective_due_date: None,
             });
         }
 

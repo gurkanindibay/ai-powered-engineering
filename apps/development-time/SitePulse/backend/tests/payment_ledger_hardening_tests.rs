@@ -60,6 +60,7 @@ fn liability(
         expense_type: ExpenseType::from_str_loose(expense),
         penalty_accrued_through: None,
         grace_days: 0,
+        effective_due_date: None,
     }
 }
 

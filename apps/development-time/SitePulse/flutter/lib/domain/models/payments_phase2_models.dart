@@ -13,6 +13,8 @@ class StatementOpenItem {
   final String period;
   final String expenseType;
   final DateTime? dueDate;
+  final DateTime? effectiveDueDate;
+  final bool chargeCreatedLate;
   final int daysOverdue;
   final Decimal principalOutstanding;
   final Decimal penaltyOutstanding;
@@ -25,6 +27,8 @@ class StatementOpenItem {
     required this.period,
     required this.expenseType,
     required this.dueDate,
+    this.effectiveDueDate,
+    this.chargeCreatedLate = false,
     required this.daysOverdue,
     required this.principalOutstanding,
     required this.penaltyOutstanding,
@@ -38,6 +42,8 @@ class StatementOpenItem {
         period: j['period']?.toString() ?? '',
         expenseType: j['expense_type']?.toString() ?? '',
         dueDate: _date(j['due_date']),
+        effectiveDueDate: _date(j['effective_due_date']),
+        chargeCreatedLate: j['charge_created_late'] == true,
         daysOverdue: (j['days_overdue'] as num?)?.toInt() ?? 0,
         principalOutstanding: _dec(j['principal_outstanding']),
         penaltyOutstanding: _dec(j['penalty_outstanding']),

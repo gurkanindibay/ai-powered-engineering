@@ -99,6 +99,7 @@ fn liability(
         expense_type: kind,
         penalty_accrued_through: None,
         grace_days: 0,
+        effective_due_date: None,
     }
 }
 

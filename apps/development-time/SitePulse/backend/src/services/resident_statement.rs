@@ -78,18 +78,21 @@ pub fn build_statement(
                 let d = calc.calculate_delay_penalty(stored.clone(), today);
                 let principal = dues_ledger::outstanding_principal(&d);
                 let penalty = dues_ledger::outstanding_penalty(&d);
-                let days_overdue = (today - d.due_date).num_days().max(0);
+                let effective_due_date = d.fee_due_date();
+                let days_overdue = (today - effective_due_date).num_days().max(0);
                 StatementOpenItem {
                     due_id: d.id.clone(),
                     period: d.period.clone(),
                     expense_type: d.expense_type.as_str().to_string(),
                     due_date: d.due_date,
+                    effective_due_date,
+                    charge_created_late: effective_due_date != d.due_date,
                     days_overdue,
                     principal_outstanding: principal,
                     penalty_outstanding: penalty,
                     total_outstanding: principal + penalty,
                     operating_budget_id: inner.dues_budget_basis.get(&d.id).cloned(),
-                    limitation_warning: days_overdue > LIMITATION_DAYS,
+                    limitation_warning: (today - d.due_date).num_days() > LIMITATION_DAYS,
                 }
             })
             .filter(|i| i.total_outstanding > Decimal::ZERO)

@@ -71,6 +71,7 @@ fn liability(due: NaiveDate, grace: u32) -> DuesLiability {
         expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
         grace_days: grace,
+        effective_due_date: None,
     }
 }
 
@@ -122,14 +123,17 @@ async fn when_the_scheduler_was_off_then_it_accrues_the_missed_periods_oldest_fi
 
     let dues = site_dues(&state).await;
     assert_eq!(dues.len(), 4);
-    for (label, due) in [
-        ("Eylül 2026", day(2026, 9, 15)),
-        ("Ekim 2026", day(2026, 10, 15)),
-        ("Kasım 2026", day(2026, 11, 15)),
+    // Each charge keeps its period due date; a charge created after it counts its late fee from
+    // the day it was created (issue #206).
+    for (label, due, effective) in [
+        ("Eylül 2026", day(2026, 9, 15), day(2026, 11, 2)),
+        ("Ekim 2026", day(2026, 10, 15), day(2026, 11, 2)),
+        ("Kasım 2026", day(2026, 11, 15), day(2026, 11, 15)),
     ] {
         let found: Vec<_> = dues.iter().filter(|x| x.period == label).collect();
         assert_eq!(found.len(), 1, "{label}");
         assert_eq!(found[0].due_date, due, "{label}");
+        assert_eq!(found[0].fee_due_date(), effective, "{label}");
     }
     // A second run the same day changes nothing.
     let again = run_accrual_with_report(&state, at(2026, 11, 2)).await;
@@ -316,4 +320,22 @@ fn when_day_rows_are_rewritten_then_they_honour_the_grace_period() {
     };
     assert_eq!(sum(&[(day(2026, 10, 18), d("1400.00"))]), Decimal::ZERO);
     assert_eq!(sum(&[(day(2026, 10, 25), d("1400.00"))]), d("23.33"));
+}
+
+// covers: SC-07-10-07
+#[test]
+fn when_a_charge_is_created_after_its_due_date_then_the_fee_counts_from_its_creation() {
+    let calc = DuesCalculationService::new();
+    let mut charge = liability(day(2026, 11, 10), 0);
+    charge.principal_amount = d("650.00");
+    charge.total_amount = d("650.00");
+    let created_on = day(2026, 11, 18);
+    charge.effective_due_date = Some(DuesLiability::effective_due_date_for(
+        charge.due_date,
+        created_on,
+    ));
+    assert_eq!(charge.due_date, day(2026, 11, 10));
+    assert_eq!(charge.fee_due_date(), created_on);
+    let evaluated = calc.calculate_delay_penalty(charge, day(2026, 11, 19));
+    assert_eq!(evaluated.delay_penalty, d("1.08"));
 }
