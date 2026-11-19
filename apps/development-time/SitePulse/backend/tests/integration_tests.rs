@@ -1444,6 +1444,7 @@ async fn when_getting_resident_dashboard_then_returns_real_time_calculated_dues(
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
             grace_days: 0,
+            effective_due_date: None,
         });
     }
 
