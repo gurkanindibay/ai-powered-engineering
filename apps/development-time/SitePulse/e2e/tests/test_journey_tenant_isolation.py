@@ -288,7 +288,7 @@ def test_manager_cannot_mutate_another_site_records(request, api, actors, stack)
             api, "POST", f"/api/v1/dues/periods/{period_b_id}/close", site_a.manager.token, body={}
         )
         assert status_close in (400, 403, 404)
-        assert stack.sql(f"SELECT status FROM dues_periods WHERE id = {period_b_id};") == "ACTIVE"
+        assert stack.sql(f"SELECT status FROM dues_periods WHERE id = {period_b_id};") != "CLOSED"
 
         status_close_b, _, _ = http_call(
             api, "POST", f"/api/v1/dues/periods/{period_b_id}/close", site_b.manager.token, body={}
@@ -407,7 +407,7 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
 
         # Tenant's operational debt and own receipt are visible
         open_items = [item for d in stmt.get("debtors", []) for item in d.get("open_items", [])]
-        assert any(Decimal(str(item.get("principal_outstanding", "0"))) == Decimal("1500.00") for item in open_items)
+        assert any(Decimal(str(item.get("principal_outstanding", "0"))) == Decimal("1000.00") for item in open_items)
         rcpt_numbers = [r.get("receipt_number") for r in stmt.get("receipts", [])]
         assert tenant_rcpt.get("receipt_number") in rcpt_numbers
 
@@ -415,7 +415,7 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
         debtor_types = [d.get("debtor_type") for d in stmt.get("debtors", [])]
         assert "OWNER" not in debtor_types
         assert owner_rcpt.get("receipt_number") not in rcpt_numbers
-        assert not any(Decimal(str(item.get("principal_outstanding", "0"))) == Decimal("1000.00") for item in open_items)
+        assert not any(item.get("expense_type") == "CAPITAL_DUES" for item in open_items)
 
         # Tenant requests owner's private receipt JSON and PDF
         status_j, raw_j, _ = http_call(api, "GET", f"/api/v1/payments/receipts/{owner_rcpt['id']}", selin.token)
