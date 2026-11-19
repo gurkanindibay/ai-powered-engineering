@@ -84,7 +84,7 @@ def test_f0_unknown_virtual_iban_payment_stored_unmatched(request, api, actors, 
             fixture.manager.token,
         )
         assert len(queue) >= 1
-        unmatched = [m for m in queue if m.get("status") in ("ESLESTIRILEMEDI", "Unmatched")]
+        unmatched = [m for m in queue if m.get("status") in ("UNMATCHED", "ESLESTIRILEMEDI", "Unmatched")]
         assert len(unmatched) >= 1
         assert Decimal(str(unmatched[0]["amount"])) == Decimal("1500.00")
 
