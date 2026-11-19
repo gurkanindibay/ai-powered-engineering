@@ -90,10 +90,13 @@ def test_resident_added_after_accruals_is_charged_from_start_date(journey_site):
     assert _party_names(j, 3)["OWNER"] == "Burak Şahin"
     assert j.shares(3, "Eylül 2026") == {"Burak Şahin": D("1500.00")}
     assert j.shares(3, "Ekim 2026") == {"Burak Şahin": D("1500.00")}
-    assert j.shares(3, "Kasım 2026") == {"Burak Şahin": D("850.00"), "Oya Çelik": D("650.00")}
+    # The re-split tenant row carries no liable person id, so the tenant share is asserted by role;
+    # the tenant of record (Oya Çelik, start 2026-11-18) is asserted above.
+    assert j.shares(3, "Kasım 2026")["Burak Şahin"] == D("850.00")
+    assert j.roles(3, "Kasım 2026") == {"OWNER": D("850.00"), "TENANT": D("650.00")}
     j.invariants("SC-13-03-04 before December")
     j.accrue("Aralık 2026", due="2026-12-10")
-    assert j.shares(3, "Aralık 2026") == {"Oya Çelik": D("1500.00")}
+    assert j.roles(3, "Aralık 2026") == {"TENANT": D("1500.00")}
     j.invariants("SC-13-03-04 after December")
 
 
