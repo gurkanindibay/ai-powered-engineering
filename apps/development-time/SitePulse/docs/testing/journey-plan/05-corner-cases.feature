@@ -9,7 +9,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ----------------------------------------------------------- accrual input
 
-  @SC-13-05-01 @J-12 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-05-01 @J-12 @depth:1 @state:F2 @layer:backend @edge @role_manager @pending
   Scenario Outline: Invalid accrual input is rejected and creates nothing
     Given the site is in state F2
     When the manager accrues period "<period>" with amount <amount> and due date "<due>"
@@ -23,7 +23,7 @@ Feature: Corner cases around accrual, occupancy, access and time
       | Ekim 2026  | 1500.00 | 2026-02-30 | invalid due date            |
       | Ekim 2025  | 1500.00 | 2026-10-10 | due date outside the period |
 
-  @SC-13-05-02 @J-12 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-05-02 @J-12 @depth:1 @state:F2 @layer:backend @edge @role_manager @pending
   Scenario Outline: A due day the month does not have falls on its last day
     Given the site is in state F2 with due day 31
     When the manager accrues period "<period>"
@@ -35,14 +35,14 @@ Feature: Corner cases around accrual, occupancy, access and time
       | Şubat 2028  | 2028-02-29 |
       | Kasım 2026  | 2026-11-30 |
 
-  @SC-13-05-03 @J-12 @state:F4 @layer:backend @edge @role_manager @pending
+  @SC-13-05-03 @J-12 @depth:1 @state:F4 @layer:backend @edge @role_manager @pending
   Scenario: A duplicate accrual with a different amount is still blocked
     Given the site is in state F4
     When the manager accrues period "Ekim 2026" again with amount 1800.00
     Then the request is rejected as a duplicate
     And every Ekim liability still has its original amount
 
-  @SC-13-05-04 @J-12 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-05-04 @J-12 @depth:1 @state:F2 @layer:backend @edge @role_manager @pending
   Scenario: Two admins accruing the same period at the same moment create one set of liabilities
     Given the site is in state F2
     When two manager sessions accrue period "Ekim 2026" in parallel
@@ -50,19 +50,21 @@ Feature: Corner cases around accrual, occupancy, access and time
     And exactly 6 liabilities exist
     And the ledger invariants hold
 
-  @SC-13-05-05 @J-12 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-05-05 @J-12 @depth:2 @state:F2 @layer:backend @edge @role_manager @pending
   Scenario: The scheduler catches up months that were missed
     Given the site is in state F2 with the accrual scheduler enabled
     And the scheduler did not run for "Eylül 2026" and "Ekim 2026"
     When the scheduler runs on "2026-11-19"
     Then liabilities exist for "Eylül 2026", "Ekim 2026" and "Kasım 2026", each once
-    And each liability keeps its own period's due date, so its late fee runs from that date (SC-07-10-03)
-    And the total outstanding is 31183.75, which is 5 x 4797.50 plus 7196.25 for "A-6"
+    And each liability keeps its period due date for FIFO but its effective due date is "2026-11-19"
+    And the total outstanding is 29250.00 with late fee 0.00, because no charge existed before "2026-11-19"
+    When the clock advances to "2026-11-29"
+    Then the total late fee is 487.50, which is 15 x 25.00 plus 3 x 37.50 for "A-6"
     And running the scheduler again adds nothing
 
   # ------------------------------------------------------------- occupancy
 
-  @SC-13-05-06 @J-12 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-06 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: Moving out with debt keeps the debt and the history
     Given the site is in state F5
     And the clock has advanced to "2026-12-01" before any December accrual
@@ -72,7 +74,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     And unit "A-5" is vacant and the debt stays a single liability with "Deniz Arslan" as primary debtor
     And owner "Can Öztürk" is shown as jointly liable for it (KMK m.22), without a second liability
 
-  @SC-13-05-07 @J-12 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-07 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: Moving out with an advance requires a decision before the advance leaves
     Given the site is in state F5
     And tenant "Selin Demir" pays 3422.50 on "2026-11-19", clearing existing debt and leaving advance 300.00
@@ -80,7 +82,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     Then the manager must choose keep, pay out or transfer
     And a payout or transfer only happens after a second approver confirms
 
-  @SC-13-05-08 @J-12 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-08 @J-12 @depth:2 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: Moving out twice and moving in on an occupied unit are refused
     Given the site is in state F5
     When tenant "Deniz Arslan" moves out of unit "A-5"
@@ -89,7 +91,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     When the manager moves tenant "Selin Demir" into unit "A-1" that is owner-occupied
     Then the request is refused with the allowed commands for the current state
 
-  @SC-13-05-09 @J-12 @state:F6 @layer:backend @edge @role_manager @pending
+  @SC-13-05-09 @J-12 @depth:2 @state:F6 @layer:backend @edge @role_manager @pending
   Scenario: A move-out recorded after accrual re-splits the open liability
     Given the site is in state F6
     And the clock has advanced to "2026-11-26"
@@ -97,10 +99,11 @@ Feature: Corner cases around accrual, occupancy, access and time
     Then a split correction is requested and the liability amounts remain unchanged pending approval
     When a different manager approves the split correction
     Then November principal is 700.00 to "Selin Demir", 500.00 to "Mert Kılıç" and 300.00 to the owner
+    And the owner's new 300.00 share is due on the approval date and Mert's reduced share keeps "2026-11-15"
 
   # ------------------------------------------------------------ people data
 
-  @SC-13-05-10 @J-12 @state:F1 @layer:gui @edge @role_manager @pending
+  @SC-13-05-10 @J-12 @depth:1 @state:F1 @layer:gui @edge @role_manager @pending
   Scenario: An Excel import with one bad row imports the good rows and reports the bad one
     Given the site is in state F1
     When the manager imports a workbook with 5 valid people and 1 row with an invalid national id
@@ -108,7 +111,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     And the result lists row 6 with the reason
     And no partial person exists for the bad row
 
-  @SC-13-05-11 @J-12 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-11 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: Merging two duplicate people keeps every liability and payment
     Given the site is in state F5
     And "Deniz Arslan" exists twice with different phone numbers, one of them owning a payment
@@ -118,14 +121,14 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ----------------------------------------------------------- access control
 
-  @SC-13-05-12 @J-12 @state:F5 @layer:backend @core @role_resident @pending
+  @SC-13-05-12 @J-12 @depth:1 @state:F5 @layer:backend @core @role_resident @pending
   Scenario: A resident cannot call manager actions
     Given the site is in state F5
     When tenant "Deniz Arslan" calls accrue, record-manual payment and move-out
     Then each call is answered 403
     And no data changes
 
-  @SC-13-05-13 @J-12 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-05-13 @J-12 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: A manager of another site sees nothing of this site
     Given the site is in state F5
     And a second site, named in this attempt's manifest, has its own manager in state F5
@@ -135,7 +138,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # -------------------------------------------------------------------- time
 
-  @SC-13-05-14 @J-12 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-14 @J-12 @depth:2 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: The month boundary uses Istanbul time, not UTC
     Given the site is in state F5
     And the accrual scheduler is due to open December on the first local day and catch-up is disabled
@@ -144,7 +147,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     When it is ticked at "2026-12-01 00:30" Europe/Istanbul, still November 30 UTC
     Then it accrues December exactly once and leaves November principal unchanged
 
-  @SC-13-05-15 @J-12 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-15 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: A late fee never makes a settled liability reopen
     Given the site is in state F5
     And unit "A-3" paid its "Eylül 2026" debt in full today
@@ -153,7 +156,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ------------------------------------------------------------- persistence
 
-  @SC-13-05-16 @J-12 @layer:backend @core @role_manager @pending
+  @SC-13-05-16 @J-12 @depth:1 @layer:backend @core @role_manager @pending
   Scenario Outline: Balances are identical after a backend restart at any point of the history
     Given the site is in state <state>
     When the backend is restarted
@@ -169,7 +172,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ------------------------------------------------- tenant departure (Q9)
 
-  @SC-13-05-17 @J-12 @state:F5 @layer:gui @core @role_manager @pending
+  @SC-13-05-17 @J-12 @depth:2 @state:F5 @layer:gui @core @role_manager @pending
   Scenario: Check-out shows the tenant's debt and the owner can still be collected from
     Given the site is in state F5
     When the manager starts the check-out of tenant "Deniz Arslan" from "A-5" effective "2026-11-19"
@@ -182,7 +185,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     And the owner does not see the tenant's own receipts or contact details
     And the ledger invariants hold
 
-  @SC-13-05-18 @J-12 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-05-18 @J-12 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
   Scenario: A tenant who left without notice is moved out at the real date and the owner takes over
     Given the site is in state F6
     And the clock has advanced to "2026-12-05" after "Aralık 2026" was accrued to "Mert Kılıç"
@@ -191,5 +194,6 @@ Feature: Corner cases around accrual, occupancy, access and time
     Then the "Kasım 2026" principal is 700.00 to "Selin Demir", 500.00 to "Mert Kılıç" and 300.00 to owner "Ahmet Yılmaz"
     And the whole "Aralık 2026" principal of 1500.00 moves to owner "Ahmet Yılmaz"
     And the unpaid 500.00 of "Mert Kılıç" stays his, with "Ahmet Yılmaz" shown as jointly liable
+    And the owner's new November and December shares are due on the approval date "2026-12-05"
     And the audit log records the late notice, both actors and the original shares
     And the ledger invariants hold

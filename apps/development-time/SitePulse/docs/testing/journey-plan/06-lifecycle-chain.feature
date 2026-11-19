@@ -3,7 +3,7 @@ Feature: One site from zero to a closed period (interconnected chain)
   Run this as one scenario. Report each numbered checkpoint using the existing journey
   reporter. The fixture finalizer runs even if a checkpoint fails.
 
-  @SC-13-06-01 @J-13 @chain:site-lifecycle @state:F0 @layer:gui @smoke @core @role_manager @pending
+  @SC-13-06-01 @J-13 @depth:8 @chain:site-lifecycle @state:F0 @layer:gui @smoke @core @role_manager @pending
   Scenario: A manager grows a new site, collects dues and closes a period
     Given the clock is set to "2026-09-01 09:00" Europe/Istanbul
     And a SaaS admin has onboarded a site and manager unique to this scenario attempt

@@ -32,6 +32,7 @@ This plan replaces that with three ideas:
 | Block | `A Blok`, units `A-1` to `A-7`; unless a scenario says otherwise, units, ownership and first occupancies exist from 2026-09-01 |
 | Flat tariff | 1500.00 operational per unit per month; `A-6` is larger: 2250.00 |
 | Due day | 10th of the month, grace days 0 (grace has its own scenarios) |
+| Effective due date | Every charge keeps its **period due date** (which month it belongs to, FIFO order) and gets an **effective due date** = the later of the period due date and the date the charge was created. Grace, late fee and aging count from the effective due date (Q9). A charge created by an approved correction counts as created on the approval date |
 | Late fee | KMK 5% per month, calculated per segment on outstanding principal: `principal x 5% x days / 30`, rounded to 2 decimals half away from zero |
 | Periods | `Eylül 2026` due 2026-09-10 (70 days late), `Ekim 2026` due 2026-10-10 (40 days late), `Kasım 2026` due 2026-11-10 (9 days late) |
 | Late fee per 1500.00 | Eylül 175.00, Ekim 100.00, Kasım 22.50 |
@@ -96,7 +97,9 @@ Proration is on. Start with F2 except A-2 is vacant and A-5 remains tenant-occup
 no payments. Build in chronological order, using these local dates. Each accrual runs on the
 date of its step, after that step's occupancy change, so the accrual sees the final occupancy
 of the month. October and November are therefore accrued after their due dates; the due date
-and late fee of those shares follow the open part of Q9. F6 scenarios assert principal unless they cite Q9.
+and late fee of those shares count from their effective due date: 2026-10-11 for every October share and
+2026-11-15 for every November share (section 2). Oya's re-split November share is due on the
+approval date, 2026-11-18; Burak's reduced share keeps 2026-11-15.
 A tenant session's end date is exclusive, so the incoming party pays the handover day.
 
 1. 2026-09-01: A-2 vacant, owner Ahmet. `Eylül 2026` accrued: Ahmet owes 1500.00 for A-2.
@@ -110,7 +113,7 @@ A tenant session's end date is exclusive, so the incoming party pays the handove
 5. 2026-11-18: A-3 (vacant so far) gets tenant Oya Çelik with start residing date 2026-11-18.
    `Kasım 2026` already exists, so a split correction is requested and a second manager approves
    it, as in SC-13-05-09. After approval Oya owes 650.00 (13 days) and owner Burak 850.00 (17 days).
-   Earlier periods are unchanged. This retroactive split is subject to Q4.
+   Earlier periods are unchanged. This retroactive split follows Q4.
 
 ## 4. Ledger invariants (the reusable checkpoint)
 
@@ -131,6 +134,8 @@ and empty rows.
 | I8 | Every balance is identical after a backend restart (memory and PostgreSQL agree) |
 | I9 | Sum of the amounts shown to a user equals what the API returns, to the kuruş |
 | I10 | Site-scoped responses and exports contain only authorized site data; resident financial and private identity data are further scoped to the authorized unit, person and responsibility dates |
+| I11 | Every charge's late fee and aging count from its effective due date, never from a day before the charge existed; FIFO allocation follows the period due date |
+| I12 | A title transfer moves no existing charge; only charges accrued after its effective date, or an approved seller-pays override, name the buyer or keep the seller |
 
 ## 5. Isolation and teardown contract
 
@@ -161,9 +166,23 @@ and confirming the run is inactive. File 07 exercises these boundaries.
 
 `@EPIC-13 @STORY-13-xx` on the Feature, `@SC-13-xx-nn` on each Scenario, `@J-nn` journey id,
 `@state:F5` the start state, `@chain:<name>` stage of an interconnected chain, `@layer:gui` or
-`@layer:backend`, `@smoke @core @edge`, `@role_manager` or `@role_resident` (owner or tenant
+`@layer:backend`, `@depth:n` (section 6.1), `@smoke @core @edge`, `@role_manager` or `@role_resident` (owner or tenant
 acting in the resident app), `@pending`, and `@decision` for scenarios
 whose expected behaviour needs a product answer first (section 8).
+
+### 6.1 Test depth
+
+`@depth:n` counts the state changes a scenario drives (its `When` steps). Every scenario carries it.
+
+| Depth | Meaning | Where |
+|---|---|---|
+| 1 | One action on a named starting state | Most of files 01 to 11 |
+| 2 | Two linked actions; the second depends on the result of the first | Corrections, retries, reversal, re-split after approval |
+| 3 to 5 | A short chain crossing several rules (occupancy, sale, accrual, payment, close) with a checkpoint after each stage | File 12 |
+| 6 and more | A full lifecycle on one site | File 06 |
+
+A depth-n chain asserts the ledger invariants after each stage. A failure names the stage, and the
+same rules are also covered at depth 1, so the failing rule can be found without rerunning the chain.
 
 Layer rule: GUI scenarios are few and cover what only a screen can show (empty states, the
 numbers the admin reads, the full chain). Money rules run at `@layer:backend` against the same
@@ -198,13 +217,13 @@ Covered in files `03`, `04`, `05`:
 | Q1 | Can the backend run on a controllable local clock? | **Decided:** add an e2e-only clock that can advance through fixture dates, with deterministic job ticks (to be built first, README section 10) |
 | Q2 | Accrual on a unit with no owner: skip or reject? | **Decided:** accrual succeeds; units without owner are reported in a separate list (SC-13-01-08) |
 | Q3 | Accrual on a vacant owned unit: owner is the debtor? | Yes, owner owes (matches the existing proration story) |
-| Q4 | Adding a resident after accruals: any retroactive charge? | **Decided:** charges start at the primary resident's start residing date. Confirm how to post previously unbilled days and how to approve a re-split when a liability already exists. Preserve the closed snapshot and any allocation audit. SC-13-01-10, SC-13-01-14, SC-13-03-04 |
+| Q4 | Adding a resident after accruals: any retroactive charge? | **Decided:** charges start at the primary resident's start residing date. Days nobody was billed for become a supplementary charge that refers to the original month: in that period while it is OPEN, otherwise in the current open period, with the closed snapshot unchanged (as Q5). Days already billed to someone go through the split correction with a second approver (SC-13-05-09). Either way the new charge's effective due date is its creation or approval date. SC-13-01-10, SC-13-01-14, SC-13-03-04, SC-13-12-03 |
 | Q5 | Does the late fee keep growing on a closed period? | **Decided:** yes until paid. The live liability can change; payments, fees and corrections are booked in the open period and the closed snapshot remains fixed (STORY-07-12) |
 | Q6 | Is the 5% / 30-day late-fee rule the only one (no cap, no compounding)? | Yes, as in STORY-01-02 |
 | Q7 | Is deleting a site allowed in the API, or is teardown SQL only? | SQL only, test-support code, never an API |
 | Q8 | One site per journey costs a backend restart per SQL Arrange. Accept, or add a "reload state" endpoint behind the e2e flag? | Use an exclusive test stack when setup requires a restart. |
-| Q9 | Who owes days around a tenant's stay, and what happens to a departing tenant's debt? | **Decided.** Days before the tenant's start residing date and after their release belong to the owner, also in late accruals and re-splits. Departure goes through a check-out that shows the tenant's open debt (exit settlement). That debt stays on the tenant as primary debtor and the owner stays jointly liable for it (section 8.1). If the tenant left without telling the manager, the manager records the move-out with its real date; days after it are re-split to the owner and the tenant's earlier debt is still collectable from the owner. **Still open:** the due date and first late-fee day of a share created after the period due date. Plan assumption: the latest of the period due date, the responsibility start and the share creation date. SC-13-01-14, SC-13-03-02, SC-13-03-17, SC-13-05-06, SC-13-05-17, SC-13-05-18 |
-| Q10 | A sale in the middle of the month: who owes that month? | **Decided for operational dues:** they follow the occupant. A tenant-occupied unit whose tenant does not change is not split; the tenant owes the whole month. An owner-occupied unit is split by days between seller and buyer. **Open for fixed-asset (capital or demirbaş) charges:** candidates are the owner on record when the charge is accrued (today's STORY-08-05 behaviour), the owner on record on the general assembly decision date, or a split agreed in the sale. Seller and buyer settle anything else between themselves. SC-13-03-05, SC-13-03-16, SC-13-03-18 |
+| Q9 | Who owes days around a tenant's stay, and what happens to a departing tenant's debt? | **Decided.** Days before the tenant's start residing date and after their release belong to the owner, also in late accruals and re-splits. Departure goes through a check-out that shows the tenant's open debt (exit settlement). That debt stays on the tenant as primary debtor and the owner stays jointly liable for it (section 8.1). If the tenant left without telling the manager, the manager records the move-out with its real date; days after it are re-split to the owner and the tenant's earlier debt is still collectable from the owner. **Due date, decided:** a share created after the period due date gets the effective due date of section 2, so nobody owes a fee for days before the share existed. This replaces SC-07-10-03's rule that catch-up liabilities keep their period's due date (section 8.2). SC-13-01-14, SC-13-03-02, SC-13-03-17, SC-13-05-06, SC-13-05-17, SC-13-05-18 |
+| Q10 | A sale in the middle of the month: who owes that month? | **Decided.** Operational dues follow the occupant: a tenant-occupied unit whose tenant does not change is not split; an owner-occupied unit is split by days between seller and buyer. Fixed-asset (capital) installments go to the owner on record when each installment is accrued. Debt accrued before the sale stays with the seller. At transfer the manager sees a sale clearance statement (open debt, advance, installments not yet accrued). If the sale contract says the seller pays the remaining installments, the manager records a seller-pays override that takes effect only after a second approver. SC-13-03-05, SC-13-03-16, SC-13-03-18, SC-13-03-19, SC-13-12-02 |
 | Q11 | A transfer to the unit's virtual IBAN with no payer identity, on a unit with several open debtors (F6 A-2): whose debt does it pay? | **Decided:** it is not matched automatically. It goes to the reconciliation queue as UNMATCHED and the manager assigns it to a debtor. SC-13-04-15 |
 
 ### 8.1 Legal basis for debt responsibility (Q9, Q10)
@@ -229,6 +248,18 @@ not legal advice. Confirm with a lawyer before the product rule ships.
   lighting and water fall on the tenant (TBK m.341). Structural repairs and fixed-asset costs generally stay
   with the owner (TBK m.303 and Yargıtay case law). The management's claim under KMK m.22 does not change.
 
+### 8.2 Changes these decisions need in existing specs and code
+
+The plan is pending, so nothing below is changed yet. Each item needs its own task before the matching scenario can pass.
+
+| Rule | Existing behaviour to change |
+|---|---|
+| Effective due date (Q9) | SC-07-10-03 says each catch-up liability keeps its period's due date; `dues_calculation_service.rs` counts the fee from `due_date`. Add an effective due date and use it for grace, fee and aging |
+| Jointly liable owner (Q9) | Liabilities have one debtor; add the jointly liable owner per date range and show it on the owner statement, without the tenant's receipts or contacts |
+| Unmatched multi-debtor transfer (Q11) | Webhook matching by virtual IBAN must stop when the unit has more than one open debtor |
+| Sale clearance and seller-pays override (Q10) | New screen in the title transfer flow and a four-eyes request like the advance transfer of SC-08-05-03 |
+| Supplementary charge (Q4) | Back-dated start dates on unbilled days must post a charge in the open period that refers to the original month |
+
 ## 9. Files
 
 | File | Journeys |
@@ -244,6 +275,7 @@ not legal advice. Confirm with a lawyer before the product rule ships.
 | [09-financial-state-transitions.feature](09-financial-state-transitions.feature) | J-16: targeting, partial and backdated payments, post-close changes, reconciliation and dual ledger |
 | [10-tenant-data-isolation.feature](10-tenant-data-isolation.feature) | J-17: cross-site reads, exports and mutations, private tenant statements and receipts, former occupants and session races |
 | [11-state-machines.feature](11-state-machines.feature) | J-18: every liability, period, reconciliation and unit occupancy status: entry, allowed commands and refused commands |
+| [12-multi-depth-chains.feature](12-multi-depth-chains.feature) | J-19: depth 3 to 5 chains that combine sale, departure, back-dating, catch-up and capital rules with a checkpoint per stage |
 
 ## 10. Coverage map
 
@@ -265,6 +297,7 @@ scenario as pending until its user-visible outcome or backend invariant runs in 
 1. Test support: controllable clock with deterministic scheduler ticks (Q1), `site_in_state()` fixture, `ledger_invariants()` helper, teardown finalizer (file 07 first).
 2. F0 to F3 (file 01), then the backend isolation cases that use the established fixtures (file 10).
 3. F4, F5 (file 02) and the payment rules (file 04), backend layer.
-4. F6 (file 03) once Q9 and Q10 are answered, then the state machines, ledger transitions and corner cases (files 11, 09 and 05).
-5. Add the isolated GUI recovery and session cases (files 08 and 10), then the GUI chain (file 06).
-6. Move to `.specify/features/EPIC-13/`, run `feature_traceability.py check`, link the PR to the CI `e2e-test-report`.
+4. F6 (file 03) after the section 8.2 changes, then the state machines, ledger transitions and corner cases (files 11, 09 and 05).
+5. The multi-depth chains (file 12), once their depth-1 rules pass.
+6. Add the isolated GUI recovery and session cases (files 08 and 10), then the GUI chain (file 06).
+7. Move to `.specify/features/EPIC-13/`, run `feature_traceability.py check`, link the PR to the CI `e2e-test-report`.

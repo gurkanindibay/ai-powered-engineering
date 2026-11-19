@@ -12,7 +12,7 @@ Feature: Every status of the billing state machines is reached and left correctl
 
   # ------------------------------------------------------------- liability
 
-  @SC-13-11-01 @J-18 @layer:backend @core @role_manager @pending
+  @SC-13-11-01 @J-18 @depth:1 @layer:backend @core @role_manager @pending
   Scenario Outline: A liability moves through PENDING, OVERDUE, PAID and CANCELLED
     Given a unit has a single 1500.00 liability due "2026-11-10" with grace days <grace>
     When <event>
@@ -30,7 +30,7 @@ Feature: Every status of the billing state machines is reached and left correctl
       | 0     | 1502.50 is paid on "2026-11-11"                               | PAID      | 0.00        |
       | 0     | an approved cancellation takes effect on "2026-11-12"         | CANCELLED | 0.00        |
 
-  @SC-13-11-02 @J-18 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-11-02 @J-18 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario Outline: A settled or cancelled liability cannot be paid or corrected again
     Given the site is in state F5
     And the "<period>" liability of unit "<unit>" is <status>, after an approved cancellation where the status is CANCELLED
@@ -45,7 +45,7 @@ Feature: Every status of the billing state machines is reached and left correctl
       | A-5  | Eylül 2026 | CANCELLED | records a 100.00 payment designating |
       | A-5  | Eylül 2026 | CANCELLED | requests cancellation of             |
 
-  @SC-13-11-03 @J-18 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-11-03 @J-18 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: A reversal moves a PAID liability back to OVERDUE
     Given the site is in state F5
     And unit "A-3" paid its "Eylül 2026" liability in full on "2026-11-19"
@@ -55,7 +55,7 @@ Feature: Every status of the billing state machines is reached and left correctl
 
   # ---------------------------------------------------------------- period
 
-  @SC-13-11-04 @J-18 @state:F2 @layer:backend @core @role_manager @pending
+  @SC-13-11-04 @J-18 @depth:1 @state:F2 @layer:backend @core @role_manager @pending
   Scenario Outline: Each period status allows only its own commands
     Given the site is in state F2
     And period "Ekim 2026" is <status>
@@ -73,7 +73,7 @@ Feature: Every status of the billing state machines is reached and left correctl
       | CLOSED | close        | refused                                 |
       | CLOSED | reopen       | pending until a second manager approves |
 
-  @SC-13-11-05 @J-18 @state:F2 @layer:gui @core @role_manager @pending
+  @SC-13-11-05 @J-18 @depth:1 @state:F2 @layer:gui @core @role_manager @pending
   Scenario: The periods screen shows each status with only its allowed actions
     Given the site is in state F2
     And periods "Eylül 2026" CLOSED, "Ekim 2026" OPEN and "Kasım 2026" DRAFT exist
@@ -83,7 +83,7 @@ Feature: Every status of the billing state machines is reached and left correctl
 
   # -------------------------------------------------------- reconciliation
 
-  @SC-13-11-06 @J-18 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-11-06 @J-18 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
   Scenario Outline: A bank statement item reaches each reconciliation status
     Given the site is in state F5
     When a bank statement item of 1675.00 is imported <input>
@@ -98,7 +98,7 @@ Feature: Every status of the billing state machines is reached and left correctl
       | to an unknown virtual IBAN                                 | UNMATCHED         | 0        |
       | twice with the same bank reference, the first one approved | ALREADY_PROCESSED | 1        |
 
-  @SC-13-11-07 @J-18 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-11-07 @J-18 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: A rejected or approved statement item cannot change status again
     Given the site is in state F5
     And one statement item for "A-3" is APPROVED and another is REJECTED
@@ -108,7 +108,7 @@ Feature: Every status of the billing state machines is reached and left correctl
 
   # ------------------------------------------------------------- occupancy
 
-  @SC-13-11-08 @J-18 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-11-08 @J-18 @depth:2 @state:F5 @layer:backend @core @role_manager @pending
   Scenario Outline: Each unit occupancy state offers its own commands and refuses the rest
     Given the site is in state F5
     When the manager reads the allowed commands of unit "<unit>"
