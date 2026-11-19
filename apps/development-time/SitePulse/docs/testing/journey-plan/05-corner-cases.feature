@@ -24,10 +24,16 @@ Feature: Corner cases around accrual, occupancy, access and time
       | Ekim 2025  | 1500.00 | 2026-10-10 | due date outside the period |
 
   @SC-13-05-02 @J-12 @state:F2 @layer:backend @edge @role_manager @pending
-  Scenario: A due day the month does not have falls on its last day
+  Scenario Outline: A due day the month does not have falls on its last day
     Given the site is in state F2 with due day 31
-    When the manager accrues period "Şubat 2027"
-    Then the due date of every liability is "2027-02-28"
+    When the manager accrues period "<period>"
+    Then the due date of every liability is "<due>"
+
+    Examples:
+      | period      | due        |
+      | Şubat 2027  | 2027-02-28 |
+      | Şubat 2028  | 2028-02-29 |
+      | Kasım 2026  | 2026-11-30 |
 
   @SC-13-05-03 @J-12 @state:F4 @layer:backend @edge @role_manager @pending
   Scenario: A duplicate accrual with a different amount is still blocked
@@ -50,6 +56,8 @@ Feature: Corner cases around accrual, occupancy, access and time
     And the scheduler did not run for "Eylül 2026" and "Ekim 2026"
     When the scheduler runs on "2026-11-19"
     Then liabilities exist for "Eylül 2026", "Ekim 2026" and "Kasım 2026", each once
+    And each liability keeps its own period's due date, so its late fee runs from that date (SC-07-10-03)
+    And the total outstanding is 31183.75, which is 5 x 4797.50 plus 7196.25 for "A-6"
     And running the scheduler again adds nothing
 
   # ------------------------------------------------------------- occupancy
@@ -109,7 +117,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ----------------------------------------------------------- access control
 
-  @SC-13-05-12 @J-12 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-05-12 @J-12 @state:F5 @layer:backend @core @role_resident @pending
   Scenario: A resident cannot call manager actions
     Given the site is in state F5
     When tenant "Deniz Arslan" calls accrue, record-manual payment and move-out
@@ -119,8 +127,8 @@ Feature: Corner cases around accrual, occupancy, access and time
   @SC-13-05-13 @J-12 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: A manager of another site sees nothing of this site
     Given the site is in state F5
-    And a second site "e2e-j05-other" with its own manager in state F5
-    When the manager of "e2e-j05-other" requests units, people, payments and liabilities of this site by id
+    And a second site, named in this attempt's manifest, has its own manager in state F5
+    When the manager of the second site requests units, people, payments and liabilities of this site by id
     Then every response is 403 or 404 and contains no data of this site
     And invariant I10 holds in both directions
 
@@ -128,7 +136,8 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   @SC-13-05-14 @J-12 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: The month boundary uses Istanbul time, not UTC
-    Given the accrual scheduler is due to open December on the first local day and catch-up is disabled
+    Given the site is in state F5
+    And the accrual scheduler is due to open December on the first local day and catch-up is disabled
     When it is ticked at "2026-11-30 23:30" Europe/Istanbul
     Then December has no accrued liability
     When it is ticked at "2026-12-01 00:30" Europe/Istanbul, still November 30 UTC

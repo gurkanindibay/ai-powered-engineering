@@ -61,7 +61,7 @@ numbered starting points in the request; `F4` to `F7` cover the accrual historie
 |---|---|---|
 | **F0 ZERO** | Brand-new site | Site and manager account only. No block, no unit, no person, no period |
 | **F1 NO_RESIDENTS** | Structure without people | `A Blok`, units A-1 to A-7 with tariffs, no owner, no occupant, no period |
-| **F2 RESIDENTS_NO_PERIOD** | People without billing | F1 plus the owners and occupants of the table above. No period exists |
+| **F2 RESIDENTS_NO_PERIOD** | People without billing | F1 plus the owners and occupants of the table above, each with an activated resident account and a permanent password (resident sign-in scenarios need it). No period exists |
 | **F3 PERIOD_NO_RESIDENTS** | Billing without people | F1 plus period `Ekim 2026` created and accrued while units had no owners and no occupants |
 | **F4 SINGLE_PERIOD** | One accrual | F2 plus `Ekim 2026` accrued. Only A-1 paid (on the due date). Debt: A-2 tenant 1600.00, A-3 owner 1600.00, A-4 owner 1600.00, A-5 tenant 1600.00, A-6 owner 2400.00. Outstanding total **8800.00** (principal 8250.00 + fee 550.00) |
 | **F5 MULTI_PERIOD** | Three accruals, mixed debt | F2 plus Eylül, Ekim, Kasım accrued. A-1 paid all on time: 0.00. A-2 paid Eylül only: 3122.50 (3000.00 + 122.50). A-3 owes Eylül only (single debt in a previous month): 1675.00. A-4 owes Kasım only (single debt in the current month): 1522.50. A-5 paid nothing: 4797.50 (4500.00 + 297.50). A-6 paid 8000.00 on 2026-09-01, so all three periods are covered and **1250.00 advance** remains. Outstanding total **11117.50** |
@@ -93,16 +93,24 @@ summary. Use the same close date and fee evaluation schedule when comparing to t
 ### 3.1 F6 narrative (the "residents added after accruals" case)
 
 Proration is on. Start with F2 except A-2 is vacant and A-5 remains tenant-occupied. Make
-no payments. Build in chronological order, using these local dates:
+no payments. Build in chronological order, using these local dates. Each accrual runs on the
+date of its step, after that step's occupancy change, so the accrual sees the final occupancy
+of the month. October and November are therefore accrued after their due dates; the due date
+and late fee of those shares follow Q9. F6 scenarios assert principal unless they cite Q9.
+A tenant session's end date is exclusive, so the incoming party pays the handover day.
 
 1. 2026-09-01: A-2 vacant, owner Ahmet. `Eylül 2026` accrued: Ahmet owes 1500.00 for A-2.
 2. 2026-10-11: tenant Selin Demir moves into A-2. `Ekim 2026` accrued: Ahmet owes 483.87 (10 days),
    Selin owes 1016.13 (21 days). Shares add up to 1500.00.
-3. 2026-11-05: A-4 sold, Ahmet Yılmaz to Gül Tanrıverdi (title deed transfer).
+3. 2026-11-05: A-4 sold, Ahmet Yılmaz to Gül Tanrıverdi (title deed transfer). Ahmet moves out
+   of A-4 and Gül moves in as owner-occupant on the same date.
 4. 2026-11-15: Selin moves out, tenant Mert Kılıç moves in. `Kasım 2026` accrued: Selin owes 700.00
-   (14 days), Mert owes 800.00 (16 days).
+   (14 days), Mert owes 800.00 (16 days). For A-4, Ahmet owes 200.00 (4 days) and Gül 1300.00
+   (26 days), subject to Q10.
 5. 2026-11-18: A-3 (vacant so far) gets tenant Oya Çelik with start residing date 2026-11-18.
-   `Kasım 2026` is re-split: Oya owes 650.00 (13 days), owner Burak 850.00 (17 days). Earlier periods are unchanged. This retroactive split is subject to Q4.
+   `Kasım 2026` already exists, so a split correction is requested and a second manager approves
+   it, as in SC-13-05-09. After approval Oya owes 650.00 (13 days) and owner Burak 850.00 (17 days).
+   Earlier periods are unchanged. This retroactive split is subject to Q4.
 
 ## 4. Ledger invariants (the reusable checkpoint)
 
@@ -153,7 +161,8 @@ and confirming the run is inactive. File 07 exercises these boundaries.
 
 `@EPIC-13 @STORY-13-xx` on the Feature, `@SC-13-xx-nn` on each Scenario, `@J-nn` journey id,
 `@state:F5` the start state, `@chain:<name>` stage of an interconnected chain, `@layer:gui` or
-`@layer:backend`, `@smoke @core @edge`, `@role_manager`, `@pending`, and `@decision` for scenarios
+`@layer:backend`, `@smoke @core @edge`, `@role_manager` or `@role_resident` (owner or tenant
+acting in the resident app), `@pending`, and `@decision` for scenarios
 whose expected behaviour needs a product answer first (section 8).
 
 Layer rule: GUI scenarios are few and cover what only a screen can show (empty states, the
@@ -166,7 +175,7 @@ Covered in files `03`, `04`, `05`:
 
 - Duplicate or zero-amount accrual, accrual with a due day the month does not have (31 in February).
 - Same-day move-out and move-in (handover day), move-in on day 1 and on the last day, leap February.
-- Tariff that does not divide evenly (333.33 split across a 30-day month): shares must add up exactly.
+- Tariff that does not divide evenly (1500.01 split 15/15, 1000.00 split in three): shares must add up exactly.
 - Payment of exactly the debt, one kuruş short, overpayment, zero and negative payment.
 - Same bank transaction id sent twice (idempotency), transfer to an unknown virtual IBAN, transfer
   that names a unit of another site.
@@ -194,6 +203,9 @@ Covered in files `03`, `04`, `05`:
 | Q6 | Is the 5% / 30-day late-fee rule the only one (no cap, no compounding)? | Yes, as in STORY-01-02 |
 | Q7 | Is deleting a site allowed in the API, or is teardown SQL only? | SQL only, test-support code, never an API |
 | Q8 | One site per journey costs a backend restart per SQL Arrange. Accept, or add a "reload state" endpoint behind the e2e flag? | Use an exclusive test stack when setup requires a restart. |
+| Q9 | A share created after the period due date (late accrual, catch-up, back-dated move-in, re-split): which due date does it get? | **Open.** Today each liability keeps its period's due date (SC-07-10-03), so a resident who moved in on 2026-11-18 owes a fee from 2026-11-10. Plan assumption: due date = max(period due date, responsibility start, share creation date). SC-13-01-14, SC-13-03-02, SC-13-03-17 |
+| Q10 | A sale in the middle of the month: is that month's operational liability split between seller and buyer by days? | **Open.** STORY-08-05 covers capital dues and the tenant only. Plan assumption: split by days like occupancy, with the seller up to the day before the effective date. SC-13-03-16 |
+| Q11 | A transfer to the unit's virtual IBAN with no payer identity, on a unit with several open debtors (F6 A-2): whose debt does it pay? | **Open.** Options: current occupant first, or the unit's oldest liability whatever the debtor. SC-13-04-15 |
 
 ## 9. Files
 
@@ -209,6 +221,7 @@ Covered in files `03`, `04`, `05`:
 | [08-screen-and-session-states.feature](08-screen-and-session-states.feature) | J-15: first login, loading, errors, retry, search, session expiry and stale forms |
 | [09-financial-state-transitions.feature](09-financial-state-transitions.feature) | J-16: targeting, partial and backdated payments, post-close changes, reconciliation and dual ledger |
 | [10-tenant-data-isolation.feature](10-tenant-data-isolation.feature) | J-17: cross-site reads, exports and mutations, private tenant statements and receipts, former occupants and session races |
+| [11-state-machines.feature](11-state-machines.feature) | J-18: every liability, period, reconciliation and unit occupancy status: entry, allowed commands and refused commands |
 
 ## 10. Coverage map
 
@@ -221,7 +234,7 @@ scenario as pending until its user-visible outcome or backend invariant runs in 
 | Session and permissions | Fresh provisioning, expiry, session switch, site and resident isolation (file 10) | EPIC-03, EPIC-06 and the five per-role journeys |
 | Screen data | Empty, populated, zero matches, loading, request failure, retry, stale action | GUI catalogue for remaining surfaces and resident offline cache |
 | People and units | Unowned, vacant, owner- and tenant-occupied, replacement, transfer and rollback | EPIC-04, EPIC-08 and EPIC-12 for invitation decisions, dependents and the full allowed-command matrix |
-| Billing and treasury | No period, open, settled and overdue liabilities, closed and reopened periods, payment states, dual ledger | EPIC-07 and EPIC-09 for individual commands and receipts, EPIC-10 for project and disbursement states |
+| Billing and treasury | Every `DebtStatus`, `DuesPeriodStatus` (including DRAFT) and `ReconciliationStatus` value (file 11), closed and reopened periods, payment reversal, dual ledger | EPIC-07 and EPIC-09 for individual commands and receipts, EPIC-10 for project and disbursement states |
 | Other manager workflows | Covered through their dedicated suites in an app-wide run | EPIC-02 for announcements and reminders; EPIC-11 for its finance workflows where available |
 | Test infrastructure | Partial setup, failure evidence, retry, parallel ownership, restart and crashed run | CI shard entry points and existing test report |
 
@@ -230,6 +243,6 @@ scenario as pending until its user-visible outcome or backend invariant runs in 
 1. Test support: controllable clock with deterministic scheduler ticks (Q1), `site_in_state()` fixture, `ledger_invariants()` helper, teardown finalizer (file 07 first).
 2. F0 to F3 (file 01), then the backend isolation cases that use the established fixtures (file 10).
 3. F4, F5 (file 02) and the payment rules (file 04), backend layer.
-4. F6 (file 03), then ledger transitions and corner cases (files 09 and 05).
+4. F6 (file 03) once Q9 and Q10 are answered, then the state machines, ledger transitions and corner cases (files 11, 09 and 05).
 5. Add the isolated GUI recovery and session cases (files 08 and 10), then the GUI chain (file 06).
 6. Move to `.specify/features/EPIC-13/`, run `feature_traceability.py check`, link the PR to the CI `e2e-test-report`.

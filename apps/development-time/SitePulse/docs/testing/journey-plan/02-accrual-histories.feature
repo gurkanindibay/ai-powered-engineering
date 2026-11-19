@@ -19,7 +19,7 @@ Feature: Accrual histories F4, F5 and F7
     And the debtors are tenant "Selin Demir" 1600.00, owner "Burak Şahin" 1600.00, owner "Ahmet Yılmaz" 1600.00, tenant "Deniz Arslan" 1600.00, owner "Elif Aydın" 2400.00
     And the ledger invariants hold
 
-  @SC-13-02-02 @J-07 @state:F4 @layer:gui @core @role_homeowner @pending
+  @SC-13-02-02 @J-07 @state:F4 @layer:gui @core @role_resident @pending
   Scenario: The resident sees exactly what the admin sees for the same unit
     Given the site is in state F4
     When tenant "Selin Demir" signs in
@@ -49,13 +49,14 @@ Feature: Accrual histories F4, F5 and F7
     Given the site is in state F5
     Then unit "A-3" has exactly one open liability: period "Eylül 2026", principal 1500.00, late fee 175.00
     And unit "A-3" has no open liability for "Ekim 2026" or "Kasım 2026"
-    And the admin aging report puts principal 1500.00 in the "61 days and more" bucket and shows 175.00 separately as late fee
+    And the admin aging report puts principal 1500.00 in bucket "60+" (field `overdue_60_plus_days`) and shows 175.00 separately as late fee
+    And the resident statement of "A-3" puts the same 1500.00 in bucket "61-90"
 
   @SC-13-02-06 @J-08 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: A single debt in the current month is the only one in the youngest bucket
     Given the site is in state F5
     Then unit "A-4" has exactly one open liability: period "Kasım 2026", principal 1500.00, late fee 22.50
-    And the admin aging report puts principal 1500.00 in the "1 to 30 days" bucket and shows 22.50 separately as late fee
+    And the admin aging report puts principal 1500.00 in bucket "1-30" and shows 22.50 separately as late fee
 
   @SC-13-02-07 @J-08 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: Multiple debts across periods are listed oldest first with a fee each

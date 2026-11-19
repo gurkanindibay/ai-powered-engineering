@@ -67,7 +67,8 @@ Feature: Paying, allocation and advance across periods
     When the bank webhook sends 1675.00 with transaction id "TX-001" to the virtual IBAN of unit "A-3"
     And the bank webhook sends the same transaction "TX-001" again
     Then the payment stream lists "TX-001" once
-    And unit "A-3" holds an advance of 0.00
+    And the second delivery is acknowledged as already processed, not as an error the bank retries
+    And unit "A-3" owes 0.00 and holds an advance of 0.00
 
   @SC-13-04-08 @J-11 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: Two transfers for one unit at the same moment are both applied
@@ -86,16 +87,19 @@ Feature: Paying, allocation and advance across periods
 
   @SC-13-04-10 @J-11 @layer:backend @edge @role_manager @pending
   Scenario Outline: The grace boundary decides whether a late fee is charged
-    Given the site has a grace period of 5 days and the clock is frozen at "<paid_on>"
-    And unit "A-5" has a 1500.00 liability due "2026-11-10"
-    When the manager records a manual payment of 1500.00 for unit "A-5" dated "<paid_on>"
+    Given the site has a grace period of <grace> days and the clock is set to "<paid_on>"
+    And a unit has a single 1500.00 liability due "2026-11-10" and nothing else
+    When the manager records a manual payment of 1500.00 for that unit dated "<paid_on>"
     Then <fee> of the payment clears the accrued fee and <remaining> principal remains open
 
+    # After grace the fee runs from the due date, not from the end of grace (SC-07-10-06).
     Examples:
-      | paid_on    | fee   | remaining |
-      | 2026-11-10 | 0.00  | 0.00      |
-      | 2026-11-15 | 0.00  | 0.00      |
-      | 2026-11-16 | 15.00 | 15.00     |
+      | grace | paid_on    | fee   | remaining |
+      | 0     | 2026-11-10 | 0.00  | 0.00      |
+      | 0     | 2026-11-11 | 2.50  | 2.50      |
+      | 5     | 2026-11-10 | 0.00  | 0.00      |
+      | 5     | 2026-11-15 | 0.00  | 0.00      |
+      | 5     | 2026-11-16 | 15.00 | 15.00     |
 
   @SC-13-04-11 @J-11 @state:F2 @layer:backend @core @role_manager @pending
   Scenario: A correction after a partial payment moves the paid amount to the advance
@@ -115,7 +119,7 @@ Feature: Paying, allocation and advance across periods
     Then the approval is refused
     And the liability is unchanged
 
-  @SC-13-04-13 @J-11 @state:F5 @layer:gui @core @role_homeowner @pending
+  @SC-13-04-13 @J-11 @state:F5 @layer:gui @core @role_resident @pending
   Scenario: A resident's confirmed payment appears in their statement and the admin view
     Given the site is in state F5
     When a bank webhook confirms a transfer of 1675.00 for tenant "Deniz Arslan"
@@ -124,3 +128,30 @@ Feature: Paying, allocation and advance across periods
     And the admin collection page total outstanding drops by 1675.00
     And a receipt exists for the payment
     And the ledger invariants hold
+
+  @SC-13-04-14 @J-11 @state:F5 @layer:backend @core @role_manager @pending
+  Scenario: A payment reversal restores the debt it settled and the fee it stopped
+    Given the site is in state F5
+    And the manager recorded a manual payment of 1675.00 for unit "A-3" on "2026-11-19"
+    When a staff user reverses that payment with reason "bounced transfer"
+    Then unit "A-3" owes 1675.00 again with its "Eylül 2026" liability open
+    And the late fee keeps running from the original due date
+    And the receipt is marked reversed and the reversal records the operator and the reason
+    And a second reversal of the same payment is refused and changes nothing
+    And the ledger invariants hold
+
+  @SC-13-04-15 @J-11 @state:F6 @decision @layer:backend @core @role_manager @pending
+  Scenario: A unit-level transfer on a unit with several debtors pays the right person
+    Given the site is in state F6
+    And unit "A-2" has open shares for "Ahmet Yılmaz", "Selin Demir" and "Mert Kılıç"
+    When the bank webhook sends 800.00 to the virtual IBAN of unit "A-2" with no payer identity
+    Then the allocation follows decision Q11
+    And no share of another debtor is reduced unless Q11 allows it
+    And the ledger invariants hold
+
+  @SC-13-04-16 @J-11 @state:F5 @layer:backend @edge @role_manager @pending
+  Scenario: A payment for a unit with no debt becomes the payer's advance
+    Given the site is in state F5
+    When the manager records a manual payment of 500.00 for unit "A-1"
+    Then unit "A-1" owes 0.00 and "Ayşe Kaya" holds an advance of 500.00 on "A-1"
+    And a receipt exists that shows the amount as an advance

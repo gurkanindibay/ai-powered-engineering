@@ -104,18 +104,20 @@ Feature: Site admin starting points F0 to F3
   @SC-13-01-14 @J-04 @state:F3 @decision @layer:backend @edge @role_manager @pending
   Scenario: A back-dated start residing date creates the charge for an already accrued period
     Given the site is in state F3
-    When the manager assigns "Selin Demir" as owner and primary resident of unit "A-2" effective "2026-10-11"
-    Then period "Ekim 2026" now holds a liability of 1016.13 for "Selin Demir", which is 21 of 31 days
+    When the manager assigns "Burak Şahin" as owner and primary resident of unit "A-3" effective "2026-10-11"
+    Then period "Ekim 2026" now holds a liability of 1016.13 for "Burak Şahin", which is 21 of 31 days
     And the days before 2026-10-11 are charged to nobody because the unit had no responsible party
+    And the new liability's due date and first late-fee day follow decision Q9, not the period due date "2026-10-10"
     And the ledger invariants hold
 
   @SC-13-01-11 @J-04 @state:F3 @layer:gui @edge @role_manager @pending
   Scenario: Accruing the same period again after residents arrive is blocked, not doubled
     Given the site is in state F3
-    And owners and tenants are added as in state F2
+    And the owners and tenants of state F2 are added with start residing date "2026-11-01"
     When the manager accrues period "Ekim 2026" again
     Then the duplicate is rejected with the duplicate-prevention message
-    And the retry creates no additional liability beyond the activity recorded before the retry
+    And period "Ekim 2026" still has 0 liabilities
+    And no unit gains an "Ekim 2026" charge from the residents added after it
     And the ledger invariants hold
 
   # ------------------------------------------------- navigation across states

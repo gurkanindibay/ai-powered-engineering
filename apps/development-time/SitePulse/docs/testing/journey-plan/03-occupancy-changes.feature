@@ -17,14 +17,14 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the two shares add up to 1500.00
     And the "Eylül 2026" principal of 1500.00 for "A-2" is assigned to "Ahmet Yılmaz"
 
-  @SC-13-03-02 @J-10 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-03-02 @J-10 @state:F6 @decision @layer:backend @core @role_manager @pending
   Scenario: A tenant replaced mid-month leaves the old debt with the old tenant
     Given the site is in state F6
     Then the "Kasım 2026" principal shares for "A-2" are "Selin Demir" 700.00 and "Mert Kılıç" 800.00
-    And "Selin Demir" still owes her "Ekim 2026" share of 1016.13 plus its late fee
+    And "Selin Demir" still owes her "Ekim 2026" share of 1016.13 plus its late fee, counted from the due date that decision Q9 sets
     And "Mert Kılıç" owes nothing for "Eylül 2026" or "Ekim 2026"
 
-  @SC-13-03-03 @J-10 @state:F6 @layer:gui @core @role_homeowner @pending
+  @SC-13-03-03 @J-10 @state:F6 @layer:gui @core @role_resident @pending
   Scenario: A former tenant still sees their own debt and the new tenant sees only theirs
     Given the site is in state F6
     When "Selin Demir" signs in
@@ -68,7 +68,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the clock has advanced to the effective date of the handover
     When tenant "Mert Kılıç" moves out of "A-2" and tenant "Nil Acar" moves in on the same day "2026-12-12"
     And the manager accrues period "Aralık 2026" due "2026-12-10"
-    Then "Mert Kılıç" owes for the days 1 to 11 and "Nil Acar" for the days 12 to 31
+    Then "Mert Kılıç" owes 532.26 for the days 1 to 11 and "Nil Acar" owes 967.74 for the days 12 to 31
     And the two shares add up to 1500.00
     And no day is charged to two debtors and no day to none
 
@@ -89,10 +89,19 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | Şubat 2027    | 2027-02-15 | 750.00      | 750.00       |
 
   @SC-13-03-09 @J-10 @layer:backend @edge @role_manager @pending
-  Scenario: A tariff that does not divide evenly never loses a kuruş
-    Given unit "A-3" has a monthly tariff of 333.33 and a tenant moving in on "2026-11-11"
+  Scenario Outline: A tariff that does not divide evenly never gains or loses a kuruş
+    Given unit "A-3" is owned and vacant on "2026-11-01" with monthly tariff <tariff>
+    And the occupancy of "Kasım 2026" is <segments>
     When the manager accrues period "Kasım 2026"
-    Then the owner share plus the tenant share equals exactly 333.33
+    Then the shares in day order are <shares>
+    And the shares add up to exactly <tariff>, with the rounding remainder on the last share
+
+    # Naive per-share rounding gives 1500.02 and 999.99. The remainder rule in
+    # domain/occupancy_proration.rs must give back the tariff exactly.
+    Examples:
+      | tariff  | segments                                              | shares                   |
+      | 1500.01 | owner days 1-15, tenant days 16-30                    | 750.01, 750.00           |
+      | 1000.00 | owner days 1-10, tenant 1 days 11-20, tenant 2 days 21-30 | 333.33, 333.33, 333.34 |
 
   @SC-13-03-10 @J-10 @state:F6 @layer:backend @edge @role_manager @pending
   Scenario: One person who owns one unit and rents another is billed in each role
@@ -102,20 +111,19 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And replaces the tenant of "A-5" with "Ahmet Yılmaz" on the same effective date
     And accrues period "Aralık 2026"
     Then "Ahmet Yılmaz" owes operational dues for "A-2" as owner and for "A-5" as tenant
-    And his dashboard lists both liabilities with their unit and role
+    And his resident statement API lists both liabilities with their unit and role
     And the people directory shows one person "Ahmet Yılmaz", not two
 
   @SC-13-03-11 @J-10 @state:F6 @layer:backend @edge @role_manager @pending
   Scenario: The same national id entered twice does not create a second person
     Given the site is in state F6
     When the manager moves in a tenant with the national id of "Mert Kılıç" under a different spelling of the name
-    Then the existing person is offered for selection instead of creating a duplicate
+    Then the API returns the existing person as a match instead of creating a duplicate
     And the people directory still lists one "Mert Kılıç"
 
   @SC-13-03-12 @J-10 @state:F6 @layer:backend @core @role_manager @pending
   Scenario: Owner moves in after the tenant leaves and takes the operational dues back
     Given the site is in state F6
-    And the clock has advanced to the effective date of the handover
     And the clock has advanced to "2026-12-01"
     When tenant "Mert Kılıç" moves out of "A-2" and owner "Ahmet Yılmaz" moves in on "2026-12-01"
     And the manager accrues period "Aralık 2026"
@@ -150,3 +158,26 @@ Feature: Residents and owners change after periods were accrued (state F6)
     When the manager accrues November
     Then the unit's owner is charged 750.00 principal for 15 days
     And the ledger invariants hold
+
+  @SC-13-03-16 @J-10 @state:F6 @decision @layer:backend @core @role_manager @pending
+  Scenario: A mid-month sale of an owner-occupied unit splits that month between seller and buyer
+    Given the site is in state F6
+    Then the "Kasım 2026" operational principal of "A-4" is 200.00 for "Ahmet Yılmaz" (days 1 to 4)
+    And 1300.00 for "Gül Tanrıverdi" (days 5 to 30)
+    And the two shares add up to 1500.00
+    And "Ahmet Yılmaz" has no active occupancy of "A-4" after "2026-11-05"
+
+  @SC-13-03-17 @J-10 @decision @layer:backend @edge @role_manager @pending
+  Scenario Outline: A share whose responsibility starts after the period due date is not late before it existed
+    Given unit "A-3" is owned and vacant with tariff 1500.00 and the period "Kasım 2026" is due "2026-11-10"
+    And a tenant's responsibility for "Kasım 2026" starts on "<start>" and the share is created on "<created>"
+    When the late fee is evaluated on "2026-11-19"
+    Then the tenant share is <share> due on "<share_due>" and its late fee is <fee>
+
+    # Assumption for Q9: due date = max(period due date, responsibility start, share creation date).
+    # Today the share would keep "2026-11-10" (SC-07-10-03) and owe a fee for days before it existed.
+    Examples:
+      | start      | created    | share   | share_due  | fee   |
+      | 2026-11-05 | 2026-11-05 | 1300.00 | 2026-11-10 | 19.50 |
+      | 2026-11-15 | 2026-11-15 | 800.00  | 2026-11-15 | 5.33  |
+      | 2026-11-18 | 2026-11-18 | 650.00  | 2026-11-18 | 1.08  |

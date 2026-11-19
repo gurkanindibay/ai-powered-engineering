@@ -50,9 +50,9 @@ Feature: Journey setup, teardown and isolation
 
   @SC-13-07-06 @J-14 @layer:backend @core @pending
   Scenario: Two journeys in parallel do not see each other's data
-    Given a site "e2e-par-a" in state F5 and a site "e2e-par-b" in state F4 running at the same time
+    Given site P1 in state F5 and site P2 in state F4 are built by two attempts at the same time
     When each manager reads the collection dashboard
-    Then "e2e-par-a" shows 11117.50 and "e2e-par-b" shows 8800.00
+    Then site P1 shows 11117.50 and site P2 shows 8800.00
     And neither list contains a unit, person or payment of the other
 
   @SC-13-07-07 @J-14 @layer:backend @core @pending

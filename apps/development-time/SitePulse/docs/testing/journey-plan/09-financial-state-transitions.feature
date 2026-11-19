@@ -73,15 +73,19 @@ Feature: Financial transitions that cross periods or ledgers
   @SC-13-09-09 @J-16 @layer:backend @edge @role_manager @pending
   Scenario Outline: The aging bucket changes at each day boundary
     Given a unit has one unpaid liability with principal 1500.00 and grace days 0
-    When the admin aging report is read <days> local calendar days after the due date
-    Then bucket "<bucket>" contains principal 1500.00 and all other buckets are zero
-    And the report shows fee <fee> separately
+    When the admin aging report and the resident statement are read <days> local calendar days after the due date
+    Then admin bucket "<admin_bucket>" contains principal 1500.00 and all other admin buckets are zero
+    And statement bucket "<statement_bucket>" contains principal 1500.00 and all other statement buckets are zero
+    And both show fee <fee> separately
 
+    # The admin report ends at 60+; the resident statement splits 61-90 and 90+.
     Examples:
-      | days | bucket  | fee    |
-      | 0    | current | 0.00   |
-      | 1    | 1-30    | 2.50   |
-      | 30   | 1-30    | 75.00  |
-      | 31   | 31-60   | 77.50  |
-      | 60   | 31-60   | 150.00 |
-      | 61   | 61+     | 152.50 |
+      | days | admin_bucket | statement_bucket | fee    |
+      | 0    | current      | current          | 0.00   |
+      | 1    | 1-30         | 1-30             | 2.50   |
+      | 30   | 1-30         | 1-30             | 75.00  |
+      | 31   | 31-60        | 31-60            | 77.50  |
+      | 60   | 31-60        | 31-60            | 150.00 |
+      | 61   | 60+          | 61-90            | 152.50 |
+      | 90   | 60+          | 61-90            | 225.00 |
+      | 91   | 60+          | 90+              | 227.50 |
