@@ -1,32 +1,32 @@
 {
  "schema": 1,
- "generated_at": "2026-11-19T17:21:19Z",
- "run_id": "20261119T172119Z-d6716cd",
- "commit": "d6716cda5e40ed10d8916fa95616dfebb6750a8e",
+ "generated_at": "2026-11-19T17:58:54Z",
+ "run_id": "20261119T175853Z-7bfc1fd",
+ "commit": "7bfc1fd9b4aa83efe6d457c72f827e48dbb0abe3",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 121,
+  "tests": 123,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 120,
-  "seconds": 2083.8,
+  "passed": 122,
+  "seconds": 2023.3,
   "files": 8,
   "unparseable": []
  },
  "totals": {
   "stories": 100,
   "stories_with_scenarios": 100,
-  "stories_passing": 27,
+  "stories_passing": 33,
   "scenarios": 300,
-  "automated": 275,
-  "passing": 106,
+  "automated": 289,
+  "passing": 113,
   "failing": 0,
-  "no_result": 169,
-  "planned": 25,
+  "no_result": 176,
+  "planned": 11,
   "epics": 12,
-  "epics_verified": 0,
+  "epics_verified": 2,
   "epics_failing": 0
  },
  "epics": [
@@ -35,14 +35,14 @@
    "title": "Resident Dues Management & Financial Transparency",
    "stories": 6,
    "stories_with_scenarios": 6,
-   "stories_passing": 5,
+   "stories_passing": 6,
    "scenarios": 9,
    "automated": 9,
-   "passing": 8,
+   "passing": 9,
    "failing": 0,
-   "no_result": 1,
+   "no_result": 0,
    "planned": 0,
-   "health": "in_progress"
+   "health": "verified"
   },
   {
    "id": "EPIC-02",
@@ -63,13 +63,13 @@
    "title": "SaaS Multi-Tenancy & Autonomous Site Onboarding",
    "stories": 7,
    "stories_with_scenarios": 7,
-   "stories_passing": 4,
+   "stories_passing": 5,
    "scenarios": 13,
-   "automated": 9,
-   "passing": 9,
+   "automated": 12,
+   "passing": 10,
    "failing": 0,
-   "no_result": 0,
-   "planned": 4,
+   "no_result": 2,
+   "planned": 1,
    "health": "in_progress"
   },
   {
@@ -77,14 +77,14 @@
    "title": "Digital Resident Self-Registration & Approval Queue",
    "stories": 7,
    "stories_with_scenarios": 7,
-   "stories_passing": 4,
+   "stories_passing": 7,
    "scenarios": 10,
-   "automated": 7,
-   "passing": 7,
+   "automated": 10,
+   "passing": 10,
    "failing": 0,
    "no_result": 0,
-   "planned": 3,
-   "health": "in_progress"
+   "planned": 0,
+   "health": "verified"
   },
   {
    "id": "EPIC-05",
@@ -93,11 +93,11 @@
    "stories_with_scenarios": 6,
    "stories_passing": 0,
    "scenarios": 6,
-   "automated": 1,
+   "automated": 3,
    "passing": 0,
    "failing": 0,
-   "no_result": 1,
-   "planned": 5,
+   "no_result": 3,
+   "planned": 3,
    "health": "in_progress"
   },
   {
@@ -107,11 +107,11 @@
    "stories_with_scenarios": 6,
    "stories_passing": 1,
    "scenarios": 24,
-   "automated": 19,
+   "automated": 22,
    "passing": 17,
    "failing": 0,
-   "no_result": 2,
-   "planned": 5,
+   "no_result": 5,
+   "planned": 2,
    "health": "in_progress"
   },
   {
@@ -121,11 +121,11 @@
    "stories_with_scenarios": 13,
    "stories_passing": 1,
    "scenarios": 53,
-   "automated": 52,
-   "passing": 12,
+   "automated": 53,
+   "passing": 13,
    "failing": 0,
    "no_result": 40,
-   "planned": 1,
+   "planned": 0,
    "health": "in_progress"
   },
   {
@@ -161,13 +161,13 @@
    "title": "Capital Expenditure & Fixture Dues Management (Demirba\u015f & Yat\u0131r\u0131m Projeleri)",
    "stories": 7,
    "stories_with_scenarios": 7,
-   "stories_passing": 4,
+   "stories_passing": 5,
    "scenarios": 15,
-   "automated": 11,
-   "passing": 11,
+   "automated": 13,
+   "passing": 12,
    "failing": 0,
-   "no_result": 0,
-   "planned": 4,
+   "no_result": 1,
+   "planned": 2,
    "health": "in_progress"
   },
   {
@@ -201,7 +201,7 @@
  ],
  "scenarios": {
   "SC-01-01-01": {
-   "state": "no_result",
+   "state": "passing",
    "name": "Preserve kurus-level precision in dues calculation",
    "epic": "EPIC-01",
    "story": "STORY-01-01"
@@ -399,13 +399,13 @@
    "story": "STORY-03-04"
   },
   "SC-03-04-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Duplicate admin email is rejected",
    "epic": "EPIC-03",
    "story": "STORY-03-04"
   },
   "SC-03-05-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "REST endpoint returns 201 Created on valid site onboarding",
    "epic": "EPIC-03",
    "story": "STORY-03-05"
@@ -429,7 +429,7 @@
    "story": "STORY-03-07"
   },
   "SC-03-07-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "Password renewal fails for non-existent site",
    "epic": "EPIC-03",
    "story": "STORY-03-07"
@@ -447,13 +447,13 @@
    "story": "STORY-04-02"
   },
   "SC-04-02-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "Empty approval queue shows an empty state",
    "epic": "EPIC-04",
    "story": "STORY-04-02"
   },
   "SC-04-03-01": {
-   "state": "planned",
+   "state": "passing",
    "name": "Home owner submits online registration",
    "epic": "EPIC-04",
    "story": "STORY-04-03"
@@ -489,7 +489,7 @@
    "story": "STORY-04-07"
   },
   "SC-04-07-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "Co-resident registers with unit-scoped permissions",
    "epic": "EPIC-04",
    "story": "STORY-04-07"
@@ -507,13 +507,13 @@
    "story": "STORY-05-02"
   },
   "SC-05-03-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "REST endpoint provides real-time calculated dues",
    "epic": "EPIC-05",
    "story": "STORY-05-03"
   },
   "SC-05-04-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Verification gate rejects floating-point rounding leaks",
    "epic": "EPIC-05",
    "story": "STORY-05-04"
@@ -537,7 +537,7 @@
    "story": "STORY-06-01"
   },
   "SC-06-02-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "User registers and authenticates with password",
    "epic": "EPIC-06",
    "story": "STORY-06-02"
@@ -573,7 +573,7 @@
    "story": "STORY-06-02"
   },
   "SC-06-03-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Sign in with Google links existing account",
    "epic": "EPIC-06",
    "story": "STORY-06-03"
@@ -669,7 +669,7 @@
    "story": "STORY-06-06"
   },
   "SC-06-06-06": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Server blocks operations before the password is changed",
    "epic": "EPIC-06",
    "story": "STORY-06-06"
@@ -711,7 +711,7 @@
    "story": "STORY-07-02"
   },
   "SC-07-02-05": {
-   "state": "planned",
+   "state": "passing",
    "name": "A stored payer-name alias auto-matches a re-uploaded row",
    "epic": "EPIC-07",
    "story": "STORY-07-02"
@@ -1503,7 +1503,7 @@
    "story": "STORY-10-04"
   },
   "SC-10-04-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "Virman transfer clears a capital due from the advance balance",
    "epic": "EPIC-10",
    "story": "STORY-10-04"
@@ -1521,7 +1521,7 @@
    "story": "STORY-10-05"
   },
   "SC-10-05-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Disbursement carries its invoice number and warns when overdrawn",
    "epic": "EPIC-10",
    "story": "STORY-10-05"
@@ -2160,10 +2160,23 @@
    "stories": 100,
    "stories_with_scenarios": 100,
    "scenarios": 300,
-   "automated": 275
+   "automated": 289
   }
  ],
  "recent_changes": [
+  {
+   "date": "2026-11-19",
+   "epic": "EPIC-10",
+   "title": "Capital Expenditure & Fixture Dues Management (Demirba\u015f & Yat\u0131r\u0131m Projeleri)",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 2,
+   "items": 2,
+   "samples": [
+    "SC-10-04-02: Virman transfer clears a capital due from the advance balance",
+    "SC-10-05-03: Disbursement carries its invoice number and warns when overdrawn"
+   ]
+  },
   {
    "date": "2026-11-19",
    "epic": "EPIC-09",
@@ -2200,13 +2213,68 @@
    "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
    "new_stories": 0,
    "new_scenarios": 4,
-   "newly_automated": 19,
-   "items": 19,
+   "newly_automated": 20,
+   "items": 20,
    "samples": [
+    "SC-07-02-05: A stored payer-name alias auto-matches a re-uploaded row",
     "SC-07-09-01: A mid-month move-in splits the month between owner and tenant",
     "SC-07-09-02: A unit created mid-month is charged from its creation date",
-    "SC-07-09-03: A move-out recorded after accrual re-splits the open liability",
-    "SC-07-09-04: With proration switched off the occupant on the accrual date owes the whole month"
+    "SC-07-09-03: A move-out recorded after accrual re-splits the open liability"
+   ]
+  },
+  {
+   "date": "2026-11-19",
+   "epic": "EPIC-06",
+   "title": "Identity, Authentication & Scoped Permission Model",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 3,
+   "items": 3,
+   "samples": [
+    "SC-06-02-01: User registers and authenticates with password",
+    "SC-06-03-01: Sign in with Google links existing account",
+    "SC-06-06-06: Server blocks operations before the password is changed"
+   ]
+  },
+  {
+   "date": "2026-11-19",
+   "epic": "EPIC-05",
+   "title": "Backend Persistence, REST APIs & Verification Harness",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 2,
+   "items": 2,
+   "samples": [
+    "SC-05-03-01: REST endpoint provides real-time calculated dues",
+    "SC-05-04-01: Verification gate rejects floating-point rounding leaks"
+   ]
+  },
+  {
+   "date": "2026-11-19",
+   "epic": "EPIC-04",
+   "title": "Digital Resident Self-Registration & Approval Queue",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 3,
+   "items": 3,
+   "samples": [
+    "SC-04-02-02: Empty approval queue shows an empty state",
+    "SC-04-03-01: Home owner submits online registration",
+    "SC-04-07-02: Co-resident registers with unit-scoped permissions"
+   ]
+  },
+  {
+   "date": "2026-11-19",
+   "epic": "EPIC-03",
+   "title": "SaaS Multi-Tenancy & Autonomous Site Onboarding",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 3,
+   "items": 3,
+   "samples": [
+    "SC-03-04-04: Duplicate admin email is rejected",
+    "SC-03-05-01: REST endpoint returns 201 Created on valid site onboarding",
+    "SC-03-07-02: Password renewal fails for non-existent site"
    ]
   },
   {
@@ -2742,5 +2810,5 @@
    ]
   }
  ],
- "href": "reports/44575022455-1/"
+ "href": "reports/44581407853-1/"
 }
