@@ -502,7 +502,11 @@ impl PaymentTrackingService {
         } else {
             payer_role
         };
-        let credit_debtor = payer_role.as_str().to_string();
+        let credit_debtor = if on_behalf_of_tenant {
+            DebtorType::Owner.as_str().to_string()
+        } else {
+            settling_role.as_str().to_string()
+        };
         let (unit, owner_name, tenant_name, eligible_joint_due_ids) = {
             let inner = self.state.inner.read().await;
             if let Some(key) = idempotency_key.as_deref() {

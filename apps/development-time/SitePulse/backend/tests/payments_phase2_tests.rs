@@ -570,6 +570,7 @@ async fn when_a_card_payment_is_captured_then_it_is_recorded_once_through_the_in
 }
 
 #[tokio::test]
+// Backend coverage: SC-13-05-17 owner payment allocation through the card capture path.
 async fn when_an_owner_card_payment_targets_a_joint_tenant_balance_then_only_that_debt_is_paid() {
     let state = owner_owing("100.00").await;
     let owner_person_id;
@@ -826,6 +827,7 @@ async fn when_a_statement_is_built_then_items_are_aged_and_each_debtor_sees_only
 }
 
 #[tokio::test]
+// Backend coverage: SC-13-05-06 (tenant debt remains singular) and SC-13-05-17 (owner sees joint balance without tenant receipts).
 async fn when_a_tenant_liability_has_an_owner_link_then_owner_sees_only_its_joint_balance() {
     let state = site_with_two_units().await;
     let today = today();
@@ -882,6 +884,7 @@ async fn when_a_tenant_liability_has_an_owner_link_then_owner_sees_only_its_join
 }
 
 #[tokio::test]
+// Backend coverage: SC-13-05-17 (owner payment, payer/debtor receipt identities, and owner statement balance).
 async fn when_an_owner_pays_a_linked_tenant_liability_then_the_receipt_names_payer_and_debtor() {
     let state = site_with_two_units().await;
     let tenant_person_id = 9999;

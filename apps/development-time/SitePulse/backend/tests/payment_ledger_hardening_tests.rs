@@ -274,6 +274,33 @@ async fn when_manager_explicitly_designates_tenant_payment_for_owner_capital_due
     );
 }
 
+#[tokio::test]
+async fn when_tenant_overpays_owner_capital_dues_then_surplus_stays_in_owner_advance() {
+    let state = tenanted_state_with(vec![liability(
+        "cap-1",
+        "Asansör Revizyonu",
+        "3000.00",
+        today() + Days::new(5),
+        "OWNER",
+        "CAPITAL_DUES",
+    )])
+    .await;
+    let mut req = payment("3500.00", "TENANT", "Canan Kaya");
+    req.settles_owner_capital_dues = true;
+
+    let receipt = PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(req)
+        .await
+        .unwrap();
+
+    assert_eq!(receipt.payer_role, DebtorType::Tenant);
+    assert_eq!(receipt.on_behalf_of_role, Some(DebtorType::Owner));
+    assert_eq!(receipt.allocated_advance, d("500.00"));
+    let inner = state.inner.read().await;
+    assert_eq!(inner.advance_of(UNIT, "OWNER"), d("500.00"));
+    assert_eq!(inner.advance_of(UNIT, "TENANT"), Decimal::ZERO);
+}
+
 // covers: SC-09-02-02
 #[tokio::test]
 async fn when_owner_pays_operational_due_is_settled_before_capital_due() {
