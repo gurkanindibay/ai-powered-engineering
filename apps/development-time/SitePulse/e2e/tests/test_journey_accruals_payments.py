@@ -230,6 +230,7 @@ def test_one_kurus_short_leaves_one_kurus_open(request, api, actors, stack):
         u5 = fixture.unit_ids[4]  # A-5
 
         api.record_manual_payment(fixture.manager, u5, Decimal("4797.49"), "Deniz Arslan", payer_role="TENANT")
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-04-03")
 
         stmt = api.resident_statement(fixture.manager, u5)
         debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "TENANT")
@@ -258,6 +259,7 @@ def test_overpayment_becomes_advance_offsetting_next_accrual(request, api, actor
         u5 = fixture.unit_ids[4]  # A-5
 
         api.record_manual_payment(fixture.manager, u5, Decimal("5000.00"), "Deniz Arslan", payer_role="TENANT")
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-04-04-payment")
 
         stmt = api.resident_statement(fixture.manager, u5)
         debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "TENANT")
@@ -309,6 +311,7 @@ def test_invalid_payment_amounts_rejected(request, api, actors, stack):
 
         current_receipts = stack.sql(f"SELECT COUNT(*) FROM payment_receipts WHERE site_id = {int(fixture.site_id)};")
         assert current_receipts == initial_receipts
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-04-05-rejected-payments")
 
         stmt = api.resident_statement(fixture.manager, u5)
         debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "TENANT")
@@ -335,6 +338,7 @@ def test_bank_webhook_matches_transfer_and_allocates(request, api, actors, stack
 
         viban = make_viban("00205", fixture.site_id, "A", 3)
         api.webhook_transfer(viban, Decimal("1675.00"), "TX-001")
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-04-06")
 
         stmt = api.resident_statement(fixture.manager, u3)
         debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "OWNER")
