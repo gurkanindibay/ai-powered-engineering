@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-19T17:58:54Z",
- "run_id": "20261119T175853Z-7bfc1fd",
- "commit": "7bfc1fd9b4aa83efe6d457c72f827e48dbb0abe3",
+ "generated_at": "2026-11-19T18:17:10Z",
+ "run_id": "20261119T181709Z-b896e4d",
+ "commit": "b896e4de5c932d2ebf6a03a6ece2c368548c1b8f",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 122,
-  "seconds": 2023.3,
+  "seconds": 2099.2,
   "files": 8,
   "unparseable": []
  },
@@ -19,11 +19,11 @@
   "stories": 100,
   "stories_with_scenarios": 100,
   "stories_passing": 33,
-  "scenarios": 300,
-  "automated": 289,
+  "scenarios": 302,
+  "automated": 291,
   "passing": 113,
   "failing": 0,
-  "no_result": 176,
+  "no_result": 178,
   "planned": 11,
   "epics": 12,
   "epics_verified": 2,
@@ -120,11 +120,11 @@
    "stories": 13,
    "stories_with_scenarios": 13,
    "stories_passing": 1,
-   "scenarios": 53,
-   "automated": 53,
+   "scenarios": 55,
+   "automated": 55,
    "passing": 13,
    "failing": 0,
-   "no_result": 40,
+   "no_result": 42,
    "planned": 0,
    "health": "in_progress"
   },
@@ -725,6 +725,18 @@
   "SC-07-03-02": {
    "state": "no_result",
    "name": "A statement row containing the virtual IBAN matches the flat with full confidence",
+   "epic": "EPIC-07",
+   "story": "STORY-07-03"
+  },
+  "SC-07-03-03": {
+   "state": "no_result",
+   "name": "A transfer to a unit with several open debtors waits for the manager",
+   "epic": "EPIC-07",
+   "story": "STORY-07-03"
+  },
+  "SC-07-03-04": {
+   "state": "no_result",
+   "name": "A repeated delivery of a held transfer adds no queue item",
    "epic": "EPIC-07",
    "story": "STORY-07-03"
   },
@@ -2159,8 +2171,8 @@
    "epics": 12,
    "stories": 100,
    "stories_with_scenarios": 100,
-   "scenarios": 300,
-   "automated": 289
+   "scenarios": 302,
+   "automated": 291
   }
  ],
  "recent_changes": [
@@ -2212,14 +2224,14 @@
    "epic": "EPIC-07",
    "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
    "new_stories": 0,
-   "new_scenarios": 4,
-   "newly_automated": 20,
-   "items": 20,
+   "new_scenarios": 6,
+   "newly_automated": 22,
+   "items": 22,
    "samples": [
     "SC-07-02-05: A stored payer-name alias auto-matches a re-uploaded row",
-    "SC-07-09-01: A mid-month move-in splits the month between owner and tenant",
-    "SC-07-09-02: A unit created mid-month is charged from its creation date",
-    "SC-07-09-03: A move-out recorded after accrual re-splits the open liability"
+    "SC-07-03-03: A transfer to a unit with several open debtors waits for the manager",
+    "SC-07-03-04: A repeated delivery of a held transfer adds no queue item",
+    "SC-07-09-01: A mid-month move-in splits the month between owner and tenant"
    ]
   },
   {
@@ -2810,5 +2822,5 @@
    ]
   }
  ],
- "href": "reports/44581407853-1/"
+ "href": "reports/44584115209-1/"
 }
