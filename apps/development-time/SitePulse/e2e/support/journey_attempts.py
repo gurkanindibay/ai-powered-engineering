@@ -427,8 +427,8 @@ def _build_f5(stack: E2EStack, site_id: str | int, unit_ids: tuple[str, ...]) ->
         )
 
     statements.append(
-        f"INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, total_amount, payment_channel, allocated_principal, allocated_penalty, allocated_advance, verification_hash, issued_at) "
-        f"VALUES ({site}, {u6}, 'TAH-2026-000009', 9, 'Elif Aydın', 'OWNER', 8000.00, 'BANK_STATEMENT', 6750.00, 0.00, 1250.00, encode(sha256(('receipt-' || {site} || '-9')::bytea), 'hex'), TIMESTAMPTZ '2026-09-01 10:00:00+03'); "
+        f"INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, advance_debtor_type, total_amount, payment_channel, allocated_principal, allocated_penalty, allocated_advance, verification_hash, issued_at) "
+        f"VALUES ({site}, {u6}, 'TAH-2026-000009', 9, 'Elif Aydın', 'OWNER', 'OWNER', 8000.00, 'BANK_STATEMENT', 6750.00, 0.00, 1250.00, encode(sha256(('receipt-' || {site} || '-9')::bytea), 'hex'), TIMESTAMPTZ '2026-09-01 10:00:00+03'); "
         f"INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, payment_date, created_at) "
         f"SELECT {site}, {u6}, 'Elif Aydın', 'OWNER', r.id, 8000.00, 'BANK_STATEMENT', 'SETTLED', 'Eylül, Ekim, Kasım aidatı ve avans', TIMESTAMPTZ '2026-09-01 10:00:00+03', TIMESTAMPTZ '2026-09-01 10:00:00+03' "
         f"FROM payment_receipts r WHERE r.site_id = {site} AND r.sequence_number = 9; "
