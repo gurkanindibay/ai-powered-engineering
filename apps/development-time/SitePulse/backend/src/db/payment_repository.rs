@@ -412,8 +412,10 @@ pub async fn tx_insert_receipt(
                 issuer_name, issuer_address, issuer_tax_id, issuer_tax_office
             )
             SELECT $1, $2, $3, $4, $5, $6::text, $7, $8::text, $9, $10, $11, $12, $13, $14, $15::text::jsonb, $16, $17, $18, $19,
-                   (SELECT p.person_id FROM sp_unit_party_at($2, $6::text, ($19::timestamptz)::date) p),
-                   CASE WHEN $8::text = 'OWNER'
+                   CASE WHEN $20::text = 'REVERSAL' THEN $23::bigint
+                        ELSE (SELECT p.person_id FROM sp_unit_party_at($2, $6::text, ($19::timestamptz)::date) p) END,
+                   CASE WHEN $20::text = 'REVERSAL' THEN $24::bigint
+                        WHEN $8::text = 'OWNER'
                         THEN (SELECT p.person_id FROM sp_unit_party_at($2, 'OWNER', ($19::timestamptz)::date) p) END,
                    $20, $21, $22,
                    s.name, s.address, s.tax_id, s.tax_office
@@ -443,6 +445,8 @@ pub async fn tx_insert_receipt(
                 &receipt.receipt_type,
                 &receipt.reverses_receipt_id,
                 &receipt.advance_debtor_type,
+                &receipt.payer_person_id,
+                &receipt.on_behalf_of_person_id,
             ],
         )
         .await?;

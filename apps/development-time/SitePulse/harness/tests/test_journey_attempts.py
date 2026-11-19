@@ -11,7 +11,14 @@ E2E = Path(__file__).resolve().parents[2] / "e2e"
 sys.path.insert(0, str(E2E))
 
 from support.api import Api  # noqa: E402
-from support.journey_attempts import JourneyClock, JourneyManifest, teardown_sites, teardown_with_evidence  # noqa: E402
+from support.journey_attempts import (  # noqa: E402
+    JourneyClock,
+    JourneyFixturePending,
+    JourneyManifest,
+    site_in_state,
+    teardown_sites,
+    teardown_with_evidence,
+)
 
 
 class FakeStack:
@@ -21,6 +28,8 @@ class FakeStack:
 
     def sql(self, statement: str) -> str:
         self.statements.append(statement)
+        if "SELECT id FROM units" in statement:
+            return "1\n2\n3\n4\n5\n6\n7"
         return ""
 
     def restart_backend(self) -> None:
@@ -82,6 +91,14 @@ class JourneyAttemptTests(unittest.TestCase):
                 self.assertIn("DELETE FROM sites WHERE id = 41", statement)
                 self.assertNotIn("TRUNCATE", statement.upper())
                 self.assertNotIn("DELETE FROM sites WHERE id = 1", statement)
+                self.assertLess(
+                    statement.index("DELETE FROM dues_period_snapshots"),
+                    statement.index("DELETE FROM dues_periods"),
+                )
+                self.assertLess(
+                    statement.index("DELETE FROM dues_period_reopen_requests"),
+                    statement.index("DELETE FROM dues_periods"),
+                )
 
     def test_teardown_rejects_untrusted_site_ids_before_running_sql(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -125,6 +142,40 @@ class JourneyAttemptTests(unittest.TestCase):
 
             self.assertIs(raised.exception, original)
             self.assertEqual(stack.restarts, 1)
+
+    def test_site_in_state_f3_creates_period_and_structure(self) -> None:
+        from unittest.mock import MagicMock
+        api = MagicMock()
+        api.create_site.return_value = {"site_id": 99, "temporary_password": "temp"}
+        login_session = MagicMock()
+        login_session.user = {"id": 10}
+        api.login.return_value = login_session
+        saas = MagicMock()
+        stack = FakeStack()
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = JourneyManifest.create(Path(directory), "run", "shard", "attempt")
+            fixture = site_in_state("F3", api=api, stack=stack, saas=saas, manifest=manifest)
+
+            self.assertEqual(fixture.state, "F3")
+            self.assertEqual(fixture.site_id, "99")
+            self.assertEqual(len(fixture.unit_ids), 7)
+            self.assertEqual(fixture.person_ids, ())
+            self.assertTrue(any("INSERT INTO dues_periods" in s and "Ekim 2026" in s for s in stack.statements))
+            self.assertTrue(any("UPDATE sites SET proration_enabled = TRUE" in s for s in stack.statements))
+            self.assertGreaterEqual(stack.restarts, 1)
+
+    def test_site_in_state_f4_through_f7_raise_pending(self) -> None:
+        from unittest.mock import MagicMock
+        api = MagicMock()
+        saas = MagicMock()
+        stack = FakeStack()
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = JourneyManifest.create(Path(directory), "run", "shard", "attempt")
+            for state in ["F4", "F5", "F6", "F7"]:
+                with self.assertRaises(JourneyFixturePending):
+                    site_in_state(state, api=api, stack=stack, saas=saas, manifest=manifest)
 
 
 if __name__ == "__main__":
