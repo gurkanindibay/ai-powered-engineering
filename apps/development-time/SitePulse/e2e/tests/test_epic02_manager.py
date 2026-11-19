@@ -11,7 +11,6 @@ from support.money import last_amount
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-03")
 @pytest.mark.covers("SC-02-03-01")
-@pytest.mark.covers("SC-02-03-05")
 def test_manager_adds_owner_resident(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
@@ -64,7 +63,6 @@ def october_dues_b3_paid(api, actors):
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-02")
 @pytest.mark.covers("SC-02-02-01")
-@pytest.mark.covers("SC-02-02-02")
 def test_overdue_filter_lists_every_overdue_flat(login_as, page, api, october_dues_b3_paid, stack):
     api.record_manual_payment(october_dues_b3_paid, "1", Decimal("1400.00"), "Mehmet Öz", payer_role="OWNER")
     overdue_units = set(stack.sql(
@@ -158,7 +156,6 @@ def test_manager_can_send_a_payment_reminder(builders, login_as, page):
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-07")
 @pytest.mark.covers("SC-02-05-01")
-@pytest.mark.covers("SC-02-05-02")
 def test_manager_can_create_an_announcement(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()

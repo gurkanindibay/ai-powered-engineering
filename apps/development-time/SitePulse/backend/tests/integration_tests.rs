@@ -317,10 +317,12 @@ async fn when_site_edit_drops_an_occupied_block_then_nothing_changes() {
     );
 }
 
+// covers: SC-03-04-04
 #[tokio::test]
 async fn when_duplicate_email_then_throws_exception() {
     let state = AppState::new();
-    let service = SaasTenantService::new(state);
+    let sites_before = state.inner.read().await.sites.len();
+    let service = SaasTenantService::new(state.clone());
 
     let req = RegisterSiteRequest {
         site_name: "Deneme Sitesi".to_string(),
@@ -336,6 +338,44 @@ async fn when_duplicate_email_then_throws_exception() {
     assert!(res.is_err());
     let err = res.unwrap_err();
     assert!(err.contains("already exists") || err.contains("zaten mevcut"));
+    assert_eq!(
+        state.inner.read().await.sites.len(),
+        sites_before,
+        "a rejected registration must not create a site"
+    );
+}
+
+// covers: SC-03-05-01
+#[tokio::test]
+async fn when_posting_valid_site_onboarding_then_returns_201_with_credentials() {
+    let state = AppState::new();
+    let payload = RegisterSiteRequest {
+        site_name: "Palmiye Evleri".to_string(),
+        address: "Kadıköy, İstanbul".to_string(),
+        site_admin_full_name: "Murat Yıldırım".to_string(),
+        site_admin_email: "murat@palmiyeevleri.com".to_string(),
+        site_admin_phone: "+90 532 444 5566".to_string(),
+        plan_type: Some("STANDARD".to_string()),
+        blocks: Some(vec!["A Blok".to_string()]),
+    };
+
+    let res = sitepulse_backend::handlers::register_site(
+        axum::extract::State(state),
+        axum::Json(payload),
+    )
+    .await
+    .into_response();
+
+    assert_eq!(res.status(), axum::http::StatusCode::CREATED);
+    let body = axum::body::to_bytes(res.into_body(), 1024 * 64)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    for key in ["site_id", "slug", "admin_user_id", "temporary_password"] {
+        let value = json[key].as_str().unwrap_or_default();
+        assert!(!value.is_empty(), "response is missing {key}: {json}");
+    }
+    assert_eq!(json["slug"], "palmiye-evleri");
 }
 
 #[tokio::test]
@@ -4099,6 +4139,91 @@ async fn when_accruing_capital_installment_then_reconciles_penny_drift_exactly()
 }
 
 // covers: SC-10-05-03
+#[tokio::test]
+async fn when_milestone_disbursement_recorded_then_keeps_invoice_and_accumulates_disbursed() {
+    let state = AppState::new();
+    let service = CapitalProjectService::new(state.clone());
+    let budget = Decimal::from_str_exact("300000.00").unwrap();
+    let project = service
+        .create_project(CreateCapitalProjectRequest {
+            site_id: Some("site-1".to_string()),
+            title: "Asansör Revizyonu".to_string(),
+            category: Some(CapitalProjectCategory::Other),
+            description: None,
+            total_budget: budget,
+            allocation_basis: Some(AllocationBasis::ByLandShare),
+            target_start_date: Some(Utc::now().date_naive()),
+            target_completion_date: None,
+            contractor_name: Some("Otis Asansör San. Tic.".to_string()),
+            contractor_tax_no: Some("6490012345".to_string()),
+            contractor_iban: Some("TR330006100519786457841326".to_string()),
+            contract_amount: Some(budget),
+            installments: Some(vec![CreateInstallmentItem {
+                installment_number: 1,
+                total_installments: 1,
+                due_date: Utc::now().date_naive(),
+                installment_budget: budget,
+                percentage: Some(Decimal::from_str_exact("100.00").unwrap()),
+            }]),
+        })
+        .await
+        .unwrap();
+    {
+        let mut inner = state.inner.write().await;
+        let stored = inner
+            .capital_projects
+            .iter_mut()
+            .find(|p| p.id == project.id)
+            .unwrap();
+        stored.collected_amount = Decimal::from_str_exact("220000.00").unwrap();
+    }
+    let disburse = |milestone: &str, invoice: &str, amount: &str| RecordDisbursementRequest {
+        milestone_name: milestone.to_string(),
+        invoice_number: Some(invoice.to_string()),
+        amount: Decimal::from_str_exact(amount).unwrap(),
+        disbursement_date: Some(Utc::now().date_naive()),
+        recipient_name: "Otis Asansör San. Tic.".to_string(),
+        recipient_iban: "TR330006100519786457841326".to_string(),
+        payment_reference: None,
+        disbursement_method: Some(DisbursementMethod::BankTransfer),
+        notes: None,
+    };
+    service
+        .record_disbursement(
+            &project.id,
+            &project.site_id,
+            disburse("1. Hakediş (Söküm)", "ASN-2026-0031", "50000.00"),
+        )
+        .await
+        .unwrap();
+
+    let second = service
+        .record_disbursement(
+            &project.id,
+            &project.site_id,
+            disburse(
+                "2. Hakediş (Motor & Halat Montajı)",
+                "ASN-2026-0044",
+                "120000.00",
+            ),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(second.invoice_number.as_deref(), Some("ASN-2026-0044"));
+    assert_eq!(second.recipient_name, "Otis Asansör San. Tic.");
+    let listed = service.list_disbursements(&project.id).await;
+    assert!(listed
+        .iter()
+        .any(|d| d.invoice_number.as_deref() == Some("ASN-2026-0044")
+            && d.amount == Decimal::from_str_exact("120000.00").unwrap()));
+    let updated = service.get_project(&project.id).await.unwrap();
+    assert_eq!(
+        updated.disbursed_amount,
+        Decimal::from_str_exact("170000.00").unwrap()
+    );
+}
+
 #[tokio::test]
 async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
     let state = AppState::new();

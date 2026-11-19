@@ -8,7 +8,7 @@ Feature: Site-wide announcement broadcasting
     When entering title "Planlı Su Kesintisi" and details and publishing
     Then an ANNOUNCEMENT notification with that subject is stored
 
-  @SC-02-05-02 @GUI-02-07 @layer:gui @linked @core @role_manager
+  @SC-02-05-02 @GUI-02-07 @pending @core @role_manager
   Scenario: Announcement appears on the resident feed
     Given the manager published "Planlı Su Kesintisi"
     When a resident opens the announcement feed
