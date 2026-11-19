@@ -250,15 +250,15 @@ not legal advice. Confirm with a lawyer before the product rule ships.
 
 ### 8.2 Changes these decisions need in existing specs and code
 
-The plan is pending, so nothing below is changed yet. Each item needs its own task before the matching scenario can pass.
+The plan is pending, so nothing below is changed yet. Each item has its own issue and must land before the matching scenarios can pass.
 
-| Rule | Existing behaviour to change |
-|---|---|
-| Effective due date (Q9) | SC-07-10-03 says each catch-up liability keeps its period's due date; `dues_calculation_service.rs` counts the fee from `due_date`. Add an effective due date and use it for grace, fee and aging |
-| Jointly liable owner (Q9) | Liabilities have one debtor; add the jointly liable owner per date range and show it on the owner statement, without the tenant's receipts or contacts |
-| Unmatched multi-debtor transfer (Q11) | Webhook matching by virtual IBAN must stop when the unit has more than one open debtor |
-| Sale clearance and seller-pays override (Q10) | New screen in the title transfer flow and a four-eyes request like the advance transfer of SC-08-05-03 |
-| Supplementary charge (Q4) | Back-dated start dates on unbilled days must post a charge in the open period that refers to the original month |
+| Rule | Existing behaviour to change | Issue |
+|---|---|---|
+| Effective due date (Q9) | SC-07-10-03 says each catch-up liability keeps its period's due date; `dues_calculation_service.rs` counts the fee from `due_date`. Add an effective due date and use it for grace, fee and aging | [#206](https://github.com/gurkanindibay/ai-powered-engineering/issues/206) |
+| Jointly liable owner (Q9) | Liabilities have one debtor; add the jointly liable owner per date range and show it on the owner statement, without the tenant's receipts or contacts | [#207](https://github.com/gurkanindibay/ai-powered-engineering/issues/207) |
+| Unmatched multi-debtor transfer (Q11) | Webhook matching by virtual IBAN must stop when the unit has more than one open debtor | [#208](https://github.com/gurkanindibay/ai-powered-engineering/issues/208) |
+| Sale clearance and seller-pays override (Q10) | New screen in the title transfer flow and a four-eyes request like the advance transfer of SC-08-05-03 | [#209](https://github.com/gurkanindibay/ai-powered-engineering/issues/209) |
+| Supplementary charge (Q4) | Back-dated start dates on unbilled days must post a charge in the open period that refers to the original month | [#210](https://github.com/gurkanindibay/ai-powered-engineering/issues/210) |
 
 ## 9. Files
 
