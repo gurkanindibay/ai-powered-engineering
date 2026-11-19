@@ -167,6 +167,27 @@ impl SupplementaryChargeService {
         Self { state }
     }
 
+    /// Refuses, before an occupancy transition commits, a start date whose charges could not be
+    /// posted (no open period to post them in). Nothing is changed.
+    pub async fn check_postable(
+        &self,
+        site_id: &str,
+        unit_id: &str,
+        start_date: NaiveDate,
+        today: NaiveDate,
+    ) -> FinanceResult<()> {
+        let inner = self.state.inner.read().await;
+        plan_supplementary_charges(
+            &inner,
+            site_id,
+            unit_id,
+            DebtorType::Owner,
+            start_date,
+            today,
+        )
+        .map(|_| ())
+    }
+
     /// Posts the supplementary charges for the session a transition just opened.
     pub async fn post_for_opened_session(
         &self,
@@ -209,6 +230,8 @@ impl SupplementaryChargeService {
             } else {
                 if inner.dues.iter().any(|existing| {
                     crate::auth::same_id(&existing.unit_id, &due.unit_id)
+                        && existing.expense_type == due.expense_type
+                        && existing.debtor_type == due.debtor_type
                         && existing.status != DebtStatus::Cancelled
                         && billed_period(&inner, existing)
                             == BillingPeriod::parse(&charge.source_period_key).ok()

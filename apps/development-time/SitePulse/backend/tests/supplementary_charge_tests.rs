@@ -266,3 +266,68 @@ async fn when_a_supplementary_charge_refers_to_an_older_month_then_fifo_settles_
     assert_eq!(dues[lines[0].due_index].due_date, date("2026-10-10"));
     assert_eq!(dues[lines[0].due_index].status, DebtStatus::Paid);
 }
+
+// covers: SC-07-09-08
+#[tokio::test]
+async fn when_no_period_can_take_the_charge_then_the_handler_refuses_before_the_transition() {
+    use axum::response::IntoResponse;
+    use sitepulse_backend::handlers::{apply_occupancy_transition, SiteIdParam};
+
+    let today = sitepulse_backend::scheduler::site_local_date("Europe/Istanbul", Utc::now());
+    let month = sitepulse_backend::domain::billing_period::BillingPeriod::of_date(today);
+    let state = state_with(
+        true,
+        vec![DuesPeriod {
+            id: "1".to_string(),
+            site_id: SITE.to_string(),
+            period_name: month.label(),
+            due_date: month.last_day(),
+            status: DuesPeriodStatus::Closed,
+            created_at: None,
+        }],
+    )
+    .await;
+    let token =
+        sitepulse_backend::auth::issue_token("usr-manager", "", Role::SiteManager, SITE, None)
+            .expect("token");
+    let ctx = sitepulse_backend::authorization::AuthzContext {
+        claims: sitepulse_backend::auth::verify_token(&token).expect("claims"),
+        permissions: Permission::permissions_for_role(Role::SiteManager),
+        request_id: "supplementary".to_string(),
+        stepped_up: false,
+    };
+    let request = OccupancyTransitionRequest {
+        command: sitepulse_backend::domain::unit_state::CommandKind::OwnerMoveIn,
+        effective_date: Some(month.first_day()),
+        person: None,
+        person_id: None,
+        full_name: None,
+        phone: None,
+        email: None,
+        owner_person_id: None,
+        notes: None,
+    };
+
+    let result = apply_occupancy_transition(
+        axum::extract::State(state.clone()),
+        ctx,
+        sitepulse_backend::tenancy::TenantScope::site(SITE),
+        axum::extract::Path(UNIT.to_string()),
+        axum::extract::Query(SiteIdParam {
+            site_id: Some(SITE.to_string()),
+        }),
+        axum::Json(request),
+    )
+    .await;
+
+    let response = result
+        .expect_err("the whole transition is refused")
+        .into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::CONFLICT);
+    let inner = state.inner.read().await;
+    assert!(inner.dues.is_empty());
+    assert!(inner
+        .unit_occupancies
+        .get(UNIT)
+        .is_none_or(|h| h.is_empty()));
+}

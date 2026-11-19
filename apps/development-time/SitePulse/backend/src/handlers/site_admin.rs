@@ -318,6 +318,22 @@ pub async fn apply_occupancy_transition(
     };
     payload.effective_date = Some(accrued_on);
     let service = OccupancyService::new(state.clone());
+    if matches!(
+        payload.command,
+        CommandKind::TenantMoveIn
+            | CommandKind::OwnerMoveIn
+            | CommandKind::ReplaceTenant
+            | CommandKind::OwnerRentsOut
+            | CommandKind::OwnerTakesBack
+    ) {
+        // Refuse before the transition commits: a failure after it would report an error for
+        // a move that happened and lose the charges (a retry finds the session already open).
+        let today = service.site_today(&site_id).await;
+        SupplementaryChargeService::new(state.clone())
+            .check_postable(&site_id, &id, accrued_on, today)
+            .await
+            .map_err(correction_error)?;
+    }
     let mut response = service
         .transition(&site_id, &id, payload)
         .await
