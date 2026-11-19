@@ -122,7 +122,7 @@ and empty rows.
 | I7 | Historical debt stays with its original debtor; approved dated corrections preserve the original audit trail and affect only the authorized dates and amounts |
 | I8 | Every balance is identical after a backend restart (memory and PostgreSQL agree) |
 | I9 | Sum of the amounts shown to a user equals what the API returns, to the kuruş |
-| I10 | No data of this site is visible to a manager of another site |
+| I10 | Site-scoped responses and exports contain only authorized site data; resident financial and private identity data are further scoped to the authorized unit, person and responsibility dates |
 
 ## 5. Isolation and teardown contract
 
@@ -208,6 +208,7 @@ Covered in files `03`, `04`, `05`:
 | [07-teardown-and-isolation.feature](07-teardown-and-isolation.feature) | J-14: setup, teardown and isolation contract |
 | [08-screen-and-session-states.feature](08-screen-and-session-states.feature) | J-15: first login, loading, errors, retry, search, session expiry and stale forms |
 | [09-financial-state-transitions.feature](09-financial-state-transitions.feature) | J-16: targeting, partial and backdated payments, post-close changes, reconciliation and dual ledger |
+| [10-tenant-data-isolation.feature](10-tenant-data-isolation.feature) | J-17: cross-site reads, exports and mutations, private tenant statements and receipts, former occupants and session races |
 
 ## 10. Coverage map
 
@@ -217,7 +218,7 @@ scenario as pending until its user-visible outcome or backend invariant runs in 
 
 | State family | Covered in this draft | Existing suites to include in an app-wide run |
 |---|---|---|
-| Session and permissions | Fresh provisioning, expiry, session switch, cross-site denial | EPIC-03, EPIC-06 and the five per-role journeys |
+| Session and permissions | Fresh provisioning, expiry, session switch, site and resident isolation (file 10) | EPIC-03, EPIC-06 and the five per-role journeys |
 | Screen data | Empty, populated, zero matches, loading, request failure, retry, stale action | GUI catalogue for remaining surfaces and resident offline cache |
 | People and units | Unowned, vacant, owner- and tenant-occupied, replacement, transfer and rollback | EPIC-04, EPIC-08 and EPIC-12 for invitation decisions, dependents and the full allowed-command matrix |
 | Billing and treasury | No period, open, settled and overdue liabilities, closed and reopened periods, payment states, dual ledger | EPIC-07 and EPIC-09 for individual commands and receipts, EPIC-10 for project and disbursement states |
@@ -227,8 +228,8 @@ scenario as pending until its user-visible outcome or backend invariant runs in 
 ## 11. Proposed delivery order after review
 
 1. Test support: controllable clock with deterministic scheduler ticks (Q1), `site_in_state()` fixture, `ledger_invariants()` helper, teardown finalizer (file 07 first).
-2. F0 to F3 (file 01), the smallest data and the simplest asserts.
+2. F0 to F3 (file 01), then the backend isolation cases that use the established fixtures (file 10).
 3. F4, F5 (file 02) and the payment rules (file 04), backend layer.
 4. F6 (file 03), then ledger transitions and corner cases (files 09 and 05).
-5. Add the isolated GUI recovery cases (file 08), then the GUI chain (file 06).
+5. Add the isolated GUI recovery and session cases (files 08 and 10), then the GUI chain (file 06).
 6. Move to `.specify/features/EPIC-13/`, run `feature_traceability.py check`, link the PR to the CI `e2e-test-report`.
