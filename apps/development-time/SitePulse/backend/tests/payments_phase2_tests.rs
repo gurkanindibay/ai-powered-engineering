@@ -598,6 +598,7 @@ async fn when_an_owner_card_payment_targets_a_joint_tenant_balance_then_only_tha
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
             grace_days: 0,
+            effective_due_date: None,
         });
         inner.joint_liability_owners.insert(
             "tenant-card-due".to_string(),
@@ -856,6 +857,7 @@ async fn when_a_tenant_liability_has_an_owner_link_then_owner_sees_only_its_join
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: Some(today),
             grace_days: 0,
+            effective_due_date: None,
         });
         inner.joint_liability_owners.insert(
             "tenant-joint-due".to_string(),
@@ -937,6 +939,7 @@ async fn when_an_owner_pays_a_linked_tenant_liability_then_the_receipt_names_pay
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: Some(today()),
             grace_days: 0,
+            effective_due_date: None,
         });
         inner.joint_liability_owners.insert(
             "tenant-payable-due".to_string(),
