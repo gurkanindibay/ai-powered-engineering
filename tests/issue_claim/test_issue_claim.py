@@ -1,9 +1,10 @@
 import io
 import json
+import re
 import sys
 import unittest
 import urllib.parse
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
@@ -55,6 +56,18 @@ class FakeGh:
         if added:
             self.add(added)
         return ""  # label creation
+
+
+class FakeRepo:
+    """Routes calls to one FakeGh per issue/PR number (PRs share the issues API)."""
+
+    def __init__(self, **items):
+        self.items = {int(k[1:]): v for k, v in items.items()}  # i10=..., p20=...
+
+    def __call__(self, args):
+        match = re.search(r"/issues/(\d+)", " ".join(args))
+        target = self.items[int(match.group(1))] if match else next(iter(self.items.values()))
+        return target(args)
 
 
 def run_cli(fake, *argv):
@@ -167,6 +180,61 @@ class IssueClaimTests(unittest.TestCase):
             raise ic.ClaimError("gh api failed: 422 Validation Failed invalid color")
         with self.assertRaises(ic.ClaimError):
             ic.ensure_label(bad, "o/r", "claim:x/y")
+
+class PullRequestLabelTests(unittest.TestCase):
+    def repo(self, issue=(), pr=()):
+        return FakeRepo(i10=FakeGh(issue), p20=FakeGh(pr))
+
+    def test_sync_copies_both_labels_to_the_pr(self):
+        repo = self.repo(["in progress", "claim:claude/abc"])
+        code, out = run_cli(repo, "sync", "10", "--pr", "20")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sorted(repo.items[20].labels), ["claim:claude/abc", "in progress"])
+
+    def test_sync_is_idempotent(self):
+        repo = self.repo(["in progress", "claim:claude/abc"], ["in progress", "claim:claude/abc"])
+        self.assertEqual(run_cli(repo, "sync", "10", "--pr", "20")[0], 0)
+        self.assertEqual(len(repo.items[20].labels), 2)
+
+    def test_sync_needs_a_claimed_issue(self):
+        repo = self.repo(["in progress"])
+        code, out = run_cli(repo, "sync", "10", "--pr", "20")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(repo.items[20].labels, [])
+
+    def test_sync_refuses_a_pr_owned_by_someone_else(self):
+        repo = self.repo(["in progress", "claim:claude/abc"], ["in progress", "claim:codex/zzz"])
+        code, _ = run_cli(repo, "sync", "10", "--pr", "20")
+        self.assertEqual(code, 1)
+        self.assertIn("claim:codex/zzz", repo.items[20].labels)
+        self.assertNotIn("claim:claude/abc", repo.items[20].labels)
+
+    def test_sync_requires_pr_argument(self):
+        with redirect_stderr(io.StringIO()):
+            code = ic.main(["sync", "10"], run=self.repo(["in progress", "claim:claude/abc"]), env={})
+        self.assertEqual(code, 2)
+
+    def test_claim_with_pr_labels_both(self):
+        repo = self.repo()
+        code, out = run_cli(repo, "claim", "10", "--harness", "claude", "--session", "abc", "--pr", "20")
+        self.assertEqual(code, 0, out)
+        for number in (10, 20):
+            self.assertEqual(sorted(repo.items[number].labels), ["claim:claude/abc", "in progress"])
+
+    def test_release_with_pr_clears_both(self):
+        both = ["in progress", "claim:claude/abc"]
+        repo = self.repo(both, both)
+        code, out = run_cli(repo, "release", "10", "--harness", "claude", "--session", "abc", "--pr", "20")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(repo.items[10].labels, [])
+        self.assertEqual(repo.items[20].labels, [])
+
+    def test_release_with_pr_by_non_owner_changes_nothing(self):
+        both = ["in progress", "claim:codex/zzz"]
+        repo = self.repo(both, both)
+        code, _ = run_cli(repo, "release", "10", "--harness", "claude", "--session", "abc", "--pr", "20")
+        self.assertEqual(code, 1)
+        self.assertEqual(len(repo.items[20].labels), 2)
 
 
 if __name__ == "__main__":

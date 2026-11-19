@@ -13,10 +13,16 @@ session id, find that session. `claim` refuses an issue another session owns
 
 Usage:
     python3 scripts/issue_claim.py claim 123 --harness claude --session <id>
+    python3 scripts/issue_claim.py sync 123 --pr 130      # copy the issue's labels to its PR
     python3 scripts/issue_claim.py status 123 [--json]
     python3 scripts/issue_claim.py release 123 --harness claude --session <id>
     python3 scripts/issue_claim.py claim 123 --harness codex     # session from
                                                                   # $AGENT_SESSION_ID or generated
+
+The PR that delivers an issue carries the same two labels, so the PR shows its
+owner too: `sync <issue> --pr <pr>` copies them (run it when the PR is opened),
+`claim ... --pr <pr>` claims and syncs in one step, and `release ... --pr <pr>`
+removes the claim from both. A PR already owned by another session is refused.
 
 Session id resolution: --session, then $AGENT_SESSION_ID, then the harness
 variable ($CLAUDE_SESSION_ID, $CODEX_SESSION_ID, $ANTIGRAVITY_SESSION_ID),
@@ -221,23 +227,47 @@ def drop_unused_claim_label(run: Runner, repo: str, label: str) -> None:
                 raise
 
 
-def release(run: Runner, repo: str, number: int, harness: str, session: str, force: bool) -> tuple[bool, str]:
+def sync_pr(run: Runner, repo: str, issue: int, pr: int, force: bool = False) -> tuple[bool, str]:
+    """Copy the issue's `in progress` and owner label to the PR that delivers it."""
+    issue_labels = read_labels(run, repo, issue)
+    claims = [f"{CLAIM_PREFIX}{h}/{s}" for h, s in claims_in(issue_labels)]
+    if not claims:
+        return False, f"#{issue} has no claim label to copy; claim it first"
+    pr_labels = read_labels(run, repo, pr)
+    foreign = [c for c in claims_in(pr_labels) if f"{CLAIM_PREFIX}{c[0]}/{c[1]}" not in claims]
+    if foreign and not force:
+        return False, f"PR #{pr} is already owned by {foreign[0][0]}/{foreign[0][1]}; not overwriting"
+    for harness, session in foreign:
+        remove_label(run, repo, pr, f"{CLAIM_PREFIX}{harness}/{session}")
+        drop_unused_claim_label(run, repo, f"{CLAIM_PREFIX}{harness}/{session}")
+    missing = [l for l in (IN_PROGRESS, *claims) if l not in pr_labels]
+    if missing:
+        add_labels(run, repo, pr, missing)
+    return True, f"PR #{pr} labeled like #{issue} ({', '.join(claims)})"
+
+
+def release(run: Runner, repo: str, number: int, harness: str, session: str, force: bool,
+            pr: int | None = None) -> tuple[bool, str]:
     labels = read_labels(run, repo, number)
     owner = parse_owner(labels)
     if owner.in_progress and not force and not (owner.harness == harness and owner.session == session):
         return False, f"#{number} is owned by {owner.harness}/{owner.session}, not {harness}/{session}"
-    for label in [IN_PROGRESS, *(l for l in labels if l.startswith(CLAIM_PREFIX))]:
+    pr_labels = read_labels(run, repo, pr) if pr is not None else []
+    for label in dict.fromkeys([IN_PROGRESS, *(l for l in labels + pr_labels if l.startswith(CLAIM_PREFIX))]):
+        if pr is not None:
+            remove_label(run, repo, pr, label)  # PR first: the repo label is dropped once unused
         remove_label(run, repo, number, label)
         drop_unused_claim_label(run, repo, label)
-    return True, f"#{number} released"
+    return True, f"#{number} released" + (f" (and PR #{pr})" if pr is not None else "")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("action", choices=["claim", "status", "release"])
+    parser.add_argument("action", choices=["claim", "status", "release", "sync"])
     parser.add_argument("number", type=int, help="issue or PR number")
     parser.add_argument("--harness", help=f"harness name, e.g. {', '.join(KNOWN_HARNESSES)}")
     parser.add_argument("--session", help="harness session id (default: env or generated)")
+    parser.add_argument("--pr", type=int, help="PR delivering the issue: labeled like the issue (claim/sync) or cleared (release)")
     parser.add_argument("--repo", help="owner/name (default: current repo)")
     parser.add_argument("--force", action="store_true", help="take over / release another owner's claim")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
@@ -255,12 +285,23 @@ def main(argv: list[str] | None = None, run: Runner = gh, env: dict[str, str] | 
             print(json.dumps(payload) if args.json else
                   f"#{args.number}: in_progress={owner.in_progress} harness={owner.harness} session={owner.session}")
             return 0
+        if args.action == "sync":
+            if args.pr is None:
+                raise ClaimError("--pr is required for sync")
+            ok, message = sync_pr(run, repo, args.number, args.pr, args.force)
+            print(json.dumps({"ok": ok, "message": message}) if args.json else message)
+            return 0 if ok else 1
         if not args.harness:
             raise ClaimError("--harness is required for claim/release")
         harness = slug(args.harness)
         session = resolve_session(harness, args.session, env)
-        fn = claim if args.action == "claim" else release
-        ok, message = fn(run, repo, args.number, harness, session, args.force)
+        if args.action == "release":
+            ok, message = release(run, repo, args.number, harness, session, args.force, args.pr)
+        else:
+            ok, message = claim(run, repo, args.number, harness, session, args.force)
+            if ok and args.pr is not None:
+                ok, pr_message = sync_pr(run, repo, args.number, args.pr, args.force)
+                message = f"{message}; {pr_message}"
         payload = {"ok": ok, "message": message, "harness": harness, "session": session}
         print(json.dumps(payload) if args.json else f"{message} (session id: {session})")
         return 0 if ok else 1
