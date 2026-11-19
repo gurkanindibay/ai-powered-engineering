@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-19T18:58:19Z",
- "run_id": "20261119T185819Z-d3804f6",
- "commit": "d3804f6904c0e67628eb7e51eba73ebc5af715dc",
+ "generated_at": "2026-11-19T19:08:29Z",
+ "run_id": "20261119T190829Z-15c087e",
+ "commit": "15c087eba12e962947459de3c0b04aba8e2dbd20",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 125,
-  "seconds": 2070.7,
+  "seconds": 2031.2,
   "files": 8,
   "unparseable": []
  },
@@ -19,11 +19,11 @@
   "stories": 101,
   "stories_with_scenarios": 101,
   "stories_passing": 33,
-  "scenarios": 313,
-  "automated": 293,
+  "scenarios": 317,
+  "automated": 297,
   "passing": 114,
   "failing": 0,
-  "no_result": 179,
+  "no_result": 183,
   "planned": 20,
   "epics": 13,
   "epics_verified": 2,
@@ -120,11 +120,11 @@
    "stories": 13,
    "stories_with_scenarios": 13,
    "stories_passing": 1,
-   "scenarios": 56,
-   "automated": 56,
+   "scenarios": 60,
+   "automated": 60,
    "passing": 13,
    "failing": 0,
-   "no_result": 43,
+   "no_result": 47,
    "planned": 0,
    "health": "in_progress"
   },
@@ -883,6 +883,30 @@
   "SC-07-09-06": {
    "state": "no_result",
    "name": "A manual accrual retry after move-in does not add another monthly liability",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-07": {
+   "state": "no_result",
+   "name": "A back-dated start date in an open accrued month posts a supplementary charge there",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-08": {
+   "state": "no_result",
+   "name": "A back-dated start date in a closed month posts supplementary charges in the open period",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-09": {
+   "state": "no_result",
+   "name": "Days already billed to someone are not charged again",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-10": {
+   "state": "no_result",
+   "name": "FIFO settles the charge that refers to the oldest month first",
    "epic": "EPIC-07",
    "story": "STORY-07-09"
   },
@@ -2251,8 +2275,8 @@
    "epics": 13,
    "stories": 101,
    "stories_with_scenarios": 101,
-   "scenarios": 313,
-   "automated": 293
+   "scenarios": 317,
+   "automated": 297
   }
  ],
  "recent_changes": [
@@ -2316,9 +2340,9 @@
    "epic": "EPIC-07",
    "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
    "new_stories": 0,
-   "new_scenarios": 7,
-   "newly_automated": 23,
-   "items": 23,
+   "new_scenarios": 11,
+   "newly_automated": 27,
+   "items": 27,
    "samples": [
     "SC-07-02-05: A stored payer-name alias auto-matches a re-uploaded row",
     "SC-07-03-03: A transfer to a unit with several open debtors waits for the manager",
@@ -2914,5 +2938,5 @@
    ]
   }
  ],
- "href": "reports/44590942102-1/"
+ "href": "reports/44593910135-1/"
 }
