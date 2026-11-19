@@ -577,7 +577,7 @@ async fn only_an_approved_override_makes_the_seller_pay_later_installments() {
 
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
-// covers: SC-08-05-06
+// covers: SC-08-05-09
 async fn a_rejected_override_request_leaves_the_seller_as_the_owner() {
     use sitepulse_backend::services::sale_clearance_service::TransferFlowError;
 

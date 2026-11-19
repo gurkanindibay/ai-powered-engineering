@@ -53,3 +53,17 @@ Feature: Title deed transfer and ownership sale handover
     Given a seller-pays override request is pending
     When its requester tries to approve it
     Then it is refused and the request stays pending
+
+  @SC-08-05-08 @layer:backend @linked @edge @role_manager
+  Scenario: Invalid seller-pays override leaves the transfer unchanged
+    Given the unit has a current seller and a different buyer
+    When the manager transfers title with an override reason shorter than five characters
+    Then the transfer is refused before ownership changes
+    And no seller-pays override request is created
+
+  @SC-08-05-09 @layer:backend @linked @edge @role_manager
+  Scenario: A duplicate pending override leaves the seller in place
+    Given a seller-pays override for the unit and buyer is already pending
+    When the manager transfers title to that buyer with an override reason
+    Then the request is refused with a conflict and the seller remains the owner
+    And a transfer that fails after the request was stored discards that request again
