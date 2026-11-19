@@ -283,7 +283,8 @@ impl PaymentTrackingService {
         &self,
         site_id: &str,
     ) -> Result<DebtAgingReport, LedgerReadError> {
-        self.get_debt_aging_report_at(site_id, crate::e2e_clock::now_utc()).await
+        self.get_debt_aging_report_at(site_id, crate::e2e_clock::now_utc())
+            .await
     }
 
     /// Calculates the debt-aging report as of an explicit instant.
@@ -469,9 +470,11 @@ impl PaymentTrackingService {
             req.payment_channel,
             PaymentChannel::ManualCash | PaymentChannel::Cash | PaymentChannel::Other
         ) {
-            if let Some(reason) =
-                Self::payment_date_violation(issued_at, crate::e2e_clock::now_utc(), Self::backdate_window_days())
-            {
+            if let Some(reason) = Self::payment_date_violation(
+                issued_at,
+                crate::e2e_clock::now_utc(),
+                Self::backdate_window_days(),
+            ) {
                 return Err(reason);
             }
         }
