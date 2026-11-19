@@ -1,31 +1,31 @@
 {
  "schema": 1,
- "generated_at": "2026-11-19T18:46:04Z",
- "run_id": "20261119T184604Z-2cea424",
- "commit": "2cea4246496b6bb7c26f7bfa8b96e1b75b549728",
+ "generated_at": "2026-11-19T18:58:19Z",
+ "run_id": "20261119T185819Z-d3804f6",
+ "commit": "d3804f6904c0e67628eb7e51eba73ebc5af715dc",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 123,
+  "tests": 126,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 122,
-  "seconds": 2452.2,
+  "passed": 125,
+  "seconds": 2070.7,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 100,
-  "stories_with_scenarios": 100,
+  "stories": 101,
+  "stories_with_scenarios": 101,
   "stories_passing": 33,
-  "scenarios": 303,
-  "automated": 292,
-  "passing": 113,
+  "scenarios": 313,
+  "automated": 293,
+  "passing": 114,
   "failing": 0,
   "no_result": 179,
-  "planned": 11,
-  "epics": 12,
+  "planned": 20,
+  "epics": 13,
   "epics_verified": 2,
   "epics_failing": 0
  },
@@ -196,6 +196,20 @@
    "failing": 0,
    "no_result": 36,
    "planned": 0,
+   "health": "in_progress"
+  },
+  {
+   "id": "EPIC-13",
+   "title": "Site Admin Journeys",
+   "stories": 1,
+   "stories_with_scenarios": 1,
+   "stories_passing": 0,
+   "scenarios": 10,
+   "automated": 1,
+   "passing": 1,
+   "failing": 0,
+   "no_result": 0,
+   "planned": 9,
    "health": "in_progress"
   }
  ],
@@ -2017,6 +2031,66 @@
    "name": "A person's move-out also moves out their dependents and the cards show it",
    "epic": "EPIC-12",
    "story": "STORY-12-10"
+  },
+  "SC-13-07-01": {
+   "state": "passing",
+   "name": "Every starting state can be built using the documented fixture path",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
+  },
+  "SC-13-07-10": {
+   "state": "planned",
+   "name": "Every historical starting state can be built using the documented fixture path",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
+  },
+  "SC-13-07-02": {
+   "state": "planned",
+   "name": "Teardown removes every row of the site",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
+  },
+  "SC-13-07-03": {
+   "state": "planned",
+   "name": "Teardown never touches shared seed data",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
+  },
+  "SC-13-07-04": {
+   "state": "planned",
+   "name": "Teardown runs when the journey fails",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
+  },
+  "SC-13-07-05": {
+   "state": "planned",
+   "name": "Teardown works after a half-built state",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
+  },
+  "SC-13-07-06": {
+   "state": "planned",
+   "name": "Two journeys in parallel do not see each other's data",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
+  },
+  "SC-13-07-07": {
+   "state": "planned",
+   "name": "A finished run leaves the database as it started",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
+  },
+  "SC-13-07-08": {
+   "state": "planned",
+   "name": "A leftover site from a crashed earlier run is cleaned before the next run starts",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
+  },
+  "SC-13-07-09": {
+   "state": "planned",
+   "name": "Cleanup is safe to retry after an evidence capture failure",
+   "epic": "EPIC-13",
+   "story": "STORY-13-07"
   }
  },
  "catalogue_history": [
@@ -2174,14 +2248,26 @@
   },
   {
    "date": "2026-11-19",
-   "epics": 12,
-   "stories": 100,
-   "stories_with_scenarios": 100,
-   "scenarios": 303,
-   "automated": 292
+   "epics": 13,
+   "stories": 101,
+   "stories_with_scenarios": 101,
+   "scenarios": 313,
+   "automated": 293
   }
  ],
  "recent_changes": [
+  {
+   "date": "2026-11-19",
+   "epic": "EPIC-13",
+   "title": "Site Admin Journeys",
+   "new_stories": 1,
+   "new_scenarios": 10,
+   "newly_automated": 1,
+   "items": 1,
+   "samples": [
+    "STORY-13-07: Journey setup, teardown and isolation"
+   ]
+  },
   {
    "date": "2026-11-19",
    "epic": "EPIC-10",
@@ -2828,5 +2914,5 @@
    ]
   }
  ],
- "href": "reports/44588871413-1/"
+ "href": "reports/44590942102-1/"
 }
