@@ -287,6 +287,7 @@ AREAS: Dict[str, AreaSpec] = {
         rust_tests=[
             "error_management_tests",
             "integration_tests",
+            "e2e_clock_tests",
         ],
         rust_lib_tests=[
             "error::",
@@ -309,6 +310,10 @@ AREAS: Dict[str, AreaSpec] = {
             r"backend/src/main\.rs",
             r"backend/src/app\.rs",
             r"backend/src/lib\.rs",
+            r"backend/src/e2e_clock\.rs",
+            r"backend/src/scheduler\.rs",
+            r"backend/tests/e2e_clock_tests\.rs",
+            r"e2e/support/(?:api|stack)\.py",
             r"flutter/lib/core/",
             r"flutter/lib/services/",
             r"harness/",
@@ -519,6 +524,8 @@ def execute_area_plan(plan: Dict[str, object], root: Path, is_json: bool = False
     rust_lib = plan["rust_lib_tests"]
     if rust_tests:
         cmd = ["cargo", "test", "--locked"]
+        if "e2e_clock_tests" in rust_tests:
+            cmd.extend(["--features", "e2e"])
         for t in rust_tests:
             cmd.extend(["--test", t])
         gate_name = f"rust-area-integration [{', '.join(rust_tests)}]"

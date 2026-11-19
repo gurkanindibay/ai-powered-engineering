@@ -108,6 +108,14 @@ impl BudgetComplianceService {
 
     /// Notifies staff about interim budgets near or past their 3-month deadline (daily job).
     pub async fn remind_interim_deadlines(&self) -> FinanceResult<usize> {
+        self.remind_interim_deadlines_at(chrono::Utc::now()).await
+    }
+
+    /// Runs interim-budget reminders as of an explicit instant.
+    pub async fn remind_interim_deadlines_at(
+        &self,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> FinanceResult<usize> {
         let due: Vec<(String, String, i32, chrono::NaiveDate, bool)> = self
             .store
             .read(|inner| {
@@ -117,7 +125,8 @@ impl BudgetComplianceService {
                     .filter(|b| b.status == BUDGET_INTERIM)
                     .filter_map(|b| {
                         let deadline = b.interim_deadline?;
-                        let today = site_today(inner, &b.site_id);
+                        let today =
+                            crate::services::finance_common::site_today_at(inner, &b.site_id, now);
                         let days = (deadline - today).num_days();
                         (days <= INTERIM_REMINDER_DAYS).then(|| {
                             (

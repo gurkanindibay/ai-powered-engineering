@@ -18,6 +18,29 @@ pub struct RouteSpec {
     pub path: &'static str,
     pub policy: RoutePolicy,
 }
+
+/// Finds the route policy, including private E2E control routes when compiled and enabled.
+pub fn route_policy(method: &str, path: &str) -> Option<RoutePolicy> {
+    let policy = ROUTES
+        .iter()
+        .find(|route| {
+            route.path == path
+                && (route.method.eq_ignore_ascii_case(method)
+                    || method == "HEAD" && route.method == "get")
+        })
+        .map(|route| route.policy);
+    if policy.is_some() {
+        return policy;
+    }
+    #[cfg(feature = "e2e")]
+    if path == "/__e2e/clock"
+        && method.eq_ignore_ascii_case("POST")
+        && crate::e2e_clock::validate_e2e_configuration().unwrap_or(false)
+    {
+        return Some(Public);
+    }
+    None
+}
 macro_rules! routes {
     ($( $method:ident $path:literal => $handler:path, $policy:expr; )*) => {
         pub const ROUTES:&[RouteSpec]=&[$(RouteSpec{method:stringify!($method),path:$path,policy:$policy}),*];
@@ -334,7 +357,14 @@ pub fn build_router(state: AppState) -> Router {
             HeaderName::from_static("x-request-id"),
         ])
         .expose_headers([HeaderName::from_static("x-request-id")]);
-    registered_routes()
+    let routes = registered_routes();
+    #[cfg(feature = "e2e")]
+    let routes = if state.e2e_clock.is_some() {
+        routes.route("/__e2e/clock", post(crate::e2e_clock::control))
+    } else {
+        routes
+    };
+    routes
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_auth,

@@ -283,10 +283,19 @@ impl PaymentTrackingService {
         &self,
         site_id: &str,
     ) -> Result<DebtAgingReport, LedgerReadError> {
+        self.get_debt_aging_report_at(site_id, Utc::now()).await
+    }
+
+    /// Calculates the debt-aging report as of an explicit instant.
+    pub async fn get_debt_aging_report_at(
+        &self,
+        site_id: &str,
+        now: chrono::DateTime<Utc>,
+    ) -> Result<DebtAgingReport, LedgerReadError> {
         // The report day is the site's local day, not the UTC day.
         let today = {
             let inner = self.state.inner.read().await;
-            crate::services::finance_common::site_today(&inner, site_id)
+            crate::services::finance_common::site_today_at(&inner, site_id, now)
         };
         if let Some(p) = self.state.db_pool() {
             return crate::db::dues_repository::fetch_debt_aging_report_from_db(p, site_id, today)
@@ -1596,6 +1605,17 @@ impl PaymentTrackingService {
     /// (O-8, regulatory report F17). Re-running on the same day replaces that
     /// day's rows. Returns the number of unit/debtor rows written.
     pub async fn snapshot_debt_aging(&self, site_filter: Option<&str>) -> Result<usize, String> {
+        self.snapshot_debt_aging_at(site_filter, Utc::now())
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    /// Writes aging snapshots as of an explicit instant.
+    pub async fn snapshot_debt_aging_at(
+        &self,
+        site_filter: Option<&str>,
+        now: chrono::DateTime<Utc>,
+    ) -> Result<usize, LedgerReadError> {
         let site_ids: Vec<String> = {
             let inner = self.state.inner.read().await;
             inner
@@ -1611,14 +1631,11 @@ impl PaymentTrackingService {
         };
         let mut written = 0;
         for site in site_ids {
-            let report = self
-                .get_debt_aging_report(&site)
-                .await
-                .map_err(|e| e.to_string())?;
+            let report = self.get_debt_aging_report_at(&site, now).await?;
             written += match self.state.pool {
                 Some(ref pool) => crate::db::save_debt_aging_snapshot(pool, &site, &report)
                     .await
-                    .map_err(|e| e.to_string())?,
+                    .map_err(|error| LedgerReadError::Unavailable(error.to_string()))?,
                 None => report.brackets.len(),
             };
         }

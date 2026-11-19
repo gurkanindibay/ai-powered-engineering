@@ -15,6 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .init();
 
     auth::validate_configuration()?;
+    let e2e_enabled = sitepulse_backend::e2e_clock::validate_e2e_configuration()?;
     let pool = db::create_pool()?;
     let state = AppState::with_pool(pool.clone());
     let migrations_only = std::env::var("SITEPULSE_MIGRATIONS_ONLY").is_ok_and(|v| v == "true");
@@ -46,19 +47,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     let app = app::build_router(state.clone());
 
-    // Spawn automated monthly dues accrual background scheduler (batch job)
-    tokio::spawn(sitepulse_backend::audit::CONTEXT.scope(
-        sitepulse_backend::audit::AuditContext::service("dues-scheduler"),
-        scheduler::start_automated_dues_accrual_scheduler(state.clone()),
-    ));
-    tokio::spawn(sitepulse_backend::audit::CONTEXT.scope(
-        sitepulse_backend::audit::AuditContext::service("debt-aging-worker"),
-        scheduler::start_debt_aging_snapshot_worker(state.clone()),
-    ));
-    tokio::spawn(sitepulse_backend::audit::CONTEXT.scope(
-        sitepulse_backend::audit::AuditContext::service("collections-worker"),
-        scheduler::start_collections_worker(state),
-    ));
+    if !e2e_enabled {
+        tokio::spawn(sitepulse_backend::audit::CONTEXT.scope(
+            sitepulse_backend::audit::AuditContext::service("dues-scheduler"),
+            scheduler::start_automated_dues_accrual_scheduler(state.clone()),
+        ));
+        tokio::spawn(sitepulse_backend::audit::CONTEXT.scope(
+            sitepulse_backend::audit::AuditContext::service("debt-aging-worker"),
+            scheduler::start_debt_aging_snapshot_worker(state.clone()),
+        ));
+        tokio::spawn(sitepulse_backend::audit::CONTEXT.scope(
+            sitepulse_backend::audit::AuditContext::service("collections-worker"),
+            scheduler::start_collections_worker(state),
+        ));
+    } else {
+        tracing::info!("E2E scheduler clock enabled; background timers are disabled");
+    }
 
     let addr: SocketAddr = std::env::var("SITEPULSE_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:8080".to_string())

@@ -35,6 +35,8 @@ pub struct AppState {
     pub security: Arc<tokio::sync::Mutex<crate::security::MemorySecurity>>,
     pub inner: Arc<RwLock<AppStateInner>>,
     pub pool: Option<deadpool_postgres::Pool>,
+    #[cfg(feature = "e2e")]
+    pub e2e_clock: Option<Arc<crate::e2e_clock::E2eClock>>,
 }
 
 #[derive(Clone)]
@@ -832,6 +834,8 @@ impl AppState {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(AppStateInner::new())),
             pool: None,
+            #[cfg(feature = "e2e")]
+            e2e_clock: None,
         }
     }
 
@@ -849,7 +853,20 @@ impl AppState {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),
             pool,
+            #[cfg(feature = "e2e")]
+            e2e_clock: crate::e2e_clock::validate_e2e_configuration()
+                .ok()
+                .filter(|enabled| *enabled)
+                .map(|_| Arc::new(crate::e2e_clock::E2eClock::new(Utc::now().date_naive()))),
         }
+    }
+
+    /// Creates an in-memory state with an enabled E2E clock for deterministic tests.
+    #[cfg(feature = "e2e")]
+    pub fn with_e2e_test_clock(date: NaiveDate) -> Self {
+        let mut state = Self::new();
+        state.e2e_clock = Some(Arc::new(crate::e2e_clock::E2eClock::new(date)));
+        state
     }
 
     /// Rebuilds the in-memory read model from PostgreSQL without holding the
@@ -880,6 +897,8 @@ impl AppState {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),
             pool: None,
+            #[cfg(feature = "e2e")]
+            e2e_clock: None,
         }
     }
 
@@ -891,6 +910,8 @@ impl AppState {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),
             pool: None,
+            #[cfg(feature = "e2e")]
+            e2e_clock: None,
         }
     }
 }
