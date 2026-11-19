@@ -4,6 +4,7 @@
 use chrono::{NaiveDate, Utc};
 use rust_decimal::Decimal;
 use sitepulse_backend::models::*;
+use sitepulse_backend::services::dues_calculation_service::DuesCalculationService;
 use sitepulse_backend::services::dues_ledger::allocate_waterfall;
 use sitepulse_backend::services::supplementary_charge_service::SupplementaryChargeService;
 use sitepulse_backend::state::AppState;
@@ -167,6 +168,41 @@ async fn when_the_month_is_closed_then_the_charge_refers_to_it_but_is_posted_in_
     // The closed month received no liability of its own.
     let inner = state.inner.read().await;
     assert!(inner.dues.iter().all(|due| due.period != "Ekim 2026"));
+}
+
+// covers: SC-13-01-14, SC-13-12-03
+#[tokio::test]
+async fn when_the_charge_is_created_late_then_its_late_fee_counts_from_the_creation_date() {
+    let state = state_with(
+        true,
+        vec![
+            period_row("1", "Ekim 2026", "2026-10-10", DuesPeriodStatus::Closed),
+            period_row("2", "Kasım 2026", "2026-11-10", DuesPeriodStatus::Active),
+        ],
+    )
+    .await;
+
+    let posted = post(&state, "2026-10-11", "2026-11-19").await;
+
+    let service = DuesCalculationService::new();
+    let fees_at = |day: &str| -> Vec<Decimal> {
+        posted
+            .iter()
+            .map(|due| {
+                service
+                    .calculate_delay_penalty(due.clone(), date(day))
+                    .delay_penalty
+            })
+            .collect()
+    };
+    assert!(posted
+        .iter()
+        .all(|due| due.effective_due_date == Some(date("2026-11-19"))));
+    assert_eq!(fees_at("2026-11-19"), vec![amount("0.00"), amount("0.00")]);
+    assert_eq!(
+        fees_at("2026-11-29"),
+        vec![amount("16.94"), amount("25.00")]
+    );
 }
 
 // covers: SC-07-09-09
