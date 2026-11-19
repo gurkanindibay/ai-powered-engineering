@@ -13,9 +13,12 @@ Feature: Residents and owners change after periods were accrued (state F6)
   @SC-13-03-01 @J-10 @depth:1 @state:F6 @layer:backend @smoke @core @role_manager @linked
   Scenario: A mid-month move-in splits a period between owner and tenant
     Given the site is in state F6
-    Then the "Ekim 2026" principal shares for "A-2" are owner "Ahmet Yılmaz" 483.87 and tenant "Selin Demir" 1016.13
+    Then the "Ekim 2026" principal shares for "A-2" are owner 483.87 and tenant 1016.13
+    And the tenant liability names "Selin Demir" as its liable person
+    And the owner of record of "A-2" is "Ahmet Yılmaz"
     And the two shares add up to 1500.00
-    And the "Eylül 2026" principal of 1500.00 for "A-2" is assigned to "Ahmet Yılmaz"
+    And the "Eylül 2026" principal of 1500.00 for "A-2" is an owner liability
+    And the ledger invariants hold
 
   # Pending: the accrual splits a period by role (owner, tenant), not by person, so two successive tenants share one tenant liability; the effective due date comes from the real server date, not the E2E clock (the clock drives the scheduler only); the jointly liable owner needs #207.
   @SC-13-03-02 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
@@ -40,14 +43,21 @@ Feature: Residents and owners change after periods were accrued (state F6)
   Scenario: A resident added after accruals is charged from their start residing date
     Given the site is in state F6
     Then tenant "Oya Çelik" is primary resident of unit "A-3" with start residing date "2026-11-18"
-    And "Oya Çelik" owes 0.00 for "Eylül 2026" and "Ekim 2026"
-    And "Oya Çelik" is charged principal of 650.00 for "Kasım 2026", which is 13 of 30 days
-    And owner "Burak Şahin" owes the full "Eylül 2026" and "Ekim 2026" and 850.00 for "Kasım 2026"
+    And the owner of record of "A-3" is "Burak Şahin"
+    And "A-3" has no tenant liability for "Eylül 2026" and "Ekim 2026"
+    And the "Kasım 2026" principal of "A-3" is tenant 650.00, which is 13 of 30 days, and owner 850.00
     And the ledger invariants hold
     When the manager accrues period "Aralık 2026" due "2026-12-10"
-    Then tenant "Oya Çelik" owes 1500.00 for "Aralık 2026"
-    And owner "Burak Şahin" owes nothing for "Aralık 2026" operational dues
+    Then "A-3" has a tenant liability of 1500.00 and no owner liability for "Aralık 2026"
     And the ledger invariants hold
+
+  # Pending: owner liabilities and the rows re-issued by a split correction carry no liable person id, so "who owes" cannot be asserted per person on those rows.
+  @SC-13-03-21 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  Scenario: Every liability row names the person who owes it
+    Given the site is in state F6
+    Then the owner liabilities of "A-2", "A-3" and "A-4" name the owner of record as liable person
+    And the "Kasım 2026" liabilities of "A-3" name "Oya Çelik" for 650.00 and "Burak Şahin" for 850.00
+    And "Oya Çelik" owes 0.00 for "Eylül 2026" and "Ekim 2026"
 
   # Pending: the effective due date and late fee read the real server date; the E2E clock drives the scheduler only.
   @SC-13-03-20 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending

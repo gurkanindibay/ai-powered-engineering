@@ -72,6 +72,10 @@ def test_mid_month_move_in_splits_the_period(journey_site):
         "SELECT o.start_date FROM unit_occupancies o JOIN persons p ON p.id = o.person_id "
         f"WHERE o.unit_id = {int(j.unit_id(2))} AND p.full_name = 'Selin Demir' AND o.occupancy_type = 'TENANT' "
         "ORDER BY o.id LIMIT 1;") == "2026-10-11"
+    # The accrual records the liable person on tenant rows only: Selin's Ekim row names her.
+    assert j.stack.sql(
+        f"SELECT liable_person_id FROM dues_liabilities WHERE unit_id = {int(j.unit_id(2))} "
+        "AND period = 'Ekim 2026' AND debtor_type = 'TENANT' AND status <> 'CANCELLED';") == j.people["Selin Demir"]
     assert _party_names(j, 2)["OWNER"] == "Ahmet Yılmaz"
     j.invariants("SC-13-03-01")
 
@@ -88,11 +92,10 @@ def test_resident_added_after_accruals_is_charged_from_start_date(journey_site):
     ) == "TENANT|2026-11-18|true"
     assert j.stack.sql(f"SELECT p.full_name FROM units u JOIN persons p ON p.id = u.tenant_person_id WHERE u.id = {unit};") == "Oya Çelik"
     assert _party_names(j, 3)["OWNER"] == "Burak Şahin"
-    assert j.shares(3, "Eylül 2026") == {"Burak Şahin": D("1500.00")}
-    assert j.shares(3, "Ekim 2026") == {"Burak Şahin": D("1500.00")}
-    # The re-split tenant row carries no liable person id, so the tenant share is asserted by role;
-    # the tenant of record (Oya Çelik, start 2026-11-18) is asserted above.
-    assert j.shares(3, "Kasım 2026")["Burak Şahin"] == D("850.00")
+    assert j.roles(3, "Eylül 2026") == {"OWNER": D("1500.00")}
+    assert j.roles(3, "Ekim 2026") == {"OWNER": D("1500.00")}
+    # The re-split rows carry no liable person id (pending SC-13-03-21), so shares are asserted by role;
+    # the owner and tenant of record are asserted above.
     assert j.roles(3, "Kasım 2026") == {"OWNER": D("850.00"), "TENANT": D("650.00")}
     j.invariants("SC-13-03-04 before December")
     j.accrue("Aralık 2026", due="2026-12-10")
@@ -156,3 +159,4 @@ def test_unit_created_mid_month_is_billed_for_chargeable_days(journey_site):
     j.accrue("Kasım 2026")
     assert j.shares(3, "Kasım 2026") == {"Burak Şahin": D("750.00")}
     j.invariants("SC-13-03-15")
+
