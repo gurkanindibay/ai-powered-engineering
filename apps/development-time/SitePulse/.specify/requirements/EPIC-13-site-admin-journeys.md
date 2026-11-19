@@ -20,6 +20,36 @@ As a site manager, I can view and interact with sites in early starting states (
 - Starting state F3 exposes open periods with zero liabilities before residents arrive.
 - Every starting state (F0 to F3) survives backend restart without data loss or balance drift.
 
+### STORY-13-05: Corner cases around accrual, occupancy, access and time
+
+As a site administrator, I need edge cases around billing, occupancy, access and local time to
+preserve the ledger and reject invalid state changes without side effects.
+
+#### Acceptance criteria
+
+- Corner-case scenarios use the documented named states and assert ledger invariants after each stage.
+- Scenarios without their required historical fixtures or product dependencies remain `@pending` with a specific reason.
+
+### STORY-13-09: Financial transitions across periods and ledgers
+
+As a site manager, I need targeted, partial and backdated payments and period corrections to keep
+live balances, closed snapshots and operational/capital ledgers consistent.
+
+#### Acceptance criteria
+
+- Financial scenarios assert exact Decimal balances and ledger invariants after every state change.
+- Scenarios that require unavailable historical fixtures remain `@pending` with a specific reason.
+
+### STORY-13-11: Billing state machines
+
+As a site manager, I need each liability, period, reconciliation and occupancy status to allow only
+valid commands and preserve all rows when a command is refused.
+
+#### Acceptance criteria
+
+- State-machine scenarios cover each status transition and refusal at the backend or GUI layer named by the feature.
+- Scenarios that need missing fixtures or transition evidence remain `@pending` with a specific reason.
+
 ### STORY-13-07: Journey setup, teardown and isolation
 
 As a test author, I need named site fixtures, reusable ledger invariant checks, and retryable site-scoped teardown so journeys start from known balances and leave the E2E database safe for other attempts.

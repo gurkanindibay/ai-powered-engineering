@@ -92,17 +92,24 @@ async fn when_the_due_day_is_5_then_every_liability_of_the_period_is_due_on_the_
 }
 
 // covers: SC-07-10-02
+// covers: SC-13-05-02
 #[tokio::test]
 async fn when_the_due_day_is_beyond_the_month_end_then_it_falls_on_the_last_day() {
-    let state = clean_site(AccrualSchedule {
-        due_day: 31,
-        ..AccrualSchedule::default()
-    })
-    .await;
-    run_accrual_with_report(&state, at(2027, 2, 2)).await;
-    let dues = site_dues(&state).await;
-    assert!(!dues.is_empty());
-    assert!(dues.iter().all(|x| x.due_date == day(2027, 2, 28)));
+    for (year, month, accrual_day, expected_day) in
+        [(2027, 2, 2, 28), (2028, 2, 2, 29), (2026, 11, 2, 30)]
+    {
+        let state = clean_site(AccrualSchedule {
+            due_day: 31,
+            ..AccrualSchedule::default()
+        })
+        .await;
+        run_accrual_with_report(&state, at(year, month, accrual_day)).await;
+        let dues = site_dues(&state).await;
+        assert!(!dues.is_empty(), "month {year}-{month:02}");
+        assert!(dues
+            .iter()
+            .all(|x| x.due_date == day(year, month, expected_day)));
+    }
 }
 
 // covers: SC-07-10-03

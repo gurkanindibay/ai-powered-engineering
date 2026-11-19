@@ -153,6 +153,7 @@ async fn a_closed_period_still_accepts_payment_and_books_it_on_its_receipt_date(
 }
 
 // covers: SC-07-12-03
+// covers: SC-13-09-04
 #[tokio::test]
 async fn a_correction_to_a_closed_period_posts_later_and_preserves_the_close_report() {
     let state = fixture(DuesPeriodStatus::Active, "1000.00", "0.00").await;
@@ -258,6 +259,7 @@ fn active_periods_use_the_open_contract_while_accepting_legacy_active_values() {
 
 // covers: SC-07-12-05
 #[tokio::test]
+// covers: SC-13-09-05
 async fn reopening_requires_a_second_manager_and_keeps_an_audit_record() {
     let state = fixture(DuesPeriodStatus::Active, "", "").await;
     let service = BillingPeriodService::new(&state);
