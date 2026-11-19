@@ -2205,6 +2205,11 @@ pub struct PaymentReceipt {
     pub id: i64,
     pub site_id: String,
     pub unit_id: String,
+    /// Internal identity keys used for resident authorization; never serialized in receipt responses.
+    #[serde(skip)]
+    pub payer_person_id: Option<i64>,
+    #[serde(skip)]
+    pub on_behalf_of_person_id: Option<i64>,
     pub receipt_number: String,
     pub sequence_number: i64,
     pub payer_name: String,

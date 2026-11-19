@@ -74,8 +74,8 @@ Feature: Tenant data isolation across sites and resident accounts
 
   @SC-13-10-06 @J-17 @depth:2 @state:F2 @layer:backend @core @role_resident @linked
   Scenario: A tenant statement excludes the owner's private transactions for the same unit
-    Given the tenant of "A-2" owes 1500.00 operational principal and has an issued receipt for an earlier payment
-    And the owner has a 1000.00 capital liability and a separate private receipt for the same unit
+    Given the tenant of "A-2" owes 1500.00 operational principal and has an issued receipt for an earlier payment linked to their person ID
+    And the owner has a 1000.00 capital liability and a separate private receipt linked to their person ID
     When the tenant opens their statement and their own receipt
     Then the tenant's operational debt and own receipt are visible
     And the owner's balance, payment movements and private receipt are absent from the statement

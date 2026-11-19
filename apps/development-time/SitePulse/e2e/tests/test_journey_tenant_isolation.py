@@ -95,8 +95,11 @@ def test_manager_lists_and_searches_are_site_scoped(request, api, actors, stack)
             api, "GET", f"/api/v1/site-admin/persons?site_id={site_a.site_id}", site_a.manager.token
         )
         assert status == 200
-        assert len(res_all.get("items", [])) == 7
-        assert all(str(p["id"]) in site_a.person_ids for p in res_all.get("items", []))
+        listed_person_ids = {str(p["id"]) for p in res_all.get("items", [])}
+        manager_person_id = stack.sql(
+            f"SELECT person_id FROM users WHERE id = {int(site_a.manager.user['id'])};"
+        )
+        assert listed_person_ids == set(site_a.person_ids) | {manager_person_id}
 
         # 3. Payment stream
         stream_a = api.payment_stream(site_a.manager)
@@ -145,7 +148,9 @@ def test_direct_reads_and_downloads_require_site_access(request, api, actors, st
         rcpt_b_id = str(rcpt_b["id"])
         budget_b = api.call(
             "POST", "/api/v1/operating-budgets", site_b.manager.token,
-            body={"fiscal_year": 2026, "total_budget": "100000.00", "lines": []}
+            body={"fiscal_year": 2026, "lines": [
+                {"category": "CLEANING", "annual_amount": "100000.00", "allocation_key": "EQUAL"}
+            ]}
         )
         budget_b_id = str(budget_b["id"])
 
@@ -211,7 +216,7 @@ def test_site_parameter_cannot_widen_manager_permissions(request, api, actors, s
         status_s, raw_s, stream_resp = http_call(
             api, "GET", f"/api/v1/payments/stream?site_id={site_b.site_id}", site_a.manager.token
         )
-        assert status_s in (200, 400, 403)
+        assert status_s in (200, 400, 403, 404)
         assert b"350.00" not in raw_s
         if status_s == 200 and isinstance(stream_resp, dict):
             for entry in stream_resp.get("entries", []):
@@ -284,6 +289,7 @@ def test_manager_cannot_mutate_another_site_records(request, api, actors, stack)
         # 3. Close a billing period
         period_b = api.create_period(site_b.manager, "Kasım 2026", "2026-11-15")
         period_b_id = str(period_b["id"])
+        api.accrue_period(site_b.manager, "Kasım 2026", Decimal("1500.00"), "2026-11-15")
         status_close, _, _ = http_call(
             api, "POST", f"/api/v1/dues/periods/{period_b_id}/close", site_a.manager.token, body={}
         )
@@ -400,6 +406,12 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
 
         tenant_rcpt = api.record_manual_payment(site_a.manager, unit_2, Decimal("500.00"), "Selin Demir", payer_role="TENANT")
         owner_rcpt = api.record_manual_payment(site_a.manager, unit_2, Decimal("1000.00"), "Ahmet Yılmaz", payer_role="OWNER")
+        assert stack.sql(
+            f"SELECT payer_person_id FROM payment_receipts WHERE id = {tenant_rcpt['id']};"
+        ) == selin_person_id
+        assert stack.sql(
+            f"SELECT payer_person_id FROM payment_receipts WHERE id = {owner_rcpt['id']};"
+        ) == ahmet_person_id
         stack.restart_backend()
 
         selin = api.login(selin_email, site_a.manager_password)
@@ -463,11 +475,19 @@ def test_replacing_tenant_keeps_history_and_receipts_private(request, api, actor
         mert_person_id = stack.sql(f"SELECT id FROM persons WHERE site_id = {site_a.site_id} AND email = '{mert_email}';")
         manifest.record("person_ids", mert_person_id)
         pwd_hash = stack.sql(f"SELECT password_hash FROM users WHERE email = '{site_a.manager_email}';")
-        mert_user_id = stack.sql(
-            f"INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password) "
-            f"VALUES ({site_a.site_id}, {mert_person_id}, '{mert_email}', '{pwd_hash}', 'HOME_RESIDENT', FALSE) "
-            f"ON CONFLICT (email) DO UPDATE SET password_hash = '{pwd_hash}', must_change_password = FALSE RETURNING id;"
-        ).splitlines()[0]
+        mert_user_id = stack.sql(f"SELECT id FROM users WHERE email = '{mert_email}';")
+        if mert_user_id:
+            stack.sql(
+                f"UPDATE users SET person_id = {mert_person_id}, site_id = {site_a.site_id}, "
+                f"password_hash = '{pwd_hash}', role = 'HOME_RESIDENT', must_change_password = FALSE "
+                f"WHERE id = {mert_user_id};"
+            )
+        else:
+            mert_user_id = stack.sql(
+                f"INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password) "
+                f"VALUES ({site_a.site_id}, {mert_person_id}, '{mert_email}', '{pwd_hash}', 'HOME_RESIDENT', FALSE) "
+                "RETURNING id;"
+            ).splitlines()[0]
         manifest.record("user_ids", mert_user_id)
         stack.sql(
             f"INSERT INTO user_site_roles (user_id, site_id, role) VALUES ({mert_user_id}, {site_a.site_id}, 'HOME_RESIDENT') "

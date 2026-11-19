@@ -228,7 +228,7 @@ pub async fn resource(
             "receipt" => {
                 let row = client
                     .query_opt(
-                        "SELECT r.site_id, r.unit_id, r.payer_person_id, r.on_behalf_of_person_id, r.payer_role, r.payer_name \
+                        "SELECT r.site_id, r.unit_id, r.payer_person_id, r.on_behalf_of_person_id, r.payer_role \
                          FROM payment_receipts r WHERE (r.id::text = $1 OR r.receipt_number = $1) AND r.site_id = $2",
                         &[&id, &site.0],
                     )
@@ -239,13 +239,11 @@ pub async fn resource(
                 let payer_person_id: Option<i64> = row.get(2);
                 let on_behalf_of_person_id: Option<i64> = row.get(3);
                 let payer_role: String = row.get(4);
-                let payer_name: String = row.get(5);
                 let user = crate::db::require_id("user", &claims.sub)
                     .map_err(|_| SecurityError::Unauthenticated)?;
                 let actor_row = client
                     .query_opt(
-                        "SELECT u.role, u.person_id, p.full_name FROM users u \
-                         JOIN persons p ON p.id = u.person_id WHERE u.id = $1",
+                        "SELECT u.role, u.person_id FROM users AS u WHERE u.id = $1",
                         &[&user],
                     )
                     .await
@@ -253,7 +251,6 @@ pub async fn resource(
                     .ok_or(SecurityError::Unauthenticated)?;
                 let actor_role: String = actor_row.get(0);
                 let actor_person_id: i64 = actor_row.get(1);
-                let actor_full_name: String = actor_row.get(2);
                 drop(client);
                 unit(state, claims, &unit_id.to_string()).await?;
                 if actor_role != "SITE_MANAGER" && !claims.is_saas_admin() {
@@ -264,7 +261,7 @@ pub async fn resource(
                             } else if let Some(pid) = payer_person_id {
                                 pid == actor_person_id || on_behalf_of_person_id == Some(actor_person_id)
                             } else {
-                                payer_name.eq_ignore_ascii_case(&actor_full_name)
+                                false
                             }
                         }
                         "HOME_RESIDENT" => {
@@ -273,7 +270,7 @@ pub async fn resource(
                             } else if let Some(pid) = payer_person_id {
                                 pid == actor_person_id
                             } else {
-                                payer_name.eq_ignore_ascii_case(&actor_full_name)
+                                false
                             }
                         }
                         _ => false,
@@ -324,9 +321,10 @@ pub async fn resource(
             .find(|r| r.id.to_string() == id || r.receipt_number == id)
             .ok_or(SecurityError::NotFound)?;
         let unit_id = r.unit_id.clone();
+        let payer_person_id = r.payer_person_id;
+        let on_behalf_of_person_id = r.on_behalf_of_person_id;
         let payer_role = r.payer_role;
         let on_behalf_of_role = r.on_behalf_of_role;
-        let payer_name = r.payer_name.clone();
         drop(inner);
         unit(state, claims, &unit_id).await?;
         if !claims.is_site_staff() && !claims.is_saas_admin() {
@@ -336,14 +334,19 @@ pub async fn resource(
                 .iter()
                 .find(|u| crate::auth::same_id(&u.id, &claims.sub))
                 .ok_or(SecurityError::Unauthenticated)?;
+            let Some(actor_person_id) = user.person_id else {
+                return Err(SecurityError::NotFound);
+            };
             let allowed = match user.role {
                 crate::models::Role::HomeOwner => {
-                    payer_role == crate::models::DebtorType::Owner
-                        || on_behalf_of_role == Some(crate::models::DebtorType::Owner)
+                    (payer_role == crate::models::DebtorType::Owner
+                        && payer_person_id == Some(actor_person_id))
+                        || (on_behalf_of_role == Some(crate::models::DebtorType::Owner)
+                            && on_behalf_of_person_id == Some(actor_person_id))
                 }
                 crate::models::Role::HomeResident => {
                     payer_role == crate::models::DebtorType::Tenant
-                        && payer_name.eq_ignore_ascii_case(&user.full_name)
+                        && payer_person_id == Some(actor_person_id)
                 }
                 _ => false,
             };

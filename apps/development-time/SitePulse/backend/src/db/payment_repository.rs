@@ -11,7 +11,8 @@ pub const RECEIPT_COLUMNS: &str = "id, site_id, unit_id, receipt_number, sequenc
      on_behalf_of_name, on_behalf_of_role, total_amount, payment_channel, channel_reference, \
      allocated_principal, allocated_penalty, allocated_advance, allocation_breakdown::text, \
      is_rent_offset_eligible, legal_statutory_note, verification_hash, issued_at, \
-     receipt_type, reverses_receipt_id, advance_debtor_type, issuer_name, issuer_address, issuer_tax_id, issuer_tax_office";
+     receipt_type, reverses_receipt_id, advance_debtor_type, issuer_name, issuer_address, issuer_tax_id, issuer_tax_office, \
+     payer_person_id, on_behalf_of_person_id";
 
 pub fn receipt_from_row(r: &tokio_postgres::Row) -> PaymentReceipt {
     let breakdown: Option<String> = r.get(15);
@@ -19,6 +20,8 @@ pub fn receipt_from_row(r: &tokio_postgres::Row) -> PaymentReceipt {
         id: r.get(0),
         site_id: r.get::<_, i64>(1).to_string(),
         unit_id: r.get::<_, i64>(2).to_string(),
+        payer_person_id: r.get(27),
+        on_behalf_of_person_id: r.get(28),
         receipt_number: r.get(3),
         sequence_number: r.get(4),
         payer_name: r.get(5),

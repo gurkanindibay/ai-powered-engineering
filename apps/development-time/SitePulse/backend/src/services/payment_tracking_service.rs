@@ -516,7 +516,14 @@ impl PaymentTrackingService {
         } else {
             settling_role.as_str().to_string()
         };
-        let (unit, owner_name, tenant_name, eligible_joint_due_ids) = {
+        let (
+            unit,
+            owner_name,
+            tenant_name,
+            owner_person_id,
+            tenant_person_id,
+            eligible_joint_due_ids,
+        ) = {
             let inner = self.state.inner.read().await;
             if let Some(key) = idempotency_key.as_deref() {
                 if let Some(rid) = inner
@@ -549,6 +556,11 @@ impl PaymentTrackingService {
                     .find(|user| &user.id == id)
                     .map(|user| user.full_name.clone())
             });
+            let tenant_person_id = unit
+                .tenant_user_id
+                .as_ref()
+                .and_then(|id| inner.users.iter().find(|user| &user.id == id))
+                .and_then(|user| user.person_id);
             let owner_person_id = owner.and_then(|user| user.person_id);
             let eligible_joint_due_ids = owner_person_id
                 .map(|person_id| {
@@ -593,7 +605,14 @@ impl PaymentTrackingService {
                         })
                 })
             });
-            (unit, owner_name, tenant_name, eligible_joint_due_ids)
+            (
+                unit,
+                owner_name,
+                tenant_name,
+                owner_person_id,
+                tenant_person_id,
+                eligible_joint_due_ids,
+            )
         };
         if on_behalf_of_tenant {
             if eligible_joint_due_ids.is_empty() {
@@ -653,6 +672,18 @@ impl PaymentTrackingService {
                 .unit_label(&unit.block_id, unit.unit_number),
             payer_name: req.payer_name.clone(),
             payer_role,
+            payer_person_id: if payer_role == DebtorType::Owner {
+                owner_person_id
+            } else {
+                tenant_person_id
+            },
+            on_behalf_of_person_id: if on_behalf_of_owner {
+                owner_person_id
+            } else if on_behalf_of_tenant {
+                tenant_person_id
+            } else {
+                None
+            },
             payment_channel: req.payment_channel,
             amount: payment_amount,
             issued_at,
@@ -1116,7 +1147,7 @@ impl PaymentTrackingService {
         let source = normalize_debtor(req.source_debtor.as_deref(), "source_debtor")?;
         let target = normalize_debtor(req.target_debtor.as_deref(), "target_debtor")?;
 
-        let (unit, owner_name, tenant_name) = {
+        let (unit, owner_name, tenant_name, owner_person_id, tenant_person_id) = {
             let inner = self.state.inner.read().await;
             let unit = inner
                 .units
@@ -1132,10 +1163,17 @@ impl PaymentTrackingService {
                     .and_then(|id| inner.users.iter().find(|u| &u.id == id))
                     .map(|u| u.full_name.clone())
             };
+            let person_id_of = |uid: &Option<String>| {
+                uid.as_ref()
+                    .and_then(|id| inner.users.iter().find(|u| &u.id == id))
+                    .and_then(|user| user.person_id)
+            };
             (
                 unit.clone(),
                 name_of(&unit.owner_user_id),
                 name_of(&unit.tenant_user_id),
+                person_id_of(&unit.owner_user_id),
+                person_id_of(&unit.tenant_user_id),
             )
         };
         let payer_name = if source == dues_ledger::DEBTOR_OWNER {
@@ -1158,6 +1196,18 @@ impl PaymentTrackingService {
                 .unit_label(&unit.block_id, unit.unit_number),
             payer_name,
             payer_role: DebtorType::from_str_loose(source),
+            payer_person_id: if source == dues_ledger::DEBTOR_OWNER {
+                owner_person_id
+            } else {
+                tenant_person_id
+            },
+            on_behalf_of_person_id: if source == dues_ledger::DEBTOR_TENANT
+                && target == dues_ledger::DEBTOR_OWNER
+            {
+                owner_person_id
+            } else {
+                None
+            },
             payment_channel: PaymentChannel::InterLedger,
             amount: Decimal::ZERO,
             issued_at: now,
@@ -1952,6 +2002,8 @@ struct ReceiptContext {
     unit_id: String,
     payer_name: String,
     payer_role: DebtorType,
+    payer_person_id: Option<i64>,
+    on_behalf_of_person_id: Option<i64>,
     payment_channel: PaymentChannel,
     amount: Decimal,
     issued_at: DateTime<Utc>,
@@ -2262,6 +2314,8 @@ fn build_reversal_receipt(
         id: 0,
         site_id: original.site_id.clone(),
         unit_id: original.unit_id.clone(),
+        payer_person_id: original.payer_person_id,
+        on_behalf_of_person_id: original.on_behalf_of_person_id,
         verification_hash: PaymentTrackingService::compute_verification_hash(
             &receipt_number,
             &original.unit_id,
@@ -2396,6 +2450,12 @@ fn build_receipt(
         id: 0,
         site_id: ctx.site_id.clone(),
         unit_id: ctx.unit_id.clone(),
+        payer_person_id: ctx.payer_person_id,
+        on_behalf_of_person_id: if pays_jointly_liable_tenant || is_rent_offset_eligible {
+            ctx.on_behalf_of_person_id
+        } else {
+            None
+        },
         verification_hash: String::new(),
         receipt_number,
         sequence_number,

@@ -313,10 +313,16 @@ pub async fn get_resident_statement(
         .find(|u| crate::auth::same_id(&u.id, &unit_id))
         .ok_or((StatusCode::NOT_FOUND, "Unit not found".to_string()))?;
     let viewer = resident_statement::caller_debtor_role(&claims, unit);
-    Ok(Json(resident_statement::build_statement(
+    let viewer_person_id = inner
+        .users
+        .iter()
+        .find(|user| crate::auth::same_id(&user.id, &claims.sub))
+        .and_then(|user| user.person_id);
+    Ok(Json(resident_statement::build_statement_for_person(
         &inner,
         unit,
         viewer,
+        viewer_person_id,
         Utc::now().date_naive(),
     )))
 }
