@@ -44,10 +44,14 @@ pub struct SiteQuery {
 }
 
 fn site_of(q: &SiteQuery, claims: &Claims) -> String {
-    q.site_id
-        .clone()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| claims.site_id.clone())
+    if claims.is_saas_admin() {
+        q.site_id
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| claims.site_id.clone())
+    } else {
+        claims.site_id.clone()
+    }
 }
 
 fn actor(claims: &Claims) -> String {

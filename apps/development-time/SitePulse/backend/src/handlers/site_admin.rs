@@ -542,7 +542,8 @@ pub async fn export_persons(
     ctx: AuthzContext,
     Query(q): Query<DirectoryQuery>,
 ) -> Result<Response, AppError> {
-    let site_id = q.site_id.clone().unwrap_or_default();
+    let scope = crate::tenancy::TenantScope::from_claims(&ctx.claims);
+    let site_id = scope.pinned(q.site_id.clone())?;
     let directory = PersonDirectoryService::new(state);
     let (csv, rows) = directory
         .export_csv(&site_id, &q)

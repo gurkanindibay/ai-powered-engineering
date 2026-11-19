@@ -37,3 +37,19 @@ As a manager, I need a back-dated owner in a closed month to receive supplementa
 
 - Both supplementary charges have the creation date as effective due date and a late fee of 0.00 at creation.
 - Ten days later the late fees are 16.94 and 25.00.
+
+### STORY-13-10: Tenant data isolation across sites and resident accounts
+
+As a tenant and property manager, I need strict data isolation across sites and accounts so that managers cannot view or mutate another site's data and residents cannot view another resident's private transactions.
+
+#### Acceptance criteria
+
+- Manager lists, searches and aggregates are strictly scoped to the authenticated site.
+- Direct reads and downloads require access to the requested site (403 or 404).
+- A site parameter cannot widen manager collection or export permissions.
+- A manager cannot mutate another site's records.
+- A resident cannot read another unit's financial records.
+- A tenant statement excludes the owner's private transactions for the same unit.
+- Replacing a tenant keeps each occupant's history and receipts private.
+- Late browser responses cannot repopulate the next tenant's session.
+

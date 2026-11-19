@@ -169,6 +169,7 @@ def site_in_state(
     stack: E2EStack,
     saas: Session,
     manifest: JourneyManifest,
+    name_suffix: str = "",
 ) -> JourneyFixture:
     """Build an isolated F0-F2 site and record its resources before later setup work.
 
@@ -181,7 +182,7 @@ def site_in_state(
     if state not in {"F0", "F1", "F2"}:
         raise JourneyFixturePending(f"{state} is pending the later journey fixture builders and #211 clock integration")
 
-    attempt = _slug(manifest.attempt_id)
+    attempt = _slug(f"{manifest.attempt_id}{name_suffix}")
     site_name = f"Journey {manifest.run_id[:30]} {attempt[:12]}"
     manager_email = f"journey.manager.{attempt}@e2e.test"
     credentials = api.create_site(saas, site_name, manager_email, admin_name="Journey Manager", blocks=())
@@ -206,7 +207,7 @@ def site_in_state(
         unit_ids = _create_structure(stack, site_id, manifest)
         requires_restart = True
     if state == "F2":
-        person_ids = _create_residents(stack, site_id, manager_user_id, manifest)
+        person_ids = _create_residents(stack, site_id, manager_user_id, manifest, attempt_slug=attempt)
     if requires_restart:
         stack.restart_backend()
 
@@ -266,13 +267,13 @@ def _create_structure(stack: E2EStack, site_id: str, manifest: JourneyManifest) 
 
 
 def _create_residents(stack: E2EStack, site_id: str, manager_user_id: str | int,
-                      manifest: JourneyManifest) -> tuple[str, ...]:
+                      manifest: JourneyManifest, attempt_slug: str | None = None) -> tuple[str, ...]:
     site = _safe_id(site_id)
     manager_id = _safe_id(manager_user_id)
     password_hash = stack.sql(f"SELECT password_hash FROM users WHERE id = {manager_id};")
     if not password_hash:
         raise AssertionError("F2: permanent manager password hash is unavailable")
-    attempt = _slug(manifest.attempt_id)
+    attempt = attempt_slug or _slug(manifest.attempt_id)
     people = {
         "ayse": ("Ayşe Kaya", "HOME_OWNER"),
         "ahmet": ("Ahmet Yılmaz", "HOME_OWNER"),
