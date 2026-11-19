@@ -86,12 +86,17 @@ def liability_rows(stack: E2EStack, unit_id: str, period: str) -> list[dict]:
 
 
 def liability_shares(stack: E2EStack, unit_id: str, period: str, expense_type: str = "OPERATIONAL_DUES") -> dict[str, Decimal]:
-    """Principal per liable person for a unit and period."""
+    """Principal per named debtor; resolve role-based owner rows to the unit's active owner."""
     raw = stack.sql(
-        "SELECT p.full_name || '|' || sum(d.principal_amount) "
+        "SELECT COALESCE(p.full_name, owner_person_data.full_name) || '|' || sum(d.principal_amount) "
         "FROM dues_liabilities d LEFT JOIN persons p ON p.id = d.liable_person_id "
+        "LEFT JOIN LATERAL (SELECT owner_person.full_name FROM unit_ownerships o "
+        "JOIN persons owner_person ON owner_person.id = o.person_id "
+        "WHERE o.unit_id = d.unit_id AND o.is_active ORDER BY o.id LIMIT 1) owner_person_data "
+        "ON d.debtor_type = 'OWNER' AND d.liable_person_id IS NULL "
         f"WHERE d.unit_id = {int(unit_id)} AND d.expense_type = '{expense_type}' "
-        f"AND d.period = '{period}' AND d.status <> 'CANCELLED' GROUP BY p.full_name ORDER BY 1;"
+        f"AND d.period = '{period}' AND d.status <> 'CANCELLED' "
+        "GROUP BY COALESCE(p.full_name, owner_person_data.full_name) ORDER BY 1;"
     )
     return {line.split("|")[0]: Decimal(line.split("|")[1]) for line in raw.splitlines() if line}
 
