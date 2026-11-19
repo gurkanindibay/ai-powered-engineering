@@ -95,7 +95,7 @@ def test_manager_lists_and_searches_are_site_scoped(request, api, actors, stack)
             api, "GET", f"/api/v1/site-admin/persons?site_id={site_a.site_id}", site_a.manager.token
         )
         assert status == 200
-        listed_person_ids = {str(p["id"]) for p in res_all.get("items", [])}
+        listed_person_ids = {str(p["person_id"]) for p in res_all.get("items", [])}
         manager_person_id = stack.sql(
             f"SELECT person_id FROM users WHERE id = {int(site_a.manager.user['id'])};"
         )
@@ -221,6 +221,14 @@ def test_site_parameter_cannot_widen_manager_permissions(request, api, actors, s
         if status_s == 200 and isinstance(stream_resp, dict):
             for entry in stream_resp.get("entries", []):
                 assert str(entry.get("site_id")) != str(site_b.site_id)
+
+        # The export needs a fresh password check (step-up); both managers pass it.
+        for fixture in (site_a, site_b):
+            status_up, _, _ = http_call(
+                api, "POST", "/api/v1/auth/step-up", fixture.manager.token,
+                body={"password": fixture.manager_password},
+            )
+            assert status_up == 200
 
         # Manager A requests people export with site B selector
         status_e, raw_e, _ = http_call(
@@ -493,7 +501,6 @@ def test_replacing_tenant_keeps_history_and_receipts_private(request, api, actor
             f"INSERT INTO user_site_roles (user_id, site_id, role) VALUES ({mert_user_id}, {site_a.site_id}, 'HOME_RESIDENT') "
             f"ON CONFLICT DO NOTHING;"
         )
-        stack.sql(f"UPDATE units SET tenant_user_id = '{mert_user_id}' WHERE id = {unit_2};")
         stack.restart_backend()
 
         mert = api.login(mert_email, site_a.manager_password)
@@ -510,6 +517,20 @@ def test_replacing_tenant_keeps_history_and_receipts_private(request, api, actor
         if status_s == 200 and isinstance(stmt_selin, dict):
             selin_rcpt_nums = [r.get("receipt_number") for r in stmt_selin.get("receipts", [])]
             assert rcpt_mert.get("receipt_number") not in selin_rcpt_nums
+
+        # Reversing Selin's receipt after the occupant change keeps Selin's identity.
+        selin_person = stack.sql(
+            f"SELECT payer_person_id FROM payment_receipts WHERE id = {rcpt_selin['id']};"
+        )
+        reversal = api.call(
+            "POST", "/api/v1/payments/reverse", site_a.manager.token,
+            body={"receipt": str(rcpt_selin["id"]), "reason": "Tenant isolation round trip"},
+        )
+        reversal_row = stack.sql(
+            "SELECT payer_person_id FROM payment_receipts "
+            f"WHERE reverses_receipt_id = {rcpt_selin['id']};"
+        )
+        assert reversal_row == selin_person != mert_person_id, (reversal, reversal_row)
 
         # Neither can download the other's private receipt
         s1, _, _ = http_call(api, "GET", f"/api/v1/payments/receipts/{rcpt_mert['id']}", selin.token)

@@ -22,9 +22,19 @@ const LIMITATION_DAYS: i64 = 5 * 365;
 pub fn caller_debtor_role(
     claims: &crate::auth::Claims,
     unit: &IndependentUnit,
+    viewer_person_id: Option<i64>,
 ) -> Option<&'static str> {
     if claims.is_site_staff() {
         return None;
+    }
+    // Units reference parties as `person-<id>`; a durable person id beats the login id.
+    if let Some(person_ref) = viewer_person_id.map(|id| format!("person-{id}")) {
+        if unit.tenant_user_id.as_deref() == Some(person_ref.as_str()) {
+            return Some(DEBTOR_TENANT);
+        }
+        if unit.owner_user_id.as_deref() == Some(person_ref.as_str()) {
+            return Some(DEBTOR_OWNER);
+        }
     }
     if unit
         .tenant_user_id

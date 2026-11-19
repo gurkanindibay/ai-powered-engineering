@@ -312,12 +312,12 @@ pub async fn get_resident_statement(
         .iter()
         .find(|u| crate::auth::same_id(&u.id, &unit_id))
         .ok_or((StatusCode::NOT_FOUND, "Unit not found".to_string()))?;
-    let viewer = resident_statement::caller_debtor_role(&claims, unit);
     let viewer_person_id = inner
         .users
         .iter()
         .find(|user| crate::auth::same_id(&user.id, &claims.sub))
         .and_then(|user| user.person_id);
+    let viewer = resident_statement::caller_debtor_role(&claims, unit, viewer_person_id);
     Ok(Json(resident_statement::build_statement_for_person(
         &inner,
         unit,
@@ -344,7 +344,12 @@ pub async fn create_payment_intent(
             .iter()
             .find(|u| crate::auth::same_id(&u.id, &unit_id))
             .ok_or((StatusCode::NOT_FOUND, "Unit not found".to_string()))?;
-        resident_statement::caller_debtor_role(&claims, unit)
+        let person_id = inner
+            .users
+            .iter()
+            .find(|user| crate::auth::same_id(&user.id, &claims.sub))
+            .and_then(|user| user.person_id);
+        resident_statement::caller_debtor_role(&claims, unit, person_id)
     };
     CardPaymentService::new(state)
         .create_intent(&unit_id, req, role, &actor(&claims))
