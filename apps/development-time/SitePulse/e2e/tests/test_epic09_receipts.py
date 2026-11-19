@@ -16,11 +16,13 @@ def _amount(text: str) -> Decimal:
 
 
 @pytest.fixture
-def overdue_payment(api, actors, stack):
+def overdue_payment(api, actors, stack, builders):
     """October dues overdue since 2026-10-15, then a ₺2.000,00 payment on A Blok D:14."""
     manager = api.login(**actors["manager"])
     api.create_period(manager, PERIOD, "2026-10-15")
     api.accrue_period(manager, PERIOD, Decimal("1400.00"), "2026-10-15")
+    builders.overdue_since_period_due_date(PERIOD)
+    manager = api.login(**actors["manager"])
     a14 = stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "
                     "WHERE b.block_name = 'A Blok' AND u.unit_number = 14;")
     return api.record_manual_payment(manager, a14, Decimal("2000.00"), "Ahmet Yılmaz", payer_role="OWNER")

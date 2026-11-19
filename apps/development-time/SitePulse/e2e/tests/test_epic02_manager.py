@@ -51,12 +51,13 @@ from support.flutter import by_id_prefix, fill, text_of  # noqa: E402
 
 
 @pytest.fixture
-def october_dues_b3_paid(api, actors):
+def october_dues_b3_paid(api, actors, builders):
     """Both units owe October dues (due 2026-10-15, so overdue); B Blok D:3 paid its principal."""
     manager = api.login(**actors["manager"])
     api.create_period(manager, "Ekim 2026", "2026-10-15")
     api.accrue_period(manager, "Ekim 2026", Decimal("1400.00"), "2026-10-15")
-    return manager
+    builders.overdue_since_period_due_date("Ekim 2026")
+    return api.login(**actors["manager"])
 
 
 @pytest.mark.core

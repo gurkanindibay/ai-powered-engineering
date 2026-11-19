@@ -759,8 +759,8 @@ pub async fn tx_load_entry_allocations(
     Ok(rows
         .iter()
         .map(|r| {
-            let unit: i64 = r.get(14);
-            (due_from_row(r, unit), r.get(12), r.get(13))
+            let unit: i64 = r.get(15);
+            (due_from_row(r, unit), r.get(13), r.get(14))
         })
         .collect())
 }
