@@ -51,7 +51,7 @@ impl DuesCalculationService {
         // Grace period (STORY-07-10): while it runs nothing accrues and no segment starts. The
         // first evaluation after it covers the segment from the due date, as KMK 20 requires.
         if dues.penalty_accrued_through.is_none() && Self::in_grace(&dues, evaluation_date) {
-            dues.status = if evaluation_date > dues.due_date {
+            dues.status = if evaluation_date > dues.fee_due_date() {
                 DebtStatus::Overdue
             } else {
                 DebtStatus::Pending
@@ -63,8 +63,8 @@ impl DuesCalculationService {
         let outstanding_principal = dues_ledger::outstanding_principal(&dues);
         let accrued = dues.delay_penalty.max(dues.paid_penalty);
         let segment_start = match dues.penalty_accrued_through {
-            Some(through) => through.max(dues.due_date),
-            None => dues.due_date,
+            Some(through) => through.max(dues.fee_due_date()),
+            None => dues.fee_due_date(),
         };
         let segment_days = (evaluation_date - segment_start).num_days();
         let segment = if segment_days > 0 && outstanding_principal > Decimal::ZERO {
@@ -79,14 +79,14 @@ impl DuesCalculationService {
             // Legacy single segment: the stored figure already covers part of it.
             None => accrued.max(segment),
         };
-        if evaluation_date > dues.due_date {
+        if evaluation_date > dues.fee_due_date() {
             let through = dues
                 .penalty_accrued_through
                 .map_or(evaluation_date, |t| t.max(evaluation_date));
             dues.penalty_accrued_through = Some(through);
         }
 
-        let days_overdue = (evaluation_date - dues.due_date).num_days();
+        let days_overdue = (evaluation_date - dues.fee_due_date()).num_days();
         dues.status = if days_overdue > 0 {
             DebtStatus::Overdue
         } else {
@@ -99,7 +99,8 @@ impl DuesCalculationService {
     /// Whether `date` is within the liability's grace period (the due date and the
     /// `grace_days` after it).
     pub fn in_grace(dues: &DuesLiability, date: NaiveDate) -> bool {
-        dues.grace_days > 0 && date <= dues.due_date + chrono::Days::new(u64::from(dues.grace_days))
+        dues.grace_days > 0
+            && date <= dues.fee_due_date() + chrono::Days::new(u64::from(dues.grace_days))
     }
 
     /// Late fee a liability accrues from its due date up to `through`, given the
@@ -201,6 +202,7 @@ mod tests {
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
             grace_days: 0,
+            effective_due_date: None,
         }
     }
 
@@ -327,5 +329,51 @@ mod tests {
         assert_eq!(r.delay_penalty, Decimal::ZERO);
         assert_eq!(r.penalty_accrued_through, None);
         assert_eq!(r.status, DebtStatus::Pending);
+    }
+
+    fn late_charge(effective: Option<NaiveDate>) -> DuesLiability {
+        let mut liability = due("0.00", "0.00");
+        liability.principal_amount = d("650.00");
+        liability.due_date = date(11, 10);
+        liability.effective_due_date = effective;
+        liability
+    }
+
+    #[test]
+    fn a_charge_created_late_owes_no_fee_for_days_before_it_existed() {
+        let svc = DuesCalculationService::new();
+        let from_creation =
+            svc.calculate_delay_penalty(late_charge(Some(date(11, 18))), date(11, 19));
+        assert_eq!(from_creation.delay_penalty, d("1.08"));
+        let from_period = svc.calculate_delay_penalty(late_charge(None), date(11, 19));
+        assert_eq!(from_period.delay_penalty, d("9.75"));
+    }
+
+    #[test]
+    fn grace_and_status_count_from_the_effective_due_date() {
+        let svc = DuesCalculationService::new();
+        let mut charge = late_charge(Some(date(11, 18)));
+        charge.grace_days = 5;
+        assert!(DuesCalculationService::in_grace(&charge, date(11, 23)));
+        assert!(!DuesCalculationService::in_grace(&charge, date(11, 24)));
+        let on_creation = svc.calculate_delay_penalty(charge.clone(), date(11, 18));
+        assert_eq!(on_creation.status, DebtStatus::Pending);
+        assert_eq!(on_creation.delay_penalty, Decimal::ZERO);
+    }
+
+    #[test]
+    fn the_effective_due_date_is_never_before_the_period_due_date() {
+        assert_eq!(
+            DuesLiability::effective_due_date_for(date(11, 10), date(11, 2)),
+            date(11, 10)
+        );
+        assert_eq!(
+            DuesLiability::effective_due_date_for(date(11, 10), date(11, 18)),
+            date(11, 18)
+        );
+        let mut charge = late_charge(Some(date(11, 1)));
+        assert_eq!(charge.fee_due_date(), date(11, 10));
+        charge.effective_due_date = None;
+        assert_eq!(charge.fee_due_date(), date(11, 10));
     }
 }

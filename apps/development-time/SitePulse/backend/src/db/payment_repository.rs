@@ -335,6 +335,7 @@ fn due_from_row(r: &tokio_postgres::Row, unit_id: i64) -> DuesLiability {
         expense_type: r.get(9),
         penalty_accrued_through: r.get(10),
         grace_days: u32::try_from(r.get::<_, i32>(11)).unwrap_or(0),
+        effective_due_date: r.get(12),
     };
     crate::services::dues_ledger::refresh(&mut d);
     d
@@ -342,7 +343,7 @@ fn due_from_row(r: &tokio_postgres::Row, unit_id: i64) -> DuesLiability {
 
 const DUE_COLUMNS: &str =
     "id, period, principal_amount, delay_penalty, paid_principal, paid_penalty, \
-     due_date, status, debtor_type, expense_type, penalty_accrued_through, grace_days";
+     due_date, status, debtor_type, expense_type, penalty_accrued_through, grace_days, effective_due_date";
 
 /// Open liabilities of a unit, oldest first, locked for update.
 pub async fn tx_load_open_dues(

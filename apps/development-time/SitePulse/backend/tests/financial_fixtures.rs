@@ -85,6 +85,7 @@ fn liability(
         expense_type: ExpenseType::from_str_loose(expense),
         penalty_accrued_through: None,
         grace_days: 0,
+        effective_due_date: None,
     }
 }
 
@@ -293,6 +294,7 @@ fn penalty_keeps_kurus_precision_and_does_not_drift_across_recalculations() {
         expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
         grace_days: 0,
+        effective_due_date: None,
     };
     for day in 16..=28 {
         let evaluation = NaiveDate::from_ymd_opt(2026, 9, day).unwrap();

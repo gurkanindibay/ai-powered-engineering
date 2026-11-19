@@ -527,6 +527,7 @@ impl CapitalProjectService {
                     expense_type: ExpenseType::CapitalDues,
                     penalty_accrued_through: None,
                     grace_days: 0,
+                    effective_due_date: None,
                 });
             }
 

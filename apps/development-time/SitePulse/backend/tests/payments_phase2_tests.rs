@@ -513,6 +513,7 @@ async fn owner_owing(amount: &str) -> AppState {
         expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
         grace_days: 0,
+        effective_due_date: None,
     });
     state
 }
@@ -697,6 +698,7 @@ async fn when_a_statement_is_built_then_items_are_aged_and_each_debtor_sees_only
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
             grace_days: 0,
+            effective_due_date: None,
         };
         inner.dues.push(mk("o-current", "OWNER", 0, "100.00"));
         inner.dues.push(mk("o-45", "OWNER", 45, "200.00"));

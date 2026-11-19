@@ -362,7 +362,7 @@ impl PaymentTrackingService {
             let penalty = dues_ledger::outstanding_penalty(due);
             bracket.accrued_delay_penalty += penalty;
 
-            let days_overdue = (today - due.due_date).num_days();
+            let days_overdue = (today - due.fee_due_date()).num_days();
 
             if days_overdue <= 0 {
                 bracket.current_due += principal_remaining;
@@ -1932,7 +1932,7 @@ fn rewind_penalties(
         d.delay_penalty = calc
             .penalty_through_with_grace(
                 d.principal_amount,
-                d.due_date,
+                d.fee_due_date(),
                 payment_date,
                 history,
                 d.grace_days,
@@ -1973,7 +1973,7 @@ fn finish_penalty_reevaluation(
         let recalculated = calc
             .penalty_through_with_grace(
                 rw.original.principal_amount,
-                rw.original.due_date,
+                rw.original.fee_due_date(),
                 accrued_through,
                 &history,
                 rw.original.grace_days,

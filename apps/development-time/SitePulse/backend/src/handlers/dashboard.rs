@@ -265,7 +265,7 @@ pub async fn get_resident_dashboard(
                     delay_penalty: evaluated.delay_penalty,
                     total_amount: evaluated.total_amount,
                     due_date: evaluated.due_date.to_string(),
-                    days_overdue: overdue_days(evaluated.due_date, today, false),
+                    days_overdue: overdue_days(evaluated.fee_due_date(), today, false),
                     status: format!("{:?}", evaluated.status).to_uppercase(),
                 }
             }
@@ -675,7 +675,7 @@ pub async fn get_site_overview(
                 let (billed, collected) =
                     collection_amounts(due.principal_amount, due.paid_principal);
                 let is_p = due.status == DebtStatus::Paid;
-                let days_o = overdue_days(due.due_date, today, is_p);
+                let days_o = overdue_days(due.fee_due_date(), today, is_p);
                 let p_date = if is_p {
                     Some("Ödendi".to_string())
                 } else {

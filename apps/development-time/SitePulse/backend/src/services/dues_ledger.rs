@@ -89,7 +89,7 @@ pub fn unsettle(
     d.total_amount = outstanding(d);
     d.status = if d.total_amount <= Decimal::ZERO {
         DebtStatus::Paid
-    } else if d.due_date < today {
+    } else if d.fee_due_date() < today {
         DebtStatus::Overdue
     } else {
         DebtStatus::Pending
@@ -303,6 +303,7 @@ mod tests {
             expense_type: ExpenseType::from_str_loose(expense),
             penalty_accrued_through: None,
             grace_days: 0,
+            effective_due_date: None,
         }
     }
 

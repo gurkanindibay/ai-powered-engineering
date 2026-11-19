@@ -271,6 +271,9 @@ pub async fn run_accrual_with_report(
                                 expense_type: ExpenseType::OperationalDues,
                                 penalty_accrued_through: None,
                                 grace_days: schedule.grace_days,
+                                effective_due_date: Some(DuesLiability::effective_due_date_for(
+                                    due_date, local,
+                                )),
                             },
                             basis.operating_budget_id.clone(),
                         ));

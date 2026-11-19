@@ -86,7 +86,7 @@ fn site_row(inner: &AppStateInner, link: &ManagementCompanySite) -> PortfolioSit
             .sum(),
         overdue_items: dues
             .iter()
-            .filter(|d| is_open(d) && d.due_date < today)
+            .filter(|d| is_open(d) && d.fee_due_date() < today)
             .count(),
         collection_rate_this_month: crate::domain::collection_metrics::collection_rate(
             due_sum, paid_sum,

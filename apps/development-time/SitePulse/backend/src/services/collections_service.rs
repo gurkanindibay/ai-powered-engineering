@@ -167,7 +167,7 @@ impl CollectionsService {
                         crate::auth::same_id(&d.unit_id, &unit.id)
                             && d.debtor_type.as_str() == debtor
                             && is_open(d)
-                            && d.due_date < today
+                            && d.fee_due_date() < today
                     })
                     .collect();
                 let chosen: Vec<&DuesLiability> = if req.due_ids.is_empty() {
@@ -376,13 +376,14 @@ impl CollectionsService {
                         ))
                     })?;
                     let accrued = calc.calculate_delay_penalty(d.clone(), today);
-                    let recorded_through = d.penalty_accrued_through.unwrap_or(d.due_date).max(d.due_date);
+                    let fee_start = d.fee_due_date();
+                    let recorded_through = d.penalty_accrued_through.unwrap_or(fee_start).max(fee_start);
                     let mut breakdown = Vec::new();
                     if d.delay_penalty > Decimal::ZERO {
                         breakdown.push(PenaltyDay {
-                            from: d.due_date,
+                            from: fee_start,
                             to: recorded_through,
-                            days: (recorded_through - d.due_date).num_days(),
+                            days: (recorded_through - fee_start).num_days(),
                             principal_base: d.principal_amount,
                             penalty: d.delay_penalty,
                         });

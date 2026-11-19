@@ -361,6 +361,11 @@ impl CorrectionService {
             .read(|inner| find_due(inner, &correction.site_id, &correction.due_id).cloned())
             .await?;
         let plan = plan_correction(&due, &correction.kind, correction.amount)?;
+        // A charge created by an approved correction counts as created on the approval date.
+        let approved_on = {
+            let inner = self.state.inner.read().await;
+            site_today(&inner, &correction.site_id)
+        };
         let replacements: Vec<DuesLiability> = if correction.kind == CORRECTION_SPLIT_REISSUE {
             correction
                 .replacement_shares
@@ -377,6 +382,21 @@ impl CorrectionService {
                     next.due_date = correction.new_due_date.unwrap_or(due.due_date);
                     next.debtor_type = share.debtor_type;
                     next.penalty_accrued_through = None;
+                    next.effective_due_date = Some(DuesLiability::effective_due_date_for(
+                        next.due_date,
+                        approved_on,
+                    ));
+                    if share.debtor_type == due.debtor_type
+                        && share.amount < due.principal_amount
+                        && correction.new_due_date.is_none()
+                    {
+                        // A reduced share keeps its effective due date; its late fee is the
+                        // original's, recalculated on the reduced principal.
+                        next.effective_due_date = Some(due.fee_due_date());
+                        next.delay_penalty =
+                            round2(due.delay_penalty * share.amount / due.principal_amount);
+                        next.penalty_accrued_through = due.penalty_accrued_through;
+                    }
                     next
                 })
                 .collect()
@@ -396,6 +416,10 @@ impl CorrectionService {
             next.due_date = correction.new_due_date.unwrap_or(due.due_date);
             next.debtor_type = debtor;
             next.penalty_accrued_through = None;
+            next.effective_due_date = Some(DuesLiability::effective_due_date_for(
+                next.due_date,
+                approved_on,
+            ));
             vec![next]
         } else {
             Vec::new()

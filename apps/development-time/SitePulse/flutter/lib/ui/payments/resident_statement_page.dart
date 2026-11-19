@@ -152,6 +152,7 @@ class _DebtorCard extends StatelessWidget {
                             [
                               i.expenseType == 'CAPITAL_DUES' ? 'Demirbaş' : 'Aidat',
                               if (i.dueDate != null) 'vade ${DateFormat('dd.MM.yyyy').format(i.dueDate!)}',
+                              if (i.chargeCreatedLate) 'borç geç oluşturuldu',
                               if (i.daysOverdue > 0) '${i.daysOverdue} gün gecikme',
                               if (i.operatingBudgetId != null) 'işletme projesi #${i.operatingBudgetId}',
                               if (i.limitationWarning) '5 yıllık zamanaşımı riski',

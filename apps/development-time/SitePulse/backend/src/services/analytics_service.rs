@@ -222,13 +222,15 @@ pub fn collection_analytics(
             let overdue: Vec<&&DuesLiability> = dues
                 .iter()
                 .filter(|d| {
-                    crate::auth::same_id(&d.unit_id, &u.id) && is_open(d) && d.due_date < as_of
+                    crate::auth::same_id(&d.unit_id, &u.id)
+                        && is_open(d)
+                        && d.fee_due_date() < as_of
                 })
                 .collect();
             let overdue_amount: Decimal = overdue.iter().map(|d| dues_ledger::outstanding(d)).sum();
             let oldest = overdue
                 .iter()
-                .map(|d| (as_of - d.due_date).num_days())
+                .map(|d| (as_of - d.fee_due_date()).num_days())
                 .max()
                 .unwrap_or(0);
             let monthly = budget

@@ -164,7 +164,9 @@ impl DunningService {
             .store
             .read(|inner| {
                 let mut work = Vec::new();
-                for due in site_dues(inner, site_id).filter(|d| is_open(d) && d.due_date < as_of) {
+                for due in
+                    site_dues(inner, site_id).filter(|d| is_open(d) && d.fee_due_date() < as_of)
+                {
                     report.examined += 1;
                     if pause_reason(inner, due).is_some() {
                         report.paused += 1;
@@ -177,7 +179,7 @@ impl DunningService {
                         .filter(|a| a.due_id == due.id)
                         .filter_map(|a| usize::try_from(a.step_index).ok())
                         .collect();
-                    let days = (as_of - due.due_date).num_days();
+                    let days = (as_of - due.fee_due_date()).num_days();
                     if let Some(step) = step_due(&steps, days, &executed) {
                         if let Some(unit) = inner
                             .units
@@ -209,7 +211,7 @@ impl DunningService {
                     format!("Yazılı uyarı: {} borcu", due.period),
                     format!(
                         "{} için {} dönemine ait ₺{} borç {} gündür ödenmemiştir. KMK 20 uyarınca aylık %5 gecikme tazminatı işlemektedir. Ödeme yapılmazsa yasal yollara başvurulacaktır.",
-                        label, due.period, crate::services::receipt_document::format_try(outstanding), (as_of - due.due_date).num_days()
+                        label, due.period, crate::services::receipt_document::format_try(outstanding), (as_of - due.fee_due_date()).num_days()
                     ),
                 ),
                 DunningKind::Ihtarname => (

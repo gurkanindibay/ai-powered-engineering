@@ -45,7 +45,7 @@ pub fn plan_accruals(
     }
     let principal = dues_ledger::outstanding_principal(due);
     if principal <= Decimal::ZERO
-        || today <= due.due_date
+        || today <= due.fee_due_date()
         || (due.penalty_accrued_through.is_none()
             && last.is_none()
             && DuesCalculationService::in_grace(due, today))
@@ -70,7 +70,7 @@ pub fn plan_accruals(
         None => {
             let start = due
                 .penalty_accrued_through
-                .map_or(due.due_date, |t| t.max(due.due_date));
+                .map_or(due.fee_due_date(), |t| t.max(due.fee_due_date()));
             // A liability without an accrual date has a stored fee that covers part
             // of its first segment: the segment never ends below it.
             let (base, floor) = match due.penalty_accrued_through {
@@ -123,12 +123,12 @@ pub fn rewritten_accruals(
 ) -> Vec<LateFeeAccrual> {
     let calc = DuesCalculationService::new();
     // A payment inside the grace period counts as made on the due date.
-    let grace_end = due.due_date + chrono::Days::new(u64::from(due.grace_days));
+    let grace_end = due.fee_due_date() + chrono::Days::new(u64::from(due.grace_days));
     let payments: Vec<(NaiveDate, Decimal)> = payments
         .iter()
         .map(|(d, a)| {
             if due.grace_days > 0 && *d <= grace_end {
-                (due.due_date, *a)
+                (due.fee_due_date(), *a)
             } else {
                 (*d, *a)
             }
@@ -138,19 +138,19 @@ pub fn rewritten_accruals(
     let cumulative = |day: NaiveDate| {
         calc.penalty_through_with_grace(
             due.principal_amount,
-            due.due_date,
+            due.fee_due_date(),
             day,
             payments,
             due.grace_days,
         )
     };
-    let mut previous = cumulative(after.max(due.due_date));
+    let mut previous = cumulative(after.max(due.fee_due_date()));
     let mut rows = Vec::new();
     let mut day = after;
     while day < through {
         let Some(next) = day.succ_opt() else { break };
         day = next;
-        if day <= due.due_date {
+        if day <= due.fee_due_date() {
             continue;
         }
         let before: Vec<&(NaiveDate, Decimal)> =
@@ -164,7 +164,7 @@ pub fn rewritten_accruals(
             .iter()
             .map(|(d, _)| *d)
             .max()
-            .map_or(due.due_date, |d| d.max(due.due_date));
+            .map_or(due.fee_due_date(), |d| d.max(due.fee_due_date()));
         let fee = cumulative(day);
         rows.push(LateFeeAccrual {
             id: 0,
