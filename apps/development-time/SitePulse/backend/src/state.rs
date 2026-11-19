@@ -83,6 +83,9 @@ pub struct AppStateInner {
     pub budget_required_sites: Vec<String>,
     /// Dues liability id -> operating budget id (its legal basis).
     pub dues_budget_basis: HashMap<String, String>,
+    /// Tenant liabilities mapped to the titled owners who are jointly liable
+    /// for each ownership interval under KMK m.22/1.
+    pub joint_liability_owners: HashMap<String, Vec<crate::models::JointLiabilityOwner>>,
     /// Supplementary charge id -> the key (`2026-10`) of the month it refers to. A charge posted in
     /// another period than the month it bills (a back-dated start date, STORY-07-13) has an
     /// entry; every other liability bills its own `period`.
@@ -153,6 +156,7 @@ impl AppStateInner {
             revaluation_rates: HashMap::new(),
             budget_required_sites: Vec::new(),
             dues_budget_basis: HashMap::new(),
+            joint_liability_owners: HashMap::new(),
             dues_source_period: HashMap::new(),
             site_accrual_schedules: HashMap::new(),
             payment_intents: Vec::new(),

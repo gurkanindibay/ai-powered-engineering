@@ -502,33 +502,21 @@ impl PaymentTrackingService {
         };
 
         let on_behalf_of_owner = payer_role == DebtorType::Tenant && req.settles_owner_capital_dues;
+        let on_behalf_of_tenant =
+            payer_role == DebtorType::Owner && req.settles_tenant_joint_liability;
         let settling_role = if on_behalf_of_owner {
             DebtorType::Owner
+        } else if on_behalf_of_tenant {
+            DebtorType::Tenant
         } else {
             payer_role
         };
-        let credit_debtor = settling_role.as_str().to_string();
-        let allocate = |dues: &mut Vec<DuesLiability>| {
-            let mut candidates = dues_ledger::open_dues_for(dues, |_| true, settling_role.as_str());
-            if on_behalf_of_owner {
-                candidates.retain(|&i| dues[i].expense_type == ExpenseType::CapitalDues);
-            }
-            let designated = dues_ledger::designated_dues(
-                dues,
-                &candidates,
-                designation.as_ref(),
-                description_hint.as_deref(),
-            );
-            let (lines, surplus) = dues_ledger::allocate_with_designation(
-                dues,
-                &candidates,
-                &designated,
-                payment_amount,
-            );
-            (lines, surplus, !designated.is_empty())
+        let credit_debtor = if on_behalf_of_tenant {
+            DebtorType::Owner.as_str().to_string()
+        } else {
+            settling_role.as_str().to_string()
         };
-
-        let (unit, owner_name) = {
+        let (unit, owner_name, tenant_name, eligible_joint_due_ids) = {
             let inner = self.state.inner.read().await;
             if let Some(key) = idempotency_key.as_deref() {
                 if let Some(rid) = inner
@@ -549,14 +537,98 @@ impl PaymentTrackingService {
                 })
                 .cloned()
                 .ok_or_else(|| format!("Daire bulunamadı: {}", unit_id))?;
-            let owner_name = unit.owner_user_id.as_ref().and_then(|oid| {
+            let owner = unit
+                .owner_user_id
+                .as_ref()
+                .and_then(|id| inner.users.iter().find(|user| &user.id == id));
+            let owner_name = owner.map(|user| user.full_name.clone());
+            let active_tenant_name = unit.tenant_user_id.as_ref().and_then(|id| {
                 inner
                     .users
                     .iter()
-                    .find(|u| &u.id == oid)
-                    .map(|u| u.full_name.clone())
+                    .find(|user| &user.id == id)
+                    .map(|user| user.full_name.clone())
             });
-            (unit, owner_name)
+            let owner_person_id = owner.and_then(|user| user.person_id);
+            let eligible_joint_due_ids = owner_person_id
+                .map(|person_id| {
+                    inner
+                        .joint_liability_owners
+                        .iter()
+                        .filter(|(_, owners)| {
+                            owners.iter().any(|owner| owner.person_id == person_id)
+                        })
+                        .filter_map(|(due_id, _)| {
+                            inner
+                                .dues
+                                .iter()
+                                .any(|due| {
+                                    due.id == *due_id
+                                        && crate::auth::same_id(&due.unit_id, &unit.id)
+                                        && due.debtor_type == DebtorType::Tenant
+                                        && due.status.is_collectable()
+                                })
+                                .then_some(due_id.clone())
+                        })
+                        .collect::<std::collections::HashSet<_>>()
+                })
+                .unwrap_or_default();
+            let tenant_name = active_tenant_name.or_else(|| {
+                eligible_joint_due_ids.iter().find_map(|due_id| {
+                    inner
+                        .joint_liability_owners
+                        .get(due_id)
+                        .and_then(|owners| {
+                            owners
+                                .iter()
+                                .find(|owner| Some(owner.person_id) == owner_person_id)
+                        })
+                        .and_then(|owner| owner.tenant_person_id)
+                        .and_then(|person_id| {
+                            inner
+                                .users
+                                .iter()
+                                .find(|user| user.person_id == Some(person_id))
+                                .map(|user| user.full_name.clone())
+                        })
+                })
+            });
+            (unit, owner_name, tenant_name, eligible_joint_due_ids)
+        };
+        if on_behalf_of_tenant {
+            if eligible_joint_due_ids.is_empty() {
+                return Err("Owner has no jointly liable tenant balance for this unit".to_string());
+            }
+            if designation.as_ref().is_some_and(|d| {
+                d.due_ids
+                    .iter()
+                    .any(|due_id| !eligible_joint_due_ids.contains(due_id))
+            }) {
+                return Err(
+                    "The selected liability is not jointly linked to this owner".to_string()
+                );
+            }
+        }
+        let allocate = |dues: &mut Vec<DuesLiability>| {
+            let mut candidates = dues_ledger::open_dues_for(dues, |_| true, settling_role.as_str());
+            if on_behalf_of_owner {
+                candidates.retain(|&i| dues[i].expense_type == ExpenseType::CapitalDues);
+            } else if on_behalf_of_tenant {
+                candidates.retain(|&i| eligible_joint_due_ids.contains(&dues[i].id));
+            }
+            let designated = dues_ledger::designated_dues(
+                dues,
+                &candidates,
+                designation.as_ref(),
+                description_hint.as_deref(),
+            );
+            let (lines, surplus) = dues_ledger::allocate_with_designation(
+                dues,
+                &candidates,
+                &designated,
+                payment_amount,
+            );
+            (lines, surplus, !designated.is_empty())
         };
 
         let calc = crate::services::DuesCalculationService::new();
@@ -586,6 +658,8 @@ impl PaymentTrackingService {
             issued_at,
             on_behalf_of_owner,
             owner_name,
+            on_behalf_of_tenant,
+            tenant_name,
             // O-4: the channel's own reference only; idempotency keys live in
             // payment_idempotency_keys (and AppStateInner.payment_idempotency).
             channel_reference: req
@@ -1069,7 +1143,7 @@ impl PaymentTrackingService {
                 .clone()
                 .unwrap_or_else(|| "Kat Maliki".to_string())
         } else {
-            tenant_name.unwrap_or_else(|| "Kiracı".to_string())
+            tenant_name.clone().unwrap_or_else(|| "Kiracı".to_string())
         };
         let now = Utc::now();
         let calc = crate::services::DuesCalculationService::new();
@@ -1090,6 +1164,8 @@ impl PaymentTrackingService {
             on_behalf_of_owner: source == dues_ledger::DEBTOR_TENANT
                 && target == dues_ledger::DEBTOR_OWNER,
             owner_name,
+            on_behalf_of_tenant: false,
+            tenant_name,
             channel_reference: None,
             description: None,
             external_reference: None,
@@ -1881,6 +1957,8 @@ struct ReceiptContext {
     issued_at: DateTime<Utc>,
     on_behalf_of_owner: bool,
     owner_name: Option<String>,
+    on_behalf_of_tenant: bool,
+    tenant_name: Option<String>,
     channel_reference: Option<String>,
     description: Option<String>,
     external_reference: Option<String>,
@@ -2313,6 +2391,7 @@ fn build_receipt(
         .iter()
         .any(|b| b.expense_type == ExpenseType::CapitalDues);
     let is_rent_offset_eligible = ctx.on_behalf_of_owner && paid_capital;
+    let pays_jointly_liable_tenant = ctx.on_behalf_of_tenant && !lines.is_empty();
     let mut receipt = PaymentReceipt {
         id: 0,
         site_id: ctx.site_id.clone(),
@@ -2322,12 +2401,16 @@ fn build_receipt(
         sequence_number,
         payer_name: ctx.payer_name.clone(),
         payer_role: ctx.payer_role,
-        on_behalf_of_name: if is_rent_offset_eligible {
+        on_behalf_of_name: if pays_jointly_liable_tenant {
+            ctx.tenant_name.clone()
+        } else if is_rent_offset_eligible {
             ctx.owner_name.clone()
         } else {
             None
         },
-        on_behalf_of_role: if is_rent_offset_eligible {
+        on_behalf_of_role: if pays_jointly_liable_tenant {
+            Some(DebtorType::Tenant)
+        } else if is_rent_offset_eligible {
             Some(DebtorType::Owner)
         } else {
             None

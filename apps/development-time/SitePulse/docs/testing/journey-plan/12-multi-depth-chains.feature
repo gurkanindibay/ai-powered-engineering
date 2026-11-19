@@ -12,6 +12,7 @@ Feature: Multi-depth chains across the decided responsibility rules
     And proration is enabled for the site
 
   @SC-13-12-01 @J-19 @depth:4 @chain:sale-then-silent-departure @state:F5 @layer:backend @core @role_manager @pending
+  # Backend coverage: backend/tests/accrual_corrections_tests.rs and backend/tests/payments_phase2_tests.rs (late split correction, owner statement, and owner payment allocation).
   Scenario: A unit is sold with its tenant, the tenant leaves without notice and both owners are involved
     Given the site is in state F5
     # Stage 1: December is billed to the tenant
@@ -34,8 +35,9 @@ Feature: Multi-depth chains across the decided responsibility rules
     And Gül's new share has effective due date "2027-01-05" and late fee 0.00
     And Selin's reduced share keeps effective due date "2026-12-10"
     And the ledger invariants hold
+    # A former owner remains liable for their ownership date range, but no longer has resident self-service access after title transfer; the manager records the payment.
     # Stage 4: the jointly liable former owner pays part of the tenant's debt
-    When "Ahmet Yılmaz" pays 1717.50 toward the debt of "Selin Demir" on "2027-01-05"
+    When the manager records 1717.50 from payer "Ahmet Yılmaz" toward the debt of "Selin Demir" on "2027-01-05"
     Then checkpoint 4 shows Selin's "Ekim 2026" charge settled: principal 1500.00 and late fee 217.50 for 87 days
     And the receipt names payer "Ahmet Yılmaz" and debtor "Selin Demir"
     And "Selin Demir" still owes 2599.19: "Kasım 2026" 1640.00 and "Aralık 2026" 959.19 (919.35 plus fee 39.84)

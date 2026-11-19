@@ -269,6 +269,7 @@ async fn when_a_liability_is_reissued_then_the_original_is_cancelled_and_the_new
 
 #[tokio::test]
 // covers: SC-07-09-03
+// Backend coverage: SC-13-05-18 late move-out split correction and four-eyes approval.
 async fn when_a_paid_month_is_split_then_approval_reissues_both_roles_and_credits_the_excess() {
     let state = fixture().await;
     let mut paid_due = liability("split-1", "1400.00", today());

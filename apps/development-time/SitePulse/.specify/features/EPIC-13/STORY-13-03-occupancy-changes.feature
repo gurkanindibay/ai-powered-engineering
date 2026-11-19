@@ -216,6 +216,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
 
   # Pending: needs #207 (jointly liable owner) and #209 (sale of a tenant-occupied unit); the effective date 2026-12-15 is after the real server date.
   @SC-13-03-18 @J-10 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  # Backend coverage: backend/tests/db_accrual_atomic_tests.rs (atomic accrual keeps debtor shares singular and repeat-safe).
   Scenario: A sale of a tenant-occupied unit with the same tenant is not split
     Given the site is in state F5
     And the clock has advanced to "2026-12-15"

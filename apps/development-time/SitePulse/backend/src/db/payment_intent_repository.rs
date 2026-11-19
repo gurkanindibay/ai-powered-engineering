@@ -5,7 +5,7 @@ use deadpool_postgres::Pool;
 use super::{require_id, DbResult};
 use crate::models::{PaymentDesignation, PaymentIntent};
 
-const INTENT_COLUMNS: &str = "id, site_id, unit_id, debtor_type, payer_name, amount, currency, provider, provider_ref, status, \
+const INTENT_COLUMNS: &str = "id, site_id, unit_id, debtor_type, pays_tenant_liability, payer_name, amount, currency, provider, provider_ref, status, \
      checkout_url, three_ds_status, fee_amount, failure_reason, receipt_number, designation::text, created_by, created_at, \
      updated_at, captured_at";
 
@@ -20,15 +20,16 @@ pub async fn insert_payment_intent(pool: &Pool, i: &PaymentIntent) -> DbResult<i
     let row = client
         .query_one(
             r#"
-            INSERT INTO payment_intents (site_id, unit_id, debtor_type, payer_name, amount, currency, provider, provider_ref,
+            INSERT INTO payment_intents (site_id, unit_id, debtor_type, pays_tenant_liability, payer_name, amount, currency, provider, provider_ref,
                                          status, checkout_url, designation, created_by, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::jsonb, $12, $13, $13)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::text::jsonb, $13, $14, $14)
             RETURNING id
             "#,
             &[
                 &site,
                 &unit,
                 &i.debtor_type,
+                &i.pays_tenant_liability,
                 &i.payer_name,
                 &i.amount,
                 &i.currency,
@@ -79,24 +80,25 @@ pub async fn load_payment_intents(pool: &Pool) -> DbResult<Vec<PaymentIntent>> {
             site_id: r.get::<_, i64>(1).to_string(),
             unit_id: r.get::<_, i64>(2).to_string(),
             debtor_type: r.get(3),
-            payer_name: r.get(4),
-            amount: r.get(5),
-            currency: r.get::<_, String>(6).trim().to_string(),
-            provider: r.get(7),
-            provider_ref: r.get(8),
-            status: r.get(9),
-            checkout_url: r.get(10),
-            three_ds_status: r.get(11),
-            fee_amount: r.get(12),
-            failure_reason: r.get(13),
-            receipt_number: r.get(14),
+            pays_tenant_liability: r.get(4),
+            payer_name: r.get(5),
+            amount: r.get(6),
+            currency: r.get::<_, String>(7).trim().to_string(),
+            provider: r.get(8),
+            provider_ref: r.get(9),
+            status: r.get(10),
+            checkout_url: r.get(11),
+            three_ds_status: r.get(12),
+            fee_amount: r.get(13),
+            failure_reason: r.get(14),
+            receipt_number: r.get(15),
             designation: r
-                .get::<_, Option<String>>(15)
+                .get::<_, Option<String>>(16)
                 .and_then(|v| serde_json::from_str(&v).ok()),
-            created_by: r.get(16),
-            created_at: r.get(17),
-            updated_at: r.get(18),
-            captured_at: r.get(19),
+            created_by: r.get(17),
+            created_at: r.get(18),
+            updated_at: r.get(19),
+            captured_at: r.get(20),
         })
         .collect())
 }
