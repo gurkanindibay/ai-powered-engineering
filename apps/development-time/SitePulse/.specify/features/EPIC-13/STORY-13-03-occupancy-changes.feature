@@ -10,13 +10,14 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the manager has signed in with a permanent password
     And proration is enabled for the site
 
-  @SC-13-03-01 @J-10 @depth:1 @state:F6 @layer:backend @smoke @core @role_manager @pending
+  @SC-13-03-01 @J-10 @depth:1 @state:F6 @layer:backend @smoke @core @role_manager @linked
   Scenario: A mid-month move-in splits a period between owner and tenant
     Given the site is in state F6
     Then the "Ekim 2026" principal shares for "A-2" are owner "Ahmet Yılmaz" 483.87 and tenant "Selin Demir" 1016.13
     And the two shares add up to 1500.00
     And the "Eylül 2026" principal of 1500.00 for "A-2" is assigned to "Ahmet Yılmaz"
 
+  # Pending: the accrual splits a period by role (owner, tenant), not by person, so two successive tenants share one tenant liability; the effective due date comes from the real server date, not the E2E clock (the clock drives the scheduler only); the jointly liable owner needs #207.
   @SC-13-03-02 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
   Scenario: A tenant replaced mid-month leaves the old debt with the old tenant
     Given the site is in state F6
@@ -25,6 +26,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And that fee counts 39 days from the effective due date "2026-10-11", the day October was accrued, not from "2026-10-10"
     And "Mert Kılıç" owes nothing for "Eylül 2026" or "Ekim 2026"
 
+  # Pending: GUI layer is not automated yet; needs the per-person split of SC-13-03-02.
   @SC-13-03-03 @J-10 @depth:2 @state:F6 @layer:gui @core @role_resident @pending
   Scenario: A former tenant still sees their own debt and the new tenant sees only theirs
     Given the site is in state F6
@@ -34,19 +36,27 @@ Feature: Residents and owners change after periods were accrued (state F6)
     When "Mert Kılıç" signs in
     Then his dashboard lists only "Kasım 2026" with principal of 800.00
 
-  @SC-13-03-04 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-03-04 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @linked
   Scenario: A resident added after accruals is charged from their start residing date
     Given the site is in state F6
     Then tenant "Oya Çelik" is primary resident of unit "A-3" with start residing date "2026-11-18"
     And "Oya Çelik" owes 0.00 for "Eylül 2026" and "Ekim 2026"
     And "Oya Çelik" is charged principal of 650.00 for "Kasım 2026", which is 13 of 30 days
     And owner "Burak Şahin" owes the full "Eylül 2026" and "Ekim 2026" and 850.00 for "Kasım 2026"
-    And Oya's share is due on the approval date "2026-11-18" with late fee 1.08 at the reference instant
-    And Burak's reduced share keeps its effective due date "2026-11-15" and its fee is recalculated on 850.00 to 5.67
+    And the ledger invariants hold
     When the manager accrues period "Aralık 2026" due "2026-12-10"
     Then tenant "Oya Çelik" owes 1500.00 for "Aralık 2026"
     And owner "Burak Şahin" owes nothing for "Aralık 2026" operational dues
+    And the ledger invariants hold
 
+  # Pending: the effective due date and late fee read the real server date; the E2E clock drives the scheduler only.
+  @SC-13-03-20 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  Scenario: A re-split share keeps an effective due date and a late fee that follow its creation
+    Given the site is in state F6
+    Then Oya's share is due on the approval date "2026-11-18" with late fee 1.08 at the reference instant
+    And Burak's reduced share keeps its effective due date "2026-11-15" and its fee is recalculated on 850.00 to 5.67
+
+  # Pending: needs the seller-pays override of #209.
   @SC-13-03-05 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
   Scenario Outline: Capital installments follow the owner at accrual unless a seller-pays override is approved
     Given the site is in state F6
@@ -65,6 +75,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | requested, still pending          | Gül Tanrıverdi       |
       | requested, rejected               | Gül Tanrıverdi       |
 
+  # Pending: advance balances are keyed by unit and debtor role, not by person; the seller's retained advance is not automated yet.
   @SC-13-03-06 @J-10 @depth:1 @state:F2 @layer:backend @edge @role_manager @pending
   Scenario: The previous owner's advance is not silently given to the buyer
     Given the site is in state F2
@@ -73,6 +84,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then the advance stays with "Ahmet Yılmaz" until paid out or transferred with a second approver
     And "Gül Tanrıverdi" starts with debt and advance of 0.00 for unit "A-4"
 
+  # Pending: effective dates after the real server date are refused and the accrual splits by role, so a same-day tenant handover on 2026-12-12 cannot be built.
   @SC-13-03-07 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @pending
   Scenario: Handover on the same day splits the month with no gap and no overlap
     Given the site is in state F6
@@ -83,7 +95,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the two shares add up to 1500.00
     And no day is charged to two debtors and no day to none
 
-  @SC-13-03-08 @J-10 @depth:1 @layer:backend @edge @role_manager @pending
+  @SC-13-03-08 @J-10 @depth:1 @layer:backend @edge @role_manager @linked
   Scenario Outline: Proration respects month length and edge days
     Given unit "A-3" is owned and vacant on the first day of "<period>" and has tariff 1500.00
     And the clock is set to "<move_in>" and a tenant moves in on that date
@@ -99,6 +111,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | Şubat 2028    | 2028-02-15 | 724.14      | 775.86       |
       | Şubat 2027    | 2027-02-15 | 750.00      | 750.00       |
 
+  # Pending: the accrual splits by role, so two successive tenants share one tenant liability and the three-segment row cannot be asserted.
   @SC-13-03-09 @J-10 @depth:1 @layer:backend @edge @role_manager @pending
   Scenario Outline: A tariff that does not divide evenly never gains or loses a kuruş
     Given unit "A-3" is owned and vacant on "2026-11-01" with monthly tariff <tariff>
@@ -114,6 +127,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | 1500.01 | owner days 1-15, tenant days 16-30                    | 750.01, 750.00           |
       | 1000.00 | owner days 1-10, tenant 1 days 11-20, tenant 2 days 21-30 | 333.33, 333.33, 333.34 |
 
+  # Pending: needs an effective date after the real server date (2026-12-01); the per-role resident statement listing is not automated yet.
   @SC-13-03-10 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @pending
   Scenario: One person who owns one unit and rents another is billed in each role
     Given the site is in state F6
@@ -125,6 +139,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And his resident statement API lists both liabilities with their unit and role
     And the people directory shows one person "Ahmet Yılmaz", not two
 
+  # Pending: duplicate national id matching is not automated yet.
   @SC-13-03-11 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @pending
   Scenario: The same national id entered twice does not create a second person
     Given the site is in state F6
@@ -132,6 +147,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then the API returns the existing person as a match instead of creating a duplicate
     And the people directory still lists one "Mert Kılıç"
 
+  # Pending: needs an effective date after the real server date (2026-12-01); the E2E clock drives the scheduler only.
   @SC-13-03-12 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
   Scenario: Owner moves in after the tenant leaves and takes the operational dues back
     Given the site is in state F6
@@ -142,7 +158,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And "Mert Kılıç" owes nothing for "Aralık 2026"
     And the ledger invariants hold
 
-  @SC-13-03-13 @J-10 @depth:1 @layer:backend @core @role_manager @pending
+  @SC-13-03-13 @J-10 @depth:1 @layer:backend @core @role_manager @linked
   Scenario Outline: Switching proration changes responsibility for a mid-month move-in
     Given unit "A-3" is owned and vacant on "2026-10-01" with monthly tariff 1500.00
     And proration is <setting>
@@ -154,6 +170,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | enabled  | 483.87      | 1016.13      |
       | disabled | 0.00        | 1500.00      |
 
+  # Pending: needs fault injection at the persistence boundary, which the E2E backend does not offer.
   @SC-13-03-14 @J-10 @depth:2 @state:F2 @layer:backend @edge @role_manager @pending
   Scenario: A failed replacement rolls back occupancy, household and settlement together
     Given a tenant-occupied unit with a linked household and an exit balance
@@ -163,13 +180,14 @@ Feature: Residents and owners change after periods were accrued (state F6)
     When the same replacement is retried after recovery
     Then one replacement session is active and the original tenant is settled exactly once
 
-  @SC-13-03-15 @J-10 @depth:1 @state:F2 @layer:backend @core @role_manager @pending
+  @SC-13-03-15 @J-10 @depth:1 @state:F2 @layer:backend @core @role_manager @linked
   Scenario: A unit created mid-month is billed for chargeable days only
     Given a new owned vacant unit with monthly tariff 1500.00 is created on "2026-11-16"
     When the manager accrues November
     Then the unit's owner is charged 750.00 principal for 15 days
     And the ledger invariants hold
 
+  # Pending: the accrual splits by role, so a seller and a buyer who are both owners share one owner liability instead of 200.00 and 1300.00.
   @SC-13-03-16 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
   Scenario: A mid-month sale of an owner-occupied unit splits that month between seller and buyer
     Given the site is in state F6
@@ -178,6 +196,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the two shares add up to 1500.00
     And "Ahmet Yılmaz" has no active occupancy of "A-4" after "2026-11-05"
 
+  # Pending: the effective due date and late fee read the real server date; the E2E clock drives the scheduler only.
   @SC-13-03-17 @J-10 @depth:1 @layer:backend @edge @role_manager @pending
   Scenario Outline: A share whose responsibility starts after the period due date is not late before it existed
     Given unit "A-3" is owned and vacant with tariff 1500.00 and the period "Kasım 2026" is due "2026-11-10"
@@ -195,6 +214,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | 2026-11-18 | 2026-11-18 | 650.00  | 2026-11-18 | 1.08  |
       | 2026-11-05 | 2026-11-18 | 1300.00 | 2026-11-18 | 2.17  |
 
+  # Pending: needs #207 (jointly liable owner) and #209 (sale of a tenant-occupied unit); the effective date 2026-12-15 is after the real server date.
   @SC-13-03-18 @J-10 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: A sale of a tenant-occupied unit with the same tenant is not split
     Given the site is in state F5
@@ -207,6 +227,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the jointly liable owner shown on that liability is "Ahmet Yılmaz" for days 1 to 14 and "Gül Tanrıverdi" from day 15
     And the ledger invariants hold
 
+  # Pending: GUI layer, and needs the sale clearance statement of #209.
   @SC-13-03-19 @J-10 @depth:1 @state:F5 @layer:gui @core @role_manager @pending
   Scenario: The sale clearance statement lists everything that does or does not move with the unit
     Given the site is in state F5
