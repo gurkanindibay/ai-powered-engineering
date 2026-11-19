@@ -251,7 +251,7 @@ async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_du
         liability(
             "sep",
             "Eylül 2026",
-            "1500.00",
+            "1675.00",
             soon,
             "TENANT",
             "OPERATIONAL_DUES",
@@ -259,7 +259,7 @@ async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_du
         liability(
             "oct",
             "Ekim 2026",
-            "1500.00",
+            "1600.00",
             soon + Days::new(1),
             "TENANT",
             "OPERATIONAL_DUES",
@@ -292,13 +292,24 @@ async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_du
     assert_eq!(november.paid_penalty, d("22.50"));
     assert_eq!(november.principal_amount, d("1500.00"));
     assert_eq!(november.total_amount, Decimal::ZERO);
-    for id in ["sep", "oct"] {
+    for (id, expected_open) in [("sep", d("1675.00")), ("oct", d("1600.00"))] {
         let older = inner.dues.iter().find(|due| due.id == id).unwrap();
+        assert_eq!(older.principal_amount, expected_open);
+        assert_eq!(older.paid_principal, Decimal::ZERO);
+        assert_eq!(older.paid_penalty, Decimal::ZERO);
         assert_eq!(
             older.total_amount - older.paid_principal - older.paid_penalty,
-            d("1500.00")
+            expected_open
         );
     }
+    // Ledger invariant: every unit paid across all dues equals the receipt total.
+    let paid_across_dues: Decimal = inner
+        .dues
+        .iter()
+        .map(|due| due.paid_principal + due.paid_penalty)
+        .sum();
+    assert_eq!(paid_across_dues, receipt.total_amount);
+    assert_eq!(inner.advance_total(UNIT), Decimal::ZERO);
     assert!(inner
         .dues
         .iter()

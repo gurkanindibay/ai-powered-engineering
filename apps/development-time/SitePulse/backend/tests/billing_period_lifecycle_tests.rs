@@ -280,6 +280,31 @@ fn active_periods_use_the_open_contract_while_accepting_legacy_active_values() {
     );
 }
 
+/// Liability identities with principal and paid amounts, plus receipt identities with totals.
+type LedgerSnapshot = (Vec<(String, Decimal, Decimal)>, Vec<(i64, Decimal)>);
+
+async fn liability_and_payment_snapshot(state: &AppState) -> LedgerSnapshot {
+    let inner = state.inner.read().await;
+    (
+        inner
+            .dues
+            .iter()
+            .map(|due| {
+                (
+                    due.id.clone(),
+                    due.principal_amount,
+                    due.paid_principal + due.paid_penalty,
+                )
+            })
+            .collect(),
+        inner
+            .payment_receipts
+            .iter()
+            .map(|receipt| (receipt.id, receipt.total_amount))
+            .collect(),
+    )
+}
+
 // covers: SC-07-12-05
 #[tokio::test]
 // covers: SC-13-09-05
@@ -298,6 +323,12 @@ async fn reopening_requires_a_second_manager_and_keeps_an_audit_record() {
         })
         .await
         .unwrap();
+    let before = liability_and_payment_snapshot(&state).await;
+    assert_eq!(before.0.len(), 1);
+    assert_eq!(before.0[0].0, "due-oct");
+    assert_eq!(before.0[0].1, d("1000.00"));
+    assert_eq!(before.0[0].2, d("200.00"));
+    assert_eq!(before.1, vec![(receipt.id, d("200.00"))]);
     service
         .close(&manager("manager-close"), PERIOD_ID, "close-request")
         .await
@@ -369,4 +400,6 @@ async fn reopening_requires_a_second_manager_and_keeps_an_audit_record() {
     assert_eq!(state.inner.read().await.dues.len(), 1);
     assert_eq!(state.inner.read().await.payment_receipts.len(), 1);
     assert_eq!(state.inner.read().await.payment_receipts[0].id, receipt.id);
+    // The liability and the payment survive reopening exactly once, unchanged.
+    assert_eq!(liability_and_payment_snapshot(&state).await, before);
 }
