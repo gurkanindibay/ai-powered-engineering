@@ -19,6 +19,7 @@ EXPECTED = {
     "F0": {"blocks": 0, "units": 0, "people": 0, "accounts": 0, "periods": 0, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
     "F1": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 0, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
     "F2": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 0, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
+    "F3": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 1, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
     "F4": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 1, "liabilities": 6, "receipts": 1, "overdue": Decimal("8800.00"), "advance": Decimal("0.00")},
     "F5": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 3, "liabilities": 18, "receipts": 9, "overdue": Decimal("4567.50"), "advance": Decimal("1250.00")},
 }
@@ -26,7 +27,7 @@ EXPECTED = {
 
 @pytest.mark.covers("SC-13-07-01")
 @pytest.mark.core
-@pytest.mark.parametrize("state", ["F0", "F1", "F2", "F4", "F5"])
+@pytest.mark.parametrize("state", ["F0", "F1", "F2", "F3", "F4", "F5"])
 def test_site_admin_reference_fixtures(state, request, api, actors, stack):
     saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
     manifest = JourneyManifest.create(

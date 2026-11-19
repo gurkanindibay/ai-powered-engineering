@@ -13,8 +13,10 @@ sys.path.insert(0, str(E2E))
 from support.api import Api  # noqa: E402
 from support.journey_attempts import (  # noqa: E402
     JourneyClock,
+    JourneyFixturePending,
     JourneyManifest,
     make_viban,
+    site_in_state,
     teardown_sites,
     teardown_with_evidence,
 )
@@ -27,6 +29,8 @@ class FakeStack:
 
     def sql(self, statement: str) -> str:
         self.statements.append(statement)
+        if "SELECT id FROM units" in statement:
+            return "1\n2\n3\n4\n5\n6\n7"
         return ""
 
     def restart_backend(self) -> None:
@@ -143,6 +147,40 @@ class JourneyAttemptTests(unittest.TestCase):
     def test_make_viban_matches_reference_vector(self) -> None:
         iban = make_viban("00205", "site-1", "A", 14)
         self.assertEqual(iban, "TR410020504213991067000014")
+
+    def test_site_in_state_f3_creates_period_and_structure(self) -> None:
+        from unittest.mock import MagicMock
+        api = MagicMock()
+        api.create_site.return_value = {"site_id": 99, "temporary_password": "temp"}
+        login_session = MagicMock()
+        login_session.user = {"id": 10}
+        api.login.return_value = login_session
+        saas = MagicMock()
+        stack = FakeStack()
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = JourneyManifest.create(Path(directory), "run", "shard", "attempt")
+            fixture = site_in_state("F3", api=api, stack=stack, saas=saas, manifest=manifest)
+
+            self.assertEqual(fixture.state, "F3")
+            self.assertEqual(fixture.site_id, "99")
+            self.assertEqual(len(fixture.unit_ids), 7)
+            self.assertEqual(fixture.person_ids, ())
+            self.assertTrue(any("INSERT INTO dues_periods" in s and "Ekim 2026" in s for s in stack.statements))
+            self.assertTrue(any("UPDATE sites SET proration_enabled = TRUE" in s for s in stack.statements))
+            self.assertGreaterEqual(stack.restarts, 1)
+
+    def test_site_in_state_f6_and_f7_raise_pending(self) -> None:
+        from unittest.mock import MagicMock
+        api = MagicMock()
+        saas = MagicMock()
+        stack = FakeStack()
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = JourneyManifest.create(Path(directory), "run", "shard", "attempt")
+            for state in ["F6", "F7"]:
+                with self.assertRaises(JourneyFixturePending):
+                    site_in_state(state, api=api, stack=stack, saas=saas, manifest=manifest)
 
 
 if __name__ == "__main__":

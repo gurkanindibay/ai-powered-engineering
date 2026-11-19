@@ -171,15 +171,14 @@ def site_in_state(
     saas: Session,
     manifest: JourneyManifest,
 ) -> JourneyFixture:
-    """Build an isolated F0-F2 site and record its resources before later setup work.
+    """Build an isolated F0-F5 site and record its resources before setup work.
 
-    F3-F7 need the shared deterministic clock and the later occupancy, payment,
-    close and correction builders. Those states fail explicitly until their
-    acceptance scenarios are enabled rather than silently returning partial data.
+    F6-F7 need the later close and correction builders. Those states fail
+    explicitly rather than silently returning partial data.
     """
     if state not in {f"F{number}" for number in range(8)}:
         raise ValueError(f"Unknown Site Admin reference state: {state!r}")
-    if state not in {"F0", "F1", "F2", "F4", "F5"}:
+    if state not in {"F0", "F1", "F2", "F3", "F4", "F5"}:
         raise JourneyFixturePending(f"{state} is pending the later journey fixture builders and #211 clock integration")
 
     attempt = _slug(manifest.attempt_id)
@@ -203,12 +202,15 @@ def site_in_state(
         # F0 deliberately removes that empty structure to match the catalogue.
         stack.sql(f"DELETE FROM blocks WHERE site_id = {site};")
         requires_restart = True
-    if state in {"F1", "F2", "F4", "F5"}:
+    if state in {"F1", "F2", "F3", "F4", "F5"}:
         unit_ids = _create_structure(stack, site_id, manifest)
         requires_restart = True
     if state in {"F2", "F4", "F5"}:
         person_ids = _create_residents(stack, site_id, manager_user_id, manifest)
-    if state == "F4":
+    if state == "F3":
+        _create_period_no_residents(stack, site_id)
+        requires_restart = True
+    elif state == "F4":
         _build_f4(stack, site_id, unit_ids)
         requires_restart = True
     elif state == "F5":
@@ -275,6 +277,7 @@ def _create_structure(stack: E2EStack, site_id: str, manifest: JourneyManifest) 
     stack.sql(
         "BEGIN; "
         f"DELETE FROM blocks WHERE site_id = {site}; "
+        f"UPDATE sites SET proration_enabled = TRUE WHERE id = {site}; "
         f"INSERT INTO blocks (site_id, block_name, total_floors) VALUES ({site}, 'A Blok', 7); "
         f"INSERT INTO house_types (site_id, type_name, dues_amount, description) VALUES "
         f"({site}, 'Flat', 1500.00, 'Journey reference tariff'), "
@@ -445,6 +448,14 @@ def _build_f5(stack: E2EStack, site_id: str | int, unit_ids: tuple[str, ...]) ->
     statements.append("COMMIT;")
     stack.sql(" ".join(statements))
 
+
+def _create_period_no_residents(stack: E2EStack, site_id: str) -> None:
+    site = _safe_id(site_id)
+    stack.sql(
+        f"INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status) "
+        f"VALUES ({site}, 'Ekim 2026', '2026-10', DATE '2026-10-10', 'OPEN') "
+        f"ON CONFLICT (site_id, period_name) DO UPDATE SET period_key = EXCLUDED.period_key, status = 'OPEN';"
+    )
 
 def _create_residents(stack: E2EStack, site_id: str, manager_user_id: str | int,
                       manifest: JourneyManifest) -> tuple[str, ...]:
