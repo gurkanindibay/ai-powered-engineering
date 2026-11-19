@@ -337,7 +337,13 @@ impl OccupancyService {
         let pool = self.state.db_pool()?;
         let site = crate::db::require_id("site", site_id).ok()?;
         let unit = parse_unit_id(unit_id)?;
-        let client = pool.get().await.ok()?;
+        let client = pool
+            .get()
+            .await
+            .inspect_err(
+                |error| tracing::warn!(%error, "seller lookup could not reach the database"),
+            )
+            .ok()?;
         let row = client
             .query_opt(
                 "SELECT u.owner_person_id,
@@ -349,6 +355,7 @@ impl OccupancyService {
                 &[&unit, &site],
             )
             .await
+            .inspect_err(|error| tracing::warn!(%error, "seller lookup failed"))
             .ok()??;
         let person_id: Option<i64> = row.get(0);
         person_id.map(|person_id| Seller {

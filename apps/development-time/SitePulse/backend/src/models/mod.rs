@@ -2554,6 +2554,9 @@ pub struct TransferOwnershipResponse {
     /// The seller-pays override requested with the transfer.
     #[serde(default)]
     pub seller_pays_override: Option<SellerPaysOverride>,
+    /// Follow-up steps that failed after the transfer completed; the transfer stands.
+    #[serde(default)]
+    pub warnings: Vec<String>,
     pub message: String,
     pub unit_id: String,
     pub old_owner_name: String,

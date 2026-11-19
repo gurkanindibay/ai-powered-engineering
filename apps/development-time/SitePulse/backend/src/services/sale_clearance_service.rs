@@ -16,12 +16,15 @@ use crate::domain::sale_clearance::{csv_cell, CLEARANCE_NOTICE};
 use crate::models::{
     ClearanceDebtItem, ClearanceInstallment, DecideSellerPaysOverrideRequest,
     RequestSellerPaysOverrideRequest, SaleClearanceStatement, SellerPaysOverride,
+    TransferOwnershipRequest, TransferOwnershipResponse,
 };
 use crate::services::capital_project_service::CapitalProjectService;
 use crate::services::finance_common::{
     conflict, find_unit, invalid, not_found, same_actor, unit_label, Caller, FinanceError,
     FinanceResult,
 };
+use crate::services::occupancy_service::OccupancyService;
+use crate::services::PaymentTrackingService;
 use crate::state::AppState;
 
 const PENDING: &str = "PENDING";
@@ -30,6 +33,15 @@ const REJECTED: &str = "REJECTED";
 
 const COLUMNS: &str = "id, site_id, unit_id, seller_person_id, buyer_person_id, transfer_date, \
 reason, requested_by, status, decided_by, decided_at, decision_note, created_at";
+
+/// Why a transfer with follow-up requests did not go through. Nothing was transferred.
+#[derive(Debug)]
+pub enum TransferFlowError {
+    /// The seller-pays override request was rejected before the transfer.
+    Override(FinanceError),
+    /// The transfer itself failed.
+    Transfer(String),
+}
 
 pub struct SaleClearanceService {
     state: AppState,
@@ -283,6 +295,121 @@ impl SaleClearanceService {
     ) -> FinanceResult<SellerPaysOverride> {
         self.create(caller, unit_id, Some(seller_person_id), req)
             .await
+    }
+
+    /// Removes a request that was only just created, when the sale it belongs to did not
+    /// go through. Only a still-pending request is removed.
+    pub async fn discard_pending(&self, caller: &Caller, id: i64) -> FinanceResult<()> {
+        let site = parse_id("site", &caller.site_id)?;
+        let pool = self
+            .state
+            .pool
+            .as_ref()
+            .ok_or_else(|| FinanceError::Unavailable("Database unavailable".into()))?;
+        let mut client = pool.get().await.map_err(db_unavailable)?;
+        let tx = client.transaction().await.map_err(db_unavailable)?;
+        crate::db::tx_bind_tenant(&tx, site)
+            .await
+            .map_err(db_unavailable)?;
+        tx.execute(
+            "DELETE FROM seller_pays_overrides
+              WHERE id = $1 AND site_id = $2 AND status = 'PENDING'",
+            &[&id, &site],
+        )
+        .await
+        .map_err(db_unavailable)?;
+        tx.commit().await.map_err(db_unavailable)?;
+        Ok(())
+    }
+
+    /// Transfers the unit and runs the follow-up requests of the sale (the mid-month split
+    /// and the seller-pays override).
+    ///
+    /// The override request is validated and stored first. It is inert while pending, so
+    /// a rejected request (a duplicate, a short reason) stops the sale before the owner
+    /// changes, and a failed transfer discards the request again. After the transfer the
+    /// split is best effort: its failure is reported in `warnings` and never turns the
+    /// completed transfer into an error.
+    pub async fn transfer_with_follow_ups(
+        &self,
+        caller: &Caller,
+        payload: TransferOwnershipRequest,
+        override_reason: Option<String>,
+    ) -> Result<TransferOwnershipResponse, TransferFlowError> {
+        let occupancy = OccupancyService::new(self.state.clone());
+        // Who sells, and whether the seller lives in the unit, is known only before the transfer.
+        let seller = occupancy
+            .seller_before_transfer(&caller.site_id, &payload.unit_id)
+            .await;
+        let transfer_date = match payload.transfer_date {
+            Some(date) => date,
+            None => occupancy.site_today(&caller.site_id).await,
+        };
+        let buyer = payload.new_owner_person_id;
+        let moves_in = payload.new_owner_moves_in;
+        let unit_ref = payload.unit_id.clone();
+
+        if override_reason.is_some() && seller.is_none() {
+            return Err(TransferFlowError::Override(invalid(
+                "A seller-pays override needs an existing seller on the unit",
+            )));
+        }
+        let mut requested = None;
+        if let (Some(seller), Some(buyer), Some(reason)) = (seller, buyer, override_reason) {
+            requested = Some(
+                self.request_for_seller(
+                    caller,
+                    &unit_ref,
+                    seller.person_id,
+                    RequestSellerPaysOverrideRequest {
+                        buyer_person_id: buyer,
+                        transfer_date,
+                        reason,
+                    },
+                )
+                .await
+                .map_err(TransferFlowError::Override)?,
+            );
+        }
+
+        let transferred = PaymentTrackingService::new(self.state.clone())
+            .transfer_ownership(payload)
+            .await;
+        let mut response = match transferred {
+            Ok(response) => response,
+            Err(message) => {
+                if let Some(request) = &requested {
+                    if let Err(error) = self.discard_pending(caller, request.id).await {
+                        tracing::warn!(
+                            override_id = request.id,
+                            %error,
+                            "could not discard the seller-pays override of a failed transfer"
+                        );
+                    }
+                }
+                return Err(TransferFlowError::Transfer(message));
+            }
+        };
+        response.seller_pays_override = requested;
+
+        if let (Some(seller), Some(buyer)) = (seller, buyer) {
+            if seller.owner_occupied && moves_in {
+                match occupancy
+                    .request_sale_split(caller, &unit_ref, seller.person_id, buyer, transfer_date)
+                    .await
+                {
+                    Ok(Some(correction)) => response.correction_requests.push(correction),
+                    Ok(None) => {}
+                    Err(error) => {
+                        tracing::warn!(%error, "the sale split request failed after the transfer");
+                        response.warnings.push(format!(
+                            "The transfer is complete, but the sale split was not requested: {error}"
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(response)
     }
 
     async fn create(

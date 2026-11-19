@@ -574,3 +574,121 @@ async fn only_an_approved_override_makes_the_seller_pay_later_installments() {
     );
     db.drop_db().await;
 }
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+// covers: SC-08-05-06
+async fn a_rejected_override_request_leaves_the_seller_as_the_owner() {
+    use sitepulse_backend::services::sale_clearance_service::TransferFlowError;
+
+    let db = TestDb::create().await;
+    let client = db.pool.get().await.expect("connection");
+    let row = client
+        .query_one(
+            "SELECT u.id, u.site_id, u.owner_person_id
+               FROM units u JOIN blocks b ON b.id = u.block_id JOIN sites s ON s.id = u.site_id
+              WHERE s.slug = 'begonya-sitesi' AND b.block_name = 'A Blok' AND u.unit_number = 14",
+            &[],
+        )
+        .await
+        .expect("seeded unit");
+    let (unit, site, seller): (i64, i64, i64) = (row.get(0), row.get(1), row.get(2));
+    let buyer: i64 = client
+        .query_one(
+            "INSERT INTO persons (site_id, full_name, person_type)
+             VALUES ($1, 'Atomic Sale Buyer', 'HOME_OWNER') RETURNING id",
+            &[&site],
+        )
+        .await
+        .expect("buyer")
+        .get(0);
+    let other_buyer: i64 = client
+        .query_one(
+            "INSERT INTO persons (site_id, full_name, person_type)
+             VALUES ($1, 'Second Buyer', 'HOME_OWNER') RETURNING id",
+            &[&site],
+        )
+        .await
+        .expect("second buyer")
+        .get(0);
+    drop(client);
+
+    let state = AppState::with_pool(Some(db.pool.clone()));
+    state.reload_from_db().await.expect("load state");
+    let site_id = site.to_string();
+    let unit_id = unit.to_string();
+    let requester = manager(&site_id, "requester");
+    let service = SaleClearanceService::new(&state);
+    let transfer = |buyer_id: i64, unit_ref: &str, reason: &str| {
+        (
+            TransferOwnershipRequest {
+                new_owner: None,
+                site_id: Some(site_id.clone()),
+                unit_id: unit_ref.to_string(),
+                new_owner_name: "Atomic Sale Buyer".to_string(),
+                new_owner_national_id: None,
+                new_owner_email: None,
+                new_owner_phone: None,
+                transfer_date: Some(date("2026-12-20")),
+                notes: None,
+                new_owner_person_id: Some(buyer_id),
+                new_owner_moves_in: false,
+                seller_pays_override_reason: Some(reason.to_string()),
+            },
+            Some(reason.to_string()),
+        )
+    };
+    let owner_user = || async {
+        let inner = state.inner.read().await;
+        inner
+            .units
+            .iter()
+            .find(|u| u.id == unit_id)
+            .and_then(|u| u.owner_user_id.clone())
+    };
+    let owner_before = owner_user().await;
+
+    // A reason that is too short is refused before anything moves.
+    let (payload, reason) = transfer(buyer, &unit_id, "no");
+    assert!(matches!(
+        service
+            .transfer_with_follow_ups(&requester, payload, reason)
+            .await,
+        Err(TransferFlowError::Override(FinanceError::Invalid(_)))
+    ));
+    assert_eq!(owner_user().await, owner_before);
+    assert_eq!(service.list(&requester).await.expect("list").len(), 0);
+
+    // A pending request for the same buyer makes the combined request a duplicate.
+    service
+        .request_for_seller(
+            &requester,
+            &unit_id,
+            seller,
+            RequestSellerPaysOverrideRequest {
+                buyer_person_id: buyer,
+                transfer_date: date("2026-12-20"),
+                reason: "Contract says the seller pays".to_string(),
+            },
+        )
+        .await
+        .expect("first request");
+    let (payload, reason) = transfer(buyer, &unit_id, "Contract says the seller pays");
+    assert!(matches!(
+        service
+            .transfer_with_follow_ups(&requester, payload, reason)
+            .await,
+        Err(TransferFlowError::Override(FinanceError::Conflict(_)))
+    ));
+    assert_eq!(owner_user().await, owner_before);
+    assert_eq!(service.list(&requester).await.expect("list").len(), 1);
+
+    // A transfer that fails discards the request it just stored.
+    let (payload, reason) = transfer(other_buyer, "999999", "Another seller-pays reason");
+    assert!(service
+        .transfer_with_follow_ups(&requester, payload, reason)
+        .await
+        .is_err());
+    assert_eq!(service.list(&requester).await.expect("list").len(), 1);
+    db.drop_db().await;
+}

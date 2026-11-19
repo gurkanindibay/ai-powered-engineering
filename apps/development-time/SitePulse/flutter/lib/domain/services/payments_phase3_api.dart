@@ -165,7 +165,6 @@ class PaymentsPhase3Api {
     if (note != null && note.isNotEmpty) 'note': note,
   });
 
-<<<<<<< HEAD
   static Future<DisputeItem> dispute(
     String unitId,
     String dueId,
@@ -176,7 +175,6 @@ class PaymentsPhase3Api {
       'reason': reason,
     }),
   );
-=======
 
   // ---- STORY-08-05: sale clearance and seller-pays override ----------------
 
@@ -205,10 +203,6 @@ class PaymentsPhase3Api {
         if (note != null && note.isNotEmpty) 'note': note,
       });
 
-
-  static Future<DisputeItem> dispute(String unitId, String dueId, String reason) async =>
-      DisputeItem.fromJson(await _post('/api/v1/residents/$unitId/disputes', {'due_id': dueId, 'reason': reason}));
->>>>>>> 8abbf72 (feat: sale clearance statement and four-eyes seller-pays override (#209))
   static Future<List<DisputeItem>> unitDisputes(String unitId) async =>
       _rows(await _get('/api/v1/residents/$unitId/disputes'))
           .map(DisputeItem.fromJson)

@@ -1935,6 +1935,7 @@ impl PaymentTrackingService {
             success: true,
             correction_requests: Vec::new(),
             seller_pays_override: None,
+            warnings: Vec::new(),
             message: format!(
                 "Mülk tapu devri başarıyla tamamlandı. Yeni malik ({}) kaydedildi. Eski malik bakiye dökümü arşivlendi.",
                 req.new_owner_name
