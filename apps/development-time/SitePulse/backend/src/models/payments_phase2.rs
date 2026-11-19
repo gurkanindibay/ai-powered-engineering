@@ -253,6 +253,9 @@ pub struct PaymentIntent {
     pub site_id: String,
     pub unit_id: String,
     pub debtor_type: String,
+    /// The owner is the payer while the designated debtor is the tenant.
+    #[serde(default)]
+    pub pays_tenant_liability: bool,
     pub payer_name: String,
     pub amount: Decimal,
     pub currency: String,
@@ -278,6 +281,9 @@ pub struct CreatePaymentIntentRequest {
     /// `OWNER` or `TENANT`; defaults to the caller's own role on the unit.
     #[serde(default)]
     pub debtor_type: Option<String>,
+    /// Allows an owner to pay tenant liabilities for which their title is linked.
+    #[serde(default)]
+    pub pays_tenant_liability: bool,
     #[serde(default)]
     pub payer_name: Option<String>,
     #[serde(default)]
@@ -331,6 +337,17 @@ pub struct StatementOpenItem {
     pub limitation_warning: bool,
 }
 
+/// A titled owner who is jointly liable for a tenant's single liability
+/// during this ownership interval (KMK m.22/1).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct JointLiabilityOwner {
+    pub person_id: i64,
+    #[serde(default)]
+    pub tenant_person_id: Option<i64>,
+    pub start_date: NaiveDate,
+    pub end_date: Option<NaiveDate>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatementDebtor {
     pub debtor_type: String,
@@ -345,6 +362,12 @@ pub struct StatementDebtor {
     pub total_outstanding: Decimal,
     pub advance_balance: Decimal,
     pub open_items: Vec<StatementOpenItem>,
+    /// Tenant liabilities for which this owner is jointly liable. These are
+    /// presented separately and do not inflate this debtor's ledger totals.
+    #[serde(default)]
+    pub jointly_liable_open_items: Vec<StatementOpenItem>,
+    #[serde(default)]
+    pub jointly_liable_total: Decimal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
