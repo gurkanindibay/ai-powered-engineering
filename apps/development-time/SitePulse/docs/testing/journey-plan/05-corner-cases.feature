@@ -65,6 +65,7 @@ Feature: Corner cases around accrual, occupancy, access and time
   # ------------------------------------------------------------- occupancy
 
   @SC-13-05-06 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  # Backend coverage: backend/tests/payments_phase2_tests.rs (owner joint statement balance and single tenant liability).
   Scenario: Moving out with debt keeps the debt and the history
     Given the site is in state F5
     And the clock has advanced to "2026-12-01" before any December accrual
@@ -173,6 +174,7 @@ Feature: Corner cases around accrual, occupancy, access and time
   # ------------------------------------------------- tenant departure (Q9)
 
   @SC-13-05-17 @J-12 @depth:2 @state:F5 @layer:gui @core @role_manager @pending
+  # Backend coverage: backend/tests/payments_phase2_tests.rs (owner statement privacy and manual payment payer/debtor identities).
   Scenario: Check-out shows the tenant's debt and the owner can still be collected from
     Given the site is in state F5
     When the manager starts the check-out of tenant "Deniz Arslan" from "A-5" effective "2026-11-19"
@@ -186,6 +188,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     And the ledger invariants hold
 
   @SC-13-05-18 @J-12 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  # Backend coverage: backend/tests/accrual_corrections_tests.rs (late move-out split correction and four-eyes approval).
   Scenario: A tenant who left without notice is moved out at the real date and the owner takes over
     Given the site is in state F6
     And the clock has advanced to "2026-12-05" after "Aralık 2026" was accrued to "Mert Kılıç"

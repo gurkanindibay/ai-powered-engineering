@@ -407,6 +407,7 @@ pub async fn accrue_monthly_dues(
     //    with its budget basis) and the run report commit together or not at all.
     //    Memory follows from the committed result only.
     let mut period_db_id: Option<String> = None;
+    let mut joint_owners = std::collections::HashMap::new();
     if let Some(ref pool) = state.pool {
         if !accrued.is_empty() || !skipped.is_empty() || !units_without_owner.is_empty() {
             let committed = crate::db::commit_accrual_batch(
@@ -429,6 +430,7 @@ pub async fn accrue_monthly_dues(
                 )
             })?;
             period_db_id = committed.period_id.map(|id| id.to_string());
+            joint_owners = committed.joint_owners;
             let mut kept = Vec::new();
             for ((mut due, basis), id) in accrued.into_iter().zip(committed.due_ids) {
                 if let Some(id) = id {
@@ -497,6 +499,7 @@ pub async fn accrue_monthly_dues(
         }
         inner.dues.push(due);
     }
+    inner.joint_liability_owners.extend(joint_owners);
     drop(inner);
     let legal_basis_warning = budget_id.is_none().then(|| {
         "KMK 37 (Law 7579): these dues were accrued without an operating budget (işletme projesi) in force; they have no assembly-approved basis".to_string()

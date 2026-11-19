@@ -637,6 +637,7 @@ async fn when_a_tenant_pays_owner_capital_dues_then_the_receipt_cites_kmk22_and_
             payment_channel: PaymentChannel::BankTransfer,
             description: Some("DEMİRBAŞ çatı katılımı".into()),
             settles_owner_capital_dues: true,
+            settles_tenant_joint_liability: false,
             ..Default::default()
         })
         .await
@@ -1020,6 +1021,7 @@ async fn saved_card(state: &AppState) -> SavedPaymentMethod {
             CreatePaymentIntentRequest {
                 amount: d("100.00"),
                 debtor_type: None,
+                pays_tenant_liability: false,
                 payer_name: None,
                 designation: None,
             },

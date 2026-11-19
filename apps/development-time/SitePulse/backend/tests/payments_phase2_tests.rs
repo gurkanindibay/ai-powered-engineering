@@ -570,6 +570,96 @@ async fn when_a_card_payment_is_captured_then_it_is_recorded_once_through_the_in
 }
 
 #[tokio::test]
+// Backend coverage: SC-13-05-17 owner payment allocation through the card capture path.
+async fn when_an_owner_card_payment_targets_a_joint_tenant_balance_then_only_that_debt_is_paid() {
+    let state = owner_owing("100.00").await;
+    let owner_person_id;
+    {
+        let mut inner = state.inner.write().await;
+        let unit = inner.units.iter().find(|unit| unit.id == "d-14").unwrap();
+        owner_person_id = inner
+            .users
+            .iter()
+            .find(|user| Some(&user.id) == unit.owner_user_id.as_ref())
+            .and_then(|user| user.person_id)
+            .unwrap();
+        inner.dues.push(DuesLiability {
+            id: "tenant-card-due".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "October 2026".to_string(),
+            principal_amount: d("100.00"),
+            delay_penalty: Decimal::ZERO,
+            total_amount: d("100.00"),
+            due_date: today() + Days::new(5),
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: None,
+            grace_days: 0,
+            effective_due_date: None,
+        });
+        inner.joint_liability_owners.insert(
+            "tenant-card-due".to_string(),
+            vec![JointLiabilityOwner {
+                person_id: owner_person_id,
+                tenant_person_id: None,
+                start_date: today(),
+                end_date: Some(today() + Days::new(5)),
+            }],
+        );
+    }
+    let service = CardPaymentService::new(state.clone());
+    let intent = service
+        .create_intent(
+            "d-14",
+            CreatePaymentIntentRequest {
+                amount: d("100.00"),
+                pays_tenant_liability: true,
+                designation: Some(PaymentDesignation {
+                    due_ids: vec!["tenant-card-due".to_string()],
+                    ..PaymentDesignation::default()
+                }),
+                ..Default::default()
+            },
+            Some("OWNER"),
+            ACTOR,
+        )
+        .await
+        .unwrap();
+    assert_eq!(intent.debtor_type, "TENANT");
+    assert!(intent.pays_tenant_liability);
+    let captured = service
+        .apply_provider_event(event(&intent, "CAPTURED"))
+        .await
+        .unwrap();
+    assert_eq!(captured.status, "CAPTURED");
+    let inner = state.inner.read().await;
+    assert_eq!(
+        inner
+            .dues
+            .iter()
+            .find(|due| due.id == "op-1")
+            .unwrap()
+            .paid_principal,
+        Decimal::ZERO
+    );
+    assert_eq!(
+        inner
+            .dues
+            .iter()
+            .find(|due| due.id == "tenant-card-due")
+            .unwrap()
+            .paid_principal,
+        d("100.00")
+    );
+    let receipt = inner.payment_receipts.last().unwrap();
+    assert_eq!(receipt.payer_role, DebtorType::Owner);
+    assert_eq!(receipt.on_behalf_of_role, Some(DebtorType::Tenant));
+}
+
+#[tokio::test]
 async fn when_the_provider_amount_differs_or_a_resident_pays_another_debtor_then_it_is_refused() {
     let state = owner_owing("500.00").await;
     let service = CardPaymentService::new(state.clone());
@@ -735,6 +825,155 @@ async fn when_a_statement_is_built_then_items_are_aged_and_each_debtor_sees_only
     let own = resident_statement::build_statement(&inner, unit, Some("OWNER"), today());
     assert_eq!(own.debtors.len(), 1);
     assert_eq!(own.debtors[0].debtor_type, "OWNER");
+}
+
+#[tokio::test]
+// Backend coverage: SC-13-05-06 (tenant debt remains singular) and SC-13-05-17 (owner sees joint balance without tenant receipts).
+async fn when_a_tenant_liability_has_an_owner_link_then_owner_sees_only_its_joint_balance() {
+    let state = site_with_two_units().await;
+    let today = today();
+    let owner_person_id;
+    {
+        let mut inner = state.inner.write().await;
+        let unit = inner.units.iter().find(|unit| unit.id == "d-14").unwrap();
+        owner_person_id = inner
+            .users
+            .iter()
+            .find(|user| Some(&user.id) == unit.owner_user_id.as_ref())
+            .and_then(|user| user.person_id)
+            .unwrap();
+        inner.dues.push(DuesLiability {
+            id: "tenant-joint-due".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "October 2026".to_string(),
+            principal_amount: d("4500.00"),
+            delay_penalty: d("297.50"),
+            total_amount: d("4797.50"),
+            due_date: today - Days::new(30),
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: Some(today),
+            grace_days: 0,
+            effective_due_date: None,
+        });
+        inner.joint_liability_owners.insert(
+            "tenant-joint-due".to_string(),
+            vec![JointLiabilityOwner {
+                person_id: owner_person_id,
+                tenant_person_id: None,
+                start_date: today - Days::new(60),
+                end_date: Some(today),
+            }],
+        );
+    }
+
+    let inner = state.inner.read().await;
+    let unit = inner.units.iter().find(|unit| unit.id == "d-14").unwrap();
+    let owner = resident_statement::build_statement(&inner, unit, Some("OWNER"), today);
+    let owner_debtor = owner.debtors.first().unwrap();
+    assert_eq!(owner_debtor.total_outstanding, Decimal::ZERO);
+    assert_eq!(owner_debtor.jointly_liable_total, d("4797.50"));
+    assert_eq!(owner_debtor.jointly_liable_open_items.len(), 1);
+    assert_eq!(owner.receipts.len(), 0);
+
+    let tenant = resident_statement::build_statement(&inner, unit, Some("TENANT"), today);
+    assert_eq!(tenant.debtors.len(), 1);
+    assert_eq!(tenant.debtors[0].total_outstanding, d("4797.50"));
+    assert_eq!(tenant.debtors[0].jointly_liable_total, Decimal::ZERO);
+}
+
+#[tokio::test]
+// Backend coverage: SC-13-05-17 (owner payment, payer/debtor receipt identities, and owner statement balance).
+async fn when_an_owner_pays_a_linked_tenant_liability_then_the_receipt_names_payer_and_debtor() {
+    let state = site_with_two_units().await;
+    let tenant_person_id = 9999;
+    let owner_person_id;
+    {
+        let mut inner = state.inner.write().await;
+        let owner_id = inner
+            .units
+            .iter()
+            .find(|unit| unit.id == "d-14")
+            .and_then(|unit| unit.owner_user_id.as_ref())
+            .cloned()
+            .unwrap();
+        let mut tenant = inner
+            .users
+            .iter()
+            .find(|user| user.id == owner_id)
+            .cloned()
+            .unwrap();
+        tenant.id = "tenant-test".to_string();
+        tenant.full_name = "Test Tenant".to_string();
+        tenant.email = "tenant@example.test".to_string();
+        tenant.person_id = Some(tenant_person_id);
+        tenant.role = Role::HomeResident;
+        owner_person_id = inner
+            .users
+            .iter()
+            .find(|user| user.id == owner_id)
+            .and_then(|user| user.person_id)
+            .unwrap();
+        inner.users.push(tenant);
+        inner
+            .units
+            .iter_mut()
+            .find(|unit| unit.id == "d-14")
+            .unwrap()
+            .tenant_user_id = Some("tenant-test".to_string());
+        inner.dues.push(DuesLiability {
+            id: "tenant-payable-due".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "October 2026".to_string(),
+            principal_amount: d("300.00"),
+            delay_penalty: Decimal::ZERO,
+            total_amount: d("300.00"),
+            due_date: today(),
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: Some(today()),
+            grace_days: 0,
+            effective_due_date: None,
+        });
+        inner.joint_liability_owners.insert(
+            "tenant-payable-due".to_string(),
+            vec![JointLiabilityOwner {
+                person_id: owner_person_id,
+                tenant_person_id: Some(tenant_person_id),
+                start_date: today(),
+                end_date: Some(today()),
+            }],
+        );
+    }
+
+    let receipt = PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(RecordManualPaymentRequest {
+            site_id: Some(SITE.to_string()),
+            unit_id: "d-14".to_string(),
+            amount: d("100.00"),
+            payer_name: "Can Öztürk".to_string(),
+            payer_role: DebtorType::Owner,
+            designation: Some(PaymentDesignation {
+                due_ids: vec!["tenant-payable-due".to_string()],
+                ..PaymentDesignation::default()
+            }),
+            settles_tenant_joint_liability: true,
+            ..RecordManualPaymentRequest::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(receipt.payer_name, "Can Öztürk");
+    assert_eq!(receipt.payer_role, DebtorType::Owner);
+    assert_eq!(receipt.on_behalf_of_role, Some(DebtorType::Tenant));
+    assert_eq!(receipt.on_behalf_of_name.as_deref(), Some("Test Tenant"));
+    let inner = state.inner.read().await;
+    assert_eq!(inner.dues[0].paid_principal, d("100.00"));
 }
 
 // ---------------------------------------------------------------------------

@@ -3759,6 +3759,7 @@ async fn when_tenant_payment_is_explicitly_designated_for_capital_dues_then_rent
         payment_channel: PaymentChannel::BankTransfer,
         description: Some("Daire 14 Asansör ve Demirbaş Harcaması Payı".to_string()),
         settles_owner_capital_dues: true,
+        settles_tenant_joint_liability: false,
         payment_date: Some(Utc::now()),
         idempotency_key: None,
         ..Default::default()
