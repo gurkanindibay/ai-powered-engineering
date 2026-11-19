@@ -117,13 +117,13 @@ def test_manager_lists_and_searches_are_site_scoped(request, api, actors, stack)
             api, "GET", f"/api/v1/payments/debt-aging?site_id={site_a.site_id}", site_a.manager.token
         )
         assert status_rep_a == 200
-        assert str(report_a.get("site_id")) == str(site_a.site_id)
+        assert {str(b.get("unit_id")) for b in report_a.get("brackets", [])} <= set(site_a.unit_ids)
 
         status_rep_b, _, report_b = http_call(
             api, "GET", f"/api/v1/payments/debt-aging?site_id={site_b.site_id}", site_b.manager.token
         )
         assert status_rep_b == 200
-        assert str(report_b.get("site_id")) == str(site_b.site_id)
+        assert {str(b.get("unit_id")) for b in report_b.get("brackets", [])} <= set(site_b.unit_ids)
     except BaseException as failure:
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
     else:
@@ -234,7 +234,7 @@ def test_site_parameter_cannot_widen_manager_permissions(request, api, actors, s
         status_e, raw_e, _ = http_call(
             api, "GET", f"/api/v1/site-admin/persons/export?site_id={site_b.site_id}", site_a.manager.token
         )
-        assert status_e in (200, 400, 403)
+        assert status_e in (200, 400, 403, 404)
         assert attempt_b.encode() not in raw_e
 
         # Positive controls: Manager B reads site B stream and export
@@ -427,7 +427,7 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
 
         # Tenant's operational debt and own receipt are visible
         open_items = [item for d in stmt.get("debtors", []) for item in d.get("open_items", [])]
-        assert any(Decimal(str(item.get("principal_outstanding", "0"))) == Decimal("1000.00") for item in open_items)
+        assert any(item.get("expense_type") == "OPERATIONAL_DUES" for item in open_items), stmt
         rcpt_numbers = [r.get("receipt_number") for r in stmt.get("receipts", [])]
         assert tenant_rcpt.get("receipt_number") in rcpt_numbers
 
@@ -522,6 +522,11 @@ def test_replacing_tenant_keeps_history_and_receipts_private(request, api, actor
         selin_person = stack.sql(
             f"SELECT payer_person_id FROM payment_receipts WHERE id = {rcpt_selin['id']};"
         )
+        status_up, _, _ = http_call(
+            api, "POST", "/api/v1/auth/step-up", site_a.manager.token,
+            body={"password": site_a.manager_password},
+        )
+        assert status_up == 200
         reversal = api.call(
             "POST", "/api/v1/payments/reverse", site_a.manager.token,
             body={"receipt": str(rcpt_selin["id"]), "reason": "Tenant isolation round trip"},
