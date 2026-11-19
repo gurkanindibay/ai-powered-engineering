@@ -243,6 +243,11 @@ impl OccupancyService {
             .map(Some)
     }
 
+    /// Today's date in the site's time zone.
+    pub async fn site_today(&self, site_id: &str) -> NaiveDate {
+        self.today(site_id).await
+    }
+
     async fn today(&self, site_id: &str) -> NaiveDate {
         let inner = self.state.inner.read().await;
         crate::services::finance_common::site_today(&inner, site_id)
@@ -343,6 +348,7 @@ impl OccupancyService {
             closed,
             opened,
             correction_requests: Vec::new(),
+            supplementary_charges: Vec::new(),
         })
     }
 

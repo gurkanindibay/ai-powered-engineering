@@ -218,6 +218,24 @@ impl FinanceStore {
         }
     }
 
+    /// Persists supplementary charges (STORY-07-13). `None` without a database (memory only);
+    /// otherwise the new id of each charge, `None` where an identical charge exists.
+    pub async fn persist_supplementary(
+        &self,
+        site_id: &str,
+        charges: &[super::dues_repository::SupplementaryInsert<'_>],
+    ) -> DbResult<Option<Vec<Option<String>>>> {
+        let Some(pool) = self.pool() else {
+            return Ok(None);
+        };
+        let ids = super::insert_supplementary_dues(pool, site_id, charges).await?;
+        Ok(Some(
+            ids.into_iter()
+                .map(|id| id.map(|id| id.to_string()))
+                .collect(),
+        ))
+    }
+
     /// Inserts a new liability (heat share and similar accruals). Returns `None`
     /// when the unit already has one for this period and expense type.
     pub async fn insert_due(

@@ -273,7 +273,8 @@ pub async fn accrue_monthly_dues(
         let inner = state.inner.read().await;
         let mut units = std::collections::HashSet::new();
         for due in &inner.dues {
-            if BillingPeriod::parse(&due.period).ok() == Some(billing_period)
+            if crate::services::supplementary_charge_service::billed_period(&inner, due)
+                == Some(billing_period)
                 && due.expense_type == ExpenseType::OperationalDues
             {
                 units.insert(due.unit_id.clone());

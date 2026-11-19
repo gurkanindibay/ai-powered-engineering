@@ -83,6 +83,10 @@ pub struct AppStateInner {
     pub budget_required_sites: Vec<String>,
     /// Dues liability id -> operating budget id (its legal basis).
     pub dues_budget_basis: HashMap<String, String>,
+    /// Supplementary charge id -> the key (`2026-10`) of the month it refers to. A charge posted in
+    /// another period than the month it bills (a back-dated start date, STORY-07-13) has an
+    /// entry; every other liability bills its own `period`.
+    pub dues_source_period: HashMap<String, String>,
     /// Accrual day, due day, grace period and catch-up limit per site (STORY-07-10); a site
     /// without an entry uses the defaults.
     pub site_accrual_schedules: HashMap<String, crate::domain::accrual_schedule::AccrualSchedule>,
@@ -149,6 +153,7 @@ impl AppStateInner {
             revaluation_rates: HashMap::new(),
             budget_required_sites: Vec::new(),
             dues_budget_basis: HashMap::new(),
+            dues_source_period: HashMap::new(),
             site_accrual_schedules: HashMap::new(),
             payment_intents: Vec::new(),
             account_activations: HashMap::new(),
@@ -653,6 +658,7 @@ impl AppStateInner {
         self.payment_entries.clear();
         self.operating_budgets.clear();
         self.dues_budget_basis.clear();
+        self.dues_source_period.clear();
         self.site_accrual_schedules.clear();
         self.payment_intents.clear();
         self.finance = crate::finance_book::FinanceBook::default();
@@ -671,6 +677,7 @@ impl AppStateInner {
         self.payment_entries.clear();
         self.operating_budgets.clear();
         self.dues_budget_basis.clear();
+        self.dues_source_period.clear();
         self.site_accrual_schedules.clear();
         self.payment_intents.clear();
         self.finance = crate::finance_book::FinanceBook::default();
