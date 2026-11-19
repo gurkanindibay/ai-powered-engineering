@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-19T19:43:20Z",
- "run_id": "20261119T194319Z-58ccc28",
- "commit": "58ccc28a1ea6eb3c8f6c3ddd9928c560f0dceeda",
+ "generated_at": "2026-11-19T20:03:35Z",
+ "run_id": "20261119T200334Z-2bcb9b8",
+ "commit": "2bcb9b865c3411ceb15524365322e1e090661bab",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,19 +11,19 @@
   "errors": 0,
   "skipped": 1,
   "passed": 125,
-  "seconds": 2197.5,
+  "seconds": 2048.4,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 101,
-  "stories_with_scenarios": 101,
+  "stories": 103,
+  "stories_with_scenarios": 103,
   "stories_passing": 33,
-  "scenarios": 317,
-  "automated": 297,
+  "scenarios": 319,
+  "automated": 299,
   "passing": 114,
   "failing": 0,
-  "no_result": 183,
+  "no_result": 185,
   "planned": 20,
   "epics": 13,
   "epics_verified": 2,
@@ -201,14 +201,14 @@
   {
    "id": "EPIC-13",
    "title": "Site Admin Journeys",
-   "stories": 1,
-   "stories_with_scenarios": 1,
+   "stories": 3,
+   "stories_with_scenarios": 3,
    "stories_passing": 0,
-   "scenarios": 10,
-   "automated": 1,
+   "scenarios": 12,
+   "automated": 3,
    "passing": 1,
    "failing": 0,
-   "no_result": 0,
+   "no_result": 2,
    "planned": 9,
    "health": "in_progress"
   }
@@ -2056,6 +2056,12 @@
    "epic": "EPIC-12",
    "story": "STORY-12-10"
   },
+  "SC-13-01-14": {
+   "state": "no_result",
+   "name": "A back-dated owner's supplementary charge owes no fee for days before it existed",
+   "epic": "EPIC-13",
+   "story": "STORY-13-01"
+  },
   "SC-13-07-01": {
    "state": "passing",
    "name": "Every starting state can be built using the documented fixture path",
@@ -2115,6 +2121,12 @@
    "name": "Cleanup is safe to retry after an evidence capture failure",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
+  },
+  "SC-13-12-03": {
+   "state": "no_result",
+   "name": "Both supplementary charges of a back-dated owner count their fee from the creation date",
+   "epic": "EPIC-13",
+   "story": "STORY-13-12"
   }
  },
  "catalogue_history": [
@@ -2273,10 +2285,10 @@
   {
    "date": "2026-11-19",
    "epics": 13,
-   "stories": 101,
-   "stories_with_scenarios": 101,
-   "scenarios": 317,
-   "automated": 297
+   "stories": 103,
+   "stories_with_scenarios": 103,
+   "scenarios": 319,
+   "automated": 299
   }
  ],
  "recent_changes": [
@@ -2284,12 +2296,14 @@
    "date": "2026-11-19",
    "epic": "EPIC-13",
    "title": "Site Admin Journeys",
-   "new_stories": 1,
-   "new_scenarios": 10,
-   "newly_automated": 1,
-   "items": 1,
+   "new_stories": 3,
+   "new_scenarios": 12,
+   "newly_automated": 3,
+   "items": 3,
    "samples": [
-    "STORY-13-07: Journey setup, teardown and isolation"
+    "STORY-13-01: Back-dated start residing date and late fees",
+    "STORY-13-07: Journey setup, teardown and isolation",
+    "STORY-13-12: Back-dated owner into a closed month"
    ]
   },
   {
@@ -2938,5 +2952,5 @@
    ]
   }
  ],
- "href": "reports/44597956869-1/"
+ "href": "reports/44599317189-1/"
 }
