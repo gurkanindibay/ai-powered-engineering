@@ -13,10 +13,10 @@ use crate::domain::unit_state::CommandKind;
 use crate::error::AppError;
 use crate::models::Permission;
 use crate::models::{
-    BlockDto, CreateBlockRequest, CreateHouseTypeRequest, HomeOwnerResponse, HouseTypeTariff,
-    MoveInResidentRequest, MoveOutResidentRequest, OccupancyHistoryItem,
+    BlockDto, CreateBlockRequest, CreateHouseTypeRequest, CreateUnitsRequest, HomeOwnerResponse,
+    HouseTypeTariff, MoveInResidentRequest, MoveOutResidentRequest, OccupancyHistoryItem,
     OccupancyTransitionRequest, OccupancyTransitionResponse, ProrationPolicyRequest,
-    ProrationPolicyResponse, RegisterHomeOwnerRequest, UnitOccupancyStateResponse,
+    ProrationPolicyResponse, RegisterHomeOwnerRequest, UnitDto, UnitOccupancyStateResponse,
     UpdateHomeOwnerRequest,
 };
 use crate::services::account_activation_service::{ActivationDelivery, ActivationError};
@@ -495,6 +495,28 @@ pub async fn create_block(
         .await
         .map(|res| (StatusCode::CREATED, Json(res)))
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+pub async fn get_units(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Query(q): Query<SiteIdParam>,
+) -> Result<Json<Vec<UnitDto>>, crate::tenancy::TenantDenied> {
+    let site_id = scope.pinned(q.site_id)?;
+    let service = SiteAdminService::new(state);
+    Ok(Json(service.get_units_for_site(&site_id, None).await))
+}
+
+pub async fn create_units(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<CreateUnitsRequest>,
+) -> Result<(StatusCode, Json<Vec<UnitDto>>), AppError> {
+    let site_id = scope.pinned(q.site_id)?;
+    let service = SiteAdminService::new(state);
+    let res = service.create_units(&site_id, payload).await?;
+    Ok((StatusCode::CREATED, Json(res)))
 }
 
 fn directory_error(e: PersonDirectoryError) -> AppError {

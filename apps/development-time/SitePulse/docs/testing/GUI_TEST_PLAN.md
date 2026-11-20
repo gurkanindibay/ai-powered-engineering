@@ -215,7 +215,7 @@ EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered b
 | — | 13-01, 13-12 | — | — | — | **Excluded:** Backend-only late-fee rule for supplementary charges, covered by `backend/tests/supplementary_charge_tests.rs`. | | |
 | — | 13-14 | — | — | — | **Excluded:** Backend-only liability journey (title, vacancy and move-in changes), covered by `e2e/tests/test_journey_liability_changes.py`. | | |
 | — | 13-25 | — | — | — | **Excluded:** Reconciliation of debt and cash by site is verified by the fixture-derived model in `e2e/tests/test_journey_reconciliation.py`; the GUI statement checks are pending (SC-13-25-06, SC-13-25-07). | | |
-| — | 13-13 | — | — | — | **Excluded:** Backend-only multi-site financial journey (onboarding, accruals, payments and reconciliation), covered by `e2e/tests/test_journey_accruals_payments.py`. | | |
+| — | 13-13 | — | — | — | **Excluded:** Multi-site journey onboarding is covered by `e2e/tests/test_journey_onboarding_88_units.py` (issue #247) and four-period accruals/payments by `e2e/tests/test_journey_accruals_payments.py` (issue #248). | | |
 | — | 13-10 | — | — | — | **Partial:** Backend isolation automated; GUI isolation scenario (SC-13-10-08) is pending separate GUI issue. | | |
 | — | 13-06, 13-08 | — | — | — | **Partial:** Lifecycle chain (13-06) and manager session states (13-08) specified in .specify/features/EPIC-13; GUI automation pending. | | |
 

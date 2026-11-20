@@ -4,7 +4,8 @@ use tracing::info;
 
 use super::base::{parse_id_to_i64, require_id, DbResult};
 use super::user_repository::save_user;
-use crate::models::{IndependentUnit, User};
+use crate::models::{CreateUnitsRequest, IndependentUnit, UnitDto, User};
+use crate::services::virtual_iban_service::VirtualIbanService;
 pub async fn save_unit(
     pool: &Pool,
     unit: &IndependentUnit,
@@ -602,4 +603,163 @@ pub async fn fetch_units_summary_from_db(pool: &Pool) -> DbResult<Vec<UnitSummar
         });
     }
     Ok(list)
+}
+
+pub async fn get_units_for_site_from_db(
+    pool: &Pool,
+    site_id: &str,
+    block_id: Option<&str>,
+) -> DbResult<Vec<UnitDto>> {
+    let site_numeric = match require_id("entity", site_id) {
+        Ok(id) => id,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    let client = pool.get().await?;
+    let query = r#"
+        SELECT u.id, u.site_id, u.block_id, b.block_name, u.unit_number, u.floor,
+               u.occupancy_status, u.virtual_iban,
+               u.owner_person_id, u.tenant_person_id
+        FROM units u
+        JOIN blocks b ON u.block_id = b.id
+        WHERE u.site_id = $1 AND u.deleted_at IS NULL
+        ORDER BY b.block_name ASC, u.unit_number ASC
+    "#;
+    let rows = client.query(query, &[&site_numeric]).await?;
+    let mut list = Vec::new();
+    for row in rows {
+        let id: i64 = row.get(0);
+        let s_id: i64 = row.get(1);
+        let blk_id: i64 = row.get(2);
+        let blk_name: String = row.get(3);
+        let unit_number: i32 = row.get(4);
+        let floor: i32 = row.get(5);
+        let occ_status: String = row.get(6);
+        let viban: Option<String> = row.get(7);
+        let owner_pid: Option<i64> = row.get(8);
+        let tenant_pid: Option<i64> = row.get(9);
+
+        let clean_block = blk_name
+            .trim()
+            .trim_end_matches(" Blok")
+            .trim_end_matches(" blok")
+            .trim_end_matches(" BLOK")
+            .trim();
+        let label = format!("{}-{:02}", clean_block, unit_number);
+
+        list.push(UnitDto {
+            id: id.to_string(),
+            site_id: s_id.to_string(),
+            block_id: blk_id.to_string(),
+            block_name: blk_name,
+            unit_number,
+            floor,
+            label,
+            owner_person_id: owner_pid.map(|p| p.to_string()),
+            tenant_person_id: tenant_pid.map(|p| p.to_string()),
+            virtual_iban: viban,
+            occupancy_status: occ_status,
+        });
+    }
+    if let Some(b_id) = block_id {
+        list.retain(|u| u.block_id == b_id);
+    }
+    Ok(list)
+}
+
+pub async fn create_units_in_db(
+    pool: &Pool,
+    site_id: &str,
+    req: &CreateUnitsRequest,
+    unit_numbers: &[i32],
+) -> DbResult<Vec<UnitDto>> {
+    let site_numeric = require_id("entity", site_id)?;
+    let land_share = req.land_share.unwrap_or(1).max(1);
+    let block_name_trimmed = req.block_name.trim();
+
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+
+    let existing_block_opt = tx
+        .query_opt(
+            "SELECT id, block_name FROM blocks WHERE site_id = $1 AND (LOWER(block_name) = LOWER($2) OR LOWER(block_name) = LOWER($3)) LIMIT 1",
+            &[&site_numeric, &block_name_trimmed, &format!("{} Blok", block_name_trimmed)],
+        )
+        .await?;
+
+    let (block_numeric_id, db_block_name) = if let Some(row) = existing_block_opt {
+        let id: i64 = row.get(0);
+        let name: String = row.get(1);
+        (id, name)
+    } else {
+        let new_block_row = tx
+            .query_one(
+                "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10) RETURNING id, block_name",
+                &[&site_numeric, &block_name_trimmed],
+            )
+            .await?;
+        (new_block_row.get(0), new_block_row.get(1))
+    };
+
+    let block_id_str = block_numeric_id.to_string();
+    let actual_block_name = db_block_name;
+
+    let mut result_dtos = Vec::new();
+    for unit_no in unit_numbers {
+        let floor = req.floor.unwrap_or_else(|| ((unit_no - 1) / 4) + 1);
+        let clean_block = actual_block_name
+            .trim()
+            .trim_end_matches(" Blok")
+            .trim_end_matches(" blok")
+            .trim_end_matches(" BLOK")
+            .trim();
+        let label = format!("{}-{:02}", clean_block, unit_no);
+        let viban =
+            VirtualIbanService::generate_virtual_iban("00205", site_id, clean_block, *unit_no).ok();
+
+        let unit_row = tx
+            .query_one(
+                r#"
+                INSERT INTO units (block_id, site_id, unit_number, floor, land_share, occupancy_status, virtual_iban, house_type)
+                VALUES ($1, $2, $3, $4, $5, 'VACANT', $6, $7)
+                ON CONFLICT (block_id, unit_number) DO UPDATE SET
+                    deleted_at = NULL,
+                    virtual_iban = COALESCE(units.virtual_iban, EXCLUDED.virtual_iban)
+                RETURNING id, owner_person_id, tenant_person_id, occupancy_status, virtual_iban
+                "#,
+                &[
+                    &block_numeric_id,
+                    &site_numeric,
+                    unit_no,
+                    &floor,
+                    &land_share,
+                    &viban,
+                    &req.house_type,
+                ],
+            )
+            .await?;
+
+        let unit_db_id: i64 = unit_row.get(0);
+        let owner_pid: Option<i64> = unit_row.get(1);
+        let tenant_pid: Option<i64> = unit_row.get(2);
+        let occ_status: String = unit_row.get(3);
+        let final_viban: Option<String> = unit_row.get(4);
+
+        result_dtos.push(UnitDto {
+            id: unit_db_id.to_string(),
+            site_id: site_id.to_string(),
+            block_id: block_id_str.clone(),
+            block_name: actual_block_name.clone(),
+            unit_number: *unit_no,
+            floor,
+            label,
+            owner_person_id: owner_pid.map(|p| p.to_string()),
+            tenant_person_id: tenant_pid.map(|p| p.to_string()),
+            virtual_iban: final_viban,
+            occupancy_status: occ_status,
+        });
+    }
+
+    tx.commit().await?;
+    Ok(result_dtos)
 }

@@ -8,8 +8,7 @@ Feature: Zero to multi-site financial journey
     Given the scenario clock follows the fixture timeline in Europe/Istanbul
     And a SaaS administrator and zero initial sites, liabilities or cash
 
-  # Pending: Onboarding and block/unit creation journey is covered under Issue #247
-  @SC-13-13-01 @J-17 @layer:backend @core @role_manager @pending
+  @SC-13-13-01 @J-17 @layer:backend @core @role_manager @linked
   Scenario: Onboard two sites and create all eighty-eight units from zero
     Given a SaaS administrator onboards Site A and Site B with zero initial units
     When the manager of Site A creates block "A" with 24 units labelled "A-01" through "A-24"
