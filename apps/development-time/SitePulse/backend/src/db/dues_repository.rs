@@ -184,8 +184,8 @@ pub async fn save_due_liability(
     client
         .execute(
             r#"
-            INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, due_date, status, delay_penalty, penalty_accrued_through)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, due_date, status, delay_penalty, penalty_accrued_through, liable_person_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (id) DO UPDATE SET
                 unit_id = EXCLUDED.unit_id,
                 period = EXCLUDED.period,
@@ -193,7 +193,8 @@ pub async fn save_due_liability(
                 due_date = EXCLUDED.due_date,
                 status = EXCLUDED.status,
                 delay_penalty = EXCLUDED.delay_penalty,
-                penalty_accrued_through = EXCLUDED.penalty_accrued_through
+                penalty_accrued_through = EXCLUDED.penalty_accrued_through,
+                liable_person_id = EXCLUDED.liable_person_id
             "#,
             &[
                 &due_id_num,
@@ -204,6 +205,7 @@ pub async fn save_due_liability(
                 &status_str,
                 &due.delay_penalty,
                 &due.penalty_accrued_through,
+                &due.liable_person_id,
             ],
         )
         .await?;
@@ -313,11 +315,12 @@ pub async fn insert_accrued_due(
             r#"
             INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type, grace_days, effective_due_date, liable_person_id)
             VALUES ($1, $2, $3, $4, $5, 'PENDING', 0, $6::text, $7, $8, $9,
-                    CASE WHEN $6::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) END)
+                    COALESCE($10, CASE WHEN $6::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1)
+                                       ELSE (SELECT owner_person_id FROM units WHERE id = $1) END))
             ON CONFLICT DO NOTHING
             RETURNING id
             "#,
-            &[&unit, &due.period, &key, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type, &i32::try_from(due.grace_days).unwrap_or(0), &due.fee_due_date()],
+            &[&unit, &due.period, &key, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type, &i32::try_from(due.grace_days).unwrap_or(0), &due.fee_due_date(), &due.liable_person_id],
         )
         .await?;
     let Some(row) = row else {
@@ -441,10 +444,10 @@ pub async fn insert_supplementary_dues(
                 INSERT INTO dues_liabilities
                     (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
                      delay_penalty, debtor_type, expense_type, grace_days, source_period,
-                     effective_due_date)
+                     effective_due_date, liable_person_id)
                 VALUES ($1, $2, $3,
                         (SELECT id FROM dues_periods WHERE site_id = $4 AND period_key = $3),
-                        $5, $6, 'PENDING', 0, $7, $8, $9, $10, $11)
+                        $5, $6, 'PENDING', 0, $7, $8, $9, $10, $11, $12)
                 ON CONFLICT DO NOTHING
                 RETURNING id
                 "#,
@@ -460,6 +463,7 @@ pub async fn insert_supplementary_dues(
                     &i32::try_from(due.grace_days).unwrap_or(0),
                     &charge.source_period_key,
                     &due.effective_due_date,
+                    &due.liable_person_id,
                 ],
             )
             .await?;
@@ -597,7 +601,8 @@ pub async fn commit_accrual_batch(
                     (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
                      delay_penalty, debtor_type, expense_type, operating_budget_id, grace_days, effective_due_date, liable_person_id)
                 VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7::text, $8, $9, $10, $11,
-                        CASE WHEN $7::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) END)
+                        COALESCE($12, CASE WHEN $7::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1)
+                                           ELSE (SELECT owner_person_id FROM units WHERE id = $1) END))
                 ON CONFLICT DO NOTHING
                 RETURNING id
                 "#,
@@ -613,6 +618,7 @@ pub async fn commit_accrual_batch(
                     &budget,
                     &i32::try_from(due.grace_days).unwrap_or(0),
                     &due.fee_due_date(),
+                    &due.liable_person_id,
                 ],
             )
             .await?;
@@ -915,6 +921,7 @@ pub async fn fetch_debt_aging_report_from_db(
             paid_principal,
             paid_penalty,
             debtor_type,
+            liable_person_id: None,
             expense_type,
             penalty_accrued_through,
             grace_days,

@@ -731,6 +731,10 @@ pub struct DuesLiability {
     /// `OWNER` or `TENANT`: who is liable.
     #[serde(default)]
     pub debtor_type: DebtorType,
+    /// Person who incurred this liability. This remains stable when the unit's
+    /// current owner or tenant changes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liable_person_id: Option<i64>,
     #[serde(default)]
     pub expense_type: ExpenseType,
     /// Date up to which `delay_penalty` has been accrued (KMK 20 segmented accrual).

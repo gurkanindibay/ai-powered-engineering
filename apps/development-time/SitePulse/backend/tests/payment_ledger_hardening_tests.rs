@@ -61,6 +61,7 @@ fn liability(
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     }
 }
 
@@ -1067,4 +1068,82 @@ async fn when_ownership_transfers_old_owner_balance_freezes_and_new_owner_binds(
     assert_eq!(op.total_amount, d("1000.00"), "tenant dues untouched");
     let unit = inner.units.iter().find(|u| u.id == UNIT).unwrap();
     assert_eq!(unit.owner_user_id.as_deref(), Some("usr-new-owner-99"));
+}
+
+// covers: SC-09-07-02
+#[tokio::test]
+async fn successor_owner_payment_does_not_settle_predecessor_owner_liability() {
+    let mut old_due = liability(
+        "owner-old",
+        "February 2027",
+        "800.00",
+        today() - Days::new(30),
+        "OWNER",
+        "OPERATIONAL_DUES",
+    );
+    old_due.liable_person_id = Some(101);
+    let mut current_due = liability(
+        "owner-current",
+        "March 2027",
+        "500.00",
+        today() + Days::new(5),
+        "OWNER",
+        "OPERATIONAL_DUES",
+    );
+    current_due.liable_person_id = Some(202);
+    let state = tenanted_state_with(vec![old_due, current_due]).await;
+    {
+        let mut inner = state.inner.write().await;
+        let mut successor = inner
+            .users
+            .iter_mut()
+            .find(|user| user.id == "usr-home-owner-1")
+            .map(|user| {
+                user.person_id = Some(101);
+                user.clone()
+            })
+            .unwrap();
+        successor.id = "usr-successor-owner".to_string();
+        successor.full_name = "Successor Owner".to_string();
+        successor.person_id = Some(202);
+        inner.users.push(successor);
+        inner
+            .units
+            .iter_mut()
+            .find(|unit| unit.id == UNIT)
+            .unwrap()
+            .owner_user_id = Some("usr-successor-owner".to_string());
+    }
+
+    let receipt = PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(payment("500.00", "OWNER", "Successor Owner"))
+        .await
+        .unwrap();
+    assert_eq!(
+        receipt
+            .allocation_breakdown
+            .iter()
+            .filter_map(|line| line.due_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec!["owner-current"]
+    );
+    let inner = state.inner.read().await;
+    assert_eq!(
+        inner
+            .dues
+            .iter()
+            .find(|due| due.id == "owner-old")
+            .unwrap()
+            .total_amount,
+        d("800.00")
+    );
+    assert_eq!(
+        inner
+            .dues
+            .iter()
+            .find(|due| due.id == "owner-current")
+            .unwrap()
+            .total_amount,
+        Decimal::ZERO
+    );
 }

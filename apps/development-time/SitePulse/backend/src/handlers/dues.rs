@@ -377,6 +377,21 @@ pub async fn accrue_monthly_dues(
             continue;
         }
         for (debtor_type, share_amount) in shares {
+            let liable_user_id = if debtor_type == DebtorType::Tenant {
+                unit.tenant_user_id.as_deref()
+            } else {
+                unit.owner_user_id.as_deref()
+            };
+            let liable_person_id = {
+                let inner = state.inner.read().await;
+                liable_user_id.and_then(|user_id| {
+                    inner
+                        .users
+                        .iter()
+                        .find(|user| user.id == user_id)
+                        .and_then(|user| user.person_id)
+                })
+            };
             accrued.push((
                 DuesLiability {
                     id: String::new(),
@@ -397,6 +412,7 @@ pub async fn accrue_monthly_dues(
                         payload.due_date,
                         accrued_on,
                     )),
+                    liable_person_id,
                 },
                 basis.clone(),
             ));

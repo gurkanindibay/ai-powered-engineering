@@ -72,6 +72,7 @@ fn liability(due: NaiveDate, grace: u32) -> DuesLiability {
         penalty_accrued_through: None,
         grace_days: grace,
         effective_due_date: None,
+        liable_person_id: None,
     }
 }
 

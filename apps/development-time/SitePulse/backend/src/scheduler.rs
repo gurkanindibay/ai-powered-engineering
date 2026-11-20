@@ -265,6 +265,18 @@ pub async fn run_accrual_with_report(
                         vec![(debtor, amount)]
                     };
                     for (share_debtor, share_amount) in shares {
+                        let liable_user_id = if share_debtor == DebtorType::Tenant {
+                            unit.tenant_user_id.as_deref()
+                        } else {
+                            unit.owner_user_id.as_deref()
+                        };
+                        let liable_person_id = liable_user_id.and_then(|user_id| {
+                            inner
+                                .users
+                                .iter()
+                                .find(|user| user.id == user_id)
+                                .and_then(|user| user.person_id)
+                        });
                         batch.dues.push((
                             DuesLiability {
                                 id: String::new(),
@@ -284,6 +296,7 @@ pub async fn run_accrual_with_report(
                                 effective_due_date: Some(DuesLiability::effective_due_date_for(
                                     due_date, local,
                                 )),
+                                liable_person_id,
                             },
                             basis.operating_budget_id.clone(),
                         ));

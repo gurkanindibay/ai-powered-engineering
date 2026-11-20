@@ -65,6 +65,7 @@ fn when_overdue_by_10_days_then_calculates_exact_5_percent_pro_rated_penalty() {
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     };
 
     let evaluation_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
@@ -100,6 +101,7 @@ fn when_not_overdue_then_penalty_remains_zero() {
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     };
 
     let evaluation_date = NaiveDate::from_ymd_opt(2026, 9, 10).unwrap();
@@ -1445,6 +1447,7 @@ async fn when_getting_resident_dashboard_then_returns_real_time_calculated_dues(
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
     }
 
@@ -1523,6 +1526,7 @@ async fn when_querying_resident_dashboard_then_separates_capital_dues_by_project
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     });
     {
         let inner = state.inner.read().await;
@@ -1616,6 +1620,7 @@ async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     }];
 
     // Narrative contains NO block name and NO resident name, only the Virtual IBAN!
@@ -3647,6 +3652,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
 
         // 1-30 days overdue (due 20 days ago)
@@ -3666,6 +3672,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
 
         // 31-60 days overdue (due 45 days ago)
@@ -3685,6 +3692,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
 
         // 60+ days overdue (due 80 days ago)
@@ -3704,6 +3712,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
     }
 
@@ -3810,6 +3819,7 @@ fn owner_capital_due(id: &str, amount: &str) -> DuesLiability {
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     }
 }
 
@@ -3940,6 +3950,7 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
     }
 
@@ -4004,6 +4015,7 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
     }
 
@@ -4357,6 +4369,7 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
     }
 
@@ -4435,6 +4448,7 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
     }
 

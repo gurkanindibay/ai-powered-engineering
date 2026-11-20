@@ -204,6 +204,7 @@ async fn every_spec009_record_round_trips_through_postgresql() {
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         })
         .await
         .unwrap()

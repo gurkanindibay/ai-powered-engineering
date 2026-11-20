@@ -337,7 +337,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 4. Load Dues Liabilities
     {
-        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through, grace_days, effective_due_date, source_period FROM dues_liabilities d WHERE d.status <> 'CANCELLED' AND EXISTS (SELECT 1 FROM units u WHERE u.id = d.unit_id AND u.deleted_at IS NULL)",
+        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through, grace_days, effective_due_date, source_period, liable_person_id FROM dues_liabilities d WHERE d.status <> 'CANCELLED' AND EXISTS (SELECT 1 FROM units u WHERE u.id = d.unit_id AND u.deleted_at IS NULL)",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -355,6 +355,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let grace_days = u32::try_from(row.get::<_, i32>(12)).unwrap_or(0);
             let effective_due_date: Option<NaiveDate> = row.get(13);
             let source_period: Option<String> = row.get(14);
+            let liable_person_id: Option<i64> = row.get(15);
 
             let status = match status_str.to_uppercase().as_str() {
                 "PAID" => DebtStatus::Paid,
@@ -375,6 +376,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 paid_principal,
                 paid_penalty,
                 debtor_type,
+                liable_person_id,
                 expense_type,
                 penalty_accrued_through,
                 grace_days,

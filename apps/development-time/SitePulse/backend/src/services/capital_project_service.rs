@@ -521,6 +521,13 @@ impl CapitalProjectService {
             for (unit, share) in &unit_shares {
                 next_due += 1;
                 let due_id = next_due.to_string();
+                let liable_person_id = unit.owner_user_id.as_deref().and_then(|user_id| {
+                    inner
+                        .users
+                        .iter()
+                        .find(|user| user.id == user_id)
+                        .and_then(|user| user.person_id)
+                });
                 inner.dues.push(DuesLiability {
                     id: due_id,
                     unit_id: unit.id.clone(),
@@ -533,6 +540,7 @@ impl CapitalProjectService {
                     paid_principal: Decimal::ZERO,
                     paid_penalty: Decimal::ZERO,
                     debtor_type: DebtorType::Owner,
+                    liable_person_id,
                     expense_type: ExpenseType::CapitalDues,
                     penalty_accrued_through: None,
                     grace_days: 0,

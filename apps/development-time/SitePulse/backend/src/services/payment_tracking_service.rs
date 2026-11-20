@@ -631,10 +631,40 @@ impl PaymentTrackingService {
                 );
             }
         }
+        let payer_person_id = if payer_role == DebtorType::Owner {
+            owner_person_id
+        } else {
+            tenant_person_id
+        };
         let allocate = |dues: &mut Vec<DuesLiability>| {
             let mut candidates = dues_ledger::open_dues_for(dues, |_| true, settling_role.as_str());
+            let identity_scoped = payer_person_id.is_some()
+                && dues
+                    .iter()
+                    .any(|due| due.debtor_type == settling_role && due.liable_person_id.is_some());
+            if identity_scoped && !on_behalf_of_owner && !on_behalf_of_tenant {
+                candidates.retain(|&i| {
+                    dues[i].liable_person_id == payer_person_id
+                        || designation
+                            .as_ref()
+                            .is_some_and(|d| d.due_ids.contains(&dues[i].id))
+                });
+            }
             if on_behalf_of_owner {
-                candidates.retain(|&i| dues[i].expense_type == ExpenseType::CapitalDues);
+                let owner_identity_scoped = owner_person_id.is_some()
+                    && dues.iter().any(|due| {
+                        due.debtor_type == DebtorType::Owner
+                            && due.expense_type == ExpenseType::CapitalDues
+                            && due.liable_person_id.is_some()
+                    });
+                candidates.retain(|&i| {
+                    dues[i].expense_type == ExpenseType::CapitalDues
+                        && (!owner_identity_scoped
+                            || dues[i].liable_person_id == owner_person_id
+                            || designation
+                                .as_ref()
+                                .is_some_and(|d| d.due_ids.contains(&dues[i].id)))
+                });
             } else if on_behalf_of_tenant {
                 candidates.retain(|&i| eligible_joint_due_ids.contains(&dues[i].id));
             }

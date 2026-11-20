@@ -86,6 +86,7 @@ fn liability(
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     }
 }
 
@@ -295,6 +296,7 @@ fn penalty_keeps_kurus_precision_and_does_not_drift_across_recalculations() {
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     };
     for day in 16..=28 {
         let evaluation = NaiveDate::from_ymd_opt(2026, 9, day).unwrap();
