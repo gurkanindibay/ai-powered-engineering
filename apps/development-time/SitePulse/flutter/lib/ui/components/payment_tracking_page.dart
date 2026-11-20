@@ -320,9 +320,11 @@ class PaymentTrackingPage extends StatefulWidget {
     final units = controller.homeOwners;
     final amountCtrl = TextEditingController(text: '1400.00');
     final noteCtrl = TextEditingController(text: 'Ev sahibi onaylı avanstan demirbaşa virman');
+    final withAdvance = units.where((u) => u.advanceBalance > Decimal.zero).toList()
+      ..sort((a, b) => b.advanceBalance.compareTo(a.advanceBalance));
     String? unitId = units.any((u) => u.unitId == initialUnitId)
         ? initialUnitId
-        : (units.where((u) => u.advanceBalance > Decimal.zero).firstOrNull ?? units.firstOrNull)?.unitId;
+        : (withAdvance.firstOrNull ?? units.firstOrNull)?.unitId;
 
     await AppFullscreenPage.push(
       context: context,
@@ -334,42 +336,46 @@ class PaymentTrackingPage extends StatefulWidget {
             bottomBar: AppFullscreenPage.buildBottomBar(
               context: ctx,
               children: [
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: Colors.indigo,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: () async {
-                    final amountError = validateMoneyInput(amountCtrl.text);
-                    final amt = MoneyInput.parse(amountCtrl.text).amount;
-                    if (amountError != null || amt == null) {
-                      // Previously an invalid amount was ignored silently.
-                      SpToast.error(ctx, amountError ?? MoneyInputMessages.invalid);
-                      return;
-                    }
-
-                    final selected = unitId;
-                    if (selected == null) return;
-                    final res = await controller.executeInterLedgerTransfer(
-                      unitId: selected,
-                      amount: amt,
-                      note: noteCtrl.text.trim(),
-                    );
-
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    if (res != null && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        appSnackBar(content: Text(res['message']?.toString() ?? 'Virman başarılı')),
-                      );
-                      onCompleted?.call();
-                      final rcp = res['receipt_number']?.toString();
-                      if (rcp != null) {
-                        openReceiptViewer(context, controller: controller, identifier: rcp);
+                testId(
+                  'btn_confirm_virman',
+                  ElevatedButton(
+                    key: const Key('btn_confirm_virman'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: Colors.indigo,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () async {
+                      final amountError = validateMoneyInput(amountCtrl.text);
+                      final amt = MoneyInput.parse(amountCtrl.text).amount;
+                      if (amountError != null || amt == null) {
+                        // Previously an invalid amount was ignored silently.
+                        SpToast.error(ctx, amountError ?? MoneyInputMessages.invalid);
+                        return;
                       }
-                    }
-                  },
-                  child: const Text('Virman İşlemini Onayla'),
+
+                      final selected = unitId;
+                      if (selected == null) return;
+                      final res = await controller.executeInterLedgerTransfer(
+                        unitId: selected,
+                        amount: amt,
+                        note: noteCtrl.text.trim(),
+                      );
+
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (res != null && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          appSnackBar(content: Text(res['message']?.toString() ?? 'Virman başarılı')),
+                        );
+                        onCompleted?.call();
+                        final rcp = res['receipt_number']?.toString();
+                        if (rcp != null) {
+                          openReceiptViewer(context, controller: controller, identifier: rcp);
+                        }
+                      }
+                    },
+                    child: const Text('Virman İşlemini Onayla'),
+                  ),
                 ),
               ],
             ),
@@ -411,9 +417,13 @@ class PaymentTrackingPage extends StatefulWidget {
                       for (final u in units)
                         DropdownMenuItem(
                           value: u.unitId,
-                          child: Text(
-                            '${u.block} Blok D:${u.unitNo} (Mevcut Avans: ${formatTry(u.advanceBalance)})',
-                            overflow: TextOverflow.ellipsis,
+                          child: testId(
+                            'virman_unit_item_${u.unitId}',
+                            Text(
+                              '${u.block} Blok D:${u.unitNo} (Mevcut Avans: ${formatTry(u.advanceBalance)})',
+                              key: Key('virman_unit_item_${u.unitId}'),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                     ],
@@ -422,13 +432,17 @@ class PaymentTrackingPage extends StatefulWidget {
                   const SizedBox(height: 16),
                   const Text('Virman Yapılacak Tutar (₺)', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  SpMoneyFormField(
-                    controller: amountCtrl,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                    restrictInput: true,
-                    decoration: const InputDecoration(
-                      prefixText: '₺ ',
-                      border: OutlineInputBorder(),
+                  testId(
+                    'virman_amount_input',
+                    SpMoneyFormField(
+                      key: const Key('virman_amount_input'),
+                      controller: amountCtrl,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      restrictInput: true,
+                      decoration: const InputDecoration(
+                        prefixText: '₺ ',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

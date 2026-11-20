@@ -1,0 +1,29 @@
+{
+  "name": "sitepulse-e2e-cucumber",
+  "version": "1.0.0",
+  "description": "SitePulse BDD acceptance suite pilot (Cucumber.js + TypeScript Playwright + Serenity/JS)",
+  "private": true,
+  "scripts": {
+    "test": "cucumber-js",
+    "test:pilot": "cucumber-js --tags \"@SC-10-01-01 or @SC-10-04-01 or @SC-10-04-02 or @SC-07-06-03\"",
+    "lint:money": "python3 scripts/check_ts_money.py"
+  },
+  "dependencies": {
+    "@cucumber/cucumber": "^11.2.0",
+    "@playwright/test": "^1.55.0",
+    "@serenity-js/core": "^3.34.0",
+    "@serenity-js/cucumber": "^3.34.0",
+    "@serenity-js/serenity-bdd": "^3.34.0",
+    "adm-zip": "^0.5.16",
+    "decimal.js": "^10.4.3",
+    "pg": "^8.13.1",
+    "playwright": "^1.55.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^20.17.0",
+    "@types/pg": "^8.11.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}
