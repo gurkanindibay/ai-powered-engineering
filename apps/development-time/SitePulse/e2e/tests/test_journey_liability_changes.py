@@ -2,9 +2,8 @@
 
 Executes .specify/features/EPIC-13/STORY-13-14-liability-through-sales-vacancies.feature on two isolated
 sites. Expected debtors and amounts come from the journey plan fixture (`support/journey_liability.py`),
-never from the response being checked. Scenarios that fail because of product defect #255 (a receipt is
-allocated by role, so it settles a predecessor's open charges) are strict xfails that keep the fixture
-expectations unchanged: they flip to failing XPASS as soon as the defect is fixed.
+never from the response being checked. Per-person allocation scenarios assert
+that title and occupancy changes never move liabilities between debtors.
 """
 from __future__ import annotations
 
@@ -21,12 +20,6 @@ from support.journey_liability import (
 
 E2E = Path(__file__).resolve().parents[1]
 D = Decimal
-
-PREDECESSOR_ALLOCATION_DEFECT = (
-    "BUG #255: a payment is allocated by debtor role, not by liable person, so a successor owner's or tenant's "
-    "receipt settles the predecessor's open charges of the same role first (payment_tracking_service.rs, "
-    "dues_ledger::open_dues_for)")
-
 
 @pytest.fixture
 def journey(request, api, actors, stack):
@@ -220,7 +213,6 @@ RECEIPTS_BY_LIABLE_PERSON = {
 @pytest.mark.covers("SC-13-14-08")
 @pytest.mark.core
 @pytest.mark.role_manager
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=PREDECESSOR_ALLOCATION_DEFECT)
 @pytest.mark.parametrize(("unit", "payer", "month"), list(RECEIPTS_BY_LIABLE_PERSON), ids=lambda v: str(v))
 def test_a_successors_receipt_settles_only_the_successors_charges(journey, unit, payer, month):
     j = journey().run_through("apr_paid")
@@ -251,7 +243,6 @@ FINAL_OPEN = {  # (unit, period) -> (principal, fee) after the April 10 receipts
 @pytest.mark.covers("SC-13-14-09")
 @pytest.mark.core
 @pytest.mark.role_manager
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=PREDECESSOR_ALLOCATION_DEFECT)
 def test_final_open_debt_stays_with_each_former_and_current_debtor(journey):
     j = journey().run_through("apr_paid")
     for unit in ("A-01", "A-02", "A-03", "B1-01", "B2-01"):

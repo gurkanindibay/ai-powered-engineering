@@ -18,3 +18,21 @@ Feature: Change of ownership and title deed financial handover
     When the successor pays an undesignated receipt
     Then the receipt settles only liabilities belonging to the successor
     And the predecessor's principal, fees and payment history remain unchanged
+
+  @SC-09-07-03 @layer:backend @core @role_manager @linked
+  Scenario: A former owner's receipt requires designation before allocation
+    Given the former and current owners have separate open liabilities for the same unit
+    When the former owner submits a receipt without a liability designation
+    Then the receipt is rejected without changing either owner's balance
+    When the former owner resubmits with the former liability explicitly designated
+    Then the receipt settles only the designated former owner's liability
+    And the current owner's balance remains unchanged
+
+  @SC-09-07-04 @layer:backend @core @role_manager @linked
+  Scenario: A former tenant's receipt requires designation before allocation
+    Given the former and current tenants have separate open liabilities for the same unit
+    When the former tenant submits a receipt without a liability designation
+    Then the receipt is rejected without changing either tenant's balance
+    When the former tenant resubmits with the former liability explicitly designated
+    Then the receipt settles only the designated former tenant's liability
+    And the current tenant's balance remains unchanged
