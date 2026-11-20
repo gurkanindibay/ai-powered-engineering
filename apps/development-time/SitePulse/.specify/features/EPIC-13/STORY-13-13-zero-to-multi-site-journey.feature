@@ -27,22 +27,8 @@ Feature: Zero to multi-site financial journey
     And the final period status matrix for all five detailed units distinguishes paid, partial and unpaid
     And all allocation amounts match expected values to the kuruş
 
-  # Pending: Occupancy transitions and joint exposure are verified in Issue #249
-  @SC-13-13-03 @J-17 @layer:backend @core @role_manager @pending
-  Scenario: Occupancy transitions and title transfers isolate debtor balances
-    Given four billing periods have been managed across moves and sales
-    When former and new residents inspect their account statements
-    Then liabilities remain attached to the responsible debtor
-    And former owner joint exposure is reported separately without double counting
-
-  # Pending: Reconciliation of operating cash and open debt is verified in Issue #250
-  @SC-13-13-04 @J-17 @layer:backend @core @role_manager @pending
-  Scenario: Reconcile posted operating cash and open debt by site
-    Given four periods of collections have been posted across both sites
-    When April 10 reconciliations are performed
-    Then Site A posted operating cash reconciles to TRY 90658.50
-    And Site B posted operating cash reconciles to TRY 189538.75
-    And open primary debt with accrued fees matches TRY 5804.09 for Site A and TRY 2661.67 for Site B
+  # Note: Occupancy transitions and title transfers are specified and verified in STORY-13-14 (Issue #249 / PR #256).
+  # Note: Operating cash and open debt reconciliations are specified and verified in STORY-13-25 (Issue #250 / PR #254).
 
   # Pending: GUI manager screens and statement views are verified in Issue #251
   @SC-13-13-05 @J-17 @layer:gui @core @role_manager @pending

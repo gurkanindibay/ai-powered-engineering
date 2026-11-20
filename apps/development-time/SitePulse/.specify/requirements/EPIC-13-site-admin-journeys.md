@@ -185,5 +185,5 @@ As a residential site operator, I can onboard multiple residential sites from ze
 - Accruals across January through April 2027 charge 24 units at TRY 1,000.00 in Site A (TRY 24,000.00/month) and 64 units at TRY 750.00 in Site B (TRY 48,000.00/month) on the first of each month under zero grace days.
 - Monthly receipts on the 10th allocate payments fee-first and oldest-principal-first within the applicable debtor's charges, or settle designated later periods while leaving intervening unpaid months with their own late fees.
 - Units with consecutive unpaid periods (A-03, B2-01) maintain the paid → unpaid → unpaid → paid history after designated later payments.
-- Occupancy transitions and sales isolate debt to the responsible debtor, and April cash reconciles to TRY 90,658.50 for Site A and TRY 189,538.75 for Site B.
+- Checkpoint balances preserve debtor scoping across transitions, with intermediate histories clearly distinguishing paid, partial, and unpaid charges before and after designated later settlements (occupancy isolation is specified in STORY-13-14; cash reconciliation in STORY-13-25).
 

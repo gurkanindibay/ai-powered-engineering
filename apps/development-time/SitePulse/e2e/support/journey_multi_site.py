@@ -131,7 +131,7 @@ def build_multi_site_journey(
     stack.sql(
         "BEGIN; "
         f"DELETE FROM blocks WHERE site_id = {sa_id}; "
-        f"UPDATE sites SET proration_enabled = TRUE WHERE id = {sa_id}; "
+        f"UPDATE sites SET proration_enabled = FALSE, due_day = 10, accrual_day = 1, grace_days = 0 WHERE id = {sa_id}; "
         f"INSERT INTO blocks (site_id, block_name, total_floors) VALUES ({sa_id}, 'A', 24); "
         f"INSERT INTO house_types (site_id, type_name, dues_amount, description) "
         f"VALUES ({sa_id}, 'Standard', 1000.00, 'Site A Tariff'); "
@@ -155,7 +155,7 @@ def build_multi_site_journey(
     stack.sql(
         "BEGIN; "
         f"DELETE FROM blocks WHERE site_id = {sb_id}; "
-        f"UPDATE sites SET proration_enabled = TRUE WHERE id = {sb_id}; "
+        f"UPDATE sites SET proration_enabled = FALSE, due_day = 10, accrual_day = 1, grace_days = 0 WHERE id = {sb_id}; "
         f"INSERT INTO blocks (site_id, block_name, total_floors) VALUES "
         f"({sb_id}, 'B1', 32), ({sb_id}, 'B2', 32); "
         f"INSERT INTO house_types (site_id, type_name, dues_amount, description) "

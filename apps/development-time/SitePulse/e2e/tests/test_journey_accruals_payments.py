@@ -639,10 +639,7 @@ def test_multi_site_journey_accruals_and_designated_payments(request, api, actor
 
         j.invariants_a("April final designated")
         j.invariants_b("April final designated")
-    except BaseException as failure:
-        teardown_sites(stack, manifest, restart=False)
-        raise failure
-    else:
+    finally:
         teardown_sites(stack, manifest, restart=False)
 
 
@@ -650,7 +647,212 @@ def test_multi_site_journey_accruals_and_designated_payments(request, api, actor
 @pytest.mark.smoke
 @pytest.mark.core
 @pytest.mark.role_manager
-@pytest.mark.xfail(strict=True, reason=PREDECESSOR_ALLOCATION_DEFECT)
+def test_multi_site_journey_accruals_through_march_first(request, api, actors, stack):
+    """Accrue January and February, verify initial payment histories, and advance to March 1 (Issue #248)."""
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    j = None
+    try:
+        j = build_multi_site_journey(api, stack, saas, manifest, start_date="2027-01-01")
+
+        # Month 1: JANUARY 2027
+        res_a_jan = j.accrue_a("Ocak 2027", "2027-01-10")
+        assert res_a_jan["total_units_accrued"] == 24
+        assert Decimal(str(res_a_jan["total_amount_accrued"])) == Decimal("24000.00")
+
+        res_b_jan = j.accrue_b("Ocak 2027", "2027-01-10")
+        assert res_b_jan["total_units_accrued"] == 64
+        assert Decimal(str(res_b_jan["total_amount_accrued"])) == Decimal("48000.00")
+
+        j.invariants_a("January accrued")
+        j.invariants_b("January accrued")
+
+        j.clock.advance_to("2027-01-10")
+
+        rec_a01_jan = api.record_manual_payment(
+            j.manager_a, j.unit_a("A-01"), Decimal("400.00"), "Ada Kaya",
+            payer_role="OWNER", channel="MANUAL_CASH", description="Ocak 2027 kısmi ödeme",
+            idempotency_key="pay-a01-jan-pf",
+        )
+        assert len(rec_a01_jan["allocation_breakdown"]) == 1
+        assert rec_a01_jan["allocation_breakdown"][0]["period"] == "Ocak 2027"
+        assert Decimal(str(rec_a01_jan["allocation_breakdown"][0]["principal_paid"])) == Decimal("400.00")
+
+        rec_a03_jan = api.record_manual_payment(
+            j.manager_a, j.unit_a("A-03"), Decimal("1000.00"), "Fay Çelik",
+            payer_role="OWNER", channel="MANUAL_CASH", description="Ocak 2027 aidat ödemesi",
+            idempotency_key="pay-a03-jan-pf",
+        )
+        assert len(rec_a03_jan["allocation_breakdown"]) == 1
+        assert Decimal(str(rec_a03_jan["allocation_breakdown"][0]["principal_paid"])) == Decimal("1000.00")
+
+        rec_b101_jan = api.record_manual_payment(
+            j.manager_b, j.unit_b("B1-01"), Decimal("750.00"), "Gus Şahin",
+            payer_role="OWNER", channel="MANUAL_CASH", description="Ocak 2027 aidat ödemesi",
+            idempotency_key="pay-b101-jan-pf",
+        )
+        assert len(rec_b101_jan["allocation_breakdown"]) == 1
+        assert Decimal(str(rec_b101_jan["allocation_breakdown"][0]["principal_paid"])) == Decimal("750.00")
+
+        rec_b201_jan = api.record_manual_payment(
+            j.manager_b, j.unit_b("B2-01"), Decimal("750.00"), "Juno Yıldız",
+            payer_role="TENANT", channel="MANUAL_CASH", description="Ocak 2027 aidat ödemesi",
+            idempotency_key="pay-b201-jan-pf",
+        )
+        assert len(rec_b201_jan["allocation_breakdown"]) == 1
+        assert Decimal(str(rec_b201_jan["allocation_breakdown"][0]["principal_paid"])) == Decimal("750.00")
+
+        j.post_routine_payments("Ocak 2027")
+
+        status_a01_jan = stack.sql(
+            f"SELECT status FROM dues_liabilities WHERE unit_id = {int(j.unit_a('A-01'))} AND period = 'Ocak 2027';"
+        )
+        assert status_a01_jan == "PARTIALLY_PAID"
+
+        j.invariants_a("January posted")
+        j.invariants_b("January posted")
+
+        # Month 2: FEBRUARY 2027
+        j.clock.advance_to("2027-02-01")
+
+        res_a_feb = j.accrue_a("Şubat 2027", "2027-02-10")
+        assert res_a_feb["total_units_accrued"] == 24
+        assert Decimal(str(res_a_feb["total_amount_accrued"])) == Decimal("24000.00")
+
+        res_b_feb = j.accrue_b("Şubat 2027", "2027-02-10")
+        assert res_b_feb["total_units_accrued"] == 64
+        assert Decimal(str(res_b_feb["total_amount_accrued"])) == Decimal("48000.00")
+
+        j.invariants_a("February accrued")
+        j.invariants_b("February accrued")
+
+        j.clock.advance_to("2027-02-10")
+
+        rec_a01_feb = api.record_manual_payment(
+            j.manager_a, j.unit_a("A-01"), Decimal("831.00"), "Ada Kaya",
+            payer_role="OWNER", channel="MANUAL_CASH", description="Şubat 2027 ödeme",
+            idempotency_key="pay-a01-feb-pf",
+        )
+        allocs_a01_feb = rec_a01_feb["allocation_breakdown"]
+        assert len(allocs_a01_feb) == 2
+        assert allocs_a01_feb[0]["period"] == "Ocak 2027"
+        assert Decimal(str(allocs_a01_feb[0]["penalty_paid"])) == Decimal("31.00")
+        assert Decimal(str(allocs_a01_feb[0]["principal_paid"])) == Decimal("600.00")
+        assert allocs_a01_feb[1]["period"] == "Şubat 2027"
+        assert Decimal(str(allocs_a01_feb[1]["principal_paid"])) == Decimal("200.00")
+
+        assert stack.sql(
+            f"SELECT status FROM dues_liabilities WHERE unit_id = {int(j.unit_a('A-01'))} AND period = 'Ocak 2027';"
+        ) == "PAID"
+        assert stack.sql(
+            f"SELECT status FROM dues_liabilities WHERE unit_id = {int(j.unit_a('A-01'))} AND period = 'Şubat 2027';"
+        ) == "PARTIALLY_PAID"
+
+        rec_a02_feb = api.record_manual_payment(
+            j.manager_a, j.unit_a("A-02"), Decimal("1301.67"), "Dan Arslan",
+            payer_role="TENANT", channel="MANUAL_CASH", description="Şubat 2027 ödeme",
+            idempotency_key="pay-a02-feb-pf",
+        )
+        allocs_a02_feb = rec_a02_feb["allocation_breakdown"]
+        assert len(allocs_a02_feb) == 2
+        assert allocs_a02_feb[0]["period"] == "Ocak 2027"
+        assert Decimal(str(allocs_a02_feb[0]["penalty_paid"])) == Decimal("51.67")
+        assert Decimal(str(allocs_a02_feb[0]["principal_paid"])) == Decimal("1000.00")
+        assert allocs_a02_feb[1]["period"] == "Şubat 2027"
+        assert Decimal(str(allocs_a02_feb[1]["principal_paid"])) == Decimal("250.00")
+        assert stack.sql(
+            f"SELECT status FROM dues_liabilities WHERE unit_id = {int(j.unit_a('A-02'))} AND period = 'Ocak 2027';"
+        ) == "PAID"
+        assert stack.sql(
+            f"SELECT status FROM dues_liabilities WHERE unit_id = {int(j.unit_a('A-02'))} AND period = 'Şubat 2027';"
+        ) == "PARTIALLY_PAID"
+
+        rec_b101_feb = api.record_manual_payment(
+            j.manager_b, j.unit_b("B1-01"), Decimal("250.00"), "Gus Şahin",
+            payer_role="OWNER", channel="MANUAL_CASH", description="Şubat 2027 kısmi ödeme",
+            idempotency_key="pay-b101-feb-pf",
+        )
+        allocs_b101_feb = rec_b101_feb["allocation_breakdown"]
+        assert len(allocs_b101_feb) == 1
+        assert allocs_b101_feb[0]["period"] == "Şubat 2027"
+        assert Decimal(str(allocs_b101_feb[0]["principal_paid"])) == Decimal("250.00")
+        assert stack.sql(
+            f"SELECT status FROM dues_liabilities WHERE unit_id = {int(j.unit_b('B1-01'))} AND period = 'Şubat 2027';"
+        ) == "PARTIALLY_PAID"
+
+        j.post_routine_payments("Şubat 2027")
+
+        j.invariants_a("February posted")
+        j.invariants_b("February posted")
+
+        # Month 3: MARCH 2027
+        j.clock.advance_to("2027-03-01")
+
+        # March 1 transitions
+        api.call("POST", "/api/v1/auth/step-up", j.manager_a.token, body={"password": j.manager_a_password})
+        api.call(
+            "POST",
+            f"/api/v1/site-admin/units/{j.unit_a('A-01')}/transfer-ownership",
+            j.manager_a.token,
+            body={
+                "unit_id": j.unit_a("A-01"),
+                "new_owner_name": "Ben Kaya",
+                "new_owner_email": f"{manifest.attempt_id[:6]}.a.ben.pf@journey.e2e.test".lower(),
+                "transfer_date": "2027-03-01",
+                "new_owner_moves_in": True,
+            },
+        )
+
+        api.call(
+            "POST",
+            f"/api/v1/site-admin/units/{j.unit_a('A-02')}/occupancy-transitions?site_id={j.site_a_id}",
+            j.manager_a.token,
+            body={"command": "MOVE_OUT", "effective_date": "2027-03-01", "notes": "Dan moves out"},
+        )
+
+        api.call(
+            "POST",
+            f"/api/v1/site-admin/units/{j.unit_a('A-03')}/occupancy-transitions?site_id={j.site_a_id}",
+            j.manager_a.token,
+            body={"command": "MOVE_OUT", "effective_date": "2027-03-01", "notes": "Fay moves out"},
+        )
+
+        api.call("POST", "/api/v1/auth/step-up", j.manager_b.token, body={"password": j.manager_b_password})
+        api.call(
+            "POST",
+            f"/api/v1/site-admin/units/{j.unit_b('B1-01')}/transfer-ownership",
+            j.manager_b.token,
+            body={
+                "unit_id": j.unit_b("B1-01"),
+                "new_owner_name": "Hana Aydın",
+                "new_owner_email": f"{manifest.attempt_id[:6]}.b.hana.pf@journey.e2e.test".lower(),
+                "transfer_date": "2027-03-01",
+                "new_owner_moves_in": False,
+            },
+        )
+
+        res_a_mar = j.accrue_a("Mart 2027", "2027-03-10")
+        assert res_a_mar["total_units_accrued"] == 24
+        assert Decimal(str(res_a_mar["total_amount_accrued"])) == Decimal("24000.00")
+
+        res_b_mar = j.accrue_b("Mart 2027", "2027-03-10")
+        assert res_b_mar["total_units_accrued"] == 64
+        assert Decimal(str(res_b_mar["total_amount_accrued"])) == Decimal("48000.00")
+
+        j.invariants_a("March accrued")
+        j.invariants_b("March accrued")
+    finally:
+        teardown_sites(stack, manifest, restart=False)
+
+
+@pytest.mark.covers("SC-13-13-02")
+@pytest.mark.smoke
+@pytest.mark.core
+@pytest.mark.role_manager
 def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, stack):
     """Accrue four periods and verify mixed payment histories across two sites (Issue #248)."""
     saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
@@ -893,6 +1095,9 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         j.clock.advance_to("2027-03-10")
 
         # 4. Post payments on March 10
+        # Stop at defect #255: successor payment on A-01 allocates to predecessor's charge
+        pytest.xfail(f"Successor payment allocation defect ({PREDECESSOR_ALLOCATION_DEFECT})")
+
         # A-01: Ben pays 500.00
         rec_a01_mar = api.record_manual_payment(
             j.manager_a, j.unit_a("A-01"), Decimal("500.00"), "Ben Kaya",
@@ -1108,9 +1313,6 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         j.invariants_a("April final")
         j.invariants_b("April final")
 
-    except BaseException as failure:
-        teardown_sites(stack, manifest, restart=False)
-        raise failure
-    else:
+    finally:
         teardown_sites(stack, manifest, restart=False)
 
