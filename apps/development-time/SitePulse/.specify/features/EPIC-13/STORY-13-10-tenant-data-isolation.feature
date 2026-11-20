@@ -4,7 +4,7 @@ Feature: Tenant data isolation across sites and resident accounts
   the same visible unit labels in both sites to detect lookups that omit site scope.
   Use the same requests under authorized accounts as positive controls.
 
-  @SC-13-10-01 @J-17 @depth:1 @layer:backend @core @role_manager @pending
+  @SC-13-10-01 @J-17 @depth:1 @layer:backend @core @role_manager @linked
   Scenario Outline: Manager lists, searches and aggregates use the authenticated site
     Given site A is in state F4 and site B is in state F5 with the same unit labels
     And each site has distinct people, payment references and IDs
@@ -20,7 +20,7 @@ Feature: Tenant data isolation across sites and resident accounts
       | payment stream    |
       | collection report |
 
-  @SC-13-10-02 @J-17 @depth:1 @layer:backend @core @role_manager @pending
+  @SC-13-10-02 @J-17 @depth:1 @layer:backend @core @role_manager @linked
   Scenario Outline: Direct reads and downloads require access to the requested site
     Given both sites have an existing "<resource>" with different IDs and recognizable data
     And each site manager can retrieve that site's own resource
@@ -36,7 +36,7 @@ Feature: Tenant data isolation across sites and resident accounts
       | receipt PDF             |
       | operating budget        |
 
-  @SC-13-10-03 @J-17 @depth:1 @layer:backend @core @role_manager @pending
+  @SC-13-10-03 @J-17 @depth:1 @layer:backend @core @role_manager @linked
   Scenario: A site parameter cannot widen a manager's collection or export permissions
     Given site A is in state F4 and site B is in state F5 with different synthetic people
     When the manager of site A requests a payment stream and a people export with the site B selector
@@ -44,7 +44,7 @@ Feature: Tenant data isolation across sites and resident accounts
     And no foreign names, identifiers, amounts or counts appear in the response or export
     And site B's authorized manager can read the expected site B stream and export
 
-  @SC-13-10-04 @J-17 @depth:2 @layer:backend @core @role_manager @pending
+  @SC-13-10-04 @J-17 @depth:2 @layer:backend @core @role_manager @linked
   Scenario Outline: A manager cannot mutate another site's records
     Given both sites have a resource eligible for "<action>"
     When the manager of site A attempts "<action>" using site B's resource ID
@@ -59,7 +59,7 @@ Feature: Tenant data isolation across sites and resident accounts
       | move out a tenant     |
       | close a billing period |
 
-  @SC-13-10-05 @J-17 @depth:1 @state:F4 @layer:backend @core @role_resident @pending
+  @SC-13-10-05 @J-17 @depth:1 @state:F4 @layer:backend @core @role_resident @linked
   Scenario Outline: A resident cannot read another unit's financial records
     Given "Selin Demir" rents "A-2" and can read her own statement and receipt
     And "<target>" has a distinct statement and receipt accessible to its own resident
@@ -72,10 +72,10 @@ Feature: Tenant data isolation across sites and resident accounts
       | A-5 at Selin's site        |
       | A-2 at a different site    |
 
-  @SC-13-10-06 @J-17 @depth:2 @state:F2 @layer:backend @core @role_resident @pending
+  @SC-13-10-06 @J-17 @depth:2 @state:F2 @layer:backend @core @role_resident @linked
   Scenario: A tenant statement excludes the owner's private transactions for the same unit
-    Given the tenant of "A-2" owes 1500.00 operational principal and has an issued receipt for an earlier payment
-    And the owner has a 1000.00 capital liability and a separate private receipt for the same unit
+    Given the tenant of "A-2" owes 1500.00 operational principal and has an issued receipt for an earlier payment linked to their person ID
+    And the owner has a 1000.00 capital liability and a separate private receipt linked to their person ID
     When the tenant opens their statement and their own receipt
     Then the tenant's operational debt and own receipt are visible
     And the owner's balance, payment movements and private receipt are absent from the statement
@@ -83,7 +83,7 @@ Feature: Tenant data isolation across sites and resident accounts
     Then both requests are denied without returning the owner's payment data
     And the owner can retrieve their own receipt
 
-  @SC-13-10-07 @J-17 @depth:1 @state:F6 @layer:backend @core @role_resident @pending
+  @SC-13-10-07 @J-17 @depth:1 @state:F6 @layer:backend @core @role_resident @linked
   Scenario: Replacing a tenant keeps each occupant's history and receipts private
     Given "Selin Demir" and "Mert Kılıç" have separate payments and private receipts for their respective occupancy of "A-2"
     And each tenant signed in before the replacement or at their first eligible sign-in
@@ -94,6 +94,7 @@ Feature: Tenant data isolation across sites and resident accounts
     And Mert cannot access Selin's household contact details
 
   @SC-13-10-08 @J-17 @depth:1 @state:F4 @layer:gui @edge @role_resident @pending
+  # Pending: GUI isolation scenario part of GUI issue
   Scenario: A late response cannot repopulate the next tenant's session
     Given a resident has opened their statement on site A and a refresh response is held in the browser
     And a resident of site B has an account with the same unit label and distinct debt and receipts

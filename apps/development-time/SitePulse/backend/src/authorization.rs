@@ -225,7 +225,62 @@ pub async fn resource(
         let row=match kind {
             "registration"=>client.query_opt("SELECT site_id FROM pending_registrations WHERE request_id=$1 AND site_id=$2",&[&id,&site.0]).await,
             "project"=>{let id=parse(id,&["cproj-"])?;client.query_opt("SELECT site_id FROM capital_projects WHERE id=$1 AND site_id=$2",&[&id,&site.0]).await},
-            "receipt"=>{let row=client.query_opt("SELECT site_id,unit_id FROM payment_receipts WHERE (id::text=$1 OR receipt_number=$1) AND site_id=$2",&[&id,&site.0]).await.map_err(|_|SecurityError::Unavailable)?.ok_or(SecurityError::NotFound)?;let unit_id:i64=row.get(1);drop(client);return unit(state,claims,&unit_id.to_string()).await;},
+            "receipt" => {
+                let row = client
+                    .query_opt(
+                        "SELECT r.site_id, r.unit_id, r.payer_person_id, r.on_behalf_of_person_id, r.payer_role \
+                         FROM payment_receipts r WHERE (r.id::text = $1 OR r.receipt_number = $1) AND r.site_id = $2",
+                        &[&id, &site.0],
+                    )
+                    .await
+                    .map_err(|_| SecurityError::Unavailable)?
+                    .ok_or(SecurityError::NotFound)?;
+                let unit_id: i64 = row.get(1);
+                let payer_person_id: Option<i64> = row.get(2);
+                let on_behalf_of_person_id: Option<i64> = row.get(3);
+                let payer_role: String = row.get(4);
+                let user = crate::db::require_id("user", &claims.sub)
+                    .map_err(|_| SecurityError::Unauthenticated)?;
+                let actor_row = client
+                    .query_opt(
+                        "SELECT u.role, u.person_id FROM users AS u WHERE u.id = $1",
+                        &[&user],
+                    )
+                    .await
+                    .map_err(|_| SecurityError::Unavailable)?
+                    .ok_or(SecurityError::Unauthenticated)?;
+                let actor_role: String = actor_row.get(0);
+                let actor_person_id: i64 = actor_row.get(1);
+                drop(client);
+                unit(state, claims, &unit_id.to_string()).await?;
+                if actor_role != "SITE_MANAGER" && !claims.is_saas_admin() {
+                    let allowed = match actor_role.as_str() {
+                        "HOME_OWNER" => {
+                            if payer_role != "OWNER" && on_behalf_of_person_id != Some(actor_person_id) {
+                                false
+                            } else if let Some(pid) = payer_person_id {
+                                pid == actor_person_id || on_behalf_of_person_id == Some(actor_person_id)
+                            } else {
+                                false
+                            }
+                        }
+                        "HOME_RESIDENT" => {
+                            if payer_role != "TENANT" {
+                                false
+                            } else if let Some(pid) = payer_person_id {
+                                pid == actor_person_id
+                            } else {
+                                false
+                            }
+                        }
+                        _ => false,
+                    };
+                    if !allowed {
+                        return Err(SecurityError::NotFound);
+                    }
+                }
+                return Ok(());
+            }
             "house_type"=>{let id=parse(id,&["ht-"])?;client.query_opt("SELECT site_id FROM house_types WHERE id=$1 AND site_id=$2",&[&id,&site.0]).await},
             _=>return Err(SecurityError::BadRequest),
         }.map_err(|_|SecurityError::Unavailable)?;
@@ -260,14 +315,46 @@ pub async fn resource(
         return Err(SecurityError::NotFound);
     }
     if kind == "receipt" {
-        let id = inner
+        let r = inner
             .payment_receipts
             .iter()
             .find(|r| r.id.to_string() == id || r.receipt_number == id)
-            .map(|r| r.unit_id.clone())
             .ok_or(SecurityError::NotFound)?;
+        let unit_id = r.unit_id.clone();
+        let payer_person_id = r.payer_person_id;
+        let on_behalf_of_person_id = r.on_behalf_of_person_id;
+        let payer_role = r.payer_role;
+        let on_behalf_of_role = r.on_behalf_of_role;
         drop(inner);
-        return unit(state, claims, &id).await;
+        unit(state, claims, &unit_id).await?;
+        if !claims.is_site_staff() && !claims.is_saas_admin() {
+            let inner = state.inner.read().await;
+            let user = inner
+                .users
+                .iter()
+                .find(|u| crate::auth::same_id(&u.id, &claims.sub))
+                .ok_or(SecurityError::Unauthenticated)?;
+            let Some(actor_person_id) = user.person_id else {
+                return Err(SecurityError::NotFound);
+            };
+            let allowed = match user.role {
+                crate::models::Role::HomeOwner => {
+                    (payer_role == crate::models::DebtorType::Owner
+                        && payer_person_id == Some(actor_person_id))
+                        || (on_behalf_of_role == Some(crate::models::DebtorType::Owner)
+                            && on_behalf_of_person_id == Some(actor_person_id))
+                }
+                crate::models::Role::HomeResident => {
+                    payer_role == crate::models::DebtorType::Tenant
+                        && payer_person_id == Some(actor_person_id)
+                }
+                _ => false,
+            };
+            if !allowed {
+                return Err(SecurityError::NotFound);
+            }
+        }
+        return Ok(());
     }
     Ok(())
 }

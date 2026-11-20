@@ -91,6 +91,14 @@ class JourneyAttemptTests(unittest.TestCase):
                 self.assertIn("DELETE FROM sites WHERE id = 41", statement)
                 self.assertNotIn("TRUNCATE", statement.upper())
                 self.assertNotIn("DELETE FROM sites WHERE id = 1", statement)
+                self.assertLess(
+                    statement.index("DELETE FROM dues_period_snapshots"),
+                    statement.index("DELETE FROM dues_periods"),
+                )
+                self.assertLess(
+                    statement.index("DELETE FROM dues_period_reopen_requests"),
+                    statement.index("DELETE FROM dues_periods"),
+                )
 
     def test_teardown_rejects_untrusted_site_ids_before_running_sql(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

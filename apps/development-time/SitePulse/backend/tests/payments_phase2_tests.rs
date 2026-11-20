@@ -828,6 +828,58 @@ async fn when_a_statement_is_built_then_items_are_aged_and_each_debtor_sees_only
 }
 
 #[tokio::test]
+async fn when_receipt_viewer_shares_a_name_but_not_person_id_then_receipt_is_hidden() {
+    let state = site_with_two_units().await;
+    let (owner_person_id, owner_name) = {
+        let inner = state.inner.read().await;
+        let unit = inner.units.iter().find(|unit| unit.id == "d-14").unwrap();
+        let owner = inner
+            .users
+            .iter()
+            .find(|user| Some(&user.id) == unit.owner_user_id.as_ref())
+            .unwrap();
+        (owner.person_id.unwrap(), owner.full_name.clone())
+    };
+    let receipt = PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(RecordManualPaymentRequest {
+            site_id: Some(SITE.to_string()),
+            unit_id: "d-14".to_string(),
+            amount: d("100.00"),
+            payer_name: owner_name.clone(),
+            payer_role: DebtorType::Owner,
+            ..RecordManualPaymentRequest::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(receipt.payer_person_id, Some(owner_person_id));
+
+    let inner = state.inner.read().await;
+    let unit = inner.units.iter().find(|unit| unit.id == "d-14").unwrap();
+    let own_statement = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("OWNER"),
+        Some(owner_person_id),
+        today(),
+    );
+    assert!(own_statement
+        .receipts
+        .iter()
+        .any(|item| item.receipt_number == receipt.receipt_number));
+    let same_name_account = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("OWNER"),
+        Some(owner_person_id + 100_000),
+        today(),
+    );
+    assert!(!same_name_account
+        .receipts
+        .iter()
+        .any(|item| item.receipt_number == receipt.receipt_number));
+}
+
+#[tokio::test]
 // Backend coverage: SC-13-05-06 (tenant debt remains singular) and SC-13-05-17 (owner sees joint balance without tenant receipts).
 async fn when_a_tenant_liability_has_an_owner_link_then_owner_sees_only_its_joint_balance() {
     let state = site_with_two_units().await;
