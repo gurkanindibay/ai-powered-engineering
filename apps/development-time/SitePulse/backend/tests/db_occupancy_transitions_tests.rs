@@ -520,7 +520,7 @@ async fn when_tenant_is_replaced_then_outgoing_tenant_is_settled() {
     t.drop_db().await;
 }
 
-// covers: SC-08-09-01, SC-08-09-02, SC-08-09-03, SC-08-09-04
+// covers: SC-08-09-01, SC-08-09-02, SC-08-09-03, SC-08-09-04, SC-08-05-08
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_title_is_transferred_then_occupancy_follows_the_state_table() {
@@ -556,6 +556,28 @@ async fn when_title_is_transferred_then_occupancy_follows_the_state_table() {
 
     // OWNER_OCCUPIED (seeded) -> VACANT by default; the old owner's session closes.
     assert_eq!(t.status(unit).await, "OWNER_OCCUPIED");
+    let buyer = t
+        .int("INSERT INTO persons (full_name, person_type, site_id) SELECT 'Override Buyer', 'HOME_OWNER', id FROM sites WHERE slug = 'begonya-sitesi' RETURNING id")
+        .await;
+    let before_invalid_override = t.fingerprint(unit).await;
+    let (status, body) = transfer(json!({
+        "unit_id": unit.to_string(),
+        "new_owner_name": "Override Buyer",
+        "new_owner_person_id": buyer,
+        "seller_pays_override_reason": "no"
+    }))
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(t.fingerprint(unit).await, before_invalid_override);
+    assert_eq!(
+        t.int(&format!(
+            "SELECT count(*) FROM seller_pays_overrides WHERE unit_id = {unit}"
+        ))
+        .await,
+        0,
+        "an invalid override must not leave a transfer or an override request"
+    );
+
     let (status, body) = transfer(json!({ "unit_id": unit.to_string(), "new_owner_name": "Selim Evsahibi", "new_owner_email": "selim@x.test" })).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(t.status(unit).await, "VACANT");

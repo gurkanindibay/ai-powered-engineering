@@ -731,10 +731,13 @@ pub async fn get_payment_receipt(
 
 pub async fn transfer_unit_ownership(
     State(state): State<AppState>,
+    ctx: crate::authorization::AuthzContext,
     scope: crate::tenancy::TenantScope,
     Path(unit_id): Path<String>,
     Json(mut payload): Json<crate::models::TransferOwnershipRequest>,
 ) -> Result<Json<crate::models::TransferOwnershipResponse>, crate::error::AppError> {
+    use crate::services::finance_common::{Caller, FinanceError};
+    use crate::services::sale_clearance_service::TransferFlowError;
     // A site-scoped manager must use the site from their authenticated scope;
     // a stale client selection must not block an operation on an authorized unit.
     if let Some(site_id) = scope.own_site() {
@@ -744,12 +747,38 @@ pub async fn transfer_unit_ownership(
     }
     payload.unit_id = unit_id;
     apply_new_owner_ref(&state, &mut payload).await?;
-    let service = crate::services::PaymentTrackingService::new(state);
-    service
-        .transfer_ownership(payload)
+    let override_reason = payload
+        .seller_pays_override_reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+        .map(str::to_string);
+    if override_reason.is_some() && payload.new_owner_person_id.is_none() {
+        return Err(crate::error::AppError::validation(
+            "A seller-pays override needs the buyer as an existing person or a new card",
+        ));
+    }
+    let mut caller = Caller::from_claims(&ctx.claims);
+    if let Some(site_id) = payload.site_id.clone() {
+        caller.site_id = site_id;
+    }
+    let response = crate::services::sale_clearance_service::SaleClearanceService::new(&state)
+        .transfer_with_follow_ups(&caller, payload, override_reason)
         .await
-        .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e).into())
+        .map_err(|error| match error {
+            TransferFlowError::Override(e) => {
+                let status = match e {
+                    FinanceError::Invalid(_) => StatusCode::BAD_REQUEST,
+                    FinanceError::NotFound(_) => StatusCode::NOT_FOUND,
+                    _ => StatusCode::CONFLICT,
+                };
+                crate::error::AppError::from((status, e.to_string()))
+            }
+            TransferFlowError::Transfer(e) => {
+                crate::error::AppError::from((StatusCode::BAD_REQUEST, e))
+            }
+        })?;
+    Ok(Json(response))
 }
 
 /// Maps `new_owner` onto the legacy buyer fields. A new card is created first, so

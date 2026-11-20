@@ -164,20 +164,26 @@ pub async fn apply_accrual_correction(
     }
 
     let mut replacement_ids = Vec::with_capacity(write.replacements.len());
-    for r in write.replacements {
+    for (index, r) in write.replacements.iter().enumerate() {
+        // A split between two persons of the same role names who owes each share.
+        let liable_person: Option<i64> = write
+            .correction
+            .replacement_shares
+            .get(index)
+            .and_then(|share| share.liable_person_id);
         let row = tx
             .query_one(
                 r#"
                     INSERT INTO dues_liabilities
                         (unit_id, period, period_key, dues_period_id, principal_amount, due_date,
                          status, delay_penalty, debtor_type, expense_type, operating_budget_id,
-                         penalty_accrued_through, effective_due_date)
+                         penalty_accrued_through, effective_due_date, liable_person_id)
                     VALUES ($1, $2,
                             (SELECT period_key FROM dues_liabilities WHERE id = $7),
                             (SELECT dues_period_id FROM dues_liabilities WHERE id = $7),
                             $3, $4, 'PENDING', $8, $5, $6,
                             (SELECT operating_budget_id FROM dues_liabilities WHERE id = $7),
-                            $9, $10)
+                            $9, $10, $11)
                     RETURNING id
                     "#,
                 // Preserve the source period and budget basis for every replacement.
@@ -192,6 +198,7 @@ pub async fn apply_accrual_correction(
                     &r.delay_penalty,
                     &r.penalty_accrued_through,
                     &r.fee_due_date(),
+                    &liable_person,
                 ],
             )
             .await?;

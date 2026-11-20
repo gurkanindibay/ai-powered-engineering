@@ -175,6 +175,34 @@ class PaymentsPhase3Api {
       'reason': reason,
     }),
   );
+
+  // ---- STORY-08-05: sale clearance and seller-pays override ----------------
+
+  static String _date(DateTime d) => d.toIso8601String().substring(0, 10);
+
+  static Future<SaleClearance> saleClearance(String unitId, {DateTime? effectiveDate}) async =>
+      SaleClearance.fromJson(
+        await _get('/api/v1/site-admin/units/$unitId/sale-clearance', {
+          if (effectiveDate != null) 'effective_date': _date(effectiveDate),
+        }) as Map<String, dynamic>,
+      );
+
+  /// The statement as CSV bytes, for download.
+  static Future<List<int>> saleClearanceCsv(String unitId, {DateTime? effectiveDate}) =>
+      _bytes('/api/v1/site-admin/units/$unitId/sale-clearance', {
+        'format': 'csv',
+        if (effectiveDate != null) 'effective_date': _date(effectiveDate),
+      });
+
+  static Future<List<SellerPaysOverrideItem>> sellerPaysOverrides() async =>
+      _rows(await _get('/api/v1/site-admin/seller-pays-overrides')).map(SellerPaysOverrideItem.fromJson).toList();
+
+  static Future<void> decideSellerPaysOverride(int id, {required bool approve, String? note}) =>
+      _post('/api/v1/site-admin/seller-pays-overrides/$id/decide', {
+        'approve': approve,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
+
   static Future<List<DisputeItem>> unitDisputes(String unitId) async =>
       _rows(await _get('/api/v1/residents/$unitId/disputes'))
           .map(DisputeItem.fromJson)

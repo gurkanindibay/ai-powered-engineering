@@ -398,3 +398,134 @@ class AccessLogItem {
   factory AccessLogItem.fromJson(Map<String, dynamic> j) =>
       AccessLogItem(_d(j, 'occurred_at'), _s(j, 'actor'), _s(j, 'action'), _s(j, 'resource'));
 }
+
+// ---- STORY-08-05: sale clearance and seller-pays override --------------------
+
+/// One open liability of the seller: principal and late fee apart.
+class ClearanceDebtItem {
+  final String dueId;
+  final String period;
+  final String expenseType;
+  final DateTime? dueDate;
+  final Decimal principal;
+  final Decimal fee;
+  final Decimal total;
+
+  const ClearanceDebtItem({
+    required this.dueId,
+    required this.period,
+    required this.expenseType,
+    this.dueDate,
+    required this.principal,
+    required this.fee,
+    required this.total,
+  });
+
+  factory ClearanceDebtItem.fromJson(Map<String, dynamic> j) => ClearanceDebtItem(
+        dueId: _s(j, 'due_id'),
+        period: _s(j, 'period'),
+        expenseType: _s(j, 'expense_type'),
+        dueDate: _d(j, 'due_date'),
+        principal: readDecimal(j, 'principal'),
+        fee: readDecimal(j, 'fee'),
+        total: readDecimal(j, 'total'),
+      );
+}
+
+/// A capital installment of the unit that is not accrued yet.
+class ClearanceInstallment {
+  final String projectTitle;
+  final int installmentNumber;
+  final int totalInstallments;
+  final DateTime? dueDate;
+  final Decimal amount;
+
+  const ClearanceInstallment({
+    required this.projectTitle,
+    required this.installmentNumber,
+    required this.totalInstallments,
+    this.dueDate,
+    required this.amount,
+  });
+
+  factory ClearanceInstallment.fromJson(Map<String, dynamic> j) => ClearanceInstallment(
+        projectTitle: _s(j, 'project_title'),
+        installmentNumber: _i(j, 'installment_number'),
+        totalInstallments: _i(j, 'total_installments'),
+        dueDate: _d(j, 'due_date'),
+        amount: readDecimal(j, 'amount'),
+      );
+}
+
+/// A four-eyes request that the seller pays the installments accruing after the sale.
+class SellerPaysOverrideItem {
+  final int id;
+  final String unitId;
+  final String reason;
+  final String requestedBy;
+  final String status;
+  final DateTime? transferDate;
+
+  const SellerPaysOverrideItem({
+    required this.id,
+    required this.unitId,
+    required this.reason,
+    required this.requestedBy,
+    required this.status,
+    this.transferDate,
+  });
+
+  factory SellerPaysOverrideItem.fromJson(Map<String, dynamic> j) => SellerPaysOverrideItem(
+        id: _i(j, 'id'),
+        unitId: _s(j, 'unit_id'),
+        reason: _s(j, 'reason'),
+        requestedBy: _s(j, 'requested_by'),
+        status: _s(j, 'status'),
+        transferDate: _d(j, 'transfer_date'),
+      );
+}
+
+/// What stays with the seller and what goes to the buyer when the unit is sold.
+class SaleClearance {
+  final String unitLabel;
+  final String? sellerName;
+  final Decimal openDebtPrincipal;
+  final Decimal openDebtFee;
+  final Decimal openDebtTotal;
+  final List<ClearanceDebtItem> debts;
+  final Decimal advance;
+  final List<ClearanceInstallment> upcomingInstallments;
+  final Decimal upcomingInstallmentsTotal;
+  final SellerPaysOverrideItem? overrideRequest;
+  final String notice;
+
+  const SaleClearance({
+    required this.unitLabel,
+    this.sellerName,
+    required this.openDebtPrincipal,
+    required this.openDebtFee,
+    required this.openDebtTotal,
+    required this.debts,
+    required this.advance,
+    required this.upcomingInstallments,
+    required this.upcomingInstallmentsTotal,
+    this.overrideRequest,
+    required this.notice,
+  });
+
+  factory SaleClearance.fromJson(Map<String, dynamic> j) => SaleClearance(
+        unitLabel: _s(j, 'unit_label'),
+        sellerName: _so(j, 'seller_name'),
+        openDebtPrincipal: readDecimal(j, 'open_debt_principal'),
+        openDebtFee: readDecimal(j, 'open_debt_fee'),
+        openDebtTotal: readDecimal(j, 'open_debt_total'),
+        debts: _list(j['debts']).map(ClearanceDebtItem.fromJson).toList(),
+        advance: readDecimal(j, 'advance'),
+        upcomingInstallments: _list(j['upcoming_installments']).map(ClearanceInstallment.fromJson).toList(),
+        upcomingInstallmentsTotal: readDecimal(j, 'upcoming_installments_total'),
+        overrideRequest: j['override_request'] == null
+            ? null
+            : SellerPaysOverrideItem.fromJson(j['override_request'] as Map<String, dynamic>),
+        notice: _s(j, 'notice'),
+      );
+}
