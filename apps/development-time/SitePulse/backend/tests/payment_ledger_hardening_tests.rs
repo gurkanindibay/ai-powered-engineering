@@ -1150,7 +1150,7 @@ async fn successor_owner_payment_does_not_settle_predecessor_owner_liability() {
 
 // covers: SC-09-07-03
 #[tokio::test]
-async fn former_owner_receipt_requires_designation_and_only_settles_selected_liability() {
+async fn former_owner_receipt_resolves_identity_and_settles_only_own_liability() {
     let mut former_due = liability(
         "owner-former",
         "February 2027",
@@ -1169,7 +1169,15 @@ async fn former_owner_receipt_requires_designation_and_only_settles_selected_lia
         "OPERATIONAL_DUES",
     );
     current_due.liable_person_id = Some(202);
-    let state = tenanted_state_with(vec![former_due, current_due]).await;
+    let unattributed_due = liability(
+        "owner-unattributed-after-sale",
+        "January 2027",
+        "300.00",
+        today() + Days::new(2),
+        "OWNER",
+        "OPERATIONAL_DUES",
+    );
+    let state = tenanted_state_with(vec![former_due, current_due, unattributed_due]).await;
     {
         let mut inner = state.inner.write().await;
         let current_owner = inner
@@ -1186,20 +1194,8 @@ async fn former_owner_receipt_requires_designation_and_only_settles_selected_lia
         inner.users.push(former_owner);
     }
 
-    let service = PaymentTrackingService::new(state.clone());
-    let undesignated = service
+    let receipt = PaymentTrackingService::new(state.clone())
         .record_and_allocate_payment(payment("800.00", "OWNER", "Former Owner"))
-        .await;
-    assert!(undesignated.is_err());
-    assert!(state.inner.read().await.payment_receipts.is_empty());
-
-    let mut designated_request = payment("800.00", "OWNER", "Former Owner");
-    designated_request.designation = Some(PaymentDesignation {
-        due_ids: vec!["owner-former".to_string()],
-        ..Default::default()
-    });
-    let receipt = service
-        .record_and_allocate_payment(designated_request)
         .await
         .unwrap();
     assert_eq!(
@@ -1229,11 +1225,20 @@ async fn former_owner_receipt_requires_designation_and_only_settles_selected_lia
             .total_amount,
         d("500.00")
     );
+    assert_eq!(
+        inner
+            .dues
+            .iter()
+            .find(|due| due.id == "owner-unattributed-after-sale")
+            .unwrap()
+            .total_amount,
+        d("300.00")
+    );
 }
 
 // covers: SC-09-07-04
 #[tokio::test]
-async fn former_tenant_receipt_requires_designation_and_only_settles_selected_liability() {
+async fn former_tenant_receipt_resolves_identity_and_settles_only_own_liability() {
     let mut former_due = liability(
         "tenant-former",
         "February 2027",
@@ -1269,20 +1274,8 @@ async fn former_tenant_receipt_requires_designation_and_only_settles_selected_li
         inner.users.push(former_tenant);
     }
 
-    let service = PaymentTrackingService::new(state.clone());
-    let undesignated = service
+    let receipt = PaymentTrackingService::new(state.clone())
         .record_and_allocate_payment(payment("800.00", "TENANT", "Former Tenant"))
-        .await;
-    assert!(undesignated.is_err());
-    assert!(state.inner.read().await.payment_receipts.is_empty());
-
-    let mut designated_request = payment("800.00", "TENANT", "Former Tenant");
-    designated_request.designation = Some(PaymentDesignation {
-        due_ids: vec!["tenant-former".to_string()],
-        ..Default::default()
-    });
-    let receipt = service
-        .record_and_allocate_payment(designated_request)
         .await
         .unwrap();
     assert_eq!(
@@ -1308,6 +1301,88 @@ async fn former_tenant_receipt_requires_designation_and_only_settles_selected_li
             .dues
             .iter()
             .find(|due| due.id == "tenant-current-after-move-in")
+            .unwrap()
+            .total_amount,
+        d("500.00")
+    );
+}
+
+// covers: SC-09-07-05
+#[tokio::test]
+async fn ambiguous_payer_name_requires_explicit_liability_designation() {
+    let mut former_due = liability(
+        "owner-shared-name-former",
+        "February 2027",
+        "800.00",
+        today() + Days::new(1),
+        "OWNER",
+        "OPERATIONAL_DUES",
+    );
+    former_due.liable_person_id = Some(101);
+    let mut current_due = liability(
+        "owner-shared-name-current",
+        "March 2027",
+        "500.00",
+        today() + Days::new(5),
+        "OWNER",
+        "OPERATIONAL_DUES",
+    );
+    current_due.liable_person_id = Some(202);
+    let state = tenanted_state_with(vec![former_due, current_due]).await;
+    {
+        let mut inner = state.inner.write().await;
+        let current_owner = inner
+            .users
+            .iter_mut()
+            .find(|user| user.id == "usr-home-owner-1")
+            .unwrap();
+        current_owner.full_name = "Shared Owner".to_string();
+        current_owner.person_id = Some(202);
+        let mut former_owner = current_owner.clone();
+        former_owner.id = "usr-former-owner-shared-name".to_string();
+        former_owner.person_id = Some(101);
+        inner.users.push(former_owner);
+    }
+
+    let service = PaymentTrackingService::new(state.clone());
+    let undesignated = service
+        .record_and_allocate_payment(payment("800.00", "OWNER", "Shared Owner"))
+        .await;
+    assert!(undesignated.is_err());
+    assert!(state.inner.read().await.payment_receipts.is_empty());
+
+    let mut designated = payment("800.00", "OWNER", "Shared Owner");
+    designated.designation = Some(PaymentDesignation {
+        due_ids: vec!["owner-shared-name-former".to_string()],
+        ..Default::default()
+    });
+    let receipt = service
+        .record_and_allocate_payment(designated)
+        .await
+        .unwrap();
+    assert_eq!(
+        receipt
+            .allocation_breakdown
+            .iter()
+            .filter_map(|line| line.due_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec!["owner-shared-name-former"]
+    );
+    let inner = state.inner.read().await;
+    assert_eq!(
+        inner
+            .dues
+            .iter()
+            .find(|due| due.id == "owner-shared-name-former")
+            .unwrap()
+            .total_amount,
+        Decimal::ZERO
+    );
+    assert_eq!(
+        inner
+            .dues
+            .iter()
+            .find(|due| due.id == "owner-shared-name-current")
             .unwrap()
             .total_amount,
         d("500.00")

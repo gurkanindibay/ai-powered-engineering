@@ -526,6 +526,10 @@ impl PaymentTrackingService {
             owner_person_id,
             tenant_person_id,
             eligible_joint_due_ids,
+            payer_person_id,
+            payer_identity_ambiguous,
+            payer_name_resolved,
+            payer_has_open_liabilities,
         ) = {
             let inner = self.state.inner.read().await;
             if let Some(key) = idempotency_key.as_deref() {
@@ -574,6 +578,55 @@ impl PaymentTrackingService {
             };
             let tenant_person_id = person_id_for_user(unit.tenant_user_id.as_ref());
             let owner_person_id = person_id_for_user(unit.owner_user_id.as_ref());
+            let current_payer_person_id = if payer_role == DebtorType::Owner {
+                owner_person_id
+            } else {
+                tenant_person_id
+            };
+            let payer_name_key = crate::domain::fold_turkish(req.payer_name.trim());
+            let matching_payer_ids = inner
+                .users
+                .iter()
+                .filter(|user| crate::auth::same_id(&user.site_id, &site_id))
+                .filter(|user| {
+                    !user.full_name.trim().is_empty()
+                        && !payer_name_key.is_empty()
+                        && crate::domain::fold_turkish(user.full_name.trim()) == payer_name_key
+                })
+                .filter_map(|user| {
+                    user.person_id.or_else(|| {
+                        user.id
+                            .strip_prefix("person-")
+                            .and_then(|value| value.parse().ok())
+                    })
+                })
+                .filter(|person_id| {
+                    inner.dues.iter().any(|due| {
+                        crate::auth::same_id(&due.unit_id, &unit.id)
+                            && due.debtor_type == payer_role
+                            && due.liable_person_id == Some(*person_id)
+                    }) || Some(*person_id) == current_payer_person_id
+                })
+                .collect::<std::collections::HashSet<_>>();
+            let payer_identity_ambiguous = matching_payer_ids.len() > 1;
+            let payer_name_resolved = !matching_payer_ids.is_empty();
+            let payer_person_id = if payer_identity_ambiguous {
+                None
+            } else {
+                matching_payer_ids
+                    .iter()
+                    .next()
+                    .copied()
+                    .or(current_payer_person_id)
+            };
+            let payer_has_open_liabilities = payer_person_id.is_some_and(|person_id| {
+                inner.dues.iter().any(|due| {
+                    crate::auth::same_id(&due.unit_id, &unit.id)
+                        && due.debtor_type == payer_role
+                        && due.liable_person_id == Some(person_id)
+                        && due.status.is_collectable()
+                })
+            });
             let eligible_joint_due_ids = owner_person_id
                 .map(|person_id| {
                     inner
@@ -624,6 +677,10 @@ impl PaymentTrackingService {
                 owner_person_id,
                 tenant_person_id,
                 eligible_joint_due_ids,
+                payer_person_id,
+                payer_identity_ambiguous,
+                payer_name_resolved,
+                payer_has_open_liabilities,
             )
         };
         if on_behalf_of_tenant {
@@ -640,41 +697,20 @@ impl PaymentTrackingService {
                 );
             }
         }
-        let payer_person_id = if payer_role == DebtorType::Owner {
+        let current_payer_person_id = if payer_role == DebtorType::Owner {
             owner_person_id
         } else {
             tenant_person_id
         };
-        let current_payer_name = if payer_role == DebtorType::Owner {
-            owner_name.as_deref()
-        } else {
-            tenant_name.as_deref()
-        };
-        let has_attributed_liabilities = self.state.inner.read().await.dues.iter().any(|due| {
-            crate::auth::same_id(&due.unit_id, &unit.id)
-                && due.debtor_type == settling_role
-                && due.liable_person_id.is_some()
-        });
-        let payer_matches_current_holder = current_payer_name.is_some_and(|current_name| {
-            !current_name.trim().is_empty()
-                && !req.payer_name.trim().is_empty()
-                && crate::domain::fold_turkish(current_name.trim())
-                    == crate::domain::fold_turkish(req.payer_name.trim())
-        });
-        if has_attributed_liabilities
-            && (!payer_matches_current_holder || payer_person_id.is_none())
-            && designation.is_none()
+        let former_payer_without_open_liabilities = payer_name_resolved
+            && payer_person_id != current_payer_person_id
+            && !payer_has_open_liabilities;
+        if ((payer_identity_ambiguous && designation.is_none() && description_hint.is_none())
+            || (former_payer_without_open_liabilities && designation.is_none()))
             && !on_behalf_of_owner
             && !on_behalf_of_tenant
         {
-            let role_name = if payer_role == DebtorType::Owner {
-                "current owner"
-            } else {
-                "current tenant"
-            };
-            return Err(format!(
-                "Payer does not match the {role_name}; designate the liabilities this receipt should settle"
-            ));
+            return Err("Payer identity is ambiguous or has no open liability; designate the liability this receipt should settle".to_string());
         }
         let allocate = |dues: &mut Vec<DuesLiability>| {
             let mut candidates = dues_ledger::open_dues_for(dues, |_| true, settling_role.as_str());
@@ -685,7 +721,8 @@ impl PaymentTrackingService {
             if identity_scoped && !on_behalf_of_owner && !on_behalf_of_tenant {
                 candidates.retain(|&i| {
                     dues[i].liable_person_id == payer_person_id
-                        || dues[i].liable_person_id.is_none()
+                        || (dues[i].liable_person_id.is_none()
+                            && payer_person_id == current_payer_person_id)
                         || designation
                             .as_ref()
                             .is_some_and(|d| d.due_ids.contains(&dues[i].id))

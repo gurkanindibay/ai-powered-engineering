@@ -20,19 +20,25 @@ Feature: Change of ownership and title deed financial handover
     And the predecessor's principal, fees and payment history remain unchanged
 
   @SC-09-07-03 @layer:backend @core @role_manager @linked
-  Scenario: A former owner's receipt requires designation before allocation
+  Scenario: A former owner's receipt is allocated by the identified debtor
     Given the former and current owners have separate open liabilities for the same unit
-    When the former owner submits a receipt without a liability designation
-    Then the receipt is rejected without changing either owner's balance
-    When the former owner resubmits with the former liability explicitly designated
-    Then the receipt settles only the designated former owner's liability
+    And the payer name uniquely identifies the former owner
+    When the former owner submits an undesignated receipt
+    Then the receipt settles only the former owner's liability
     And the current owner's balance remains unchanged
 
   @SC-09-07-04 @layer:backend @core @role_manager @linked
-  Scenario: A former tenant's receipt requires designation before allocation
+  Scenario: A former tenant's receipt is allocated by the identified debtor
     Given the former and current tenants have separate open liabilities for the same unit
-    When the former tenant submits a receipt without a liability designation
-    Then the receipt is rejected without changing either tenant's balance
-    When the former tenant resubmits with the former liability explicitly designated
-    Then the receipt settles only the designated former tenant's liability
+    And the payer name uniquely identifies the former tenant
+    When the former tenant submits an undesignated receipt
+    Then the receipt settles only the former tenant's liability
     And the current tenant's balance remains unchanged
+
+  @SC-09-07-05 @layer:backend @core @role_manager @linked
+  Scenario: A shared payer name requires an explicit liability designation
+    Given the former and current owners have separate open liabilities and the same name
+    When an undesignated receipt arrives from that name
+    Then the receipt is rejected without changing either owner's balance
+    When the manager records the receipt with the former liability designated
+    Then only the designated former owner's liability is settled
