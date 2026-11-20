@@ -213,6 +213,7 @@ EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered b
 | — | 13-02, 13-04, 13-07 | — | — | — | **Excluded:** Backend-only journey contract for accruals, payments and teardown, covered by test_journey_accruals_payments.py and test_journey_fixtures.py. | | |
 | — | 13-07 | — | — | — | **Excluded:** Backend-only journey fixture, invariant and teardown contract, covered by journey tests and `run_tests.py` gates. | | |
 | — | 13-01, 13-12 | — | — | — | **Excluded:** Backend-only late-fee rule for supplementary charges, covered by `backend/tests/supplementary_charge_tests.rs`. | | |
+| — | 13-14 | — | — | — | **Excluded:** Backend-only liability journey (title, vacancy and move-in changes), covered by `e2e/tests/test_journey_liability_changes.py`. | | |
 | — | 13-10 | — | — | — | **Partial:** Backend isolation automated; GUI isolation scenario (SC-13-10-08) is pending separate GUI issue. | | |
 | — | 13-06, 13-08 | — | — | — | **Partial:** Lifecycle chain (13-06) and manager session states (13-08) specified in .specify/features/EPIC-13; GUI automation pending. | | |
 

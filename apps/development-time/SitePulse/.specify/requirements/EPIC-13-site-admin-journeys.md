@@ -107,6 +107,19 @@ As a manager, I need the supplementary charge created for a back-dated start res
 - The supplementary charge keeps the referred month's period due date and stores the creation date as its effective due date.
 - The late fee is 0.00 at creation and counts from the effective due date afterwards (16.94 ten days later for the 1016.13 charge).
 
+### STORY-13-14: Liability follows titles, vacancies and move-ins
+
+As a site manager, I need historical debt to stay with whoever was responsible and new charges to go to the current owner or tenant when units are sold, vacated or occupied, so that collections and site cash stay reconcilable across periods.
+
+#### Acceptance criteria
+
+- Title transfers, move-outs and move-ins take effect on their dates, with current rosters limited to the current occupant's household and the former occupant's household archived under the closed occupancy.
+- Each accrual bills the owner of record (including for vacant units) or the tenant in residence, and earlier charges keep their original debtor and amount.
+- Former owners' and tenants' open charges stay visible and keep accruing their late fees next to their successors' charges.
+- A receipt from a new owner or tenant settles only that person's own charges and leaves other debtors' principal, fees and payment history unchanged; this includes successive debtors with the same role (defect #255).
+- A designated receipt has exactly one allocation to the designated period and leaves other open periods unpaid.
+- Title changes, vacancies and accruals move no cash, and a receipt of one site never changes another site's cash.
+
 ### STORY-13-12: Multi-depth chains across the decided responsibility rules
 
 As a site administrator, I need multi-stage operational journeys (combining unit sales, tenant departures, capital projects, back-dated assignments, catch-up schedules, payment reversals, and unmatched multi-debtor transfers) to maintain ledger invariants and exact Decimal balances at every checkpoint.
