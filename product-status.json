@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-20T16:17:49Z",
- "run_id": "20261120T161749Z-c09e66c",
- "commit": "c09e66c7a8c60151b0a6116d6c69761093e64b05",
+ "generated_at": "2026-11-20T16:32:25Z",
+ "run_id": "20261120T163224Z-c7e3974",
+ "commit": "c7e3974cadf4978625cd20bb4c8b8ec97e1c44b5",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,20 +11,20 @@
   "errors": 0,
   "skipped": 1,
   "passed": 163,
-  "seconds": 2207.8,
+  "seconds": 2255.5,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 110,
-  "stories_with_scenarios": 110,
+  "stories": 112,
+  "stories_with_scenarios": 112,
   "stories_passing": 32,
-  "scenarios": 434,
+  "scenarios": 442,
   "automated": 343,
   "passing": 141,
   "failing": 0,
   "no_result": 202,
-  "planned": 91,
+  "planned": 99,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 0
@@ -201,15 +201,15 @@
   {
    "id": "EPIC-13",
    "title": "Site Admin Journeys",
-   "stories": 10,
-   "stories_with_scenarios": 10,
+   "stories": 12,
+   "stories_with_scenarios": 12,
    "stories_passing": 0,
-   "scenarios": 121,
+   "scenarios": 129,
    "automated": 41,
    "passing": 28,
    "failing": 0,
    "no_result": 13,
-   "planned": 80,
+   "planned": 88,
    "health": "in_progress"
   }
  ],
@@ -2578,6 +2578,12 @@
    "epic": "EPIC-13",
    "story": "STORY-13-05"
   },
+  "SC-13-06-01": {
+   "state": "planned",
+   "name": "A manager grows a new site, collects dues and closes a period",
+   "epic": "EPIC-13",
+   "story": "STORY-13-06"
+  },
   "SC-13-07-01": {
    "state": "passing",
    "name": "Every starting state can be built using the documented fixture path",
@@ -2637,6 +2643,48 @@
    "name": "Cleanup is safe to retry after an evidence capture failure",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
+  },
+  "SC-13-08-01": {
+   "state": "planned",
+   "name": "The first manager sign-in unlocks a populated site after password change",
+   "epic": "EPIC-13",
+   "story": "STORY-13-08"
+  },
+  "SC-13-08-02": {
+   "state": "planned",
+   "name": "Loading, failure and recovery are distinguishable from an empty site",
+   "epic": "EPIC-13",
+   "story": "STORY-13-08"
+  },
+  "SC-13-08-03": {
+   "state": "planned",
+   "name": "A search with zero matches is recoverable without changing the site",
+   "epic": "EPIC-13",
+   "story": "STORY-13-08"
+  },
+  "SC-13-08-04": {
+   "state": "planned",
+   "name": "An expired session cannot reveal a previous manager's data",
+   "epic": "EPIC-13",
+   "story": "STORY-13-08"
+  },
+  "SC-13-08-05": {
+   "state": "planned",
+   "name": "Cancelling accrual confirmation makes no financial change",
+   "epic": "EPIC-13",
+   "story": "STORY-13-08"
+  },
+  "SC-13-08-06": {
+   "state": "planned",
+   "name": "Refreshing a payment after a lost response shows the committed result",
+   "epic": "EPIC-13",
+   "story": "STORY-13-08"
+  },
+  "SC-13-08-07": {
+   "state": "planned",
+   "name": "A stale unit action refreshes after another manager updates occupancy",
+   "epic": "EPIC-13",
+   "story": "STORY-13-08"
   },
   "SC-13-09-01": {
    "state": "no_result",
@@ -2983,9 +3031,9 @@
   {
    "date": "2026-11-20",
    "epics": 13,
-   "stories": 110,
-   "stories_with_scenarios": 110,
-   "scenarios": 434,
+   "stories": 112,
+   "stories_with_scenarios": 112,
+   "scenarios": 442,
    "automated": 343
   }
  ],
@@ -2994,10 +3042,10 @@
    "date": "2026-11-20",
    "epic": "EPIC-13",
    "title": "Site Admin Journeys",
-   "new_stories": 7,
-   "new_scenarios": 95,
+   "new_stories": 9,
+   "new_scenarios": 103,
    "newly_automated": 32,
-   "items": 7,
+   "items": 9,
    "samples": [
     "STORY-13-02: Accrual histories F4, F5 and F7",
     "STORY-13-03: Residents and owners change after periods were accrued",
@@ -3680,5 +3728,5 @@
    ]
   }
  ],
- "href": "reports/44770678827-1/"
+ "href": "reports/44773121435-1/"
 }
