@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-19T20:56:51Z",
- "run_id": "20261119T205651Z-20689b0",
- "commit": "20689b00ba0df48af0a5f669482c8b798b2b6374",
+ "generated_at": "2026-11-20T05:01:33Z",
+ "run_id": "20261120T050132Z-d02f9a2",
+ "commit": "d02f9a23f1849c3878ac5fd9b85e423b7750e617",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,20 +11,20 @@
   "errors": 0,
   "skipped": 1,
   "passed": 135,
-  "seconds": 2193.5,
+  "seconds": 2142.4,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 103,
-  "stories_with_scenarios": 103,
+  "stories": 106,
+  "stories_with_scenarios": 106,
   "stories_passing": 33,
-  "scenarios": 333,
-  "automated": 305,
+  "scenarios": 368,
+  "automated": 309,
   "passing": 120,
   "failing": 0,
-  "no_result": 185,
-  "planned": 28,
+  "no_result": 189,
+  "planned": 59,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 0
@@ -201,15 +201,15 @@
   {
    "id": "EPIC-13",
    "title": "Site Admin Journeys",
-   "stories": 3,
-   "stories_with_scenarios": 3,
+   "stories": 6,
+   "stories_with_scenarios": 6,
    "stories_passing": 0,
-   "scenarios": 26,
-   "automated": 9,
+   "scenarios": 61,
+   "automated": 13,
    "passing": 7,
    "failing": 0,
-   "no_result": 2,
-   "planned": 17,
+   "no_result": 6,
+   "planned": 48,
    "health": "in_progress"
   }
  ],
@@ -2146,6 +2146,114 @@
    "epic": "EPIC-13",
    "story": "STORY-13-01"
   },
+  "SC-13-05-01": {
+   "state": "planned",
+   "name": "Invalid accrual input is rejected and creates nothing",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-02": {
+   "state": "no_result",
+   "name": "A due day the month does not have falls on its last day",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-03": {
+   "state": "planned",
+   "name": "A duplicate accrual with a different amount is still blocked",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-04": {
+   "state": "planned",
+   "name": "Two admins accruing the same period at the same moment create one set of liabilities",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-05": {
+   "state": "planned",
+   "name": "The scheduler catches up months that were missed",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-06": {
+   "state": "planned",
+   "name": "Moving out with debt keeps the debt and the history",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-07": {
+   "state": "planned",
+   "name": "Moving out with an advance requires a decision before the advance leaves",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-08": {
+   "state": "planned",
+   "name": "Moving out twice and moving in on an occupied unit are refused",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-09": {
+   "state": "planned",
+   "name": "A move-out recorded after accrual re-splits the open liability",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-10": {
+   "state": "planned",
+   "name": "An Excel import with one bad row imports the good rows and reports the bad one",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-11": {
+   "state": "planned",
+   "name": "Merging two duplicate people keeps every liability and payment",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-12": {
+   "state": "planned",
+   "name": "A resident cannot call manager actions",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-13": {
+   "state": "planned",
+   "name": "A manager of another site sees nothing of this site",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-14": {
+   "state": "planned",
+   "name": "The month boundary uses Istanbul time, not UTC",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-15": {
+   "state": "planned",
+   "name": "A late fee never makes a settled liability reopen",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-16": {
+   "state": "planned",
+   "name": "Balances are identical after a backend restart at any point of the history",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-17": {
+   "state": "planned",
+   "name": "Check-out shows the tenant's debt and the owner can still be collected from",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
+  "SC-13-05-18": {
+   "state": "planned",
+   "name": "A tenant who left without notice is moved out at the real date and the owner takes over",
+   "epic": "EPIC-13",
+   "story": "STORY-13-05"
+  },
   "SC-13-07-01": {
    "state": "passing",
    "name": "Every starting state can be built using the documented fixture path",
@@ -2205,6 +2313,108 @@
    "name": "Cleanup is safe to retry after an evidence capture failure",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
+  },
+  "SC-13-09-01": {
+   "state": "no_result",
+   "name": "A designated payment can settle a newer liability ahead of FIFO",
+   "epic": "EPIC-13",
+   "story": "STORY-13-09"
+  },
+  "SC-13-09-02": {
+   "state": "planned",
+   "name": "A partial payment reduces the principal used for later fees",
+   "epic": "EPIC-13",
+   "story": "STORY-13-09"
+  },
+  "SC-13-09-03": {
+   "state": "planned",
+   "name": "A backdated payment recalculates fees using its value date",
+   "epic": "EPIC-13",
+   "story": "STORY-13-09"
+  },
+  "SC-13-09-04": {
+   "state": "no_result",
+   "name": "A credit note adjusts live debt while the close snapshot stays fixed",
+   "epic": "EPIC-13",
+   "story": "STORY-13-09"
+  },
+  "SC-13-09-05": {
+   "state": "no_result",
+   "name": "A closed period reopens only after independent approval",
+   "epic": "EPIC-13",
+   "story": "STORY-13-09"
+  },
+  "SC-13-09-06": {
+   "state": "planned",
+   "name": "Concurrent deliveries of the same bank event are credited once",
+   "epic": "EPIC-13",
+   "story": "STORY-13-09"
+  },
+  "SC-13-09-07": {
+   "state": "planned",
+   "name": "An unmatched statement item can be approved exactly once",
+   "epic": "EPIC-13",
+   "story": "STORY-13-09"
+  },
+  "SC-13-09-08": {
+   "state": "planned",
+   "name": "Operational and capital balances stay separate for a tenant-occupied unit",
+   "epic": "EPIC-13",
+   "story": "STORY-13-09"
+  },
+  "SC-13-09-09": {
+   "state": "planned",
+   "name": "The aging bucket changes at each day boundary",
+   "epic": "EPIC-13",
+   "story": "STORY-13-09"
+  },
+  "SC-13-11-01": {
+   "state": "planned",
+   "name": "A liability moves through PENDING, OVERDUE, PAID and CANCELLED",
+   "epic": "EPIC-13",
+   "story": "STORY-13-11"
+  },
+  "SC-13-11-02": {
+   "state": "planned",
+   "name": "A settled or cancelled liability cannot be paid or corrected again",
+   "epic": "EPIC-13",
+   "story": "STORY-13-11"
+  },
+  "SC-13-11-03": {
+   "state": "planned",
+   "name": "A reversal moves a PAID liability back to OVERDUE",
+   "epic": "EPIC-13",
+   "story": "STORY-13-11"
+  },
+  "SC-13-11-04": {
+   "state": "planned",
+   "name": "Each period status allows only its own commands",
+   "epic": "EPIC-13",
+   "story": "STORY-13-11"
+  },
+  "SC-13-11-05": {
+   "state": "planned",
+   "name": "The periods screen shows each status with only its allowed actions",
+   "epic": "EPIC-13",
+   "story": "STORY-13-11"
+  },
+  "SC-13-11-06": {
+   "state": "planned",
+   "name": "A bank statement item reaches each reconciliation status",
+   "epic": "EPIC-13",
+   "story": "STORY-13-11"
+  },
+  "SC-13-11-07": {
+   "state": "planned",
+   "name": "A rejected or approved statement item cannot change status again",
+   "epic": "EPIC-13",
+   "story": "STORY-13-11"
+  },
+  "SC-13-11-08": {
+   "state": "planned",
+   "name": "Each unit occupancy state offers its own commands and refuses the rest",
+   "epic": "EPIC-13",
+   "story": "STORY-13-11"
   },
   "SC-13-12-03": {
    "state": "no_result",
@@ -2373,9 +2583,31 @@
    "stories_with_scenarios": 103,
    "scenarios": 333,
    "automated": 305
+  },
+  {
+   "date": "2026-11-20",
+   "epics": 13,
+   "stories": 106,
+   "stories_with_scenarios": 106,
+   "scenarios": 368,
+   "automated": 309
   }
  ],
  "recent_changes": [
+  {
+   "date": "2026-11-20",
+   "epic": "EPIC-13",
+   "title": "Site Admin Journeys",
+   "new_stories": 3,
+   "new_scenarios": 35,
+   "newly_automated": 4,
+   "items": 3,
+   "samples": [
+    "STORY-13-05: Corner cases around accrual, occupancy, access and time",
+    "STORY-13-09: Financial transitions across periods and ledgers",
+    "STORY-13-11: Billing state machines"
+   ]
+  },
   {
    "date": "2026-11-19",
    "epic": "EPIC-13",
@@ -3036,5 +3268,5 @@
    ]
   }
  ],
- "href": "reports/44610725718-1/"
+ "href": "reports/44677452802-1/"
 }
