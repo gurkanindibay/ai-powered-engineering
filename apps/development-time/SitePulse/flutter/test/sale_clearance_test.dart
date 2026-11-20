@@ -54,7 +54,7 @@ Map<String, dynamic> _statementJson({Map<String, dynamic>? override}) => {
 
 void main() {
   test('the statement is read with Decimal money', () {
-    // covers: SC-08-05-04
+    // covers: SC-08-05-04, SC-13-03-19
     final statement = SaleClearance.fromJson(_statementJson());
     expect(statement.openDebtTotal, d('5158.33'));
     expect(statement.openDebtPrincipal + statement.openDebtFee, statement.openDebtTotal);
@@ -105,7 +105,7 @@ void main() {
   });
 
   testWidgets('a pending request is approved from the queue with the decision note', (tester) async {
-    // covers: SC-08-05-06
+    // covers: SC-08-05-06, SC-13-03-05
     (int, bool, String?)? decision;
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light(),
