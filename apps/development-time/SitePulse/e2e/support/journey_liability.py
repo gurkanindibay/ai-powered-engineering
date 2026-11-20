@@ -4,8 +4,9 @@ Replays the five detailed units of docs/testing/journey-plan/zero-to-multi-site-
 isolated sites (Site A tariff 1,000.00, Site B tariff 750.00) between January and April 2027 on the
 Europe/Istanbul E2E clock. The 83 filler owner-occupants of the full journey and the zero-site onboarding
 steps belong to the sibling issues #247 and #248; this module builds the minimum needed locally: two
-sites with the five units, their owners and tenants, created through the supported site onboarding and the
-manager's occupancy, title-transfer, household and payment commands.
+sites with the five units, their owners and tenants, set up as follows: blocks, units, persons, ownerships, occupancies and resident users are inserted with SQL
+in `_build_site` (until #247 provides the onboarding builder); only the household, title-transfer,
+occupancy and payment steps go through the supported manager commands.
 
 Expected debtors are declared in `DEBTORS` from the fixture timeline, independently of any response.
 """

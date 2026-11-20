@@ -220,7 +220,7 @@ RECEIPTS_BY_LIABLE_PERSON = {
 @pytest.mark.covers("SC-13-14-08")
 @pytest.mark.core
 @pytest.mark.role_manager
-@pytest.mark.xfail(strict=True, reason=PREDECESSOR_ALLOCATION_DEFECT)
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=PREDECESSOR_ALLOCATION_DEFECT)
 @pytest.mark.parametrize(("unit", "payer", "month"), list(RECEIPTS_BY_LIABLE_PERSON), ids=lambda v: str(v))
 def test_a_successors_receipt_settles_only_the_successors_charges(journey, unit, payer, month):
     j = journey().run_through("apr_paid")
@@ -251,7 +251,7 @@ FINAL_OPEN = {  # (unit, period) -> (principal, fee) after the April 10 receipts
 @pytest.mark.covers("SC-13-14-09")
 @pytest.mark.core
 @pytest.mark.role_manager
-@pytest.mark.xfail(strict=True, reason=PREDECESSOR_ALLOCATION_DEFECT)
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=PREDECESSOR_ALLOCATION_DEFECT)
 def test_final_open_debt_stays_with_each_former_and_current_debtor(journey):
     j = journey().run_through("apr_paid")
     for unit in ("A-01", "A-02", "A-03", "B1-01", "B2-01"):
