@@ -266,7 +266,7 @@ The plan is pending, so nothing below is changed yet. Each item has its own issu
 |---|---|
 | [01-starting-states.feature](01-starting-states.feature) | J-01 to J-06: F0 to F3, what an admin sees and can do from each |
 | [02-accrual-histories.feature](02-accrual-histories.feature) | J-07 to J-09: F4, F5, F7: single and multiple periods, single debts, closing |
-| [03-occupancy-changes.feature](03-occupancy-changes.feature) | J-10: F6: residents added late, tenant and owner changes |
+| [STORY-13-03-occupancy-changes.feature](../../.specify/features/EPIC-13/STORY-13-03-occupancy-changes.feature) | J-10: F6: residents added late, tenant and owner changes |
 | [04-payments-and-allocation.feature](04-payments-and-allocation.feature) | J-11: paying, advance, idempotency, FIFO across periods |
 | [05-corner-cases.feature](05-corner-cases.feature) | J-12: the edge list of section 7 |
 | [06-lifecycle-chain.feature](06-lifecycle-chain.feature) | J-13: one site from zero to a closed period, with invariant checkpoints |

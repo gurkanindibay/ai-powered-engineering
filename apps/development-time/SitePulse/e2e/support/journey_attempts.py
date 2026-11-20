@@ -37,6 +37,7 @@ _SITE_SCOPED_DELETES = (
     "reconciliation_queue WHERE site_id = {site}",
     "unit_sender_ibans WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
     "unit_payer_names WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
+    "accrual_corrections WHERE site_id = {site}",
     "dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
     "operating_budgets WHERE site_id = {site}",
     "occupancy_transitions WHERE site_id = {site}",
