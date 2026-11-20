@@ -7,6 +7,8 @@ on:
       - 'scripts/team_orchestrator.py'
       - 'scripts/issue_claim.py'
       - 'tests/issue_claim/**'
+      - 'scripts/review_bot.py'
+      - 'tests/review_bot/**'
       - 'tests/engineering_harness/**'
       - 'config/engineering-harness/**'
       - '.github/workflows/engineering-harness-ci.yml'
@@ -16,6 +18,8 @@ on:
       - 'scripts/engineering_harness/**'
       - 'scripts/development_harness.py'
       - 'scripts/team_orchestrator.py'
+      - 'scripts/review_bot.py'
+      - 'tests/review_bot/**'
       - 'tests/engineering_harness/**'
       - 'config/engineering-harness/**'
       - '.github/workflows/engineering-harness-ci.yml'
@@ -40,5 +44,7 @@ jobs:
         run: python3 scripts/development_harness.py --json evaluate --cases config/engineering-harness/routing-cases.json
       - name: Issue claim label tests
         run: python3 -m unittest discover -s tests/issue_claim -v
+      - name: Review bot tests
+        run: python3 -m unittest discover -s tests/review_bot -v
       - name: Existing SitePulse harness regression tests
         run: python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests
