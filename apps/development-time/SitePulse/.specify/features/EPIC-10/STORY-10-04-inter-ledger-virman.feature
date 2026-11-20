@@ -8,7 +8,7 @@ Feature: Inter-ledger virman from the advance balance
     When the site manager opens the virman dialog in dues management
     Then the virman unit list shows an advance of "₺3.500,00"
 
-  @SC-10-04-02 @layer:gui @linked
+  @SC-10-04-02 @GUI-09-07 @layer:gui @edge @role_manager
   Scenario: Virman transfer clears a capital due from the advance balance
     Given unit 14 has an advance balance of 3500.00 and an accrued capital due of 2500.00
     When the site manager executes a virman transfer of 2500.00 to the capital project

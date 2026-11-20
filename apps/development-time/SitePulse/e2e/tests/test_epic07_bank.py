@@ -171,7 +171,6 @@ def test_wrong_statement_format_is_rejected_and_excel_accepted(login_as, page, t
     assert dues.upload_statement(_statement(tmp_path)).matched()[0] == 1
 
 
-@pytest.mark.covers("SC-07-06-03")
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-11")

@@ -153,6 +153,21 @@ def _tags(scenario) -> set[str]:
     return set(scenario.tags) | set(scenario.feature.tags)
 
 
+def _outline_info(item, scenario) -> dict:
+    callspec = getattr(item, "callspec", None)
+    if not callspec:
+        return {}
+    example_params = callspec.params.get("_pytest_bdd_example")
+    if example_params and isinstance(example_params, dict):
+        indices = getattr(callspec, "indices", {})
+        row = indices.get("_pytest_bdd_example", 0) + 1
+        return {
+            "example": {k: str(v) for k, v in example_params.items()},
+            "example_row": row,
+        }
+    return {}
+
+
 def _targets(item) -> list[dict]:
     """The scenarios this test item reports on, with the static part of their record."""
     scenario = getattr(getattr(item, "obj", None), "__scenario__", None)
@@ -162,8 +177,15 @@ def _targets(item) -> list[dict]:
         layer = next((t.split(":", 1)[1] for t in sorted(tags) if t.startswith("layer:")), "")
         feature_file = Path(scenario.feature.filename).resolve()
         rel = feature_file.relative_to(FEATURES).as_posix() if feature_file.is_relative_to(FEATURES) else feature_file.name
-        return [{"scenario": sid, "name": scenario.name, "binding": "gherkin", "layer": layer, "feature_file": rel}
-                for sid in ids]
+        outline = _outline_info(item, scenario)
+        targets = []
+        for sid in ids:
+            t = {"scenario": sid, "name": scenario.name, "binding": "gherkin", "layer": layer, "feature_file": rel}
+            if outline:
+                t.update(outline)
+                t["example_id"] = f"{sid}[{outline['example_row']}]"
+            targets.append(t)
+        return targets
     ids = sorted({str(m.args[0]) for m in item.iter_markers("covers") if m.args})
     linked = [{"scenario": sid, "name": item.name, "binding": "linked", "layer": "gui", "feature_file": ""}
               for sid in ids if SCENARIO_ID.match(sid)]

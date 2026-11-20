@@ -278,7 +278,6 @@ def test_debt_aging_total_matches_the_open_ledger(login_as, page, tenant_paid_ca
 
 @pytest.mark.edge
 @pytest.mark.role_manager
-@pytest.mark.covers("SC-10-04-02")
 @pytest.mark.gui_id("GUI-09-07")
 def test_virman_moves_advance_to_the_capital_due(login_as, page, api):
     api.webhook_transfer(A14_IBAN, Decimal("3500.00"), "E2E-FAST-VIRMAN", "AHMET YILMAZ AVANS")  # no dues: all advance
