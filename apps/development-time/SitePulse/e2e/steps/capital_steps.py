@@ -188,6 +188,92 @@ def virman_shows_advance(page, formatted: str) -> None:
     assert formatted in text_of(dropdown)
 
 
+@given(_parse('unit {unit} has an advance balance of {advance:Money} and an accrued capital due of {due:Money}'))
+def unit_advance_and_capital_due(stack, api, actors, unit: str, advance: Decimal, due: Decimal) -> None:
+    manager = api.login(**actors["manager"])
+    site_id = int(manager.user["site_id"])
+    unit_id = stack.sql(f"SELECT id FROM units WHERE unit_number = {int(unit)} AND site_id = {site_id} AND deleted_at IS NULL LIMIT 1;")
+    stack.sql(
+        f"INSERT INTO advance_balances (unit_id, debtor_type, balance) "
+        f"VALUES ({int(unit_id)}, 'OWNER', {advance}) "
+        f"ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance;"
+    )
+    stack.sql(
+        f"INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description) "
+        f"VALUES ({int(unit_id)}, 'OWNER', 'PAYMENT_SURPLUS', {advance}, 'E2E virman test');"
+    )
+    stack.restart_backend()
+    unit_count = int(stack.sql(f"SELECT count(*) FROM units WHERE site_id = {site_id} AND deleted_at IS NULL;"))
+    assert unit_count > 0, f"no active units in site {site_id}"
+    project = api.create_capital_project(manager, "Çatı İzolasyonu", due * unit_count, basis="EQUAL_PER_UNIT", installments=1)
+    p_id = str(project.get("id") or project.get("project_id"))
+    api.accrue_installment(manager, p_id, 1)
+    accrued = stack.sql(
+        f"SELECT principal_amount FROM dues_liabilities WHERE unit_id = {int(unit_id)} AND expense_type = 'CAPITAL_DUES' ORDER BY id DESC LIMIT 1;"
+    )
+    assert Decimal(accrued) == due, f"expected accrued capital due {due}, got {accrued}"
+
+
+@when(_parse('the site manager executes a virman transfer of {amount:Money} to the capital project'))
+def execute_virman_transfer(stack, api, actors, login_as, page, amount: Decimal) -> None:
+    manager = api.login(**actors["manager"])
+    site_id = int(manager.user["site_id"])
+    unit_id = stack.sql(f"SELECT id FROM units WHERE unit_number = 14 AND site_id = {site_id} AND deleted_at IS NULL LIMIT 1;")
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    DuesManagement(page).open()
+    by_id(page, "btn_dues_more_actions").click()
+    by_id(page, "menu_item_virman").click()
+    dropdown = by_id(page, "virman_unit_dropdown")
+    dropdown.wait_for(timeout=10_000)
+    dropdown.click()
+    by_id(page, f"virman_unit_item_{int(unit_id)}").click()
+    fill(page, "virman_amount_input", str(amount))
+    by_id(page, "btn_confirm_virman").click()
+    by_id(page, "btn_confirm_virman").wait_for(state="detached", timeout=15_000)
+
+
+@then(_parse('the advance balance of unit {unit} decreases to {expected:Money}'))
+def advance_balance_decreases(stack, api, actors, unit: str, expected: Decimal) -> None:
+    manager = api.login(**actors["manager"])
+    site_id = int(manager.user["site_id"])
+    unit_id = stack.sql(f"SELECT id FROM units WHERE unit_number = {int(unit)} AND site_id = {site_id} AND deleted_at IS NULL LIMIT 1;")
+    val = stack.wait_sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(unit_id)} AND debtor_type = 'OWNER';",
+        str(expected),
+        timeout_s=10.0,
+    )
+    assert val != "", f"timed out waiting for advance balance of unit {unit}; expected {expected}"
+    assert Decimal(val) == expected, f"expected advance {expected}, got {val}"
+
+
+@then("the capital dues liability is fully paid")
+def capital_dues_liability_paid(stack, api, actors) -> None:
+    manager = api.login(**actors["manager"])
+    site_id = int(manager.user["site_id"])
+    unit_id = stack.sql(f"SELECT id FROM units WHERE unit_number = 14 AND site_id = {site_id} AND deleted_at IS NULL LIMIT 1;")
+    val = stack.wait_sql(
+        f"SELECT status FROM dues_liabilities WHERE unit_id = {int(unit_id)} AND expense_type = 'CAPITAL_DUES' ORDER BY id DESC LIMIT 1;",
+        "PAID",
+        timeout_s=10.0,
+    )
+    assert val == "PAID", f"expected PAID, got {val}"
+
+
+@then("an inter-ledger audit record is stored in collection_transactions")
+def inter_ledger_audit_stored(stack, api, actors) -> None:
+    manager = api.login(**actors["manager"])
+    site_id = int(manager.user["site_id"])
+    unit_id = stack.sql(f"SELECT id FROM units WHERE unit_number = 14 AND site_id = {site_id} AND deleted_at IS NULL LIMIT 1;")
+    cnt = stack.wait_sql(
+        f"SELECT count(*) FROM payment_entries WHERE unit_id = {int(unit_id)} AND payment_channel = 'INTER_LEDGER';",
+        "1",
+        timeout_s=10.0,
+    )
+    assert cnt == "1", f"expected 1 inter-ledger payment entry, got {cnt}"
+
+
+
 # ---------------------------------------------------------------- resident
 
 @when("the home owner opens the resident dashboard", target_fixture="resident_home")

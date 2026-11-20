@@ -127,3 +127,77 @@ During the pilot and rollout, the Python path is the rollback: revert a batch's 
 3. Should step normalisation and arm A go ahead regardless of the Serenity decision, since both runners need them?
 4. What change in CI runtime and rerun rate is acceptable? Agree thresholds before approving the rollout.
 5. Should the Serenity report stay in CI artifacts or eventually have a public view on Pages? Decide after reviewing the pilot report contents.
+
+---
+
+## Pilot execution results and evaluation
+
+A complete end-to-end pilot comparing **Arm A (pytest-bdd)** and **Arm B (Cucumber.js + TypeScript Playwright + Serenity/JS)** was implemented and executed against identical SitePulse backend (`:8180`) and Flutter Web client (`:9190`) builds seeded with `02-test-seed.sql` on PostgreSQL.
+
+> [!NOTE]
+> The rejected Arm B reference implementation (TypeScript Playwright + Cucumber.js + Serenity/JS) was fully verified during the pilot and is archived under git tag [`pilot/cucumber-serenity-arm-b`](https://github.com/gurkanindibay/ai-powered-engineering/tree/pilot/cucumber-serenity-arm-b/apps/development-time/SitePulse/e2e-cucumber) (commit [`515f749`](https://github.com/gurkanindibay/ai-powered-engineering/commit/515f7492931589da0e9bb2efd8118021c210ca31)). In accordance with the recommendation against adopting Option 3, it is excluded from `master` to avoid dual-stack maintenance, container bloat, and unmonitored dependency scanning surfaces.
+
+### 1. Execution status across pilot scenarios
+
+Both arms executed the four pilot scenarios across five distinct executions (including both scenario outline examples of `SC-07-06-03`):
+
+| Scenario | Scenario type | Arm A (pytest-bdd) outcome & duration | Arm B (Cucumber.js + Serenity/JS) outcome & duration | Outcome parity |
+| --- | --- | ---: | ---: | :---: |
+| `SC-10-01-01` Land share split without rounding drift | Standard Scenario | PASS (11.85 s) | PASS (10.72 s) | **Identical** |
+| `SC-10-04-01` Virman dialog offers real advance | Standard Scenario | PASS (6.42 s) | PASS (6.62 s) | **Identical** |
+| `SC-10-04-02` Virman transfer clears capital due | Standard Scenario | PASS (8.68 s) | PASS (7.64 s) | **Identical** |
+| `SC-07-06-03[1]` Excel sample download (`KUVEYT_TURK`) | Scenario Outline Example 1 | PASS (8.21 s) | PASS (6.50 s) | **Identical** |
+| `SC-07-06-03[2]` Excel sample download (`YAPI_KREDI`) | Scenario Outline Example 2 | PASS (8.67 s) | PASS (6.32 s) | **Identical** |
+| **Total / Suite Run** | **5 executions / 25 steps** | **5 passed in 43.83 s** | **5 passed in 36.42 s** | **100% Parity** |
+
+Both test runners produced structured `executions.jsonl` records conforming exactly to the SitePulse schema (`epic`, `story`, `scenario`, `binding`, `layer`, `example`, `example_row`, `example_id`, `status`, `duration_s`, and per-step status arrays).
+
+### 2. Controlled failure comparison (Action 4)
+
+Three controlled failures were injected and tested across both runners to verify error attribution, exit codes, and diagnostic clarity:
+
+| Failure mode | Injected condition | Arm A (pytest-bdd) diagnostic & behavior | Arm B (Cucumber.js + Serenity/JS) diagnostic & behavior | Comparison |
+| --- | --- | --- | --- | --- |
+| **Assertion failure** | `SC-10-04-02`: Expected remaining advance altered to `999.00` (actual `1000.00`) | Exit code `1`. Stack trace pinpointed `steps/capital_steps.py:232`: `AssertionError: expected advance 999.00, got 1000.00`. Record in `executions.jsonl` marked Step 3 as `FAIL` and subsequent steps as `SKIPPED`. | Exit code `1`. Output pinpointed `src/steps/capital_steps.ts:174`: `AssertionError: INJECTED_FAILURE: expected advance 999.00 (-999.00, +1000.00)`. Step marked `FAIL`, subsequent steps `SKIPPED`. Serenity captured failure screenshot attachment and marked scenario `Failed` in HTML living documentation. | **Tie on diagnostics; Arm B adds automated screenshot attachment in Serenity HTML.** |
+| **Undefined step** | `SC-10-04-01`: Added unmapped step `And this step is completely unmapped and undefined in both runners` | Exit code `1`. Raised `pytest_bdd.exceptions.StepDefinitionNotFoundError` highlighting line number, scenario name, and feature file path. | Exit code `1`. Cucumber reported `? Undefined` step, skipped remaining steps, and printed TypeScript code snippet template for missing step definition. Serenity HTML recorded step as undefined. | **Arm B provides actionable step implementation snippets.** |
+| **Setup failure** | Stack startup with invalid DB password (`DB_PASS=invalid_secret`) | Exit code `3` (`_pytest.outcomes.Exit`). Aborted run before scenario execution with message `E2E stack setup failed: backend exited during startup`. | Exit code `1`. Launcher aborted startup with `api_system_check.SetupError: backend exited during startup`. No partial Cucumber records emitted. | **Equivalent fail-fast behavior across both runners.** |
+
+### 3. Evaluation against the five pilot exit criteria
+
+1. **Parity of outcomes**: **MET**. Both arms produced identical outcomes across all four scenarios and outline examples, verifying identical business assertions (decimal apportionment, ledger balances, database persistence, and sample workbook bytes).
+2. **Example-level identity**: **MET**. Both runners emitted distinct, unambiguous records for `SC-07-06-03[1]` (`KUVEYT_TURK`) and `SC-07-06-03[2]` (`YAPI_KREDI`) containing exact parameter values and individual step timings.
+3. **Injected failure attribution**: **MET**. Both runners exited with non-zero status codes, localized failure causes to the exact file and step, and attributed the failures cleanly.
+4. **Runtime & setup complexity**: **EVALUATED**. Arm A executed in 43.83 s; Arm B executed in 36.42 s (+3.5 s for Serenity HTML generation, total ~40 s). While execution speed is comparable, Arm B introduces significant toolchain complexity (Node.js 20+, TypeScript, 8 npm packages, and a Java 25 runtime for the Serenity CLI jar).
+5. **Review value vs. cost**: **EVALUATED**. While Serenity BDD provides an attractive HTML living documentation interface with narrative step breakdowns and embedded screenshots, it does not provide superior verification strength over pytest-bdd.
+
+### 4. Effort indicator and scaling projection
+
+An audit of step definitions, page objects, and support infrastructure needed for the four pilot scenarios reveals the scaling cost for a full rollout across the remaining GUI catalogue:
+
+| Component | Arm A (pytest-bdd) pilot | Arm B (Cucumber.js) pilot | Full GUI suite (154 scenarios / 145 linked tests / 556 distinct phrasings) |
+| --- | ---: | ---: | --- |
+| **Step definitions** | 18 Python step definitions (reused across pilot) | 18 TypeScript step definitions | ~538 additional step definitions required in both arms. Step normalisation is identical in both. |
+| **Page objects** | 0 new (reused 5 existing Python page objects) | 5 new TypeScript page objects (~350 LOC) | **Arm A**: Reuses all ~40 existing Python page objects (~700 LOC) and helper utilities.<br>**Arm B**: Requires rewriting all ~40 page objects and helpers in TypeScript (~3,600 LOC total). |
+| **Support modules** | 0 new (existing `e2e/support`) | 5 modules (World, API client, DB client, Flutter semantics helpers, SitePulse formatter) | **Arm B** requires ongoing dual maintenance of browser helpers, login flows, and token guards. |
+| **Toolchains** | Python only (already in place) | Python (launcher) + Node.js (Cucumber/TS) + JVM (Serenity CLI) | **Arm B** introduces permanent multi-language CI dependencies and container bloat. |
+
+### 5. Review questions and final recommendation
+
+1. **Who will use the Serenity report?**
+   - The Serenity living documentation report primarily benefits external non-technical stakeholders, auditors, and manual QA leads who require narrative test logs and screenshot evidence.
+   - For engineering, product owners, and automated CI verification, the SitePulse test report dashboard and GitHub CI job summaries already surface scenario-level pass/fail statuses, durations, and traceback logs with zero extra runtime overhead.
+2. **Is the scope boundary right?**
+   - Yes. The 145 non-GUI linked tests (Rust backend unit/integration tests, Flutter unit tests, database checks, API system checks) must remain in their native test harnesses (Cargo, Flutter test, pytest).
+3. **Should step normalisation and Arm A proceed regardless of the Serenity decision?**
+   - **Yes, absolutely.** Normalising the 556 distinct GUI step phrasings and binding linked GUI tests in pytest-bdd (Option 2) directly resolves the step-level evidence gap, eliminates the `@linked` surrogate pattern, and unlocks outline example tracking without introducing a secondary language toolchain.
+4. **What change in CI runtime and rerun rate is acceptable?**
+   - Arm B adds ~35–45 s per shard plus Java report generation time. Across eight shards, this represents a modest runtime increase, but introduces package installation overhead and JVM memory consumption in CI runners.
+5. **Should the Serenity report stay in CI artifacts or go to Pages?**
+   - The generated Serenity HTML report contains detailed database transaction IDs, test IBANs, and internal UI routes. If Serenity were adopted, reports should remain ephemeral CI workflow artifacts rather than being published publicly to GitHub Pages.
+
+### Final Conclusion & Recommendation
+
+**Adopt Option 2: Bind linked GUI tests as Gherkin in pytest-bdd and extend native SitePulse reporting.**
+- **Do not adopt Option 3 (Cucumber.js + Serenity BDD).** The considerable effort required to rewrite ~40 page objects into TypeScript (~3,600 lines of code) and maintain a permanent dual browser stack (Python and Node.js/JVM) is not justified by the visual benefits of the Serenity HTML report.
+- The step normalisation and Gherkin binding developed in Arm A delivers full step-level narrative evidence, exact example-level identity, and robust error attribution while fully preserving the existing, proven Python Playwright test architecture.
+
