@@ -44,10 +44,14 @@ pub struct SiteQuery {
 }
 
 fn site_of(q: &SiteQuery, claims: &Claims) -> String {
-    q.site_id
-        .clone()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| claims.site_id.clone())
+    if claims.is_saas_admin() {
+        q.site_id
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| claims.site_id.clone())
+    } else {
+        claims.site_id.clone()
+    }
 }
 
 fn actor(claims: &Claims) -> String {
@@ -308,11 +312,17 @@ pub async fn get_resident_statement(
         .iter()
         .find(|u| crate::auth::same_id(&u.id, &unit_id))
         .ok_or((StatusCode::NOT_FOUND, "Unit not found".to_string()))?;
-    let viewer = resident_statement::caller_debtor_role(&claims, unit);
-    Ok(Json(resident_statement::build_statement(
+    let viewer_person_id = inner
+        .users
+        .iter()
+        .find(|user| crate::auth::same_id(&user.id, &claims.sub))
+        .and_then(|user| user.person_id);
+    let viewer = resident_statement::caller_debtor_role(&claims, unit, viewer_person_id);
+    Ok(Json(resident_statement::build_statement_for_person(
         &inner,
         unit,
         viewer,
+        viewer_person_id,
         crate::e2e_clock::now_utc().date_naive(),
     )))
 }
@@ -334,7 +344,12 @@ pub async fn create_payment_intent(
             .iter()
             .find(|u| crate::auth::same_id(&u.id, &unit_id))
             .ok_or((StatusCode::NOT_FOUND, "Unit not found".to_string()))?;
-        resident_statement::caller_debtor_role(&claims, unit)
+        let person_id = inner
+            .users
+            .iter()
+            .find(|user| crate::auth::same_id(&user.id, &claims.sub))
+            .and_then(|user| user.person_id);
+        resident_statement::caller_debtor_role(&claims, unit, person_id)
     };
     CardPaymentService::new(state)
         .create_intent(&unit_id, req, role, &actor(&claims))

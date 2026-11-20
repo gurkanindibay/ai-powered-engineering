@@ -54,6 +54,10 @@ class E2EClock:
     def tick(self) -> dict:
         return self.api.call("POST", "/__e2e/clock", body={"action": "tick"})
 
+    def clear(self) -> dict:
+        """Return the backend process to the system clock."""
+        return self.api.call("POST", "/__e2e/clock", body={"action": "clear"})
+
 
 class Api:
     def __init__(self, base: str | None = None):
@@ -104,11 +108,11 @@ class Api:
 
     def e2e_clock(self, action: str, date: str | None = None) -> dict:
         """Control the E2E-only backend clock; unavailable in normal backend builds."""
-        if action not in {"set_date", "advance_to", "tick"}:
+        if action not in {"set_date", "advance_to", "tick", "clear"}:
             raise ValueError(f"Unsupported E2E clock action: {action}")
-        if action == "tick" and date is not None:
-            raise ValueError("The E2E clock tick action does not accept a date")
-        if action != "tick" and date is None:
+        if action in {"tick", "clear"} and date is not None:
+            raise ValueError(f"The E2E clock {action} action does not accept a date")
+        if action not in {"tick", "clear"} and date is None:
             raise ValueError(f"The E2E clock action {action!r} requires a date")
         body: dict[str, str] = {"action": action}
         if date is not None:

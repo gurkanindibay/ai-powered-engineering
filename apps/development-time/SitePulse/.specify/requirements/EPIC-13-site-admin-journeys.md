@@ -44,6 +44,36 @@ As a site manager, I need payments to allocate FIFO across periods and bank webh
 - Invalid payment amounts are rejected without side effects.
 - Bank webhooks match virtual IBANs and allocate transfers to open liabilities.
 
+### STORY-13-05: Corner cases around accrual, occupancy, access and time
+
+As a site administrator, I need edge cases around billing, occupancy, access and local time to
+preserve the ledger and reject invalid state changes without side effects.
+
+#### Acceptance criteria
+
+- Corner-case scenarios use the documented named states and assert ledger invariants after each stage.
+- Scenarios without their required historical fixtures or product dependencies remain `@pending` with a specific reason.
+
+### STORY-13-09: Financial transitions across periods and ledgers
+
+As a site manager, I need targeted, partial and backdated payments and period corrections to keep
+live balances, closed snapshots and operational/capital ledgers consistent.
+
+#### Acceptance criteria
+
+- Financial scenarios assert exact Decimal balances and ledger invariants after every state change.
+- Scenarios that require unavailable historical fixtures remain `@pending` with a specific reason.
+
+### STORY-13-11: Billing state machines
+
+As a site manager, I need each liability, period, reconciliation and occupancy status to allow only
+valid commands and preserve all rows when a command is refused.
+
+#### Acceptance criteria
+
+- State-machine scenarios cover each status transition and refusal at the backend or GUI layer named by the feature.
+- Scenarios that need missing fixtures or transition evidence remain `@pending` with a specific reason.
+
 ### STORY-13-07: Journey setup, teardown and isolation
 
 As a test author, I need named site fixtures, reusable ledger invariant checks, and retryable site-scoped teardown so journeys start from known balances and leave the E2E database safe for other attempts.
@@ -73,3 +103,19 @@ As a manager, I need a back-dated owner in a closed month to receive supplementa
 
 - Both supplementary charges have the creation date as effective due date and a late fee of 0.00 at creation.
 - Ten days later the late fees are 16.94 and 25.00.
+
+### STORY-13-10: Tenant data isolation across sites and resident accounts
+
+As a tenant and property manager, I need strict data isolation across sites and accounts so that managers cannot view or mutate another site's data and residents cannot view another resident's private transactions.
+
+#### Acceptance criteria
+
+- Manager lists, searches and aggregates are strictly scoped to the authenticated site.
+- Direct reads and downloads require access to the requested site (403 or 404).
+- A site parameter cannot widen manager collection or export permissions.
+- A manager cannot mutate another site's records.
+- A resident cannot read another unit's financial records.
+- A tenant statement excludes the owner's private transactions for the same unit.
+- Replacing a tenant keeps each occupant's history and receipts private.
+- Late browser responses cannot repopulate the next tenant's session.
+

@@ -188,8 +188,14 @@ impl Drop for E2eTickGuard<'_> {
 #[cfg(feature = "e2e")]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum ClockRequest {
-    SetDate { date: NaiveDate },
-    AdvanceTo { date: NaiveDate },
+    SetDate {
+        date: NaiveDate,
+    },
+    AdvanceTo {
+        date: NaiveDate,
+    },
+    /// Returns the process to the system clock until the next date is set.
+    Clear,
     Tick,
 }
 
@@ -203,10 +209,20 @@ pub enum ClockResponse {
     Advanced {
         date: NaiveDate,
     },
+    Cleared,
     Ticked {
         date: NaiveDate,
         report: crate::scheduler::E2eTickReport,
     },
+}
+
+/// Drops the published fixture instant so `now_utc()` follows the system clock again.
+#[cfg(feature = "e2e")]
+pub fn clear_fixture_now() -> Result<(), E2eClockError> {
+    *FIXTURE_NOW
+        .write()
+        .map_err(|_| E2eClockError::LockUnavailable)? = None;
+    Ok(())
 }
 
 /// Handles the private E2E control endpoint.
@@ -218,7 +234,10 @@ pub async fn control(
     let Some(clock) = state.e2e_clock.as_ref() else {
         return Err(E2eClockError::Disabled);
     };
-    let publishes_fixture_time = !matches!(request, ClockRequest::Tick);
+    let publishes_fixture_time = matches!(
+        request,
+        ClockRequest::SetDate { .. } | ClockRequest::AdvanceTo { .. }
+    );
     let response = match request {
         ClockRequest::SetDate { date } => {
             clock.set_date(date)?;
@@ -227,6 +246,10 @@ pub async fn control(
         ClockRequest::AdvanceTo { date } => {
             clock.advance_to(date)?;
             ClockResponse::Advanced { date }
+        }
+        ClockRequest::Clear => {
+            clear_fixture_now()?;
+            ClockResponse::Cleared
         }
         ClockRequest::Tick => {
             let now = clock.now()?;

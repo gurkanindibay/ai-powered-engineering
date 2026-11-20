@@ -36,6 +36,14 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 
 ## 3. Scenario catalogue
 
+### EPIC-13 Site Admin journeys (backend and GUI scenarios are tracked in `.specify/features/EPIC-13`)
+| ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |
+|---|---|---|---|---|---|---|---|
+| GUI-13-01 | 13-05 | Manager | P1 | F1 | Import a workbook with valid people and one invalid national id → good rows are reported and the invalid row is rejected (`SC-13-05-10`, pending) | Journey GUI flow not implemented | ⏳ |
+| GUI-13-02 | 13-05 | Manager | P1 | F5 | Check out a tenant with debt → debt split and owner collection details are visible (`SC-13-05-17`, blocked by #207) | Journey GUI flow not implemented | ⏳ |
+| GUI-13-03 | 13-11 | Manager | P1 | F2 | Period rows show their statuses and only their allowed actions (`SC-13-11-05`, pending) | Journey GUI flow not implemented | ⏳ |
+| — | 13-09 | — | — | — | **Excluded:** financial transitions in this story are specified at the backend layer; no GUI scenario is in scope. | | |
+
 ### EPIC-06 Identity, Authentication & Permissions (run first; every other test depends on login)
 | ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |
 |---|---|---|---|---|---|---|---|
@@ -204,6 +212,7 @@ EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered b
 | — | 13-02, 13-04, 13-07 | — | — | — | **Excluded:** Backend-only journey contract for accruals, payments and teardown, covered by test_journey_accruals_payments.py and test_journey_fixtures.py. | | |
 | — | 13-07 | — | — | — | **Excluded:** Backend-only journey fixture, invariant and teardown contract, covered by journey tests and `run_tests.py` gates. | | |
 | — | 13-01, 13-12 | — | — | — | **Excluded:** Backend-only late-fee rule for supplementary charges, covered by `backend/tests/supplementary_charge_tests.rs`. | | |
+| — | 13-10 | — | — | — | **Partial:** Backend isolation automated; GUI isolation scenario (SC-13-10-08) is pending separate GUI issue. | | |
 
 ## 4. API data builders (`e2e/support/api.py`), confirmed against `backend/src/app.rs`
 Each builder calls real backend endpoints (no direct SQL writes), returns the ids it created, and runs after a reset.

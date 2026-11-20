@@ -22,9 +22,19 @@ const LIMITATION_DAYS: i64 = 5 * 365;
 pub fn caller_debtor_role(
     claims: &crate::auth::Claims,
     unit: &IndependentUnit,
+    viewer_person_id: Option<i64>,
 ) -> Option<&'static str> {
     if claims.is_site_staff() {
         return None;
+    }
+    // Units reference parties as `person-<id>`; a durable person id beats the login id.
+    if let Some(person_ref) = viewer_person_id.map(|id| format!("person-{id}")) {
+        if unit.tenant_user_id.as_deref() == Some(person_ref.as_str()) {
+            return Some(DEBTOR_TENANT);
+        }
+        if unit.owner_user_id.as_deref() == Some(person_ref.as_str()) {
+            return Some(DEBTOR_OWNER);
+        }
     }
     if unit
         .tenant_user_id
@@ -53,6 +63,28 @@ pub fn build_statement(
     inner: &AppStateInner,
     unit: &IndependentUnit,
     viewer: Option<&str>,
+    today: NaiveDate,
+) -> ResidentStatement {
+    let viewer_person_id = viewer.and_then(|debtor| {
+        let user_id = if debtor == DEBTOR_TENANT {
+            unit.tenant_user_id.as_ref()
+        } else {
+            unit.owner_user_id.as_ref()
+        }?;
+        inner
+            .users
+            .iter()
+            .find(|user| &user.id == user_id)
+            .and_then(|user| user.person_id)
+    });
+    build_statement_for_person(inner, unit, viewer, viewer_person_id, today)
+}
+
+pub fn build_statement_for_person(
+    inner: &AppStateInner,
+    unit: &IndependentUnit,
+    viewer: Option<&str>,
+    viewer_person_id: Option<i64>,
     today: NaiveDate,
 ) -> ResidentStatement {
     let calc = crate::services::DuesCalculationService::new();
@@ -208,9 +240,9 @@ pub fn build_statement(
         .filter(|r| crate::auth::same_id(&r.unit_id, &unit.id))
         .filter(|r| match viewer {
             None => true,
-            Some(v) => {
-                r.payer_role.as_str() == v || r.on_behalf_of_role.map(|x| x.as_str()) == Some(v)
-            }
+            Some(_) => viewer_person_id.is_some_and(|person_id| {
+                r.payer_person_id == Some(person_id) || r.on_behalf_of_person_id == Some(person_id)
+            }),
         })
         .map(|r| StatementReceipt {
             receipt_number: r.receipt_number.clone(),
