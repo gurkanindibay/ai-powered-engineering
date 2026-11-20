@@ -442,7 +442,7 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
             Decimal(str(line["principal_paid"])) for line in owner_rcpt["allocation_breakdown"]
         ) == Decimal("940.00")
 
-        assert Decimal(str(tenant_rcpt["allocated_total"])) == Decimal("500.00")
+        assert Decimal(str(tenant_rcpt["total_amount"])) == Decimal("500.00")
         assert Decimal(str(tenant_rcpt["allocated_penalty"])) == Decimal("90.00")
         assert Decimal(str(tenant_rcpt["allocated_principal"])) == Decimal("410.00")
         paid_on_operational = sum(

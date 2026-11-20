@@ -312,6 +312,18 @@ python3 apps/development-time/SitePulse/scripts/publish_test_report.py --report 
 ./scripts/product_status.py html --site /tmp/test-report-site --out /tmp/product-status.html
 ```
 
+## 5b-9. Mutation Scenarios (`mutation_scenarios.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/mutation_scenarios.py](file:///apps/development-time/SitePulse/scripts/mutation_scenarios.py) (symlinked to `scripts/mutation_scenarios.py`)
+- **Purpose:** Tests the tests. Applies hand-designed mutants from [harness/mutation/scenarios.toml](file:///apps/development-time/SitePulse/harness/mutation/scenarios.toml) (one realistic bug each: boundaries, rounding, sign, tenancy and authorization checks) one at a time, runs the suites named for each, restores the file, and reports killed / survived / unviable / skipped with a mutation score. `validate` fails when production code drifts from a scenario. The check also runs in `harness/tests/test_mutation_scenarios.py`, so it gates every PR: if a refactor touches a targeted line, rewrite that scenario's `original`/`mutant` for the new code instead of deleting it. CI does not run the mutation run itself. Each checkout has its own crash-recovery journal, and a suite that times out has its whole process group killed. Suites that need PostgreSQL run only with `--with postgres`. Analysis and results: [docs/testing/mutation-testing-analysis.md](file:///apps/development-time/SitePulse/docs/testing/mutation-testing-analysis.md).
+
+```bash
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py validate
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py list --layer rust
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py run --area late-fee --markdown /tmp/mut.md --output /tmp/mut.json
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py restore   # after an interrupted run
+```
+
 ## 5c. Test Execution & Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
@@ -358,6 +370,20 @@ python3 scripts/issue_claim.py claim 123 --harness claude --session <id> --pr 13
 python3 scripts/issue_claim.py status 123 --json
 python3 scripts/issue_claim.py release 123 --harness claude --session <id> --pr 130   # clears issue and PR
 python3 -m unittest discover -s tests/issue_claim
+```
+
+## 5c-4. PR Review Bot (`review_bot.py`)
+
+- **Executable Script:** [scripts/review_bot.py](file:///scripts/review_bot.py)
+- **Purpose:** Posts PR reviews and comments as the `local-reviewer-agent` GitHub App instead of a personal account (AGENTS.md rule 14). It signs the app JWT with `openssl`, mints and caches an installation token, and submits real reviews. `--commit` refuses to post if the PR head moved after the review was written. Configuration comes from the untracked `.env` (`REVIEW_BOT_APP_ID`, `REVIEW_BOT_INSTALLATION_ID`, `REVIEW_BOT_KEY`, `REVIEW_BOT_REPO`). The worktree's `.env` is read first, then the main checkout's.
+
+```bash
+python3 scripts/review_bot.py whoami --json
+python3 scripts/review_bot.py review 123 --event APPROVE --body-file review.md --commit <head-sha>
+python3 scripts/review_bot.py review 123 --event REQUEST_CHANGES --body-file review.md --commit <head-sha>
+python3 scripts/review_bot.py comment 123 --body-file note.md
+python3 scripts/review_bot.py gh -- api repos/{owner}/{repo}/pulls/123/reviews   # any gh call as the bot
+python3 -m unittest discover -s tests/review_bot
 ```
 
 ## 5d. Harness CLI (`harness/harness_cli.py`)

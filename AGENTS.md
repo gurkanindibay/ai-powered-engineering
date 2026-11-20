@@ -94,6 +94,12 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - **Committing a recorded run per task is a switch, currently off**: `require_recorded_run` in `apps/development-time/SitePulse/.specify/executions/settings.json` (`$SITEPULSE_REQUIRE_RECORDED_RUN=1|0` overrides it). While off, gate `test-run-recorded` (`feature_traceability.py check --require-run`) passes with a "switched off" note. When switched on, before opening the PR run and record `python3 apps/development-time/SitePulse/scripts/gui_e2e.py run --affected --record --task "<task>"`, commit the new `.specify/executions/runs|reports` files, paste `feature_traceability.py task-report` into the PR, and the gate fails a behaviour branch without a passing recorded run. Never edit or delete recorded runs.
    - In the durable engineering harness, workers never write run records: the tester role may write `.specify/features` and `e2e/steps|tests`, the `sitepulse-full` gate records the run, and the operator exports it with `development_harness.py captures <run> --output <repository>`.
 
+
+14. **PR Reviews Through the Review Bot (All Agents)**:
+   - When you review a pull request, post the review (approve, request changes, comment) as the review bot GitHub App `local-reviewer-agent`, using `python3 scripts/review_bot.py review <pr> --event APPROVE|REQUEST_CHANGES|COMMENT --body-file <file> --commit <reviewed-head-sha>`. Never post reviews as the repository owner's personal account (`gurkanindibay`).
+   - The app's ids and key path come from the untracked `.env` (`REVIEW_BOT_*`). Never commit them or the key. If `python3 scripts/review_bot.py whoami` fails, stop and tell the user rather than falling back to the personal account.
+   - The bot approves or requests changes; it does not merge. Authors merge their own PRs. Follow [.agents/rules/pr-review-bot.md](file:///.agents/rules/pr-review-bot.md).
+
 ## Durable engineering harness
 
 For persistent multi-role development runs, use `python3 scripts/development_harness.py --help` and the [team-orchestration skill](.agents/skills/team-orchestration/SKILL.md). Setup, execution boundaries and recovery are in [apps/development-time/SitePulse/docs/engineering-process/engineering-harness.md](apps/development-time/SitePulse/docs/engineering-process/engineering-harness.md). Preserve user changes; create runs from an explicit committed revision. Model targets require live capabilities and configured eligibility; a plan alone does not execute agents.

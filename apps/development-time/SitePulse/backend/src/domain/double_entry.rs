@@ -319,4 +319,24 @@ mod tests {
         assert_eq!(revenue.map(|r| r.balance), Some(d("1000")));
         assert!(is_balanced(&lines));
     }
+
+    #[test]
+    fn sub_kurus_precision_is_rejected_on_either_side() {
+        let debit_side = vec![
+            Posting::debit(BANK, d("10.005")),
+            Posting::credit(CASH, d("10.005")),
+        ];
+        assert_eq!(
+            validate_entry(&debit_side),
+            Err(JournalError::LineAmount(0))
+        );
+        let credit_side = vec![
+            Posting::debit(BANK, d("10.00")),
+            Posting::credit(CASH, d("10.005")),
+        ];
+        assert_eq!(
+            validate_entry(&credit_side),
+            Err(JournalError::LineAmount(1))
+        );
+    }
 }

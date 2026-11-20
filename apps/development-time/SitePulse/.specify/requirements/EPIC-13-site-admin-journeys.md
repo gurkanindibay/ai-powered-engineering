@@ -107,6 +107,19 @@ As a manager, I need the supplementary charge created for a back-dated start res
 - The supplementary charge keeps the referred month's period due date and stores the creation date as its effective due date.
 - The late fee is 0.00 at creation and counts from the effective due date afterwards (16.94 ten days later for the 1016.13 charge).
 
+### STORY-13-14: Liability follows titles, vacancies and move-ins
+
+As a site manager, I need historical debt to stay with whoever was responsible and new charges to go to the current owner or tenant when units are sold, vacated or occupied, so that collections and site cash stay reconcilable across periods.
+
+#### Acceptance criteria
+
+- Title transfers, move-outs and move-ins take effect on their dates, with current rosters limited to the current occupant's household and the former occupant's household archived under the closed occupancy.
+- Each accrual bills the owner of record (including for vacant units) or the tenant in residence, and earlier charges keep their original debtor and amount.
+- Former owners' and tenants' open charges stay visible and keep accruing their late fees next to their successors' charges.
+- A receipt from a new owner or tenant settles only that person's own charges and leaves other debtors' principal, fees and payment history unchanged; this includes successive debtors with the same role (defect #255).
+- A designated receipt has exactly one allocation to the designated period and leaves other open periods unpaid.
+- Title changes, vacancies and accruals move no cash, and a receipt of one site never changes another site's cash.
+
 ### STORY-13-12: Multi-depth chains across the decided responsibility rules
 
 As a site administrator, I need multi-stage operational journeys (combining unit sales, tenant departures, capital projects, back-dated assignments, catch-up schedules, payment reversals, and unmatched multi-debtor transfers) to maintain ledger invariants and exact Decimal balances at every checkpoint.
@@ -118,6 +131,18 @@ As a site administrator, I need multi-stage operational journeys (combining unit
 - An owner back-dated into a closed month receives supplementary charges in the current open period with effective due dates set to the creation date, leaving the closed month snapshot untouched, with late fees accruing strictly from creation.
 - Catch-up accrual across multiple months honors the grace period for timely payments, computes daily KMK late fees once grace expires, cleanly restores debt upon payment reversal with contra entries, and settles in full upon final payment.
 - An unmatched bank transfer to a unit with multiple open debtors is held in the reconciliation queue without reducing balances until assigned to a specific debtor, and duplicate deliveries are processed idempotently.
+
+### STORY-13-25: Reconcile homeowner debt and operating cash by site
+
+As a site manager, I need each outstanding amount traced to a site, unit, primary debtor and period, and each site's posted operating cash reconciled to its own receipts after four periods, so that no amount is lost, double counted or posted to another site.
+
+#### Acceptance criteria
+
+- Posted operating cash equals cumulative gross receipts, including paid fees, at every checkpoint, and accruals, occupancy changes and title transfers add no cash.
+- On April 10, 2027 (Europe/Istanbul) exactly eleven rows are open, matched by site, unit, primary debtor and period with principal and fee; every other accrued charge is settled.
+- Current and former owner totals are asserted separately from a jointly liable owner's exposure.
+- Site A shows cash 90,658.50 and open primary debt 5,804.09; Site B shows cash 189,538.75 and open primary debt 2,661.67, reconciled independently from fixture inputs with a jointly liable receivable counted once.
+- Coverage today is against the independent model only; the live comparison against a running site is pending (SC-13-25-06 and SC-13-25-07, blocked on the #247/#248 fixtures).
 
 ### STORY-13-10: Tenant data isolation across sites and resident accounts
 
