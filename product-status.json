@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-20T05:36:52Z",
- "run_id": "20261120T053651Z-b0d31a9",
- "commit": "b0d31a924a28ac010733d879007707035253cb9e",
+ "generated_at": "2026-11-20T16:05:48Z",
+ "run_id": "20261120T160548Z-7b6d856",
+ "commit": "7b6d8566e1410b42fc9aebcdba1d0cb5288e4dc4",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 163,
-  "seconds": 2184.5,
+  "seconds": 2669.8,
   "files": 8,
   "unparseable": []
  },
@@ -20,11 +20,11 @@
   "stories_with_scenarios": 110,
   "stories_passing": 32,
   "scenarios": 430,
-  "automated": 336,
+  "automated": 339,
   "passing": 141,
   "failing": 0,
-  "no_result": 195,
-  "planned": 94,
+  "no_result": 198,
+  "planned": 91,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 0
@@ -205,11 +205,11 @@
    "stories_with_scenarios": 10,
    "stories_passing": 0,
    "scenarios": 117,
-   "automated": 34,
+   "automated": 37,
    "passing": 28,
    "failing": 0,
-   "no_result": 6,
-   "planned": 83,
+   "no_result": 9,
+   "planned": 80,
    "health": "in_progress"
   }
  ],
@@ -2285,7 +2285,7 @@
    "story": "STORY-13-03"
   },
   "SC-13-03-05": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Capital installments follow the owner at accrual unless a seller-pays override is approved",
    "epic": "EPIC-13",
    "story": "STORY-13-03"
@@ -2351,7 +2351,7 @@
    "story": "STORY-13-03"
   },
   "SC-13-03-16": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A mid-month sale of an owner-occupied unit splits that month between seller and buyer",
    "epic": "EPIC-13",
    "story": "STORY-13-03"
@@ -2369,7 +2369,7 @@
    "story": "STORY-13-03"
   },
   "SC-13-03-19": {
-   "state": "planned",
+   "state": "no_result",
    "name": "The sale clearance statement lists everything that does or does not move with the unit",
    "epic": "EPIC-13",
    "story": "STORY-13-03"
@@ -2962,7 +2962,7 @@
    "stories": 110,
    "stories_with_scenarios": 110,
    "scenarios": 430,
-   "automated": 336
+   "automated": 339
   }
  ],
  "recent_changes": [
@@ -2972,7 +2972,7 @@
    "title": "Site Admin Journeys",
    "new_stories": 7,
    "new_scenarios": 91,
-   "newly_automated": 25,
+   "newly_automated": 28,
    "items": 7,
    "samples": [
     "STORY-13-02: Accrual histories F4, F5 and F7",
@@ -3656,5 +3656,5 @@
    ]
   }
  ],
- "href": "reports/44681412125-1/"
+ "href": "reports/44768163363-1/"
 }
