@@ -28,7 +28,8 @@ commit you reviewed. Tokens are cached in ~/.cache/review-bot/ (mode 600)
 until five minutes before they expire. JWTs are signed with `openssl`, so no
 third-party Python package is needed.
 
-Exit codes: 0 ok, 1 refused (head moved), 2 usage/config/API error.
+Exit codes: 0 ok, 1 refused (head moved), 2 usage/config/API error
+(including `whoami` when the installation cannot access the repo).
 """
 
 from __future__ import annotations
@@ -217,9 +218,10 @@ class Bot:
     def _cache_file(self) -> Path | None:
         return None if self.cache_dir is None else self.cache_dir / f"{self.cfg.installation_id}.json"
 
-    def token(self) -> str:
+    def token(self, fresh: bool = False) -> str:
+        """Installation token; `fresh` skips the cache (after a 401)."""
         cache = self._cache_file()
-        if cache and cache.is_file():
+        if cache and cache.is_file() and not fresh:
             try:
                 cached = json.loads(cache.read_text())
                 if cached["expires_epoch"] - TOKEN_MARGIN > self.now():
@@ -239,25 +241,33 @@ class Bot:
                 json.dump({"token": data["token"], "expires_epoch": expires}, fh)
         return data["token"]
 
-    def api(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
+    def request(self, method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
+        """One call with the installation token; on 401 (a revoked cached
+        token) mint a fresh one and retry once."""
         payload = json.dumps(body).encode() if body is not None else None
-        status, data = self.http(method, f"{API}/{path.lstrip('/')}", _headers(f"token {self.token()}"), payload)
-        return _check(status, data, f"{method} {path}")
+        url = f"{API}/{path.lstrip('/')}"
+        status, data = self.http(method, url, _headers(f"token {self.token()}"), payload)
+        if status == 401:
+            status, data = self.http(method, url, _headers(f"token {self.token(fresh=True)}"), payload)
+        return status, data
+
+    def api(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
+        return _check(*self.request(method, path, body), f"{method} {path}")
 
     # -- actions ----------------------------------------------------------
     def whoami(self) -> dict[str, Any]:
         status, app = self.http("GET", f"{API}/app", _headers(f"Bearer {self.app_jwt()}"), None)
         app = _check(status, app, "reading the app")
-        repos = self.api("GET", "installation/repositories?per_page=100")
-        names = [r["full_name"] for r in repos.get("repositories", [])]
+        status, repo = self.request("GET", f"repos/{self.cfg.repo}")
+        if status not in (200, 404):
+            _check(status, repo, f"reading {self.cfg.repo}")
         return {
             "app": app.get("slug"),
             "login": f"{app.get('slug')}[bot]",
             "app_id": app.get("id"),
             "installation_id": self.cfg.installation_id,
             "repo": self.cfg.repo,
-            "repo_accessible": self.cfg.repo in names,
-            "repositories": len(names),
+            "repo_accessible": status == 200,
             "permissions": app.get("permissions", {}),
         }
 
@@ -337,7 +347,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "token":
             print(bot.token())
         elif args.command == "whoami":
-            _emit(bot.whoami(), args.json)
+            me = bot.whoami()
+            _emit(me, args.json)
+            if not me["repo_accessible"]:
+                print(f"error: the app installation cannot access {bot.cfg.repo}", file=sys.stderr)
+                return 2
         elif args.command == "review":
             _emit(bot.review(args.pr, args.event, _read_body(args.body_file), args.commit), args.json)
         elif args.command == "comment":

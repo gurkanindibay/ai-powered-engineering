@@ -1,4 +1,6 @@
 import argparse
+import contextlib
+import io
 import base64
 import json
 import os
@@ -23,9 +25,14 @@ class FakeHttp:
         self.calls = []
         self.head = head
         self.token_mints = 0
+        self.repo_visible = True
+        self.revoked = set()
 
     def __call__(self, method, url, headers, body):
         self.calls.append((method, url, headers, json.loads(body) if body else None))
+        token = headers["Authorization"].removeprefix("token ")
+        if token in self.revoked:
+            return 401, {"message": "Bad credentials"}
         if url.endswith("/access_tokens"):
             self.token_mints += 1
             return 201, {"token": f"ghs_{self.token_mints}", "expires_at": "2027-01-15T09:00:00Z"}
@@ -37,8 +44,8 @@ class FakeHttp:
             return 201, {"id": 7, "html_url": "https://x/c/7"}
         if url.endswith("/app"):
             return 200, {"slug": "local-reviewer-agent", "id": 42, "permissions": {"pull_requests": "write"}}
-        if "installation/repositories" in url:
-            return 200, {"repositories": [{"full_name": "o/r"}]}
+        if url.endswith("/repos/o/r"):
+            return (200, {"full_name": "o/r"}) if self.repo_visible else (404, {"message": "Not Found"})
         return 404, {"message": "Not Found"}
 
 
@@ -151,6 +158,30 @@ class BotTest(KeyCase):
         self.assertEqual(self.bot(http).comment(5, "hi")["id"], 7)
         me = self.bot(http).whoami()
         self.assertEqual((me["login"], me["repo_accessible"]), ("local-reviewer-agent[bot]", True))
+
+    def test_whoami_reports_unreachable_repo_and_main_fails(self):
+        http = FakeHttp()
+        http.repo_visible = False
+        self.assertFalse(self.bot(http).whoami()["repo_accessible"])
+        orig_bot, orig_load = rb.Bot, rb.load_config
+        rb.load_config = lambda args: self.cfg
+        bot = self.bot(http)  # built before patching rb.Bot
+        rb.Bot = lambda cfg: bot
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(rb.main(["whoami"]), 2)
+            self.assertIn("cannot access o/r", err.getvalue())
+        finally:
+            rb.Bot, rb.load_config = orig_bot, orig_load
+
+    def test_revoked_cached_token_is_replaced_once(self):
+        http = FakeHttp()
+        bot = self.bot(http, cache=True)
+        self.assertEqual(bot.token(), "ghs_1")
+        http.revoked.add("ghs_1")
+        self.assertEqual(bot.comment(5, "hi")["id"], 7)
+        self.assertEqual(http.token_mints, 2)
+        self.assertEqual(bot.token(), "ghs_2")  # the cache now holds the fresh token
 
     def test_api_error_is_raised(self):
         with self.assertRaisesRegex(rb.BotError, "HTTP 404"):
