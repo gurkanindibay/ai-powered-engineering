@@ -119,6 +119,18 @@ As a site administrator, I need multi-stage operational journeys (combining unit
 - Catch-up accrual across multiple months honors the grace period for timely payments, computes daily KMK late fees once grace expires, cleanly restores debt upon payment reversal with contra entries, and settles in full upon final payment.
 - An unmatched bank transfer to a unit with multiple open debtors is held in the reconciliation queue without reducing balances until assigned to a specific debtor, and duplicate deliveries are processed idempotently.
 
+### STORY-13-25: Reconcile homeowner debt and operating cash by site
+
+As a site manager, I need each outstanding amount traced to a site, unit, primary debtor and period, and each site's posted operating cash reconciled to its own receipts after four periods, so that no amount is lost, double counted or posted to another site.
+
+#### Acceptance criteria
+
+- Posted operating cash equals cumulative gross receipts, including paid fees, at every checkpoint, and accruals, occupancy changes and title transfers add no cash.
+- On April 10, 2027 (Europe/Istanbul) exactly eleven rows are open, matched by site, unit, primary debtor and period with principal and fee; every other accrued charge is settled.
+- Current and former owner totals are asserted separately from a jointly liable owner's exposure.
+- Site A shows cash 90,658.50 and open primary debt 5,804.09; Site B shows cash 189,538.75 and open primary debt 2,661.67, reconciled independently from fixture inputs with a jointly liable receivable counted once.
+- Coverage today is against the independent model only; the live comparison against a running site is pending (SC-13-25-06 and SC-13-25-07, blocked on the #247/#248 fixtures).
+
 ### STORY-13-10: Tenant data isolation across sites and resident accounts
 
 As a tenant and property manager, I need strict data isolation across sites and accounts so that managers cannot view or mutate another site's data and residents cannot view another resident's private transactions.
