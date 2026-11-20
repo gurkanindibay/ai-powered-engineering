@@ -1056,6 +1056,48 @@ mod tests {
         assert!(!verify_webhook_signature(body, None));
     }
 
+    fn token_with_lifetime(seconds: i64) -> String {
+        let now = Utc::now().timestamp();
+        let token = AccessToken {
+            sub: "usr-1".to_string(),
+            sid: "sid-1".to_string(),
+            ver: 1,
+            iss: issuer(),
+            aud: audience(),
+            iat: now,
+            exp: now + seconds,
+            jti: "jti-1".to_string(),
+        };
+        encode(
+            &Header::new(Algorithm::HS256),
+            &token,
+            &EncodingKey::from_secret(jwt_secret().expect("test secret")),
+        )
+        .expect("signed")
+    }
+
+    #[test]
+    fn access_tokens_live_at_most_the_ttl() {
+        assert!(verify_token(&token_with_lifetime(TOKEN_TTL_SECONDS)).is_ok());
+        assert!(verify_token(&token_with_lifetime(TOKEN_TTL_SECONDS + 1)).is_err());
+        assert!(verify_token(&token_with_lifetime(86_400)).is_err());
+    }
+
+    #[test]
+    fn an_unsalted_sha256_digest_is_not_a_usable_plaintext_password() {
+        assert_eq!(legacy_plaintext(&"a".repeat(64)), None);
+        assert_eq!(legacy_plaintext(&"0123456789abcdef".repeat(4)), None);
+        // Anything else of that length is an ordinary legacy plaintext.
+        assert_eq!(legacy_plaintext(&"g".repeat(64)), Some("g".repeat(64)));
+    }
+
+    #[test]
+    fn a_password_of_exactly_the_minimum_length_is_accepted() {
+        assert!(validate_new_password(&"x".repeat(MIN_PASSWORD_LENGTH)).is_ok());
+        assert!(validate_new_password(&"x".repeat(MIN_PASSWORD_LENGTH - 1)).is_err());
+        assert!(validate_new_password(&"x".repeat(1025)).is_err());
+    }
+
     #[test]
     fn query_decoding() {
         assert_eq!(decode_component("a%20b+c"), "a b c");

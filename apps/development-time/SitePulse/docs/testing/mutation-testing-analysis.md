@@ -152,6 +152,10 @@ Each survivor is a concrete missing assertion. "Test to add" names the smallest 
 6. **Grow the catalogue with each defect.** When a bug escapes to review or production, add the scenario that reproduces it before fixing; it then guards the fix.
 7. **Later: sample with a generic tool.** Once the curated survivors are fixed, a time-boxed `cargo-mutants --file src/services/dues_ledger.rs`-style run on one module at a time would find mutants this hand-made list does not imagine.
 
+## Follow-up: survivors fixed
+
+All 20 survivors and the RS-016 timeout now have a test that kills them (re-run with `mutation_scenarios.py run --id <ID>`: 21 of 21 killed, at `rust-unit`, `flutter-money` or `harness`, in seconds). RS-016 was fixed in the code: `penalty_through_with_grace` is now a single pass over the payments and cannot loop, so its scenario was rewritten to "only the latest payment reduces the penalised principal". The scores in *Results* are from the first run and are not re-recorded; the DB layer is still not run.
+
 ## Limits
 
 - 58 scenarios are a sample chosen by risk, not an exhaustive mutation of the code base; the score describes these behaviours only.

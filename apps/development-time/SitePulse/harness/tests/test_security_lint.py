@@ -70,6 +70,15 @@ class SecretRules(unittest.TestCase):
         self.assertEqual(report["status"], "PASS")
 
 
+    def test_entropy_threshold_separates_secrets_from_repetitive_values(self):
+        between = "abcdefghijklmnop" + "abcdefgh"  # 24 chars, about 3.9 bits per character
+        repetitive = "abcdefgh" * 3  # 24 chars, 3.0 bits per character
+        self.assertTrue(3.5 < security_lint.entropy(between) < 4.5)
+        self.assertLess(security_lint.entropy(repetitive), 3.5)
+        self.assertTrue(security_lint._looks_like_secret(between))
+        self.assertFalse(security_lint._looks_like_secret(repetitive))
+
+
 class WorkflowAndImageRules(unittest.TestCase):
     def test_workflow_needs_permissions(self):
         report = _lint({".github/workflows/ci.yml": "on: push\njobs: {}\n"})

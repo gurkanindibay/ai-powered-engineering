@@ -281,9 +281,9 @@ area = "late-fee"
 operator = "relational-boundary"
 risk = "high"
 file = "backend/src/services/dues_calculation_service.rs"
-original = "while index < payments.len() && payments[index].0 <= cursor {"
-mutant = "while index < payments.len() && payments[index].0 < cursor {"
-intent = "A back-dated payment made on the due date does not reduce the penalised principal."
+original = "            paid += *amount;\n        }\n        penalty += segment_penalty(cursor, through, paid);"
+mutant = "            paid = *amount;\n        }\n        penalty += segment_penalty(cursor, through, paid);"
+intent = "Only the latest payment reduces the penalised principal; earlier partial payments are forgotten."
 suites = ["rust-unit", "rust-integration"]
 
 [[scenario]]
