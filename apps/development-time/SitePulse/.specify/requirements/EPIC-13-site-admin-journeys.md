@@ -134,3 +134,32 @@ As a tenant and property manager, I need strict data isolation across sites and 
 - Replacing a tenant keeps each occupant's history and receipts private.
 - Late browser responses cannot repopulate the next tenant's session.
 
+### STORY-13-08: Manager screen and session states
+
+As a site manager, I need predictable screen behaviors during first sign-in, loading, network failures, retry, search recovery, session expiry, and concurrent occupancy mutations.
+
+#### Acceptance criteria
+
+- The first manager sign-in unlocks a populated site only after the provisioning password is changed.
+- Loading states, network errors, and retry recovery are clearly distinguishable from empty site results.
+- A search with zero matches is easily recoverable without altering site data.
+- An expired manager session redirects to sign-in and conceals prior site balances from other users on the same browser.
+- Cancelling an accrual confirmation modal makes no financial mutations and leaves liabilities clean.
+- Refreshing a payment stream after a lost confirmation response displays the committed payment and prevents duplicate submissions.
+- Stale unit action forms safely refresh and prompt the user when another manager has modified unit occupancy.
+
+### STORY-13-06: One site from zero to a closed period (interconnected lifecycle chain)
+
+As a site manager, I need an end-to-end interconnected lifecycle journey that walks a new site from zero to a closed accounting period with ledger invariants preserved at every checkpoint.
+
+#### Acceptance criteria
+
+- Checkpoint 1: Site setup and block/unit creation moves site from state F0 to F1 with ledger invariants held.
+- Checkpoint 2: Adding initial owners and tenants establishes state F2 with zero initial debt.
+- Checkpoint 3: Creating and accruing the first billing period generates exact liabilities and balances.
+- Checkpoint 4: Manual payments settle dues or create advance balances with receipts issued.
+- Checkpoint 5: Subsequent monthly accruals and payments advance the site to state F5.
+- Checkpoint 6: Closing a billing period creates an immutable closed snapshot, prevents duplicate accrual, and retains collectability.
+- Checkpoint 7: Replacing tenants and transferring unit titles preserves historical liabilities and attaches debt strictly to responsible parties.
+- Checkpoint 8: Server restarts verify state persistence, tenant isolation, and absence of cross-site leakage.
+
