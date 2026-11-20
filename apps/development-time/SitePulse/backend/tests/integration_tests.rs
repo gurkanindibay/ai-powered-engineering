@@ -4352,7 +4352,7 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
             status: DebtStatus::Overdue,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: DebtorType::Tenant,
+            debtor_type: DebtorType::Owner,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
             grace_days: 0,

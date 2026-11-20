@@ -429,24 +429,29 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
 
         # Tenant's operational debt and own receipt are visible
         open_items = [item for d in stmt.get("debtors", []) for item in d.get("open_items", [])]
-        operational = [item for item in open_items if item.get("expense_type") == "OPERATIONAL_DUES"]
-        # The 1500.00 principal is reduced by every receipt line allocated to that due. An owner
-        # may pay any liability of the unit, so the owner's receipt also lands on the tenant's
-        # due (940.00 here); read the allocations instead of assuming only the tenant paid.
+        # Debtor isolation: The owner's undesignated payment of 1000.00 settles only the
+        # owner's capital due and never touches the tenant's operational due (#238).
+        assert not any(line.get("expense_type") == "OPERATIONAL_DUES" for line in owner_rcpt["allocation_breakdown"])
+        assert any(line.get("expense_type") == "CAPITAL_DUES" for line in owner_rcpt["allocation_breakdown"])
+        assert sum(
+            Decimal(str(line["principal_paid"])) for line in owner_rcpt["allocation_breakdown"]
+        ) == Decimal("1000.00")
+
         paid_on_operational = sum(
             (
                 Decimal(str(line["principal_paid"]))
-                for rcpt in (tenant_rcpt, owner_rcpt)
-                for line in rcpt["allocation_breakdown"]
+                for line in tenant_rcpt["allocation_breakdown"]
                 if line["expense_type"] == "OPERATIONAL_DUES"
             ),
             Decimal("0.00"),
         )
-        assert paid_on_operational >= Decimal(str(tenant_rcpt["allocated_principal"]))
+        assert paid_on_operational == Decimal("500.00")
         expected_principal = Decimal("1500.00") - paid_on_operational
+        operational = [item for item in open_items if item.get("expense_type") == "OPERATIONAL_DUES"]
         assert sum(
             (Decimal(str(item.get("principal_outstanding", "0"))) for item in operational), Decimal("0.00")
         ) == expected_principal, stmt
+        assert expected_principal == Decimal("1000.00")
         rcpt_numbers = [r.get("receipt_number") for r in stmt.get("receipts", [])]
         assert tenant_rcpt.get("receipt_number") in rcpt_numbers
 

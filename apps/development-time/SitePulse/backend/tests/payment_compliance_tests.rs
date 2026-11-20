@@ -182,7 +182,7 @@ async fn when_overdue_due_is_paid_by_webhook_then_penalty_is_collected_first_wit
         "Eylül 2026",
         "1400.00",
         due_date,
-        "TENANT",
+        "OWNER",
         "OPERATIONAL_DUES",
     )])
     .await;
@@ -218,7 +218,7 @@ async fn when_bank_webhook_is_redelivered_then_only_one_receipt_exists() {
         "Eylül 2026",
         "1400.00",
         today() + Days::new(10),
-        "TENANT",
+        "OWNER",
         "OPERATIONAL_DUES",
     )])
     .await;
@@ -242,7 +242,7 @@ async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_du
         "Kasım 2026",
         "1500.00",
         soon + Days::new(2),
-        "TENANT",
+        "OWNER",
         "OPERATIONAL_DUES",
     );
     november.delay_penalty = d("22.50");
@@ -253,7 +253,7 @@ async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_du
             "Eylül 2026",
             "1675.00",
             soon,
-            "TENANT",
+            "OWNER",
             "OPERATIONAL_DUES",
         ),
         liability(
@@ -261,7 +261,7 @@ async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_du
             "Ekim 2026",
             "1600.00",
             soon + Days::new(1),
-            "TENANT",
+            "OWNER",
             "OPERATIONAL_DUES",
         ),
         november,
@@ -341,7 +341,7 @@ async fn when_no_designation_is_given_then_the_oldest_due_is_settled_first() {
             "Eylül 2026",
             "1400.00",
             soon + Days::new(1),
-            "TENANT",
+            "OWNER",
             "OPERATIONAL_DUES",
         ),
         liability(
@@ -349,7 +349,7 @@ async fn when_no_designation_is_given_then_the_oldest_due_is_settled_first() {
             "Ağustos 2026",
             "1400.00",
             soon,
-            "TENANT",
+            "OWNER",
             "OPERATIONAL_DUES",
         ),
     ])
@@ -369,7 +369,7 @@ async fn when_a_statement_line_is_confirmed_twice_then_it_is_settled_once() {
         "Eylül 2026",
         "1400.00",
         today() + Days::new(10),
-        "TENANT",
+        "OWNER",
         "OPERATIONAL_DUES",
     )])
     .await;
@@ -440,7 +440,7 @@ async fn when_match_all_settles_a_pending_payment_then_no_duplicate_ledger_row_i
         "Eylül 2026",
         "1400.00",
         today() + Days::new(10),
-        "TENANT",
+        "OWNER",
         "OPERATIONAL_DUES",
     )])
     .await;
