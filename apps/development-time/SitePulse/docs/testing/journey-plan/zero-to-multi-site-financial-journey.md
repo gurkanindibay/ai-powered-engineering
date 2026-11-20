@@ -37,19 +37,23 @@ Site A charges 1,000.00 per unit per period and Site B charges 750.00. Assert ex
 
 ## Payment and cash checkpoints
 
-Record completed receipts for the unit and its named primary debtor. The table gives the **actual gross receipts** to enter for the five detailed units, including any fee collected by the allocation waterfall. The remaining owner-occupants pay 21,000.00 per period in Site A and 46,500.00 per period in Site B. A zero means skip the payment. For example, Ada's February receipt of 831.00 pays 31.00 in fees and 600.00 toward January principal, then 200.00 toward February principal. Confirm the receipt and its allocations to the kuruş.
+Record each completed receipt against the listed unit and the named payer, who is also the primary debtor for that receipt. The table gives the **actual gross receipts** for the five detailed units, including any fee collected by the allocation waterfall. For every other unit, the registered owner-occupant pays that unit's own charge, totalling 21,000.00 per period in Site A and 46,500.00 per period in Site B. A dash means skip the payment. For example, Ada's February receipt of 831.00 pays 31.00 in fees and 600.00 toward January principal, then 200.00 toward February principal. Confirm the receipt and its allocations to the kuruş.
 
 | Unit | January 10 | February 10 | March 10 | April 10 |
-|---|---:|---:|---:|---:|
-| A-01 | 400.00 | 831.00 | 500.00 | 1,025.83 |
-| A-02 | 0.00 | 1,301.67 | 0.00 | 600.00 |
-| A-03 | 1,000.00 | 0.00 | 0.00 | 1,000.00 (April only) |
-| B1-01 | 750.00 | 250.00 | 0.00 | 1,038.75 |
-| B2-01 | 750.00 | 0.00 | 0.00 | 750.00 (April only) |
+|---|---|---|---|---|
+| A-01 | Ada · 400.00 | Ada · 831.00 | Ben · 500.00 | Ben · 1,025.83 |
+| A-02 | — | Dan · 1,301.67 | — | Eli · 600.00 |
+| A-03 | Fay · 1,000.00 | — | — | Fay · 1,000.00 (April only) |
+| B1-01 | Gus · 750.00 | Gus · 250.00 | — | Hana · 1,038.75 |
+| B2-01 | Juno · 750.00 | — | — | Juno · 750.00 (April only) |
+
+Every allocation from a new owner or tenant's receipt must stay with that person's own charges. For Ben, Eli and Hana, verify the debtor on each allocation and compare the other debtors' principal, accrued fees and payment history immediately before and after posting at the same controlled date.
 
 For A-03 and B2-01, pay January in full, skip February and March, then explicitly designate the April receipt to the April charge. Use the [supported payment designation](../../../.specify/features/EPIC-13/STORY-13-09-financial-state-transitions.feature) and verify that each receipt has exactly one allocation, to April. February and March must remain fully unpaid and accrue their own fees. On April 10, assert the exact open periods as well as the statuses of the paid periods. Other receipts follow the default allocation order.
 
-For each of the two units, check period history after each payment checkpoint. January shows paid throughout. February appears as unpaid and stays unpaid. March adds a second consecutive unpaid period. April shows unpaid immediately before its designated receipt and paid immediately after. Also check the final status of every detailed unit to distinguish partial payment from a missed payment or a later settlement.
+For each of the two units, check period history after each payment checkpoint. January shows paid throughout. February appears as unpaid and stays unpaid. March adds a second consecutive unpaid period. April shows unpaid immediately before its designated receipt and paid immediately after. Check the final status of every detailed unit to distinguish partial payment from a missed payment or a later settlement. A-01 is partial for January at the January checkpoint and becomes paid after Ada’s February receipt.
+
+**Final period status after the April 10 payments**
 
 | Unit | January | February | March | April |
 |---|---|---|---|---|
@@ -73,7 +77,7 @@ Define money remaining in the site fund for this proposal as **posted operating 
 
 ## Final debt checkpoint
 
-Read the manager's unit statements, including former debtors, after April 10 payments and late-fee evaluation. Match on site, unit, debtor and period. Primary debt and an owner's joint exposure describe the same receivable and must contribute to site totals only once.
+Keep the controlled Europe/Istanbul clock on April 10, 2027 while evaluating late fees and reading the final balances. After posting the April 10 payments, read the manager's unit statements, including former debtors, and check any aging report against the same date. Match on site, unit, debtor and period. Primary debt and an owner's joint exposure describe the same receivable and must contribute to site totals only once.
 
 | Unit | Primary debtor | Open period | Principal | Open fee | Total open | Jointly liable owner |
 |---|---|---|---:|---:|---:|---|
@@ -89,7 +93,7 @@ Read the manager's unit statements, including former debtors, after April 10 pay
 | B2-01 | Juno, continuing tenant | February | 750.00 | 73.75 | 823.75 | Ivan |
 | B2-01 | Juno, continuing tenant | March | 750.00 | 38.75 | 788.75 | Ivan |
 
-Cara has 1,051.67 of primary debt and joint exposure to 1,223.75 of tenant debt. Ivan has 0.00 of primary debt and joint exposure to 1,612.50 of tenant debt. Fay has 2,150.00 in primary debt across two periods. Check the other current and former homeowners against their primary rows. Each accrued charge outside this table should be settled.
+Total open primary debt includes principal and fees. Cara has 1,051.67 of total open primary debt and joint exposure to 1,223.75 of tenant debt. Ivan has 0.00 of total open primary debt and joint exposure to 1,612.50 of tenant debt. Fay has 2,150.00 of total open primary debt across two periods, made up of 2,000.00 of principal and 150.00 of fees. Check the other current and former homeowners against their primary rows. Each accrued charge outside this table should be settled.
 
 | Site | Principal accrued | Principal collected | Principal open | Fees collected | Fees open | Total debt open |
 |---|---:|---:|---:|---:|---:|---:|
