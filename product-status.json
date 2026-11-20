@@ -1,33 +1,33 @@
 {
  "schema": 1,
- "generated_at": "2026-11-20T22:08:53Z",
- "run_id": "20261120T220852Z-127e5f1",
- "commit": "127e5f1ce9ceb532a79540475075dbf220191b1f",
+ "generated_at": "2026-11-20T22:21:11Z",
+ "run_id": "20261120T222111Z-8c528e2",
+ "commit": "8c528e2b1ad2efc714da647481cf61de8fa52b84",
  "task": "master",
- "status": "PASS",
+ "status": "DEFECT",
  "junit": {
-  "tests": 176,
+  "tests": 188,
   "failures": 0,
   "errors": 0,
-  "skipped": 1,
-  "passed": 175,
-  "seconds": 2245.8,
+  "skipped": 6,
+  "passed": 182,
+  "seconds": 2223.5,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 113,
-  "stories_with_scenarios": 113,
+  "stories": 114,
+  "stories_with_scenarios": 114,
   "stories_passing": 32,
-  "scenarios": 449,
-  "automated": 348,
-  "passing": 146,
-  "failing": 0,
+  "scenarios": 459,
+  "automated": 357,
+  "passing": 153,
+  "failing": 2,
   "no_result": 202,
-  "planned": 101,
+  "planned": 102,
   "epics": 13,
   "epics_verified": 2,
-  "epics_failing": 0
+  "epics_failing": 1
  },
  "epics": [
   {
@@ -201,16 +201,16 @@
   {
    "id": "EPIC-13",
    "title": "Site Admin Journeys",
-   "stories": 13,
-   "stories_with_scenarios": 13,
+   "stories": 14,
+   "stories_with_scenarios": 14,
    "stories_passing": 0,
-   "scenarios": 136,
-   "automated": 46,
-   "passing": 33,
-   "failing": 0,
+   "scenarios": 146,
+   "automated": 55,
+   "passing": 40,
+   "failing": 2,
    "no_result": 13,
-   "planned": 90,
-   "health": "in_progress"
+   "planned": 91,
+   "health": "failing"
   }
  ],
  "scenarios": {
@@ -2866,6 +2866,66 @@
    "epic": "EPIC-13",
    "story": "STORY-13-12"
   },
+  "SC-13-14-01": {
+   "state": "passing",
+   "name": "Titles and occupancies change on their effective dates",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
+  "SC-13-14-02": {
+   "state": "passing",
+   "name": "March charges follow the new owners and the vacancies",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
+  "SC-13-14-03": {
+   "state": "passing",
+   "name": "April move-ins redirect new charges and show only the current household",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
+  "SC-13-14-04": {
+   "state": "passing",
+   "name": "Former owners and tenants remain collectible next to their successors",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
+  "SC-13-14-05": {
+   "state": "passing",
+   "name": "Receipts before the changes settle the paying debtor's own periods",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
+  "SC-13-14-06": {
+   "state": "passing",
+   "name": "A designated April receipt leaves February and March unpaid",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
+  "SC-13-14-07": {
+   "state": "passing",
+   "name": "Title changes, vacancies and accruals move no cash between sites",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
+  "SC-13-14-08": {
+   "state": "failing",
+   "name": "A successor's receipt settles only the successor's own charges",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
+  "SC-13-14-09": {
+   "state": "failing",
+   "name": "The final open debt stays with each former and current debtor",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
+  "SC-13-14-10": {
+   "state": "planned",
+   "name": "Owners keep joint exposure to their tenants' open charges without double counting",
+   "epic": "EPIC-13",
+   "story": "STORY-13-14"
+  },
   "SC-13-25-01": {
    "state": "passing",
    "name": "Posted operating cash equals cumulative gross receipts at every checkpoint",
@@ -3081,10 +3141,10 @@
   {
    "date": "2026-11-21",
    "epics": 13,
-   "stories": 113,
-   "stories_with_scenarios": 113,
-   "scenarios": 449,
-   "automated": 348
+   "stories": 114,
+   "stories_with_scenarios": 114,
+   "scenarios": 459,
+   "automated": 357
   }
  ],
  "recent_changes": [
@@ -3092,11 +3152,12 @@
    "date": "2026-11-21",
    "epic": "EPIC-13",
    "title": "Site Admin Journeys",
-   "new_stories": 1,
-   "new_scenarios": 7,
-   "newly_automated": 5,
-   "items": 1,
+   "new_stories": 2,
+   "new_scenarios": 17,
+   "newly_automated": 14,
+   "items": 2,
    "samples": [
+    "STORY-13-14: Liability follows titles, vacancies and move-ins",
     "STORY-13-25: Reconcile homeowner debt and operating cash by site"
    ]
   },
@@ -3790,5 +3851,5 @@
    ]
   }
  ],
- "href": "reports/44823134921-1/"
+ "href": "reports/44827215360-1/"
 }
