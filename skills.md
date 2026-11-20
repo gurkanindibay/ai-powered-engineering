@@ -312,6 +312,18 @@ python3 apps/development-time/SitePulse/scripts/publish_test_report.py --report 
 ./scripts/product_status.py html --site /tmp/test-report-site --out /tmp/product-status.html
 ```
 
+## 5b-9. Mutation Scenarios (`mutation_scenarios.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/mutation_scenarios.py](file:///apps/development-time/SitePulse/scripts/mutation_scenarios.py) (symlinked to `scripts/mutation_scenarios.py`)
+- **Purpose:** Tests the tests. Applies hand-designed mutants from [harness/mutation/scenarios.toml](file:///apps/development-time/SitePulse/harness/mutation/scenarios.toml) (one realistic bug each: boundaries, rounding, sign, tenancy and authorization checks) one at a time, runs the suites named for each, restores the file, and reports killed / survived / unviable / skipped with a mutation score. `validate` fails when production code drifts from a scenario (also checked by `harness/tests/test_mutation_scenarios.py`). Suites that need PostgreSQL run only with `--with postgres`. Analysis and results: [docs/testing/mutation-testing-analysis.md](file:///apps/development-time/SitePulse/docs/testing/mutation-testing-analysis.md).
+
+```bash
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py validate
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py list --layer rust
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py run --area late-fee --markdown /tmp/mut.md --output /tmp/mut.json
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py restore   # after an interrupted run
+```
+
 ## 5c. Test Execution & Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
