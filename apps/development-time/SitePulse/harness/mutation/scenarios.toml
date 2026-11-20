@@ -1,0 +1,845 @@
+# SitePulse mutation scenarios — each one plants a single realistic bug and
+# names the suites that should catch it. Runner: scripts/mutation_scenarios.py.
+# Analysis: docs/testing/mutation-testing-analysis.md.
+#
+# Fields: id, layer (rust|flutter|db|python), area, operator, risk (high|medium|low),
+# file (relative to apps/development-time/SitePulse), original (must occur exactly
+# once in file), mutant, intent (the bug in plain words), suites (cheapest first),
+# note (optional).
+#
+# When production code changes under a scenario, `validate` (and the harness
+# self-test) fails: rewrite `original`/`mutant` against the new code, do not drop
+# the scenario.
+
+# ------------------------------------------------------------------ suites
+
+[suites.rust-unit]
+cwd = "backend"
+cmd = ["cargo", "test", "--locked", "--lib"]
+timeout = 900
+
+[suites.rust-integration]
+cwd = "backend"
+cmd = ["cargo", "test", "--locked", "--test", "*"]
+timeout = 1200
+
+[suites.rust-db]
+cwd = "backend"
+cmd = ["cargo", "test", "--locked", "--test", "db_*", "--", "--ignored", "--test-threads=1"]
+timeout = 1800
+requires = ["postgres"]
+
+[suites.flutter-money]
+cwd = "flutter"
+cmd = ["flutter", "test", "test/money_format_test.dart", "test/design_system_test.dart",
+       "test/reusable_components_test.dart", "test/financial_fixture_test.dart"]
+timeout = 900
+
+[suites.flutter-all]
+cwd = "flutter"
+cmd = ["flutter", "test"]
+timeout = 1800
+
+[suites.harness]
+cwd = "."
+cmd = ["python3", "-m", "unittest", "discover", "-s", "harness/tests"]
+timeout = 600
+
+# ------------------------------------------------------------------ Rust: dues ledger and allocation
+
+[[scenario]]
+id = "MUT-RS-001"
+layer = "rust"
+area = "dues-ledger"
+operator = "remove-clamp"
+risk = "high"
+file = "backend/src/services/dues_ledger.rs"
+original = "(d.principal_amount - d.paid_principal).max(Decimal::ZERO)"
+mutant = "(d.principal_amount - d.paid_principal)"
+intent = "An overpaid liability reports negative outstanding principal, which then offsets other debts."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-002"
+layer = "rust"
+area = "dues-ledger"
+operator = "remove-guard"
+risk = "high"
+file = "backend/src/services/dues_ledger.rs"
+original = '''
+pub fn outstanding_principal(d: &DuesLiability) -> Decimal {
+    if d.status == DebtStatus::Cancelled {
+        return Decimal::ZERO;
+    }
+'''
+mutant = '''
+pub fn outstanding_principal(d: &DuesLiability) -> Decimal {
+'''
+intent = "A cancelled liability still shows (and collects) its unpaid principal."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-003"
+layer = "rust"
+area = "dues-ledger"
+operator = "relational-boundary"
+risk = "high"
+file = "backend/src/services/dues_ledger.rs"
+original = "d.status != DebtStatus::Cancelled && d.total_amount <= Decimal::ZERO"
+mutant = "d.status != DebtStatus::Cancelled && d.total_amount < Decimal::ZERO"
+intent = "A liability settled to exactly zero is never marked PAID."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-004"
+layer = "rust"
+area = "dues-ledger"
+operator = "remove-condition"
+risk = "high"
+file = "backend/src/services/dues_ledger.rs"
+original = "d.debtor_type == DebtorType::Tenant && d.expense_type != ExpenseType::CapitalDues"
+mutant = "d.debtor_type == DebtorType::Tenant"
+intent = "A tenant may pay owner-only capital dues (KMK / chk_dues_capital_owner_only)."
+suites = ["rust-unit", "rust-integration", "rust-db"]
+
+[[scenario]]
+id = "MUT-RS-005"
+layer = "rust"
+area = "dues-ledger"
+operator = "swap-order"
+risk = "high"
+file = "backend/src/services/dues_ledger.rs"
+original = '''
+    let penalty = outstanding_penalty(d).min(remaining);
+    remaining -= penalty;
+    let principal = outstanding_principal(d).min(remaining);
+'''
+mutant = '''
+    let principal = outstanding_principal(d).min(remaining);
+    remaining -= principal;
+    let penalty = outstanding_penalty(d).min(remaining);
+'''
+intent = "A single-liability payment settles principal before the late fee (TBK 100 order reversed)."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-006"
+layer = "rust"
+area = "dues-ledger"
+operator = "remove-clamp"
+risk = "medium"
+file = "backend/src/services/dues_ledger.rs"
+original = '''
+    let mut remaining = amount.max(Decimal::ZERO);
+    let penalty = outstanding_penalty(d).min(remaining);
+'''
+mutant = '''
+    let mut remaining = amount;
+    let penalty = outstanding_penalty(d).min(remaining);
+'''
+intent = "A negative settlement amount reduces what was already paid."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-007"
+layer = "rust"
+area = "allocation"
+operator = "negate-sort-key"
+risk = "high"
+file = "backend/src/services/dues_ledger.rs"
+original = "dues[i].expense_type == ExpenseType::CapitalDues,"
+mutant = "dues[i].expense_type != ExpenseType::CapitalDues,"
+intent = "The waterfall pays capital dues before ordinary dues."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-008"
+layer = "rust"
+area = "allocation"
+operator = "reverse-sort-key"
+risk = "high"
+file = "backend/src/services/dues_ledger.rs"
+original = '''
+            dues[i].due_date,
+            dues[i].id.clone(),
+'''
+mutant = '''
+            std::cmp::Reverse(dues[i].due_date),
+            dues[i].id.clone(),
+'''
+intent = "The waterfall settles the newest liability first instead of FIFO."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-009"
+layer = "rust"
+area = "allocation"
+operator = "skip-loop"
+risk = "high"
+file = "backend/src/services/dues_ledger.rs"
+original = '''
+    // Tier 1: penalties.
+    for &idx in &order {
+'''
+mutant = '''
+    // Tier 1: penalties.
+    for &idx in order.iter().take(0) {
+'''
+intent = "The penalty tier of the waterfall is skipped; payments go straight to principal."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-010"
+layer = "rust"
+area = "allocation"
+operator = "relational-boundary"
+risk = "medium"
+file = "backend/src/services/dues_ledger.rs"
+original = "} else if d.fee_due_date() < today {"
+mutant = "} else if d.fee_due_date() <= today {"
+intent = "Reversing a payment on the due date itself marks the liability OVERDUE."
+suites = ["rust-unit", "rust-integration"]
+
+# ------------------------------------------------------------------ Rust: late fees
+
+[[scenario]]
+id = "MUT-RS-011"
+layer = "rust"
+area = "late-fee"
+operator = "constant"
+risk = "high"
+file = "backend/src/services/dues_calculation_service.rs"
+original = "Decimal::new(5, 2)"
+mutant = "Decimal::new(5, 3)"
+intent = "The monthly late-fee rate drops from 5% to 0.5%."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-012"
+layer = "rust"
+area = "late-fee"
+operator = "rounding-strategy"
+risk = "high"
+file = "backend/src/services/dues_calculation_service.rs"
+original = '''
+            / Decimal::from(30))
+            .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+'''
+mutant = '''
+            / Decimal::from(30))
+            .round_dp_with_strategy(2, RoundingStrategy::MidpointNearestEven)
+'''
+intent = "Late fees round half-kuruş values with banker's rounding instead of half away from zero."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-013"
+layer = "rust"
+area = "late-fee"
+operator = "constant"
+risk = "high"
+file = "backend/src/services/dues_calculation_service.rs"
+original = '''
+            (outstanding_principal * Self::monthly_rate() * Decimal::from(segment_days)
+                / Decimal::from(30))
+'''
+mutant = '''
+            (outstanding_principal * Self::monthly_rate() * Decimal::from(segment_days)
+                / Decimal::from(31))
+'''
+intent = "The daily late-fee basis uses a 31-day month instead of the 30-day convention."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-014"
+layer = "rust"
+area = "late-fee"
+operator = "relational-boundary"
+risk = "high"
+file = "backend/src/services/dues_calculation_service.rs"
+original = "&& date <= dues.fee_due_date() + chrono::Days::new(u64::from(dues.grace_days))"
+mutant = "&& date < dues.fee_due_date() + chrono::Days::new(u64::from(dues.grace_days))"
+intent = "The last day of the grace period already accrues a late fee."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-015"
+layer = "rust"
+area = "late-fee"
+operator = "relational-boundary"
+risk = "medium"
+file = "backend/src/services/dues_calculation_service.rs"
+original = "if grace_days > 0 && through <= grace_end {"
+mutant = "if grace_days > 0 && through < grace_end {"
+intent = "Fee re-evaluation charges a fee for an evaluation exactly at the end of grace."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-016"
+layer = "rust"
+area = "late-fee"
+operator = "relational-boundary"
+risk = "high"
+file = "backend/src/services/dues_calculation_service.rs"
+original = "while index < payments.len() && payments[index].0 <= cursor {"
+mutant = "while index < payments.len() && payments[index].0 < cursor {"
+intent = "A back-dated payment made on the due date does not reduce the penalised principal."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-017"
+layer = "rust"
+area = "late-fee"
+operator = "arithmetic"
+risk = "high"
+file = "backend/src/services/dues_calculation_service.rs"
+original = "None => accrued.max(segment),"
+mutant = "None => accrued + segment,"
+intent = "A legacy liability's stored penalty is counted twice on its first segmented evaluation."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-018"
+layer = "rust"
+area = "late-fee"
+operator = "remove-condition"
+risk = "high"
+file = "backend/src/services/dues_calculation_service.rs"
+original = "if matches!(dues.status, DebtStatus::Paid | DebtStatus::Cancelled) {"
+mutant = "if matches!(dues.status, DebtStatus::Cancelled) {"
+intent = "Paid liabilities are re-evaluated and can be reopened by a new late fee."
+suites = ["rust-unit", "rust-integration"]
+
+# ------------------------------------------------------------------ Rust: occupancy proration
+
+[[scenario]]
+id = "MUT-RS-019"
+layer = "rust"
+area = "proration"
+operator = "off-by-one"
+risk = "high"
+file = "backend/src/domain/occupancy_proration.rs"
+original = "let chargeable_days = period_end.signed_duration_since(charge_start).num_days() + 1;"
+mutant = "let chargeable_days = period_end.signed_duration_since(charge_start).num_days();"
+intent = "Proration drops the last day of the month from the chargeable days."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-020"
+layer = "rust"
+area = "proration"
+operator = "rounding-residual"
+risk = "high"
+file = "backend/src/domain/occupancy_proration.rs"
+original = "amount: active_amount - first_amount,"
+mutant = "amount: (monthly_amount * Decimal::from(chargeable_days - first_days) / Decimal::from(days_in_month)).round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero),"
+intent = "Owner and tenant shares are rounded independently, so they may not add up to the month's amount (lost or extra kuruş)."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-021"
+layer = "rust"
+area = "proration"
+operator = "remove-guard"
+risk = "medium"
+file = "backend/src/domain/occupancy_proration.rs"
+original = '''
+    accrued_on: NaiveDate,
+) -> Result<Vec<ProratedShare>, ProrationError> {
+    if monthly_amount < Decimal::ZERO {
+        return Err(ProrationError::NegativeAmount);
+    }
+'''
+mutant = '''
+    accrued_on: NaiveDate,
+) -> Result<Vec<ProratedShare>, ProrationError> {
+'''
+intent = "A negative monthly amount is prorated into negative charges instead of being rejected."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-022"
+layer = "rust"
+area = "proration"
+operator = "default-value"
+risk = "high"
+file = "backend/src/domain/occupancy_proration.rs"
+original = '''
+            .unwrap_or(ResponsibleParty::Owner);
+        return Ok(vec![ProratedShare {
+'''
+mutant = '''
+            .unwrap_or(ResponsibleParty::Tenant);
+        return Ok(vec![ProratedShare {
+'''
+intent = "With proration disabled, a day with no occupant is billed to the tenant instead of the owner."
+suites = ["rust-unit", "rust-integration"]
+
+# ------------------------------------------------------------------ Rust: double-entry ledger
+
+[[scenario]]
+id = "MUT-RS-023"
+layer = "rust"
+area = "double-entry"
+operator = "relational"
+risk = "high"
+file = "backend/src/domain/double_entry.rs"
+original = "if debits != credits {"
+mutant = "if debits < credits {"
+intent = "A manual journal entry with more debits than credits is accepted."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-024"
+layer = "rust"
+area = "double-entry"
+operator = "remove-condition"
+risk = "medium"
+file = "backend/src/domain/double_entry.rs"
+original = '''
+            || l.debit.scale() > 2
+'''
+mutant = '''
+'''
+intent = "A journal line with sub-kuruş debit precision (e.g. 10.005) is accepted."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-025"
+layer = "rust"
+area = "double-entry"
+operator = "relational-boundary"
+risk = "low"
+file = "backend/src/domain/double_entry.rs"
+original = "if lines.len() < 2 {"
+mutant = "if lines.is_empty() {"
+intent = "A single-line journal entry passes the line-count rule (it still fails the balance rule)."
+suites = ["rust-unit", "rust-integration"]
+note = "Equivalent-ish: one positive one-sided line can never balance, so the error kind changes but the entry is still rejected."
+
+[[scenario]]
+id = "MUT-RS-026"
+layer = "rust"
+area = "double-entry"
+operator = "swap-operands"
+risk = "high"
+file = "backend/src/domain/double_entry.rs"
+original = "NormalSide::Credit => *c - *d,"
+mutant = "NormalSide::Credit => *d - *c,"
+intent = "Credit-normal accounts (liabilities, income) show their balance with the wrong sign in the trial balance."
+suites = ["rust-unit", "rust-integration"]
+
+# ------------------------------------------------------------------ Rust: identifiers (IBAN, tax id)
+
+[[scenario]]
+id = "MUT-RS-027"
+layer = "rust"
+area = "identifiers"
+operator = "relational"
+risk = "high"
+file = "backend/src/domain/iban.rs"
+original = "if mod97(&rearranged) != 1 {"
+mutant = "if mod97(&rearranged) == 0 {"
+intent = "IBANs with a wrong checksum are accepted."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-028"
+layer = "rust"
+area = "identifiers"
+operator = "constant"
+risk = "high"
+file = "backend/src/domain/iban.rs"
+original = "Ok(format!(\"{:02}\", 98 - remainder))"
+mutant = "Ok(format!(\"{:02}\", 97 - remainder))"
+intent = "Generated virtual IBANs carry wrong check digits."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-029"
+layer = "rust"
+area = "identifiers"
+operator = "relational"
+risk = "medium"
+file = "backend/src/domain/iban.rs"
+original = "if compact.len() != TR_IBAN_LEN || !compact.starts_with(\"TR\") {"
+mutant = "if compact.len() < TR_IBAN_LEN || !compact.starts_with(\"TR\") {"
+intent = "An IBAN longer than 26 characters reaches the checksum step."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-030"
+layer = "rust"
+area = "identifiers"
+operator = "remove-condition"
+risk = "medium"
+file = "backend/src/domain/tax_id.rs"
+original = "10 if is_valid_vkn(&s) => Ok(TaxId::Vkn(s)),"
+mutant = "10 => Ok(TaxId::Vkn(s)),"
+intent = "Any 10-digit number is accepted as a VKN (tax id checksum skipped)."
+suites = ["rust-unit", "rust-integration"]
+
+# ------------------------------------------------------------------ Rust: authentication and tenancy
+
+[[scenario]]
+id = "MUT-RS-031"
+layer = "rust"
+area = "auth"
+operator = "widen-range"
+risk = "high"
+file = "backend/src/auth.rs"
+original = "Some(ttl) if (1..=TOKEN_TTL_SECONDS).contains(&ttl))"
+mutant = "Some(ttl) if (1..).contains(&ttl))"
+intent = "Access tokens with a lifetime longer than 10 minutes (e.g. forged long-lived tokens) are accepted."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-032"
+layer = "rust"
+area = "auth"
+operator = "relational-boundary"
+risk = "medium"
+file = "backend/src/auth.rs"
+original = "if password.chars().count() < MIN_PASSWORD_LENGTH {"
+mutant = "if password.chars().count() <= MIN_PASSWORD_LENGTH {"
+intent = "A password of exactly the minimum length (10) is rejected."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-033"
+layer = "rust"
+area = "auth"
+operator = "return-value"
+risk = "high"
+file = "backend/src/auth.rs"
+original = '''
+    if stored.len() == 64 && stored.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+'''
+mutant = '''
+    if stored.len() == 64 && stored.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Some(stored.to_string());
+    }
+'''
+intent = "A legacy unsalted SHA-256 digest is treated as the plaintext password, so the digest itself becomes a valid password."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-034"
+layer = "rust"
+area = "tenancy"
+operator = "remove-condition"
+risk = "high"
+file = "backend/src/tenancy.rs"
+original = "TenantScope::Site { site_id: own, .. } => !own.is_empty() && same_id(own, site_id),"
+mutant = "TenantScope::Site { site_id: own, .. } => same_id(own, site_id),"
+intent = "A token with an empty site claim is allowed for a site whose id compares equal to empty."
+suites = ["rust-unit", "rust-integration", "rust-db"]
+
+[[scenario]]
+id = "MUT-RS-035"
+layer = "rust"
+area = "tenancy"
+operator = "remove-branch"
+risk = "high"
+file = "backend/src/tenancy.rs"
+original = "Some(s) if !same_id(own, s) => Err(TenantDenied::forbidden()),"
+mutant = "Some(s) if own.is_empty() && !same_id(own, s) => Err(TenantDenied::forbidden()),"
+intent = "A request for a foreign site is silently rewritten to the caller's own site instead of being refused."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-036"
+layer = "rust"
+area = "tenancy"
+operator = "weaken-check"
+risk = "high"
+file = "backend/src/authorization.rs"
+original = "if !self.permissions.contains(&permission) {"
+mutant = "if self.permissions.is_empty() {"
+intent = "Any granted permission authorizes every action (privilege escalation inside a site)."
+suites = ["rust-unit", "rust-integration", "rust-db"]
+
+[[scenario]]
+id = "MUT-RS-037"
+layer = "rust"
+area = "tenancy"
+operator = "remove-guard"
+risk = "high"
+file = "backend/src/authorization.rs"
+original = '''
+        if !same_site(&self.claims.site_id, site) {
+            return Err(SecurityError::NotFound);
+        }
+'''
+mutant = '''
+'''
+intent = "An authorized user of one site can act on another site's resources (cross-tenant access)."
+suites = ["rust-unit", "rust-integration", "rust-db"]
+
+[[scenario]]
+id = "MUT-RS-038"
+layer = "rust"
+area = "tenancy"
+operator = "remove-guard"
+risk = "high"
+file = "backend/src/auth.rs"
+original = "if kind(a) != 0 && kind(b) != 0 && kind(a) != kind(b) {"
+mutant = "if false {"
+intent = "A unit id (unit-1) compares equal to a site id (site-1), so a unit id passes as a site id."
+suites = ["rust-unit", "rust-integration"]
+
+# ------------------------------------------------------------------ Rust: unit state machine
+
+[[scenario]]
+id = "MUT-RS-039"
+layer = "rust"
+area = "unit-state"
+operator = "relational-boundary"
+risk = "medium"
+file = "backend/src/domain/unit_state.rs"
+original = '''
+    if date > today {
+        return Err(TransitionError::FutureDate { date });
+'''
+mutant = '''
+    if date > today + chrono::Days::new(1) {
+        return Err(TransitionError::FutureDate { date });
+'''
+intent = "A move-in/move-out dated tomorrow is accepted."
+suites = ["rust-unit", "rust-integration"]
+
+[[scenario]]
+id = "MUT-RS-040"
+layer = "rust"
+area = "unit-state"
+operator = "drop-side-effect"
+risk = "high"
+file = "backend/src/domain/unit_state.rs"
+original = "step(owned(OwnerOccupied), None, owner_in, true)"
+mutant = "step(owned(OwnerOccupied), None, None, true)"
+intent = "Registering a resident owner does not open the owner's residence session."
+suites = ["rust-unit", "rust-integration"]
+
+# ------------------------------------------------------------------ DB: schema constraints (need PostgreSQL)
+
+[[scenario]]
+id = "MUT-DB-001"
+layer = "db"
+area = "tenancy"
+operator = "weaken-policy"
+risk = "high"
+file = "backend/migrations/V25__tenant_row_level_security.sql"
+original = "'CREATE POLICY tenant_isolation ON %I USING (sp_tenant_site() IS NULL OR (%s)) '"
+mutant = "'CREATE POLICY tenant_isolation ON %I USING (TRUE OR (%s)) '"
+intent = "Row-level security lets every tenant read every other tenant's rows."
+suites = ["rust-db"]
+
+[[scenario]]
+id = "MUT-DB-002"
+layer = "db"
+area = "dues-ledger"
+operator = "remove-constraint"
+risk = "high"
+file = "backend/migrations/V12__financial_and_tenancy_remediation.sql"
+original = "ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_capital_owner_only CHECK (expense_type <> 'CAPITAL_DUES' OR debtor_type = 'OWNER');"
+mutant = "ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_capital_owner_only CHECK (TRUE);"
+intent = "The database accepts capital dues billed to a tenant."
+suites = ["rust-db"]
+
+# ------------------------------------------------------------------ Flutter: money parsing and formatting
+
+[[scenario]]
+id = "MUT-FL-001"
+layer = "flutter"
+area = "money-format"
+operator = "rounding"
+risk = "high"
+file = "flutter/lib/domain/formatting/money_formatter.dart"
+original = "final rounded = amount.round(scale: 2);"
+mutant = "final rounded = amount.truncate(scale: 2);"
+intent = "Displayed amounts truncate half-kuruş values instead of rounding (₺999,999 shows ₺999,99)."
+suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-002"
+layer = "flutter"
+area = "money-format"
+operator = "constant"
+risk = "medium"
+file = "flutter/lib/domain/formatting/money_formatter.dart"
+original = "if (i > 0 && (digits.length - i) % 3 == 0) buffer.write('.');"
+mutant = "if (i > 0 && (digits.length - i) % 4 == 0) buffer.write('.');"
+intent = "Thousands separators are placed every four digits."
+suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-003"
+layer = "flutter"
+area = "money-parse"
+operator = "remove-call"
+risk = "high"
+file = "flutter/lib/domain/formatting/money_formatter.dart"
+original = "text = text.replaceAll('.', '').replaceAll(',', '.');"
+mutant = "text = text.replaceAll(',', '.');"
+intent = "Typed Turkish amounts with thousands separators (1.423,33) are rejected as invalid."
+suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-004"
+layer = "flutter"
+area = "money-parse"
+operator = "regex"
+risk = "high"
+file = "flutter/lib/domain/formatting/money_formatter.dart"
+original = "RegExp(r'^\\d{1,3}(\\.\\d{3})+$')"
+mutant = "RegExp(r'^\\d{1,3}(\\.\\d{2})+$')"
+intent = "`1.423` is read as 1.423 TL instead of 1423 TL, and `14.23` as 1423 TL — a 1000x error on input."
+suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-005"
+layer = "flutter"
+area = "money-input"
+operator = "relational-boundary"
+risk = "high"
+file = "flutter/lib/ui/design_system/sp_money_field.dart"
+original = "if (positive && amount <= Decimal.zero) return MoneyInputMessages.positive;"
+mutant = "if (positive && amount < Decimal.zero) return MoneyInputMessages.positive;"
+intent = "A zero payment or charge passes the positive-amount validation."
+suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-006"
+layer = "flutter"
+area = "money-input"
+operator = "remove-guard"
+risk = "high"
+file = "flutter/lib/ui/design_system/sp_money_field.dart"
+original = "if (input.hasSubKurusDigits) return MoneyInputMessages.scale;"
+mutant = ""
+intent = "An amount with three decimals (10,005) is accepted by money fields."
+suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-007"
+layer = "flutter"
+area = "money-format"
+operator = "relational-boundary"
+risk = "low"
+file = "flutter/lib/domain/formatting/money_formatter.dart"
+original = "if (amount > Decimal.zero) return '+${format(amount)}';"
+mutant = "if (amount >= Decimal.zero) return '+${format(amount)}';"
+intent = "A zero ledger movement is shown as +₺0,00."
+suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-008"
+layer = "flutter"
+area = "json-decimal"
+operator = "remove-call"
+risk = "medium"
+file = "flutter/lib/domain/formatting/json_decimal.dart"
+original = "if (parsed == null) onMalformedDecimal(key, raw);"
+mutant = ""
+intent = "Malformed money in an API payload silently becomes zero with no log entry."
+suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-009"
+layer = "flutter"
+area = "json-decimal"
+operator = "swap-operands"
+risk = "high"
+file = "flutter/lib/domain/formatting/json_decimal.dart"
+original = "return readDecimalOrNull(json, key) ?? fallback ?? Decimal.zero;"
+mutant = "return fallback ?? readDecimalOrNull(json, key) ?? Decimal.zero;"
+intent = "An explicit fallback replaces a valid amount sent by the API."
+suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-010"
+layer = "flutter"
+area = "money-format"
+operator = "swap-order"
+risk = "low"
+file = "flutter/lib/domain/formatting/money_formatter.dart"
+original = "return '${negative ? '-' : ''}$symbol${_group(integerPart)},$fraction';"
+mutant = "return '$symbol${negative ? '-' : ''}${_group(integerPart)},$fraction';"
+intent = "Negative amounts render as ₺-1.234,50 instead of -₺1.234,50."
+suites = ["flutter-money", "flutter-all"]
+
+# ------------------------------------------------------------------ Python: harness gates
+
+[[scenario]]
+id = "MUT-PY-001"
+layer = "python"
+area = "security-lint"
+operator = "constant"
+risk = "high"
+file = "scripts/security_lint.py"
+original = "if len(value) < 20 or any(c in value for c in \"${}<>()/\\\\ \"):"
+mutant = "if len(value) < 40 or any(c in value for c in \"${}<>()/\\\\ \"):"
+intent = "The secret scanner ignores credentials shorter than 40 characters."
+suites = ["harness"]
+
+[[scenario]]
+id = "MUT-PY-002"
+layer = "python"
+area = "security-lint"
+operator = "constant"
+risk = "medium"
+file = "scripts/security_lint.py"
+original = "return entropy(value) >= 3.5"
+mutant = "return entropy(value) >= 4.5"
+intent = "The secret scanner's entropy threshold is raised so typical random keys pass unnoticed."
+suites = ["harness"]
+
+[[scenario]]
+id = "MUT-PY-003"
+layer = "python"
+area = "tenant-lint"
+operator = "return-value"
+risk = "high"
+file = "scripts/tenant_isolation_lint.py"
+original = "return bool(re.search(r\"\\bctx\\.claims\\b|[(,]\\s*&ctx\\b\", body))"
+mutant = "return True"
+intent = "The tenant-isolation lint accepts every AuthzContext handler, scoped or not."
+suites = ["harness"]
+
+[[scenario]]
+id = "MUT-PY-004"
+layer = "python"
+area = "traceability"
+operator = "remove-check"
+risk = "high"
+file = "scripts/feature_traceability.py"
+original = "if scenario.mode == \"linked\" and scenario.id not in catalogue.links:"
+mutant = "if False and scenario.mode == \"linked\" and scenario.id not in catalogue.links:"
+intent = "A @linked scenario with no test declaring `covers:` passes the traceability gate."
+suites = ["harness"]
+
+[[scenario]]
+id = "MUT-PY-005"
+layer = "python"
+area = "traceability"
+operator = "constant"
+risk = "medium"
+file = "scripts/feature_traceability.py"
+original = "for sid, count in known.items() if count > 1]"
+mutant = "for sid, count in known.items() if count > 2]"
+intent = "A scenario id used twice is not reported as a duplicate."
+suites = ["harness"]
+
+[[scenario]]
+id = "MUT-PY-006"
+layer = "python"
+area = "traceability"
+operator = "swap-function"
+risk = "high"
+file = "scripts/feature_traceability.py"
+original = "return min(statuses, key=order.index) if statuses else \"MISSING\""
+mutant = "return max(statuses, key=order.index) if statuses else \"MISSING\""
+intent = "A story's status is its best scenario's instead of its worst, hiding failures."
+suites = ["harness"]
