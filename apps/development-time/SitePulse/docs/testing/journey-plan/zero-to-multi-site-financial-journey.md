@@ -102,6 +102,12 @@ Total open primary debt includes principal and fees. Cara has 1,051.67 of total 
 
 The amounts assume fees accrue at 5% per 30 days on outstanding principal, rounded by segment. Payments settle any designated charge first. The default waterfall clears outstanding fees before applying principal oldest first within the selected debtor and unit. Calculate expected amounts from the fixture dates and amounts independently of the response being checked. Each month, compare accrued amounts, payment allocations, ownership and occupancy history, and the site's open debt and cash. Report the site, period, unit and debtor when a checkpoint fails.
 
+## Manager browser evidence and isolated onboarding
+
+The GUI journey runs on the disposable `sitepulse_e2e_<pid>` database created by `E2EStack`; it never connects to the developer database. For the onboarding scenario, `reset_empty()` keeps the schema history and system configuration, omits the demo-site seed, and restarts the backend so it bootstraps the SaaS administrator. The first `/api/v1/saas/sites` result must be empty. The test uses this throwaway database, not a product-wide reset endpoint, and the normal suite reset restores the demo seed before the next test.
+
+Use the site manager's **Residents** view for block and unit counts and the unit workspace for household and title-history evidence. From a unit workspace, open its account statement to compare debtor, period, fee, balance and receipt rows. Use **Aidat Yönetimi → Tahsilat & Kasa Takibi** for the site-scoped payment stream; the top collection-volume KPI and each receipt detail provide the posted receipt evidence. The approved fixture has no opening cash, expenses or transfers, so cumulative gross posted receipts (including paid fees) are the operating-cash expectation. Record the site ID shown in each manager session and compare it with the site ID used by the backend query. Before and after a Site A payment, reload Site B's stream and verify its totals and receipt rows did not change.
+
 ## Decisions for review
 
 - **Fund scope.** Is posted operating cash sufficient for this journey, or should the same scenario include an expense and assert cash net of that expense? Reserve and capital funds have separate balances.

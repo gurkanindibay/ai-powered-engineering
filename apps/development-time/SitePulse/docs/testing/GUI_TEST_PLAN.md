@@ -215,6 +215,7 @@ EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered b
 | — | 13-01, 13-12 | — | — | — | **Excluded:** Backend-only late-fee rule for supplementary charges, covered by `backend/tests/supplementary_charge_tests.rs`. | | |
 | — | 13-10 | — | — | — | **Partial:** Backend isolation automated; GUI isolation scenario (SC-13-10-08) is pending separate GUI issue. | | |
 | — | 13-06, 13-08 | — | — | — | **Partial:** Lifecycle chain (13-06) and manager session states (13-08) specified in .specify/features/EPIC-13; GUI automation pending. | | |
+| — | 13-26 | — | — | — | **Partial:** Empty-site isolation is linked to an E2E test; full manager-browser journey waits for the onboarding and billing builders in #247 and #248. | | |
 
 ## 4. API data builders (`e2e/support/api.py`), confirmed against `backend/src/app.rs`
 Each builder calls real backend endpoints (no direct SQL writes), returns the ids it created, and runs after a reset.

@@ -163,3 +163,15 @@ As a site manager, I need an end-to-end interconnected lifecycle journey that wa
 - Checkpoint 7: Replacing tenants and transferring unit titles preserves historical liabilities and attaches debt strictly to responsible parties.
 - Checkpoint 8: Server restarts verify state persistence, tenant isolation, and absence of cross-site leakage.
 
+### STORY-13-26: Two-site journey from onboarding to reconciliation
+
+As a SaaS administrator and site manager, I need one isolated attempt to carry two sites from onboarding through 88 unit creations, occupancy changes, four billing periods and financial reconciliation, so the whole residential workflow is verified with stable site and unit identities.
+
+#### Acceptance criteria
+
+- The attempt begins in its own empty E2E database with system configuration and a SaaS administrator; it does not reset the developer or production database.
+- It creates both sites, all three blocks and 88 units through supported product flows, then registers the five detailed households and the 83 owner-occupants.
+- The same returned site and unit identifiers flow through onboarding evidence, owner/tenant transitions, accruals, receipts, statements and site-scoped cash checks.
+- Manager browser evidence uses the unit workspace statement for period/debtor/receipt details and Dues Management → Tahsilat & Kasa Takibi for posted receipt totals and receipt records. Under the approved collections-only fixture, gross posted receipts equal operating cash.
+- Final site-scoped manager results agree with the independently calculated balances, and a Site A payment does not change Site B's totals.
+
