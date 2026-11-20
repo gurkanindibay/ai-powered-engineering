@@ -209,4 +209,12 @@ mod tests {
         assert_eq!(normalize_bank_code("2O5"), Err(IbanError::InvalidBankCode));
         assert_eq!(normalize_bank_code(""), Err(IbanError::InvalidBankCode));
     }
+
+    #[test]
+    fn an_iban_longer_than_26_characters_is_not_turkish() {
+        let valid = TrIban::from_bban("0001000000000000000001").expect("bban");
+        let longer = format!("{}0", valid.as_str());
+        assert_eq!(TrIban::parse(&longer), Err(IbanError::NotTurkish));
+        assert!(TrIban::parse(valid.as_str()).is_ok());
+    }
 }

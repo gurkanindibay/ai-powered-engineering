@@ -252,4 +252,10 @@ mod tests {
         assert!(scope.resolve(None).is_err());
         assert_eq!(scope.resolve(Some("7")).unwrap(), "7");
     }
+
+    #[test]
+    fn a_site_scope_never_allows_an_empty_or_zero_site() {
+        assert!(!TenantScope::site("").allows(""));
+        assert!(!TenantScope::site("1").allows(""));
+    }
 }

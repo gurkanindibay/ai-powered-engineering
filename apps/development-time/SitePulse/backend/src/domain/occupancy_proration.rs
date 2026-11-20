@@ -370,4 +370,78 @@ mod tests {
         .expect("valid amount");
         assert_eq!(amount, Some(money("774.19")));
     }
+
+    #[test]
+    fn split_shares_always_add_up_to_the_prorated_total() {
+        let owner_then_tenant = |split: &str| {
+            [OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                starts_on: date(split),
+                ends_before: None,
+            }]
+        };
+        for (month_start, last_day) in [("2026-02-01", 28), ("2026-04-01", 30), ("2026-10-01", 31)]
+        {
+            for amount in [
+                "1000.00", "1400.00", "100.01", "333.33", "0.05", "10.01", "7.77",
+            ] {
+                for day in 2..=last_day {
+                    let split = format!("{}-{day:02}", &month_start[..7]);
+                    let shares = split_monthly_dues(
+                        money(amount),
+                        date(month_start),
+                        None,
+                        &owner_then_tenant(&split),
+                        true,
+                        date(&split),
+                    )
+                    .expect("valid amount");
+                    let total: Decimal = shares.iter().map(|s| s.amount).sum();
+                    assert_eq!(total, money(amount), "{amount} split on {split}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn without_proration_an_unoccupied_day_is_billed_to_the_owner() {
+        let spans = [OccupancySpan {
+            party: ResponsibleParty::Tenant,
+            starts_on: date("2026-10-11"),
+            ends_before: None,
+        }];
+        let shares = split_monthly_dues(
+            money("1400.00"),
+            date("2026-10-01"),
+            None,
+            &spans,
+            false,
+            date("2026-10-05"),
+        )
+        .expect("valid amount");
+        assert_eq!(
+            shares,
+            vec![ProratedShare {
+                party: ResponsibleParty::Owner,
+                amount: money("1400.00")
+            }]
+        );
+    }
+
+    #[test]
+    fn a_negative_monthly_amount_is_rejected_with_and_without_proration() {
+        for proration in [true, false] {
+            assert_eq!(
+                split_monthly_dues(
+                    money("-1.00"),
+                    date("2026-10-01"),
+                    None,
+                    &[],
+                    proration,
+                    date("2026-10-05"),
+                ),
+                Err(ProrationError::NegativeAmount)
+            );
+        }
+    }
 }

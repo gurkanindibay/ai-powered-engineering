@@ -147,32 +147,32 @@ impl DuesCalculationService {
             })
             .collect();
         payments.sort_by_key(|(date, _)| *date);
+        // One pass over the date-ordered payments: every payment strictly inside
+        // (cursor, through) closes the segment before it, so the loop always advances.
+        let segment_penalty = |from: NaiveDate, to: NaiveDate, paid: Decimal| {
+            let days = (to - from).num_days();
+            let outstanding = (principal_amount - paid).max(Decimal::ZERO);
+            if days > 0 && outstanding > Decimal::ZERO {
+                (outstanding * Self::monthly_rate() * Decimal::from(days) / Decimal::from(30))
+                    .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+            } else {
+                Decimal::ZERO
+            }
+        };
         let mut penalty = Decimal::ZERO;
         let mut cursor = due_date;
         let mut paid = Decimal::ZERO;
-        let mut index = 0;
-        loop {
-            // Payments dated on or before the cursor already reduce the principal.
-            while index < payments.len() && payments[index].0 <= cursor {
-                paid += payments[index].1;
-                index += 1;
-            }
-            let segment_end = match payments.get(index) {
-                Some((date, _)) if *date < through => *date,
-                _ => through,
-            };
-            let days = (segment_end - cursor).num_days();
-            let outstanding = (principal_amount - paid).max(Decimal::ZERO);
-            if days > 0 && outstanding > Decimal::ZERO {
-                penalty += (outstanding * Self::monthly_rate() * Decimal::from(days)
-                    / Decimal::from(30))
-                .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
-            }
-            if segment_end >= through {
+        for (date, amount) in &payments {
+            if *date >= through {
                 break;
             }
-            cursor = segment_end;
+            if *date > cursor {
+                penalty += segment_penalty(cursor, *date, paid);
+                cursor = *date;
+            }
+            paid += *amount;
         }
+        penalty += segment_penalty(cursor, through, paid);
         penalty
     }
 
@@ -375,5 +375,40 @@ mod tests {
         assert_eq!(charge.fee_due_date(), date(11, 10));
         charge.effective_due_date = None;
         assert_eq!(charge.fee_due_date(), date(11, 10));
+    }
+
+    #[test]
+    fn a_paid_liability_never_accrues_a_new_penalty() {
+        let svc = DuesCalculationService::new();
+        // Status says Paid although principal is still open: it must be left alone.
+        let mut paid = due("0.00", "0.00");
+        paid.status = DebtStatus::Paid;
+        let later = NaiveDate::from_ymd_opt(2027, 3, 1).unwrap();
+        let out = svc.calculate_delay_penalty(paid, later);
+        assert_eq!(out.delay_penalty, Decimal::ZERO);
+        assert_eq!(out.penalty_accrued_through, None);
+        assert_eq!(out.status, DebtStatus::Paid);
+    }
+
+    #[test]
+    fn payments_dated_on_every_cursor_position_terminate_and_are_applied_once() {
+        let svc = DuesCalculationService::new();
+        let day = |m, d| NaiveDate::from_ymd_opt(2026, m, d).unwrap();
+        let principal = Decimal::from_str_exact("1400.00").unwrap();
+        let half = Decimal::from_str_exact("700.00").unwrap();
+        // Several payments on the due date, on a later cursor and on the end date.
+        let penalty = svc.penalty_through(
+            principal,
+            day(10, 15),
+            day(11, 14),
+            &[
+                (day(10, 15), half),
+                (day(10, 25), half / Decimal::from(2)),
+                (day(10, 25), half / Decimal::from(2)),
+                (day(11, 14), half),
+            ],
+        );
+        // 10 days on 700 (the other payments close the principal on 25 October).
+        assert_eq!(penalty, Decimal::from_str_exact("11.67").unwrap());
     }
 }

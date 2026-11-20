@@ -49,6 +49,7 @@ void main() {
       expect(MoneyFormatter.format(d('-1460.67')), '-₺1.460,67');
       expect(MoneyFormatter.formatSigned(d('500')), '+₺500,00');
       expect(MoneyFormatter.formatSigned(d('-500')), '-₺500,00');
+      expect(MoneyFormatter.formatSigned(Decimal.zero), '₺0,00');
       expect(MoneyFormatter.formatCredit(d('-576.67')), '+₺576,67');
       expect(MoneyFormatter.formatPlain(d('1423.33')), '1.423,33');
       expect(formatTry(d('1400.55') * d('2')), '₺2.801,10');
