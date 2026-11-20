@@ -48,6 +48,7 @@ async fn scheduler_runs_once_only_when_the_e2e_clock_is_ticked() {
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
             grace_days: 0,
+            effective_due_date: Some(date(10, 10)),
         });
     }
 

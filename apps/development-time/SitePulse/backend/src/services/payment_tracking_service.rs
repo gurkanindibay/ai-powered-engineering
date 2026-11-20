@@ -283,7 +283,8 @@ impl PaymentTrackingService {
         &self,
         site_id: &str,
     ) -> Result<DebtAgingReport, LedgerReadError> {
-        self.get_debt_aging_report_at(site_id, Utc::now()).await
+        self.get_debt_aging_report_at(site_id, crate::e2e_clock::now_utc())
+            .await
     }
 
     /// Calculates the debt-aging report as of an explicit instant.
@@ -462,16 +463,18 @@ impl PaymentTrackingService {
             .ok_or_else(|| "site_id is required".to_string())?;
         let unit_id = req.unit_id.clone();
         let payment_amount = req.amount;
-        let issued_at = req.payment_date.unwrap_or_else(Utc::now);
+        let issued_at = req.payment_date.unwrap_or_else(crate::e2e_clock::now_utc);
         // Only manually keyed payments are date-checked: bank, card and provider
         // payments carry the institution's value date for money already received.
         if matches!(
             req.payment_channel,
             PaymentChannel::ManualCash | PaymentChannel::Cash | PaymentChannel::Other
         ) {
-            if let Some(reason) =
-                Self::payment_date_violation(issued_at, Utc::now(), Self::backdate_window_days())
-            {
+            if let Some(reason) = Self::payment_date_violation(
+                issued_at,
+                crate::e2e_clock::now_utc(),
+                Self::backdate_window_days(),
+            ) {
                 return Err(reason);
             }
         }
@@ -1183,7 +1186,7 @@ impl PaymentTrackingService {
         } else {
             tenant_name.clone().unwrap_or_else(|| "Kiracı".to_string())
         };
-        let now = Utc::now();
+        let now = crate::e2e_clock::now_utc();
         let calc = crate::services::DuesCalculationService::new();
         let ctx = ReceiptContext {
             site_id: site_id.clone(),

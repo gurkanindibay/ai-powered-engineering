@@ -20,6 +20,30 @@ As a site manager, I can view and interact with sites in early starting states (
 - Starting state F3 exposes open periods with zero liabilities before residents arrive.
 - Every starting state (F0 to F3) survives backend restart without data loss or balance drift.
 
+### STORY-13-02: Accrual histories F4, F5 and F7
+
+As a site manager, I need accruals across one, multiple and closed periods with accurate KMK late fees and aging buckets so debts are properly tracked and displayed to admins and residents.
+
+#### Acceptance criteria
+
+- Residents with a single accrual period (F4) show one debt each matching the reference catalogue.
+- Late fees follow the clock day by day for overdue liabilities.
+- Multiple periods with mixed debts (F5) add up correctly per unit and per site.
+- Aging buckets correctly categorize debts according to days overdue.
+- Closed periods (F7) accept no new accruals while preserving open debts.
+
+### STORY-13-04: Paying, allocation and advance across periods
+
+As a site manager, I need payments to allocate FIFO across periods and bank webhooks to match transfers so unit balances are settled accurately.
+
+#### Acceptance criteria
+
+- Payments clear oldest period first (FIFO) with late fee settled before principal.
+- Exact payments settle debts with zero remaining and no advance.
+- Overpayments become advance balances that offset subsequent accruals.
+- Invalid payment amounts are rejected without side effects.
+- Bank webhooks match virtual IBANs and allocate transfers to open liabilities.
+
 ### STORY-13-03: Residents and owners change after periods were accrued
 
 As a site manager, I need old liabilities to stay with whoever was responsible at the time, and new residents or owners to be charged only from their start date, so that mid-period occupancy changes never move debt between people.

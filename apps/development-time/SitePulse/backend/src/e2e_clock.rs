@@ -1,7 +1,27 @@
 //! E2E-only deterministic scheduler clock and control endpoint.
 
+use chrono::{DateTime, Utc};
+
+/// Fixture instant published by the E2E control endpoint; `None` until a runner sets the date.
 #[cfg(feature = "e2e")]
-use chrono::{DateTime, NaiveDate, Utc};
+static FIXTURE_NOW: RwLock<Option<DateTime<Utc>>> = RwLock::new(None);
+
+/// Current instant for date-dependent reads and writes.
+///
+/// Returns the E2E fixture time once a runner has set the clock through the control endpoint,
+/// otherwise the system clock. Normal backend builds always use the system clock.
+pub fn now_utc() -> DateTime<Utc> {
+    #[cfg(feature = "e2e")]
+    if let Ok(guard) = FIXTURE_NOW.read() {
+        if let Some(fixture) = *guard {
+            return fixture;
+        }
+    }
+    Utc::now()
+}
+
+#[cfg(feature = "e2e")]
+use chrono::NaiveDate;
 #[cfg(feature = "e2e")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "e2e")]
@@ -168,8 +188,14 @@ impl Drop for E2eTickGuard<'_> {
 #[cfg(feature = "e2e")]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum ClockRequest {
-    SetDate { date: NaiveDate },
-    AdvanceTo { date: NaiveDate },
+    SetDate {
+        date: NaiveDate,
+    },
+    AdvanceTo {
+        date: NaiveDate,
+    },
+    /// Returns the process to the system clock until the next date is set.
+    Clear,
     Tick,
 }
 
@@ -183,10 +209,20 @@ pub enum ClockResponse {
     Advanced {
         date: NaiveDate,
     },
+    Cleared,
     Ticked {
         date: NaiveDate,
         report: crate::scheduler::E2eTickReport,
     },
+}
+
+/// Drops the published fixture instant so `now_utc()` follows the system clock again.
+#[cfg(feature = "e2e")]
+pub fn clear_fixture_now() -> Result<(), E2eClockError> {
+    *FIXTURE_NOW
+        .write()
+        .map_err(|_| E2eClockError::LockUnavailable)? = None;
+    Ok(())
 }
 
 /// Handles the private E2E control endpoint.
@@ -198,6 +234,10 @@ pub async fn control(
     let Some(clock) = state.e2e_clock.as_ref() else {
         return Err(E2eClockError::Disabled);
     };
+    let publishes_fixture_time = matches!(
+        request,
+        ClockRequest::SetDate { .. } | ClockRequest::AdvanceTo { .. }
+    );
     let response = match request {
         ClockRequest::SetDate { date } => {
             clock.set_date(date)?;
@@ -207,6 +247,10 @@ pub async fn control(
             clock.advance_to(date)?;
             ClockResponse::Advanced { date }
         }
+        ClockRequest::Clear => {
+            clear_fixture_now()?;
+            ClockResponse::Cleared
+        }
         ClockRequest::Tick => {
             let now = clock.now()?;
             let date = now.date_naive();
@@ -214,6 +258,12 @@ pub async fn control(
             ClockResponse::Ticked { date, report }
         }
     };
+    if publishes_fixture_time {
+        let fixture = clock.now()?;
+        *FIXTURE_NOW
+            .write()
+            .map_err(|_| E2eClockError::LockUnavailable)? = Some(fixture);
+    }
     Ok(axum::Json(response))
 }
 

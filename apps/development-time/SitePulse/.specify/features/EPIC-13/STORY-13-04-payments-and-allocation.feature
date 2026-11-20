@@ -8,30 +8,31 @@ Feature: Paying, allocation and advance across periods
     And a SaaS admin has onboarded a site and manager unique to this scenario attempt
     And the manager has signed in with a permanent password
 
-  @SC-13-04-01 @J-11 @depth:1 @state:F5 @layer:backend @smoke @core @role_manager @pending
+  @SC-13-04-01 @J-11 @depth:1 @state:F5 @layer:backend @smoke @core @role_manager @linked
   Scenario: A payment clears the oldest period first
     Given the site is in state F5
     When the manager records a manual payment of 2000.00 for unit "A-5"
-    Then the "Eylül 2026" late fee 175.00 and principal 1500.00 are settled
-    And the remaining 325.00 goes to the "Ekim 2026" late fee 100.00 and then 225.00 of its principal
+    Then late fees are settled oldest first: 175.00 for "Eylül 2026", 100.00 for "Ekim 2026" and 22.50 for "Kasım 2026"
+    And the remaining 1702.50 settles all 1500.00 of "Eylül 2026" principal and 202.50 of "Ekim 2026" principal
+    And "Ekim 2026" has 1297.50 principal open, while "Kasım 2026" has 1500.00 principal open and no late fee
     And unit "A-5" owes 2797.50
     And the ledger invariants hold
 
-  @SC-13-04-02 @J-11 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-04-02 @J-11 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: Paying exactly the whole debt leaves zero and no advance
     Given the site is in state F5
     When the manager records a manual payment of 4797.50 for unit "A-5"
     Then unit "A-5" owes 0.00 and holds an advance of 0.00
     And its 3 liabilities are settled
 
-  @SC-13-04-03 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-04-03 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario: One kuruş short leaves one kuruş open
     Given the site is in state F5
     When the manager records a manual payment of 4797.49 for unit "A-5"
     Then unit "A-5" owes exactly 0.01
     And the "Kasım 2026" liability is the one still open
 
-  @SC-13-04-04 @J-11 @depth:2 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-04-04 @J-11 @depth:2 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: An overpayment becomes an advance that offsets the next accrual
     Given the site is in state F5
     When the manager records a manual payment of 5000.00 for unit "A-5"
@@ -41,7 +42,7 @@ Feature: Paying, allocation and advance across periods
     And 1297.50 remains open
     And the ledger invariants hold
 
-  @SC-13-04-05 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-04-05 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario Outline: Invalid payment amounts are rejected without any side effect
     Given the site is in state F5
     When the manager records a manual payment of <amount> for unit "A-5"
@@ -54,13 +55,14 @@ Feature: Paying, allocation and advance across periods
       | -100.00 | amount must be positive    |
       | 10.005  | at most two decimal places |
 
-  @SC-13-04-06 @J-11 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-04-06 @J-11 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: The bank webhook matches a transfer to the unit and allocates it
     Given the site is in state F5
     When the bank webhook sends 1675.00 with transaction id "TX-001" to the virtual IBAN of unit "A-3"
     Then unit "A-3" owes 0.00
     And the payment stream lists "TX-001" once, allocated to "Eylül 2026"
 
+  # Pending: Webhook transaction idempotence test pending.
   @SC-13-04-07 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: The same bank transaction sent twice is applied once
     Given the site is in state F5
@@ -70,6 +72,7 @@ Feature: Paying, allocation and advance across periods
     And the second delivery is acknowledged as already processed, not as an error the bank retries
     And unit "A-3" owes 0.00 and holds an advance of 0.00
 
+  # Pending: Concurrent webhook transfers test pending.
   @SC-13-04-08 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: Two transfers for one unit at the same moment are both applied
     Given the site is in state F5
@@ -77,6 +80,7 @@ Feature: Paying, allocation and advance across periods
     Then unit "A-5" owes 2797.50
     And both payments are listed and no allocation is counted twice
 
+  # Pending: Multi-site webhook isolation test pending.
   @SC-13-04-09 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: A transfer matched to another site is applied only there
     Given the site is in state F5
@@ -85,6 +89,7 @@ Feature: Paying, allocation and advance across periods
     Then the other site's liability is settled and only its payment stream shows the transfer
     And no balance of the original site changes
 
+  # Pending: Grace period boundary late fee test pending.
   @SC-13-04-10 @J-11 @depth:1 @layer:backend @edge @role_manager @pending
   Scenario Outline: The grace boundary decides whether a late fee is charged
     Given the site has a grace period of <grace> days and the clock is set to "<paid_on>"
@@ -101,6 +106,7 @@ Feature: Paying, allocation and advance across periods
       | 5     | 2026-11-15 | 0.00  | 0.00      |
       | 5     | 2026-11-16 | 15.00 | 15.00     |
 
+  # Pending: Payment correction and advance transfer test pending.
   @SC-13-04-11 @J-11 @depth:1 @state:F2 @layer:backend @core @role_manager @pending
   Scenario: A correction after a partial payment moves the paid amount to the advance
     Given the site was built from F2 with only September accrued
@@ -111,6 +117,7 @@ Feature: Paying, allocation and advance across periods
     And the original receipt remains available with its original amount
     And the ledger invariants hold
 
+  # Pending: Correction four-eyes approval enforcement test pending.
   @SC-13-04-12 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: The requester of a correction cannot approve it
     Given the site is in state F5
@@ -119,6 +126,7 @@ Feature: Paying, allocation and advance across periods
     Then the approval is refused
     And the liability is unchanged
 
+  # Pending: Resident confirmed payment view updates pending.
   @SC-13-04-13 @J-11 @depth:1 @state:F5 @layer:gui @core @role_resident @pending
   Scenario: A resident's confirmed payment appears in their statement and the admin view
     Given the site is in state F5
@@ -129,6 +137,7 @@ Feature: Paying, allocation and advance across periods
     And a receipt exists for the payment
     And the ledger invariants hold
 
+  # Pending: Payment reversal and penalty restoration test pending.
   @SC-13-04-14 @J-11 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
   Scenario: A payment reversal restores the debt it settled and the fee it stopped
     Given the site is in state F5
@@ -140,6 +149,7 @@ Feature: Paying, allocation and advance across periods
     And a second reversal of the same payment is refused and changes nothing
     And the ledger invariants hold
 
+  # Pending: Multi-debtor reconciliation queue assignment test pending.
   @SC-13-04-15 @J-11 @depth:2 @state:F6 @layer:backend @core @role_manager @pending
   # Backend coverage: backend/tests/bank_multi_debtor_tests.rs (SC-07-03-03)
   Scenario: A unit-level transfer on a unit with several debtors waits for the manager
@@ -152,6 +162,7 @@ Feature: Paying, allocation and advance across periods
     Then the "Kasım 2026" share of "Mert Kılıç" is settled and the other shares are unchanged
     And the ledger invariants hold
 
+  # Pending: Payment for unit with no debt becoming payer advance test pending.
   @SC-13-04-16 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
   Scenario: A payment for a unit with no debt becomes the payer's advance
     Given the site is in state F5

@@ -16,16 +16,18 @@ from support.journey_attempts import (
 
 E2E = Path(__file__).resolve().parents[1]
 EXPECTED = {
-    "F0": {"blocks": 0, "units": 0, "people": 0, "accounts": 0, "periods": 0},
-    "F1": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 0},
-    "F2": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 0},
-    "F3": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 1},
+    "F0": {"blocks": 0, "units": 0, "people": 0, "accounts": 0, "periods": 0, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
+    "F1": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 0, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
+    "F2": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 0, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
+    "F3": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 1, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
+    "F4": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 1, "liabilities": 6, "receipts": 1, "overdue": Decimal("8800.00"), "advance": Decimal("0.00")},
+    "F5": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 3, "liabilities": 18, "receipts": 9, "overdue": Decimal("4567.50"), "advance": Decimal("1250.00")},
 }
 
 
 @pytest.mark.covers("SC-13-07-01")
 @pytest.mark.core
-@pytest.mark.parametrize("state", ["F0", "F1", "F2", "F3"])
+@pytest.mark.parametrize("state", ["F0", "F1", "F2", "F3", "F4", "F5"])
 def test_site_admin_reference_fixtures(state, request, api, actors, stack):
     saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
     manifest = JourneyManifest.create(
@@ -42,8 +44,8 @@ def test_site_admin_reference_fixtures(state, request, api, actors, stack):
         assert len(overview["flats"]) == expected["units"]
         assert len(fixture.unit_ids) == expected["units"]
         assert stack.sql(f"SELECT COUNT(*) FROM blocks WHERE site_id = {int(fixture.site_id)};") == str(expected["blocks"])
-        assert Decimal(str(overview["summary"]["total_overdue_with_interest"])) == Decimal("0.00")
-        assert Decimal(str(overview["summary"]["total_advance_balance"])) == Decimal("0.00")
+        assert Decimal(str(overview["summary"]["total_overdue_with_interest"])) == expected["overdue"]
+        assert Decimal(str(overview["summary"]["total_advance_balance"])) == expected["advance"]
         assert len(overview["available_periods"]) == expected["periods"]
         assert stack.sql(
             f"SELECT COUNT(*) FROM persons WHERE site_id = {int(fixture.site_id)} "
@@ -57,8 +59,8 @@ def test_site_admin_reference_fixtures(state, request, api, actors, stack):
         assert stack.sql(
             "SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
             f"WHERE u.site_id = {int(fixture.site_id)};"
-        ) == "0"
-        assert stack.sql(f"SELECT COUNT(*) FROM payment_receipts WHERE site_id = {int(fixture.site_id)};") == "0"
+        ) == str(expected["liabilities"])
+        assert stack.sql(f"SELECT COUNT(*) FROM payment_receipts WHERE site_id = {int(fixture.site_id)};") == str(expected["receipts"])
     except BaseException as failure:
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
     else:

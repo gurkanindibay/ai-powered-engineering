@@ -15,6 +15,7 @@ from support.journey_attempts import (  # noqa: E402
     JourneyClock,
     JourneyFixturePending,
     JourneyManifest,
+    make_viban,
     site_in_state,
     teardown_sites,
     teardown_with_evidence,
@@ -89,6 +90,7 @@ class JourneyAttemptTests(unittest.TestCase):
             for statement in stack.statements:
                 self.assertIn("SET LOCAL sitepulse.allow_ledger_purge", statement)
                 self.assertIn("DELETE FROM sites WHERE id = 41", statement)
+                self.assertIn("DELETE FROM late_fee_accruals WHERE site_id = 41", statement)
                 self.assertNotIn("TRUNCATE", statement.upper())
                 self.assertNotIn("DELETE FROM sites WHERE id = 1", statement)
                 self.assertLess(
@@ -143,6 +145,17 @@ class JourneyAttemptTests(unittest.TestCase):
             self.assertIs(raised.exception, original)
             self.assertEqual(stack.restarts, 1)
 
+    def test_make_viban_generates_valid_checksum(self) -> None:
+        iban = make_viban("00205", "1", "A", 14)
+        self.assertTrue(iban.startswith("TR"))
+        self.assertEqual(len(iban), 26)
+        rearranged = f"{iban[4:]}2927{iban[2:4]}"
+        self.assertEqual(int(rearranged) % 97, 1)
+
+    def test_make_viban_matches_reference_vector(self) -> None:
+        iban = make_viban("00205", "site-1", "A", 14)
+        self.assertEqual(iban, "TR410020504213991067000014")
+
     def test_site_in_state_f3_creates_period_and_structure(self) -> None:
         from unittest.mock import MagicMock
         api = MagicMock()
@@ -165,7 +178,7 @@ class JourneyAttemptTests(unittest.TestCase):
             self.assertTrue(any("UPDATE sites SET proration_enabled = TRUE" in s for s in stack.statements))
             self.assertGreaterEqual(stack.restarts, 1)
 
-    def test_site_in_state_f4_through_f7_raise_pending(self) -> None:
+    def test_site_in_state_f6_and_f7_raise_pending(self) -> None:
         from unittest.mock import MagicMock
         api = MagicMock()
         saas = MagicMock()
@@ -173,7 +186,7 @@ class JourneyAttemptTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             manifest = JourneyManifest.create(Path(directory), "run", "shard", "attempt")
-            for state in ["F4", "F5", "F6", "F7"]:
+            for state in ["F6", "F7"]:
                 with self.assertRaises(JourneyFixturePending):
                     site_in_state(state, api=api, stack=stack, saas=saas, manifest=manifest)
 

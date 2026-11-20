@@ -145,7 +145,7 @@ impl AppStateInner {
             blocks: Vec::new(),
             kuveyt_turk_client_id: std::env::var("KT_CLIENT_ID").ok(),
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
-            auto_scheduler_enabled: false,
+            auto_scheduler_enabled: std::env::var("SITEPULSE_E2E").is_ok_and(|v| v == "true"),
             unit_occupancies: HashMap::new(),
             payment_receipts: Vec::new(),
             payment_entries: Vec::new(),
@@ -666,12 +666,12 @@ impl AppStateInner {
         self.site_accrual_schedules.clear();
         self.payment_intents.clear();
         self.finance = crate::finance_book::FinanceBook::default();
-        self.auto_scheduler_enabled = false;
+        self.auto_scheduler_enabled = std::env::var("SITEPULSE_E2E").is_ok_and(|v| v == "true");
         self.seed_system_lookups();
     }
 
     pub fn reset_all_payments_and_balances(&mut self) {
-        self.auto_scheduler_enabled = false;
+        self.auto_scheduler_enabled = std::env::var("SITEPULSE_E2E").is_ok_and(|v| v == "true");
         self.advance_balances.clear();
         self.pending_exit_advance_reservations.clear();
         self.payment_idempotency.clear();
