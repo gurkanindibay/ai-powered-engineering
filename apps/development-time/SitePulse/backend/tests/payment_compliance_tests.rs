@@ -233,31 +233,43 @@ async fn when_bank_webhook_is_redelivered_then_only_one_receipt_exists() {
 }
 
 /// R4 / TBK 101: the designated period is paid even though an older one is open.
+// covers: SC-13-09-01
 #[tokio::test]
 async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_dues() {
     let soon = today() + Days::new(5);
+    let mut november = liability(
+        "nov",
+        "Kasım 2026",
+        "1500.00",
+        soon + Days::new(2),
+        "TENANT",
+        "OPERATIONAL_DUES",
+    );
+    november.delay_penalty = d("22.50");
+    november.total_amount = d("1522.50");
     let state = state_with(vec![
         liability(
-            "aug",
-            "Ağustos 2026",
-            "1400.00",
+            "sep",
+            "Eylül 2026",
+            "1675.00",
             soon,
             "TENANT",
             "OPERATIONAL_DUES",
         ),
         liability(
-            "sep",
-            "Eylül 2026",
-            "1400.00",
+            "oct",
+            "Ekim 2026",
+            "1600.00",
             soon + Days::new(1),
             "TENANT",
             "OPERATIONAL_DUES",
         ),
+        november,
     ])
     .await;
-    let mut req = manual("1400.00");
+    let mut req = manual("1522.50");
     req.designation = Some(PaymentDesignation {
-        periods: vec!["EYLÜL 2026".to_string()],
+        periods: vec!["KASIM 2026".to_string()],
         ..Default::default()
     });
     let receipt = PaymentTrackingService::new(state.clone())
@@ -265,17 +277,44 @@ async fn when_payer_designates_a_period_then_that_due_is_settled_before_older_du
         .await
         .unwrap();
 
+    assert_eq!(receipt.total_amount, d("1522.50"));
     assert_eq!(receipt.allocation_breakdown.len(), 1);
-    assert_eq!(receipt.allocation_breakdown[0].period, "Eylül 2026");
+    assert_eq!(receipt.allocation_breakdown[0].period, "Kasım 2026");
+    assert_eq!(receipt.allocation_breakdown[0].principal_paid, d("1500.00"));
+    assert_eq!(receipt.allocation_breakdown[0].penalty_paid, d("22.50"));
     let inner = state.inner.read().await;
     assert_eq!(
-        inner.dues.iter().find(|x| x.id == "sep").unwrap().status,
+        inner.dues.iter().find(|x| x.id == "nov").unwrap().status,
         DebtStatus::Paid
     );
-    assert_ne!(
-        inner.dues.iter().find(|x| x.id == "aug").unwrap().status,
-        DebtStatus::Paid
-    );
+    let november = inner.dues.iter().find(|x| x.id == "nov").unwrap();
+    assert_eq!(november.paid_principal, d("1500.00"));
+    assert_eq!(november.paid_penalty, d("22.50"));
+    assert_eq!(november.principal_amount, d("1500.00"));
+    assert_eq!(november.total_amount, Decimal::ZERO);
+    for (id, expected_open) in [("sep", d("1675.00")), ("oct", d("1600.00"))] {
+        let older = inner.dues.iter().find(|due| due.id == id).unwrap();
+        assert_eq!(older.principal_amount, expected_open);
+        assert_eq!(older.paid_principal, Decimal::ZERO);
+        assert_eq!(older.paid_penalty, Decimal::ZERO);
+        assert_eq!(
+            older.total_amount - older.paid_principal - older.paid_penalty,
+            expected_open
+        );
+    }
+    // Ledger invariant: every unit paid across all dues equals the receipt total.
+    let paid_across_dues: Decimal = inner
+        .dues
+        .iter()
+        .map(|due| due.paid_principal + due.paid_penalty)
+        .sum();
+    assert_eq!(paid_across_dues, receipt.total_amount);
+    assert_eq!(inner.advance_total(UNIT), Decimal::ZERO);
+    assert!(inner
+        .dues
+        .iter()
+        .filter(|x| x.id != "nov")
+        .all(|x| x.status != DebtStatus::Paid));
     let entry = inner
         .payment_entries
         .iter()

@@ -1,8 +1,8 @@
-# Site Admin interconnected journeys: test plan (DRAFT for review)
+# Site Admin interconnected journeys: test plan
 
-Status: **plan only, nothing is automated.** Every scenario is tagged `@pending`. After review the
-files move to `.specify/features/EPIC-13/` (proposed epic `EPIC-13 Site admin journeys`) and get
-step definitions in `e2e/steps/epic13_steps.py`. Complements `GUI_TEST_PLAN.md` §12 (per-role
+This document remains the reference for journey fixtures and invariants. The accepted scenarios
+for files 05, 09, and 11 live under `.specify/features/EPIC-13/`; their `@pending` and
+`@linked` tags record current automation status. Complements `GUI_TEST_PLAN.md` §12 (per-role
 journeys), which walks one role through its own screens but has no shared fixtures or teardown contract.
 
 ## 1. Why this plan is shaped this way
