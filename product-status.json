@@ -1,30 +1,30 @@
 {
  "schema": 1,
- "generated_at": "2026-11-20T05:01:33Z",
- "run_id": "20261120T050132Z-d02f9a2",
- "commit": "d02f9a23f1849c3878ac5fd9b85e423b7750e617",
+ "generated_at": "2026-11-20T05:14:57Z",
+ "run_id": "20261120T051457Z-0eeefb5",
+ "commit": "0eeefb516921ffffb1b8b1bed8cacfd902a0f204",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 136,
+  "tests": 143,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 135,
-  "seconds": 2142.4,
+  "passed": 142,
+  "seconds": 2049.5,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 106,
-  "stories_with_scenarios": 106,
+  "stories": 107,
+  "stories_with_scenarios": 107,
   "stories_passing": 33,
-  "scenarios": 368,
-  "automated": 309,
-  "passing": 120,
+  "scenarios": 376,
+  "automated": 316,
+  "passing": 127,
   "failing": 0,
   "no_result": 189,
-  "planned": 59,
+  "planned": 60,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 0
@@ -201,15 +201,15 @@
   {
    "id": "EPIC-13",
    "title": "Site Admin Journeys",
-   "stories": 6,
-   "stories_with_scenarios": 6,
+   "stories": 7,
+   "stories_with_scenarios": 7,
    "stories_passing": 0,
-   "scenarios": 61,
-   "automated": 13,
-   "passing": 7,
+   "scenarios": 69,
+   "automated": 20,
+   "passing": 14,
    "failing": 0,
    "no_result": 6,
-   "planned": 48,
+   "planned": 49,
    "health": "in_progress"
   }
  ],
@@ -2368,6 +2368,54 @@
    "epic": "EPIC-13",
    "story": "STORY-13-09"
   },
+  "SC-13-10-01": {
+   "state": "passing",
+   "name": "Manager lists, searches and aggregates use the authenticated site",
+   "epic": "EPIC-13",
+   "story": "STORY-13-10"
+  },
+  "SC-13-10-02": {
+   "state": "passing",
+   "name": "Direct reads and downloads require access to the requested site",
+   "epic": "EPIC-13",
+   "story": "STORY-13-10"
+  },
+  "SC-13-10-03": {
+   "state": "passing",
+   "name": "A site parameter cannot widen a manager's collection or export permissions",
+   "epic": "EPIC-13",
+   "story": "STORY-13-10"
+  },
+  "SC-13-10-04": {
+   "state": "passing",
+   "name": "A manager cannot mutate another site's records",
+   "epic": "EPIC-13",
+   "story": "STORY-13-10"
+  },
+  "SC-13-10-05": {
+   "state": "passing",
+   "name": "A resident cannot read another unit's financial records",
+   "epic": "EPIC-13",
+   "story": "STORY-13-10"
+  },
+  "SC-13-10-06": {
+   "state": "passing",
+   "name": "A tenant statement excludes the owner's private transactions for the same unit",
+   "epic": "EPIC-13",
+   "story": "STORY-13-10"
+  },
+  "SC-13-10-07": {
+   "state": "passing",
+   "name": "Replacing a tenant keeps each occupant's history and receipts private",
+   "epic": "EPIC-13",
+   "story": "STORY-13-10"
+  },
+  "SC-13-10-08": {
+   "state": "planned",
+   "name": "A late response cannot repopulate the next tenant's session",
+   "epic": "EPIC-13",
+   "story": "STORY-13-10"
+  },
   "SC-13-11-01": {
    "state": "planned",
    "name": "A liability moves through PENDING, OVERDUE, PAID and CANCELLED",
@@ -2587,10 +2635,10 @@
   {
    "date": "2026-11-20",
    "epics": 13,
-   "stories": 106,
-   "stories_with_scenarios": 106,
-   "scenarios": 368,
-   "automated": 309
+   "stories": 107,
+   "stories_with_scenarios": 107,
+   "scenarios": 376,
+   "automated": 316
   }
  ],
  "recent_changes": [
@@ -2598,13 +2646,14 @@
    "date": "2026-11-20",
    "epic": "EPIC-13",
    "title": "Site Admin Journeys",
-   "new_stories": 3,
-   "new_scenarios": 35,
-   "newly_automated": 4,
-   "items": 3,
+   "new_stories": 4,
+   "new_scenarios": 43,
+   "newly_automated": 11,
+   "items": 4,
    "samples": [
     "STORY-13-05: Corner cases around accrual, occupancy, access and time",
     "STORY-13-09: Financial transitions across periods and ledgers",
+    "STORY-13-10: Tenant data isolation across sites and resident accounts",
     "STORY-13-11: Billing state machines"
    ]
   },
@@ -3268,5 +3317,5 @@
    ]
   }
  ],
- "href": "reports/44677452802-1/"
+ "href": "reports/44677492043-1/"
 }
