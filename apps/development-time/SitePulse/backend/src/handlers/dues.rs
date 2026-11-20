@@ -390,6 +390,11 @@ pub async fn accrue_monthly_dues(
                         .iter()
                         .find(|user| user.id == user_id)
                         .and_then(|user| user.person_id)
+                        .or_else(|| {
+                            user_id
+                                .strip_prefix("person-")
+                                .and_then(|value| value.parse::<i64>().ok())
+                        })
                 })
             };
             accrued.push((

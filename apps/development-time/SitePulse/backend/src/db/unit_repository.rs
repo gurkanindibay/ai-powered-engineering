@@ -394,11 +394,12 @@ pub struct TitleTransfer<'a> {
 
 /// Closes the old ownership, opens the new one and applies the occupancy
 /// effect of the transfer in one transaction (§3.3 T6). Returns the exit
-/// balance of the occupancy session the transfer closed, if any.
+/// balance of the occupancy session the transfer closed, if any, and the
+/// resolved buyer person id.
 pub async fn transfer_unit_ownership_db(
     pool: &Pool,
     transfer: &TitleTransfer<'_>,
-) -> Result<Option<Decimal>, crate::db::occupancy_repository::OccupancyError> {
+) -> Result<(Option<Decimal>, i64), crate::db::occupancy_repository::OccupancyError> {
     use crate::db::occupancy_repository::{self as occupancy, OccupancyError, TransitionInput};
     use crate::domain::unit_state::{self, Command, SessionRole};
 
@@ -517,7 +518,7 @@ pub async fn transfer_unit_ownership_db(
         to = %outcome.plan.to.label(),
         "Transferred unit ownership in PostgreSQL"
     );
-    Ok(outcome.closed.map(|c| c.exit_balance))
+    Ok((outcome.closed.map(|c| c.exit_balance), buyer))
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

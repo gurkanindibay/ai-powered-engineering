@@ -1978,7 +1978,7 @@ impl PaymentTrackingService {
             .clone()
             .unwrap_or_else(|| format!("owner.{}@sitepulse.local", new_user_id));
 
-        let new_user = User {
+        let mut new_user = User {
             id: new_user_id.clone(),
             site_id: site_id.clone(),
             full_name: req.new_owner_name.clone(),
@@ -1991,7 +1991,7 @@ impl PaymentTrackingService {
             google_sub: None,
             avatar_url: None,
             created_at: now,
-            person_id: None,
+            person_id: req.new_owner_person_id,
         };
 
         // Archive old owner in unit_occupancies
@@ -2046,7 +2046,7 @@ impl PaymentTrackingService {
         if let Some(pool) = self.state.pool.clone() {
             let unit_index_id = inner.units[unit_idx].id.clone();
             drop(inner);
-            let persisted = crate::db::transfer_unit_ownership_db(
+            let (persisted, buyer_person_id) = crate::db::transfer_unit_ownership_db(
                 &pool,
                 &crate::db::TitleTransfer {
                     unit_id: &unit_id,
@@ -2061,6 +2061,7 @@ impl PaymentTrackingService {
             )
             .await
             .map_err(|e| e.to_string())?;
+            new_user.person_id = Some(buyer_person_id);
             if let Some(balance) = persisted {
                 old_owner_exit_balance = balance;
             }

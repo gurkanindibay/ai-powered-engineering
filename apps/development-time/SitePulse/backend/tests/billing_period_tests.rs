@@ -80,6 +80,27 @@ async fn when_another_spelling_of_an_accrued_month_is_accrued_then_it_is_a_dupli
     assert_eq!(inner.dues_periods[0].period_name, "Ekim 2026");
 }
 
+#[tokio::test]
+async fn accrual_keeps_person_ids_from_database_synced_units() {
+    let state = site_with_two_units().await;
+    {
+        let mut inner = state.inner.write().await;
+        let unit = inner
+            .units
+            .iter_mut()
+            .find(|unit| unit.id == "d-14")
+            .unwrap();
+        // Database sync represents owner_person_id as person-<id>, without a User row.
+        unit.owner_user_id = Some("person-202".to_string());
+    }
+
+    accrue(&state, "2026-10", day(2026, 10, 15)).await.unwrap();
+
+    let inner = state.inner.read().await;
+    let due = inner.dues.iter().find(|due| due.unit_id == "d-14").unwrap();
+    assert_eq!(due.liable_person_id, Some(202));
+}
+
 // covers: SC-07-08-01
 #[tokio::test]
 async fn when_the_scheduler_runs_for_a_month_a_manager_accrued_then_nothing_is_charged_twice() {

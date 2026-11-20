@@ -245,6 +245,10 @@ FINAL_OPEN = {  # (unit, period) -> (principal, fee) after the April 10 receipts
 @pytest.mark.role_manager
 def test_final_open_debt_stays_with_each_former_and_current_debtor(journey):
     j = journey().run_through("apr_paid")
+    a01_charges = j.charges("A-01")
+    assert a01_charges[(FEB, "OWNER")]["liable"] == "Ada Aksoy"
+    assert a01_charges[(MAR, "OWNER")]["liable"] == "Ben Bilgin"
+    assert a01_charges[(APR, "OWNER")]["liable"] == "Ben Bilgin"
     for unit in ("A-01", "A-02", "A-03", "B1-01", "B2-01"):
         actual = {period: values for (period, _), values in j.open_items(unit).items()}
         expected = {period: values for (u, period), values in FINAL_OPEN.items() if u == unit}
