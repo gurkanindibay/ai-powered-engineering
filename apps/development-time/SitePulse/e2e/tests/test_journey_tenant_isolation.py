@@ -429,7 +429,24 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
 
         # Tenant's operational debt and own receipt are visible
         open_items = [item for d in stmt.get("debtors", []) for item in d.get("open_items", [])]
-        assert any(item.get("expense_type") == "OPERATIONAL_DUES" for item in open_items), stmt
+        operational = [item for item in open_items if item.get("expense_type") == "OPERATIONAL_DUES"]
+        # The 1500.00 principal is reduced by every receipt line allocated to that due. An owner
+        # may pay any liability of the unit, so the owner's receipt also lands on the tenant's
+        # due (940.00 here); read the allocations instead of assuming only the tenant paid.
+        paid_on_operational = sum(
+            (
+                Decimal(str(line["principal_paid"]))
+                for rcpt in (tenant_rcpt, owner_rcpt)
+                for line in rcpt["allocation_breakdown"]
+                if line["expense_type"] == "OPERATIONAL_DUES"
+            ),
+            Decimal("0.00"),
+        )
+        assert paid_on_operational >= Decimal(str(tenant_rcpt["allocated_principal"]))
+        expected_principal = Decimal("1500.00") - paid_on_operational
+        assert sum(
+            (Decimal(str(item.get("principal_outstanding", "0"))) for item in operational), Decimal("0.00")
+        ) == expected_principal, stmt
         rcpt_numbers = [r.get("receipt_number") for r in stmt.get("receipts", [])]
         assert tenant_rcpt.get("receipt_number") in rcpt_numbers
 
