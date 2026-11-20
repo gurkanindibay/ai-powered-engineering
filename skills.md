@@ -360,6 +360,20 @@ python3 scripts/issue_claim.py release 123 --harness claude --session <id> --pr 
 python3 -m unittest discover -s tests/issue_claim
 ```
 
+## 5c-4. PR Review Bot (`review_bot.py`)
+
+- **Executable Script:** [scripts/review_bot.py](file:///scripts/review_bot.py)
+- **Purpose:** Posts PR reviews and comments as the `local-reviewer-agent` GitHub App instead of a personal account (AGENTS.md rule 14). It signs the app JWT with `openssl`, mints and caches an installation token, and submits real reviews. `--commit` refuses to post if the PR head moved after the review was written. Configuration comes from the untracked `.env` (`REVIEW_BOT_APP_ID`, `REVIEW_BOT_INSTALLATION_ID`, `REVIEW_BOT_KEY`, `REVIEW_BOT_REPO`). The worktree's `.env` is read first, then the main checkout's.
+
+```bash
+python3 scripts/review_bot.py whoami --json
+python3 scripts/review_bot.py review 123 --event APPROVE --body-file review.md --commit <head-sha>
+python3 scripts/review_bot.py review 123 --event REQUEST_CHANGES --body-file review.md --commit <head-sha>
+python3 scripts/review_bot.py comment 123 --body-file note.md
+python3 scripts/review_bot.py gh -- api repos/{owner}/{repo}/pulls/123/reviews   # any gh call as the bot
+python3 -m unittest discover -s tests/review_bot
+```
+
 ## 5d. Harness CLI (`harness/harness_cli.py`)
 
 - **Purpose:** Task DAG scheduler and verification loop. `verify --task <id>` runs the global build gates, the task's `gates` and its named `acceptance_tests` (read-only). `--record` (CI only) writes `.specify/evidence/<task>.json` (git SHA, gate results, timestamps) and updates the status with a retry budget (FAILED, then BLOCKED). `python3 harness/rtm_validator.py` accepts a VERIFIED requirement only with passing evidence from the current commit.
