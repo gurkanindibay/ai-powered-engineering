@@ -182,3 +182,27 @@ def test_epic09_rust_linked_scenarios() -> None:
 def test_epic09_flutter_linked_scenarios() -> None:
     run_suite(["flutter", "test", "test/payment_tracking_and_aging_test.dart"], FLUTTER)
 
+
+@pytest.mark.covers("SC-13-09-01")
+def test_epic13_designated_payment_linked_scenario() -> None:
+    run_suite(
+        ["cargo", "test", "--locked", "--test", "payment_compliance_tests",
+         "when_payer_designates_a_period_then_that_due_is_settled_before_older_dues"],
+        BACKEND,
+    )
+
+
+@pytest.mark.covers("SC-13-09-04")
+@pytest.mark.covers("SC-13-09-05")
+def test_epic13_closed_period_linked_scenarios() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "billing_period_lifecycle_tests"], BACKEND)
+
+
+@pytest.mark.covers("SC-13-05-02")
+def test_epic13_due_day_month_end_linked_scenario() -> None:
+    run_suite(
+        ["cargo", "test", "--locked", "--test", "accrual_schedule_tests",
+         "when_the_due_day_is_beyond_the_month_end_then_it_falls_on_the_last_day"],
+        BACKEND,
+    )
+

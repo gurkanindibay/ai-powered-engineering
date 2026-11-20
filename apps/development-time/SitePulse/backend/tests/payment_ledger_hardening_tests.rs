@@ -440,6 +440,8 @@ async fn when_a_settled_payment_is_reversed_then_dues_reopen_the_advance_is_refu
     );
     assert_eq!(rev.receipt_type, "REVERSAL");
     assert_eq!(rev.reverses_receipt_id, Some(original.id));
+    assert_eq!(rev.payer_person_id, original.payer_person_id);
+    assert_eq!(rev.on_behalf_of_person_id, original.on_behalf_of_person_id);
     assert_eq!(rev.total_amount, original.total_amount);
     assert_eq!(resp.refunded_advance, original.allocated_advance);
     assert_eq!(resp.reopened_due_ids, vec!["op-1".to_string()]);
