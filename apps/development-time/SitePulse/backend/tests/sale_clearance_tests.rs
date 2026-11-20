@@ -683,12 +683,17 @@ async fn a_rejected_override_request_leaves_the_seller_as_the_owner() {
     assert_eq!(owner_user().await, owner_before);
     assert_eq!(service.list(&requester).await.expect("list").len(), 1);
 
-    // A transfer that fails discards the request it just stored.
-    let (payload, reason) = transfer(other_buyer, "999999", "Another seller-pays reason");
-    assert!(service
-        .transfer_with_follow_ups(&requester, payload, reason)
-        .await
-        .is_err());
+    // A transfer that fails after the request was stored discards that request again. The
+    // seller is read from the database, so dropping the unit from the in-memory state makes
+    // the transfer itself fail while the override request still passes validation.
+    state.inner.write().await.units.retain(|u| u.id != unit_id);
+    let (payload, reason) = transfer(other_buyer, &unit_id, "Another seller-pays reason");
+    assert!(matches!(
+        service
+            .transfer_with_follow_ups(&requester, payload, reason)
+            .await,
+        Err(TransferFlowError::Transfer(_))
+    ));
     assert_eq!(service.list(&requester).await.expect("list").len(), 1);
     db.drop_db().await;
 }

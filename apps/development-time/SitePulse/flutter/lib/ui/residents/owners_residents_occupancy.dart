@@ -525,6 +525,10 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                               if ((res['correction_requests'] as List?)?.isNotEmpty == true) {
                                 transferMessage += ' Satış ayının aidat bölüşümü ikinci yetkili onayına gönderildi.';
                               }
+                              final warnings = (res['warnings'] as List?)?.map((w) => w.toString()).toList() ?? const <String>[];
+                              if (warnings.isNotEmpty) {
+                                transferMessage += ' ${warnings.join(' ')}';
+                              }
                             }
                             if (settlementChoice != AdvanceExitSettlementChoice.keep) {
                               final requestError = await widget.controller.requestAdvanceExitSettlement(
