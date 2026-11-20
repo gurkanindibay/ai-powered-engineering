@@ -398,6 +398,7 @@ async fn when_advances_are_offset_then_each_due_is_paid_only_from_its_own_debtor
 // O-2: reversals
 // ---------------------------------------------------------------------------
 
+// covers: SC-13-12-04
 #[tokio::test]
 async fn when_a_settled_payment_is_reversed_then_dues_reopen_the_advance_is_refunded_and_an_iad_receipt_is_issued(
 ) {

@@ -89,7 +89,7 @@ async fn confirm(
     .map(|(_, axum::Json(res))| res)
 }
 
-// covers: SC-07-03-03
+// covers: SC-07-03-03, SC-13-12-05
 #[tokio::test]
 async fn when_unit_has_several_open_debtors_then_transfer_is_held_unmatched_and_assigned_once() {
     let state = state_with(vec![
@@ -151,7 +151,7 @@ async fn when_unit_has_several_open_debtors_then_transfer_is_held_unmatched_and_
     assert_eq!(state.inner.read().await.payment_receipts.len(), 1);
 }
 
-// covers: SC-07-03-04
+// covers: SC-07-03-04, SC-13-12-05
 #[tokio::test]
 async fn when_held_transfer_is_delivered_again_then_it_is_a_duplicate_and_adds_no_queue_item() {
     let state = state_with(vec![

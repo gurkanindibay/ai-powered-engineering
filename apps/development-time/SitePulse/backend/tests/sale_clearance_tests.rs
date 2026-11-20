@@ -99,7 +99,7 @@ fn project_request(site: &str) -> CreateCapitalProjectRequest {
 }
 
 #[tokio::test]
-// covers: SC-08-05-04, SC-13-03-19
+// covers: SC-08-05-04, SC-13-03-19, SC-13-12-02
 async fn statement_itemizes_seller_debt_advance_and_installments_not_yet_accrued() {
     let state = fixture().await;
     let capital = CapitalProjectService::new(state.clone());
@@ -414,7 +414,7 @@ async fn capital_debtor(pool: &Pool, unit: i64, project: i64, installment: i32) 
 
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
-// covers: SC-08-05-06, SC-08-05-07, SC-13-03-05
+// covers: SC-08-05-06, SC-08-05-07, SC-13-03-05, SC-13-12-02
 async fn only_an_approved_override_makes_the_seller_pay_later_installments() {
     let db = TestDb::create().await;
     let client = db.pool.get().await.expect("connection");

@@ -11,7 +11,7 @@ Feature: Multi-depth chains across the decided responsibility rules
     And the manager has signed in with a permanent password
     And proration is enabled for the site
 
-  @SC-13-12-01 @J-19 @depth:4 @chain:sale-then-silent-departure @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-12-01 @J-19 @depth:4 @chain:sale-then-silent-departure @state:F5 @layer:backend @core @role_manager @linked
   # Backend coverage: backend/tests/accrual_corrections_tests.rs and backend/tests/payments_phase2_tests.rs (late split correction, owner statement, and owner payment allocation).
   Scenario: A unit is sold with its tenant, the tenant leaves without notice and both owners are involved
     Given the site is in state F5
@@ -44,7 +44,7 @@ Feature: Multi-depth chains across the decided responsibility rules
     And "Gül Tanrıverdi" owes 580.65 and holds no part of Selin's debt
     And the ledger invariants hold
 
-  @SC-13-12-02 @J-19 @depth:5 @chain:capital-across-sale @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-12-02 @J-19 @depth:5 @chain:capital-across-sale @state:F5 @layer:backend @core @role_manager @linked
   Scenario Outline: A capital project runs across a sale with or without a seller-pays override
     Given the site is in state F5
     # Stage 1: operational and capital charges before the sale
@@ -77,7 +77,7 @@ Feature: Multi-depth chains across the decided responsibility rules
       | requested and approved by a second manager | Ahmet Yılmaz       |
       | requested and rejected                     | Gül Tanrıverdi     |
 
-  @SC-13-12-03 @J-19 @depth:5 @chain:backdated-owner-into-closed-month @state:F3 @layer:backend @core @role_manager @pending
+  @SC-13-12-03 @J-19 @depth:5 @chain:backdated-owner-into-closed-month @state:F3 @layer:backend @core @role_manager @linked
   Scenario: An owner back-dated into a closed month gets supplementary charges without changing the snapshot
     Given the site is in state F3
     # Stage 1: November is billed to nobody
@@ -102,7 +102,7 @@ Feature: Multi-depth chains across the decided responsibility rules
     Then checkpoint 5 shows the charge referring to "Ekim 2026" settled first, both charges settled and an advance of 0.00
     And the ledger invariants hold
 
-  @SC-13-12-04 @J-19 @depth:5 @chain:catch-up-grace-reversal @state:F2 @layer:backend @core @role_manager @pending
+  @SC-13-12-04 @J-19 @depth:5 @chain:catch-up-grace-reversal @state:F2 @layer:backend @core @role_manager @linked
   Scenario: Catch-up, a payment inside grace, a reversal and a final settlement
     Given the site is in state F2 with grace days 5 and the accrual scheduler disabled since "2026-09-01"
     # Stage 1: catch-up creates three months at once
@@ -128,7 +128,7 @@ Feature: Multi-depth chains across the decided responsibility rules
     And the payment stream lists the reversed payment once and the final payment once
     And the ledger invariants hold
 
-  @SC-13-12-05 @J-19 @depth:3 @chain:multi-debtor-transfer @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-12-05 @J-19 @depth:3 @chain:multi-debtor-transfer @state:F6 @layer:backend @core @role_manager @linked
   # Backend coverage: backend/tests/bank_multi_debtor_tests.rs (SC-07-03-04)
   Scenario: An unmatched transfer on a unit with several debtors is assigned once and never applied twice
     Given the site is in state F6

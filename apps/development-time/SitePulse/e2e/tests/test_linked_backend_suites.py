@@ -206,3 +206,29 @@ def test_epic13_due_day_month_end_linked_scenario() -> None:
         BACKEND,
     )
 
+
+@pytest.mark.covers("SC-13-12-01")
+def test_epic13_sale_departure_joint_payment_linked_scenario() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "accrual_corrections_tests", "when_a_paid_month_is_split"], BACKEND)
+
+
+@pytest.mark.covers("SC-13-12-02")
+def test_epic13_capital_project_sale_override_linked_scenario() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "sale_clearance_tests", "statement_itemizes_seller_debt"], BACKEND)
+
+
+@pytest.mark.covers("SC-13-12-03")
+def test_epic13_supplementary_charge_linked_scenario() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "supplementary_charge_tests", "when_the_charge_is_created_late"], BACKEND)
+
+
+@pytest.mark.covers("SC-13-12-04")
+def test_epic13_catch_up_grace_reversal_linked_scenario() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "payment_ledger_hardening_tests", "when_a_settled_payment_is_reversed"], BACKEND)
+
+
+@pytest.mark.covers("SC-13-12-05")
+def test_epic13_unmatched_multi_debtor_transfer_linked_scenario() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "bank_multi_debtor_tests"], BACKEND)
+
+

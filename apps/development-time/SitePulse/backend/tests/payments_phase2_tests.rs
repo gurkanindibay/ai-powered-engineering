@@ -938,6 +938,7 @@ async fn when_a_tenant_liability_has_an_owner_link_then_owner_sees_only_its_join
 }
 
 #[tokio::test]
+// covers: SC-13-12-01
 // Backend coverage: SC-13-05-17 (owner payment, payer/debtor receipt identities, and owner statement balance).
 async fn when_an_owner_pays_a_linked_tenant_liability_then_the_receipt_names_payer_and_debtor() {
     let state = site_with_two_units().await;
