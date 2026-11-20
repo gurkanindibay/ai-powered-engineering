@@ -4,7 +4,7 @@
 
 Prove that a SitePulse operator can onboard multiple residential sites from an empty installation and run them through several billing periods without losing track of **who owes what, which site received the money, and what stays collectible when people move or sell**.
 
-The test creates two sites through SaaS onboarding, then **creates all 88 units during the journey**: 24 in Site A and 64 in Site B. Once the units exist, each manager registers owners, tenants and household members attached to the person living in the unit. The managers accrue four periods and record a mix of full payments, partial payments and missed payments. After two periods, people move out, buyers take title, some homes remain empty, and other residents move in. By the final checkpoint, managers can explain every open balance by debtor, unit and period and reconcile each site's cash to its own posted receipts.
+The test creates two sites through SaaS onboarding, then **creates all 88 units during the journey**: 24 in Site A and 64 in Site B. Once the units exist, each manager registers owners, tenants and household members attached to the person living in the unit. The managers accrue four periods and record a mix of full payments, partial payments and missed payments. At least one unit per site follows a paid, unpaid, unpaid, paid pattern that remains visible after April. After two periods, people move out, buyers take title, some homes remain empty, and other residents move in. By the final checkpoint, managers can explain every open balance by debtor, unit and period and reconcile each site's cash to its own posted receipts.
 
 This is a proposal for review. The [existing journey plan](README.md) defines F0 as a site with a manager already present. Its billing and occupancy scenarios are useful references. This journey starts one step earlier and carries the same two sites through onboarding, billing, occupancy changes and reconciliation.
 
@@ -43,19 +43,33 @@ Record completed receipts for the unit and its named primary debtor. The table g
 |---|---:|---:|---:|---:|
 | A-01 | 400.00 | 831.00 | 500.00 | 1,025.83 |
 | A-02 | 0.00 | 1,301.67 | 0.00 | 600.00 |
-| A-03 | 1,000.00 | 0.00 | 746.67 | 1,367.17 |
+| A-03 | 1,000.00 | 0.00 | 0.00 | 1,000.00 (April only) |
 | B1-01 | 750.00 | 250.00 | 0.00 | 1,038.75 |
-| B2-01 | 300.00 | 0.00 | 979.25 | 804.25 |
+| B2-01 | 750.00 | 0.00 | 0.00 | 750.00 (April only) |
+
+For A-03 and B2-01, pay January in full, skip February and March, then explicitly designate the April receipt to the April charge. Use the [supported payment designation](../../../.specify/features/EPIC-13/STORY-13-09-financial-state-transitions.feature) and verify that each receipt has exactly one allocation, to April. February and March must remain fully unpaid and accrue their own fees. On April 10, assert the exact open periods as well as the statuses of the paid periods. Other receipts follow the default allocation order.
+
+For each of the two units, check period history after each payment checkpoint. January shows paid throughout. February appears as unpaid and stays unpaid. March adds a second consecutive unpaid period. April shows unpaid immediately before its designated receipt and paid immediately after. Also check the final status of every detailed unit to distinguish partial payment from a missed payment or a later settlement.
+
+| Unit | January | February | March | April |
+|---|---|---|---|---|
+| A-01 | Paid | Partial | Paid | Partial |
+| A-02 | Paid | Partial | Unpaid | Partial |
+| A-03 | **Paid** | **Unpaid** | **Unpaid** | **Paid** |
+| B1-01 | Paid | Partial | Paid | Partial |
+| B2-01 | **Paid** | **Unpaid** | **Unpaid** | **Paid** |
+
+For these assertions, paid means zero balance, partial means a principal payment posted and a balance remains, and unpaid means no payment was allocated and the full principal remains. Read period status from the unit statement or derive it from the charge and allocation rows if the statement uses a different label.
 
 Define money remaining in the site fund for this proposal as **posted operating cash**. Opening cash is zero and the journey contains only collections, so expected cash equals cumulative gross receipts, including paid fees. Assert that accruals, occupancy changes and deed transfers create no cash movements. Reconcile the site-scoped operating balance against posted receipts after each period. Capture Site B before and after a Site A payment to catch cross-site posting even when the final system-wide total would agree.
 
 | Checkpoint, after payments | Site A cash | Site B cash |
 |---|---:|---:|
 | Onboarding | 0.00 | 0.00 |
-| January 10 | 22,400.00 | 47,550.00 |
-| February 10 | 45,532.67 | 94,300.00 |
-| March 10 | 67,779.34 | 141,779.25 |
-| April 10 | **91,772.34** | **190,122.25** |
+| January 10 | 22,400.00 | 48,000.00 |
+| February 10 | 45,532.67 | 94,750.00 |
+| March 10 | 67,032.67 | 141,250.00 |
+| April 10 | **90,658.50** | **189,538.75** |
 
 ## Final debt checkpoint
 
@@ -68,19 +82,21 @@ Read the manager's unit statements, including former debtors, after April 10 pay
 | A-02 | Dan, former tenant | February | 750.00 | 73.75 | 823.75 | Cara |
 | A-02 | Cara, owner when vacant | March | 1,000.00 | 51.67 | 1,051.67 | |
 | A-02 | Eli, current tenant | April | 400.00 | 0.00 | 400.00 | Cara |
-| A-03 | Fay, owner of vacant unit | April | 1,000.00 | 0.00 | 1,000.00 | |
+| A-03 | Fay, owner of vacant unit | February | 1,000.00 | 98.33 | 1,098.33 | |
+| A-03 | Fay, owner of vacant unit | March | 1,000.00 | 51.67 | 1,051.67 | |
 | B1-01 | Gus, former owner | February | 500.00 | 49.17 | 549.17 | |
 | B1-01 | Hana, current owner | April | 500.00 | 0.00 | 500.00 | |
-| B2-01 | Juno, continuing tenant | March and April | 1,050.00 | 0.00 | 1,050.00 | Ivan |
+| B2-01 | Juno, continuing tenant | February | 750.00 | 73.75 | 823.75 | Ivan |
+| B2-01 | Juno, continuing tenant | March | 750.00 | 38.75 | 788.75 | Ivan |
 
-Cara has 1,051.67 of primary debt and joint exposure to 1,223.75 of tenant debt. Ivan has 0.00 of primary debt and joint exposure to 1,050.00 of tenant debt. Check the other current and former homeowners against their primary rows. Verify Juno's two open installments individually, 300.00 for March and 750.00 for April. Each other accrued installment should be settled.
+Cara has 1,051.67 of primary debt and joint exposure to 1,223.75 of tenant debt. Ivan has 0.00 of primary debt and joint exposure to 1,612.50 of tenant debt. Fay has 2,150.00 in primary debt across two periods. Check the other current and former homeowners against their primary rows. Each accrued charge outside this table should be settled.
 
 | Site | Principal accrued | Principal collected | Principal open | Fees collected | Fees open | Total debt open |
 |---|---:|---:|---:|---:|---:|---:|
-| A | 96,000.00 | 91,550.00 | 4,450.00 | 222.34 | 204.09 | **4,654.09** |
-| B | 192,000.00 | 189,950.00 | 2,050.00 | 172.25 | 49.17 | **2,099.17** |
+| A | 96,000.00 | 90,550.00 | 5,450.00 | 108.50 | 354.09 | **5,804.09** |
+| B | 192,000.00 | 189,500.00 | 2,500.00 | 38.75 | 161.67 | **2,661.67** |
 
-The amounts assume fees accrue at 5% per 30 days on outstanding principal, rounded by segment. Payments clear outstanding fees before applying principal oldest first within the selected debtor and unit. Calculate expected amounts from the fixture dates and amounts independently of the response being checked. Each month, compare accrued amounts, payment allocations, ownership and occupancy history, and the site's open debt and cash. Report the site, period, unit and debtor when a checkpoint fails.
+The amounts assume fees accrue at 5% per 30 days on outstanding principal, rounded by segment. Payments settle any designated charge first. The default waterfall clears outstanding fees before applying principal oldest first within the selected debtor and unit. Calculate expected amounts from the fixture dates and amounts independently of the response being checked. Each month, compare accrued amounts, payment allocations, ownership and occupancy history, and the site's open debt and cash. Report the site, period, unit and debtor when a checkpoint fails.
 
 ## Decisions for review
 
