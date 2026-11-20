@@ -66,8 +66,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then Oya's share is due on the approval date "2026-11-18" with late fee 1.08 at the reference instant
     And Burak's reduced share keeps its effective due date "2026-11-15" and its fee is recalculated on 850.00 to 5.67
 
-  # Pending: needs the seller-pays override of #209.
-  @SC-13-03-05 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-03-05 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @linked
   Scenario Outline: Capital installments follow the owner at accrual unless a seller-pays override is approved
     Given the site is in state F6
     And installment 1 of the capital project "Cephe" (6000.00 for unit "A-4" in 2 installments) was accrued before the sale
@@ -197,8 +196,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then the unit's owner is charged 750.00 principal for 15 days
     And the ledger invariants hold
 
-  # Pending: the accrual splits by role, so a seller and a buyer who are both owners share one owner liability instead of 200.00 and 1300.00.
-  @SC-13-03-16 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-03-16 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @linked
   Scenario: A mid-month sale of an owner-occupied unit splits that month between seller and buyer
     Given the site is in state F6
     Then the "Kasım 2026" operational principal of "A-4" is 200.00 for "Ahmet Yılmaz" (days 1 to 4)
@@ -238,8 +236,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the jointly liable owner shown on that liability is "Ahmet Yılmaz" for days 1 to 14 and "Gül Tanrıverdi" from day 15
     And the ledger invariants hold
 
-  # Pending: GUI layer, and needs the sale clearance statement of #209.
-  @SC-13-03-19 @J-10 @depth:1 @state:F5 @layer:gui @core @role_manager @pending
+  @SC-13-03-19 @J-10 @depth:1 @state:F5 @layer:gui @core @role_manager @linked
   Scenario: The sale clearance statement lists everything that does or does not move with the unit
     Given the site is in state F5
     And the clock has advanced to "2026-12-20"

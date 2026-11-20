@@ -155,9 +155,11 @@ def test_direct_reads_and_downloads_require_site_access(request, api, actors, st
         budget_b_id = str(budget_b["id"])
 
         # 1. Person card
-        status, raw, _ = http_call(api, "GET", f"/api/v1/site-admin/persons/{person_b_id}/card?site_id={site_a.site_id}", site_a.manager.token)
+        status, raw, parsed = http_call(api, "GET", f"/api/v1/site-admin/persons/{person_b_id}/card?site_id={site_a.site_id}", site_a.manager.token)
         assert status in (403, 404)
-        assert str(person_b_id).encode() not in raw
+        err = parsed.get("error", {}) if isinstance(parsed, dict) else {}
+        clean_raw = raw.replace(err.get("timestamp", "").encode(), b"").replace(err.get("trace_id", "").encode(), b"")
+        assert str(person_b_id).encode() not in clean_raw
 
         status_b, _, _ = http_call(api, "GET", f"/api/v1/site-admin/persons/{person_b_id}/card?site_id={site_b.site_id}", site_b.manager.token)
         assert status_b == 200
