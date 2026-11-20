@@ -264,17 +264,17 @@ The plan is pending, so nothing below is changed yet. Each item has its own issu
 
 | File | Journeys |
 |---|---|
-| [01-starting-states.feature](01-starting-states.feature) | J-01 to J-06: F0 to F3, what an admin sees and can do from each |
-| [02-accrual-histories.feature](02-accrual-histories.feature) | J-07 to J-09: F4, F5, F7: single and multiple periods, single debts, closing |
+| [STORY-13-01-starting-states.feature](../../.specify/features/EPIC-13/STORY-13-01-starting-states.feature) | J-01 to J-06: F0 to F3, what an admin sees and can do from each |
+| [STORY-13-02-accrual-histories.feature](../../.specify/features/EPIC-13/STORY-13-02-accrual-histories.feature) | J-07 to J-09: F4, F5, F7: single and multiple periods, single debts, closing |
 | [STORY-13-03-occupancy-changes.feature](../../.specify/features/EPIC-13/STORY-13-03-occupancy-changes.feature) | J-10: F6: residents added late, tenant and owner changes |
-| [04-payments-and-allocation.feature](04-payments-and-allocation.feature) | J-11: paying, advance, idempotency, FIFO across periods |
-| [05-corner-cases.feature](05-corner-cases.feature) | J-12: the edge list of section 7 |
-| [06-lifecycle-chain.feature](06-lifecycle-chain.feature) | J-13: one site from zero to a closed period, with invariant checkpoints |
-| [07-teardown-and-isolation.feature](07-teardown-and-isolation.feature) | J-14: setup, teardown and isolation contract |
-| [08-screen-and-session-states.feature](08-screen-and-session-states.feature) | J-15: first login, loading, errors, retry, search, session expiry and stale forms |
-| [09-financial-state-transitions.feature](09-financial-state-transitions.feature) | J-16: targeting, partial and backdated payments, post-close changes, reconciliation and dual ledger |
-| [10-tenant-data-isolation.feature](10-tenant-data-isolation.feature) | J-17: cross-site reads, exports and mutations, private tenant statements and receipts, former occupants and session races |
-| [11-state-machines.feature](11-state-machines.feature) | J-18: every liability, period, reconciliation and unit occupancy status: entry, allowed commands and refused commands |
+| [STORY-13-04-payments-and-allocation.feature](../../.specify/features/EPIC-13/STORY-13-04-payments-and-allocation.feature) | J-11: paying, advance, idempotency, FIFO across periods |
+| [STORY-13-05-corner-cases.feature](../../.specify/features/EPIC-13/STORY-13-05-corner-cases.feature) | J-12: the edge list of section 7 |
+| [STORY-13-06-lifecycle-chain.feature](../../.specify/features/EPIC-13/STORY-13-06-lifecycle-chain.feature) | J-13: one site from zero to a closed period, with invariant checkpoints |
+| [STORY-13-07-teardown-and-isolation.feature](../../.specify/features/EPIC-13/STORY-13-07-teardown-and-isolation.feature) | J-14: setup, teardown and isolation contract |
+| [STORY-13-08-screen-and-session-states.feature](../../.specify/features/EPIC-13/STORY-13-08-screen-and-session-states.feature) | J-15: first login, loading, errors, retry, search, session expiry and stale forms |
+| [STORY-13-09-financial-state-transitions.feature](../../.specify/features/EPIC-13/STORY-13-09-financial-state-transitions.feature) | J-16: targeting, partial and backdated payments, post-close changes, reconciliation and dual ledger |
+| [STORY-13-10-tenant-data-isolation.feature](../../.specify/features/EPIC-13/STORY-13-10-tenant-data-isolation.feature) | J-17: cross-site reads, exports and mutations, private tenant statements and receipts, former occupants and session races |
+| [STORY-13-11-state-machines.feature](../../.specify/features/EPIC-13/STORY-13-11-state-machines.feature) | J-18: every liability, period, reconciliation and unit occupancy status: entry, allowed commands and refused commands |
 | [STORY-13-12-multi-depth-chains.feature](../../.specify/features/EPIC-13/STORY-13-12-multi-depth-chains.feature) | J-19: depth 3 to 5 chains that combine sale, departure, back-dating, catch-up and capital rules with a checkpoint per stage |
 
 ## 10. Coverage map

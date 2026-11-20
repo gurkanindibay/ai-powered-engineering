@@ -93,8 +93,8 @@ Feature: Tenant data isolation across sites and resident accounts
     And Selin's prior session cannot make a current-occupant change
     And Mert cannot access Selin's household contact details
 
+  # Pending: GUI isolation scenario with held browser response across session switch is pending browser automation.
   @SC-13-10-08 @J-17 @depth:1 @state:F4 @layer:gui @edge @role_resident @pending
-  # Pending: GUI isolation scenario part of GUI issue
   Scenario: A late response cannot repopulate the next tenant's session
     Given a resident has opened their statement on site A and a refresh response is held in the browser
     And a resident of site B has an account with the same unit label and distinct debt and receipts
