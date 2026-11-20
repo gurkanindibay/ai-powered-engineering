@@ -114,7 +114,8 @@ def gh(args: list[str]) -> str:
     except FileNotFoundError as exc:
         raise ClaimError("gh CLI not found") from exc
     if done.returncode != 0:
-        raise ClaimError(f"gh {' '.join(args[:3])} failed: {done.stderr.strip()[:300]}")
+        msg = f"{done.stderr.strip()} {done.stdout.strip()}".strip()
+        raise ClaimError(f"gh {' '.join(args[:3])} failed: {msg[:300]}")
     return done.stdout
 
 
