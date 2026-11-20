@@ -1,30 +1,30 @@
 {
  "schema": 1,
- "generated_at": "2026-11-20T05:14:57Z",
- "run_id": "20261120T051457Z-0eeefb5",
- "commit": "0eeefb516921ffffb1b8b1bed8cacfd902a0f204",
+ "generated_at": "2026-11-20T05:36:52Z",
+ "run_id": "20261120T053651Z-b0d31a9",
+ "commit": "b0d31a924a28ac010733d879007707035253cb9e",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 143,
+  "tests": 164,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 142,
-  "seconds": 2049.5,
+  "passed": 163,
+  "seconds": 2184.5,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 107,
-  "stories_with_scenarios": 107,
-  "stories_passing": 33,
-  "scenarios": 376,
-  "automated": 316,
-  "passing": 127,
+  "stories": 110,
+  "stories_with_scenarios": 110,
+  "stories_passing": 32,
+  "scenarios": 430,
+  "automated": 336,
+  "passing": 141,
   "failing": 0,
-  "no_result": 189,
-  "planned": 60,
+  "no_result": 195,
+  "planned": 94,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 0
@@ -133,12 +133,12 @@
    "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
    "stories": 12,
    "stories_with_scenarios": 12,
-   "stories_passing": 4,
-   "scenarios": 55,
-   "automated": 55,
+   "stories_passing": 3,
+   "scenarios": 61,
+   "automated": 61,
    "passing": 12,
    "failing": 0,
-   "no_result": 43,
+   "no_result": 49,
    "planned": 0,
    "health": "in_progress"
   },
@@ -201,15 +201,15 @@
   {
    "id": "EPIC-13",
    "title": "Site Admin Journeys",
-   "stories": 7,
-   "stories_with_scenarios": 7,
+   "stories": 10,
+   "stories_with_scenarios": 10,
    "stories_passing": 0,
-   "scenarios": 69,
-   "automated": 20,
-   "passing": 14,
+   "scenarios": 117,
+   "automated": 34,
+   "passing": 28,
    "failing": 0,
    "no_result": 6,
-   "planned": 49,
+   "planned": 83,
    "health": "in_progress"
   }
  ],
@@ -1123,6 +1123,42 @@
   "SC-08-05-03": {
    "state": "passing",
    "name": "Previous owner's advance is paid out or transferred only with a second approver",
+   "epic": "EPIC-08",
+   "story": "STORY-08-05"
+  },
+  "SC-08-05-04": {
+   "state": "no_result",
+   "name": "The sale clearance statement shows what stays with the seller and what goes to the buyer",
+   "epic": "EPIC-08",
+   "story": "STORY-08-05"
+  },
+  "SC-08-05-05": {
+   "state": "no_result",
+   "name": "A mid-month sale of an owner-occupied unit splits that month by days through the split correction",
+   "epic": "EPIC-08",
+   "story": "STORY-08-05"
+  },
+  "SC-08-05-06": {
+   "state": "no_result",
+   "name": "Capital installments follow the owner at accrual unless a seller-pays override is approved",
+   "epic": "EPIC-08",
+   "story": "STORY-08-05"
+  },
+  "SC-08-05-07": {
+   "state": "no_result",
+   "name": "The seller-pays override cannot be approved by its requester",
+   "epic": "EPIC-08",
+   "story": "STORY-08-05"
+  },
+  "SC-08-05-08": {
+   "state": "no_result",
+   "name": "Invalid seller-pays override leaves the transfer unchanged",
+   "epic": "EPIC-08",
+   "story": "STORY-08-05"
+  },
+  "SC-08-05-09": {
+   "state": "no_result",
+   "name": "A duplicate pending override leaves the seller in place",
    "epic": "EPIC-08",
    "story": "STORY-08-05"
   },
@@ -2146,6 +2182,294 @@
    "epic": "EPIC-13",
    "story": "STORY-13-01"
   },
+  "SC-13-02-01": {
+   "state": "planned",
+   "name": "Residents with a single accrual period show one debt each on every screen",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-02": {
+   "state": "planned",
+   "name": "The resident sees exactly what the admin sees for the same unit",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-03": {
+   "state": "passing",
+   "name": "The late fee follows the clock day by day",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-04": {
+   "state": "planned",
+   "name": "Multiple periods with mixed debts add up per unit and per site",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-05": {
+   "state": "passing",
+   "name": "A single debt in a previous month stays attached to that month",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-06": {
+   "state": "passing",
+   "name": "A single debt in the current month is the only one in the youngest bucket",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-07": {
+   "state": "planned",
+   "name": "Multiple debts across periods are listed oldest first with a fee each",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-08": {
+   "state": "planned",
+   "name": "An advance balance has already offset later periods",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-09": {
+   "state": "planned",
+   "name": "A fourth accrual adds exactly one liability per responsible debtor",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-10": {
+   "state": "planned",
+   "name": "A closed period accepts no new accrual or edit but keeps its open debts",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-02-11": {
+   "state": "planned",
+   "name": "A payment toward a closed period is still allocated to its oldest debt",
+   "epic": "EPIC-13",
+   "story": "STORY-13-02"
+  },
+  "SC-13-03-01": {
+   "state": "passing",
+   "name": "A mid-month move-in splits a period between owner and tenant",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-02": {
+   "state": "planned",
+   "name": "A tenant replaced mid-month leaves the old debt with the old tenant",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-03": {
+   "state": "planned",
+   "name": "A former tenant still sees their own debt and the new tenant sees only theirs",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-04": {
+   "state": "passing",
+   "name": "A resident added after accruals is charged from their start residing date",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-21": {
+   "state": "planned",
+   "name": "Every liability row names the person who owes it",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-20": {
+   "state": "planned",
+   "name": "A re-split share keeps an effective due date and a late fee that follow its creation",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-05": {
+   "state": "planned",
+   "name": "Capital installments follow the owner at accrual unless a seller-pays override is approved",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-06": {
+   "state": "planned",
+   "name": "The previous owner's advance is not silently given to the buyer",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-07": {
+   "state": "planned",
+   "name": "Handover on the same day splits the month with no gap and no overlap",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-08": {
+   "state": "passing",
+   "name": "Proration respects month length and edge days",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-09": {
+   "state": "planned",
+   "name": "A tariff that does not divide evenly never gains or loses a kuru\u015f",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-10": {
+   "state": "planned",
+   "name": "One person who owns one unit and rents another is billed in each role",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-11": {
+   "state": "planned",
+   "name": "The same national id entered twice does not create a second person",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-12": {
+   "state": "planned",
+   "name": "Owner moves in after the tenant leaves and takes the operational dues back",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-13": {
+   "state": "passing",
+   "name": "Switching proration changes responsibility for a mid-month move-in",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-14": {
+   "state": "planned",
+   "name": "A failed replacement rolls back occupancy, household and settlement together",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-15": {
+   "state": "passing",
+   "name": "A unit created mid-month is billed for chargeable days only",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-16": {
+   "state": "planned",
+   "name": "A mid-month sale of an owner-occupied unit splits that month between seller and buyer",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-17": {
+   "state": "planned",
+   "name": "A share whose responsibility starts after the period due date is not late before it existed",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-18": {
+   "state": "planned",
+   "name": "A sale of a tenant-occupied unit with the same tenant is not split",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-03-19": {
+   "state": "planned",
+   "name": "The sale clearance statement lists everything that does or does not move with the unit",
+   "epic": "EPIC-13",
+   "story": "STORY-13-03"
+  },
+  "SC-13-04-01": {
+   "state": "passing",
+   "name": "A payment clears the oldest period first",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-02": {
+   "state": "passing",
+   "name": "Paying exactly the whole debt leaves zero and no advance",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-03": {
+   "state": "passing",
+   "name": "One kuru\u015f short leaves one kuru\u015f open",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-04": {
+   "state": "passing",
+   "name": "An overpayment becomes an advance that offsets the next accrual",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-05": {
+   "state": "passing",
+   "name": "Invalid payment amounts are rejected without any side effect",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-06": {
+   "state": "passing",
+   "name": "The bank webhook matches a transfer to the unit and allocates it",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-07": {
+   "state": "planned",
+   "name": "The same bank transaction sent twice is applied once",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-08": {
+   "state": "planned",
+   "name": "Two transfers for one unit at the same moment are both applied",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-09": {
+   "state": "planned",
+   "name": "A transfer matched to another site is applied only there",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-10": {
+   "state": "planned",
+   "name": "The grace boundary decides whether a late fee is charged",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-11": {
+   "state": "planned",
+   "name": "A correction after a partial payment moves the paid amount to the advance",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-12": {
+   "state": "planned",
+   "name": "The requester of a correction cannot approve it",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-13": {
+   "state": "planned",
+   "name": "A resident's confirmed payment appears in their statement and the admin view",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-14": {
+   "state": "planned",
+   "name": "A payment reversal restores the debt it settled and the fee it stopped",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-15": {
+   "state": "planned",
+   "name": "A unit-level transfer on a unit with several debtors waits for the manager",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
+  "SC-13-04-16": {
+   "state": "planned",
+   "name": "A payment for a unit with no debt becomes the payer's advance",
+   "epic": "EPIC-13",
+   "story": "STORY-13-04"
+  },
   "SC-13-05-01": {
    "state": "planned",
    "name": "Invalid accrual input is rejected and creates nothing",
@@ -2635,10 +2959,10 @@
   {
    "date": "2026-11-20",
    "epics": 13,
-   "stories": 107,
-   "stories_with_scenarios": 107,
-   "scenarios": 376,
-   "automated": 316
+   "stories": 110,
+   "stories_with_scenarios": 110,
+   "scenarios": 430,
+   "automated": 336
   }
  ],
  "recent_changes": [
@@ -2646,15 +2970,30 @@
    "date": "2026-11-20",
    "epic": "EPIC-13",
    "title": "Site Admin Journeys",
-   "new_stories": 4,
-   "new_scenarios": 43,
-   "newly_automated": 11,
-   "items": 4,
+   "new_stories": 7,
+   "new_scenarios": 91,
+   "newly_automated": 25,
+   "items": 7,
    "samples": [
-    "STORY-13-05: Corner cases around accrual, occupancy, access and time",
-    "STORY-13-09: Financial transitions across periods and ledgers",
-    "STORY-13-10: Tenant data isolation across sites and resident accounts",
-    "STORY-13-11: Billing state machines"
+    "STORY-13-02: Accrual histories F4, F5 and F7",
+    "STORY-13-03: Residents and owners change after periods were accrued",
+    "STORY-13-04: Paying, allocation and advance across periods",
+    "STORY-13-05: Corner cases around accrual, occupancy, access and time"
+   ]
+  },
+  {
+   "date": "2026-11-20",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 0,
+   "new_scenarios": 6,
+   "newly_automated": 6,
+   "items": 6,
+   "samples": [
+    "SC-08-05-04: The sale clearance statement shows what stays with the seller and what goes to the buyer",
+    "SC-08-05-05: A mid-month sale of an owner-occupied unit splits that month by days through the split correction",
+    "SC-08-05-06: Capital installments follow the owner at accrual unless a seller-pays override is approved",
+    "SC-08-05-07: The seller-pays override cannot be approved by its requester"
    ]
   },
   {
@@ -3317,5 +3656,5 @@
    ]
   }
  ],
- "href": "reports/44677492043-1/"
+ "href": "reports/44681412125-1/"
 }
