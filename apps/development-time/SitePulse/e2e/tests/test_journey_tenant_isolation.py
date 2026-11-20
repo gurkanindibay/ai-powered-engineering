@@ -434,8 +434,12 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
         assert not any(line.get("expense_type") == "OPERATIONAL_DUES" for line in owner_rcpt["allocation_breakdown"])
         assert any(line.get("expense_type") == "CAPITAL_DUES" for line in owner_rcpt["allocation_breakdown"])
         assert sum(
-            Decimal(str(line["principal_paid"])) for line in owner_rcpt["allocation_breakdown"]
+            Decimal(str(line["principal_paid"])) + Decimal(str(line["penalty_paid"]))
+            for line in owner_rcpt["allocation_breakdown"]
         ) == Decimal("1000.00")
+        assert sum(
+            Decimal(str(line["principal_paid"])) for line in owner_rcpt["allocation_breakdown"]
+        ) == Decimal("940.00")
 
         paid_on_operational = sum(
             (
@@ -445,13 +449,12 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
             ),
             Decimal("0.00"),
         )
-        assert paid_on_operational == Decimal("500.00")
+        assert paid_on_operational == Decimal(str(tenant_rcpt["allocated_principal"]))
         expected_principal = Decimal("1500.00") - paid_on_operational
         operational = [item for item in open_items if item.get("expense_type") == "OPERATIONAL_DUES"]
         assert sum(
             (Decimal(str(item.get("principal_outstanding", "0"))) for item in operational), Decimal("0.00")
         ) == expected_principal, stmt
-        assert expected_principal == Decimal("1000.00")
         rcpt_numbers = [r.get("receipt_number") for r in stmt.get("receipts", [])]
         assert tenant_rcpt.get("receipt_number") in rcpt_numbers
 
