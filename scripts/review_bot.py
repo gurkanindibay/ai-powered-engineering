@@ -134,7 +134,7 @@ def _check(status: int, data: Any, what: str) -> Any:
 
 def _origin_repo() -> str:
     proc = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, check=False)
-    match = re.search(r"github\.com[:/]([^/]+/[^/.]+?)(?:\.git)?$", proc.stdout.strip())
+    match = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", proc.stdout.strip())
     if not match:
         raise BotError("cannot infer owner/repo from the origin remote; pass --repo")
     return match.group(1)
@@ -149,6 +149,8 @@ def parse_dotenv(text: str) -> dict[str, str]:
             continue
         key, value = line.removeprefix("export ").split("=", 1)
         value = value.strip()
+        if value[:1] not in ("'", '"'):
+            value = value.split(" #", 1)[0].strip()  # inline comment
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
             value = value[1:-1]
         values[key.strip()] = value

@@ -97,6 +97,10 @@ class ConfigTest(KeyCase):
         cfg = rb.load_config(args, env)
         self.assertEqual((cfg.app_id, cfg.installation_id, cfg.repo), ("env", "flag", "file/repo"))
 
+    def test_dotenv_inline_comments_and_quotes(self):
+        parsed = rb.parse_dotenv("A=1 # app id\nB='x # kept'\n# C=3\nD\n")
+        self.assertEqual(parsed, {"A": "1", "B": "x # kept"})
+
     def test_missing_app_id_is_reported(self):
         env = self.env(REVIEW_BOT_INSTALLATION_ID="1", REVIEW_BOT_KEY=str(self.key))
         with self.assertRaisesRegex(rb.BotError, "REVIEW_BOT_APP_ID"):
