@@ -129,6 +129,7 @@ As a site manager, I need each outstanding amount traced to a site, unit, primar
 - On April 10, 2027 (Europe/Istanbul) exactly eleven rows are open, matched by site, unit, primary debtor and period with principal and fee; every other accrued charge is settled.
 - Current and former owner totals are asserted separately from a jointly liable owner's exposure.
 - Site A shows cash 90,658.50 and open primary debt 5,804.09; Site B shows cash 189,538.75 and open primary debt 2,661.67, reconciled independently from fixture inputs with a jointly liable receivable counted once.
+- Coverage today is against the independent model only; the live comparison against a running site is pending (SC-13-25-06 and SC-13-25-07, blocked on the #247/#248 fixtures).
 
 ### STORY-13-10: Tenant data isolation across sites and resident accounts
 

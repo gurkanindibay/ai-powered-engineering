@@ -164,6 +164,10 @@ class Ledger:
     allocations: list[tuple[Payment, Charge, str, Decimal]] = field(default_factory=list)
 
     def _apply(self, payment: Payment) -> None:
+        """Apply one receipt. Fees are accrued up to the receipt date on every due charge of the
+        payer, including charges whose principal the receipt does not touch. That splits a segment
+        of unchanged principal into two roundings, which can differ from the product (one rounding
+        per segment) by a cent on other fixture data; the approved fixture is unaffected."""
         own = [c for c in self.charges if (c.site, c.unit, c.debtor) == (payment.site, payment.unit, payment.payer)]
         due = [c for c in own if DUE_DATES[c.period] <= payment.on]
         if payment.designated_period:
