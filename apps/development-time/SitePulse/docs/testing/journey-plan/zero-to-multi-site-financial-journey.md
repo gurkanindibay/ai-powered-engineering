@@ -4,13 +4,21 @@
 
 Prove that a SitePulse operator can onboard multiple residential sites from an empty installation and run them through several billing periods without losing track of **who owes what, which site received the money, and what stays collectible when people move or sell**.
 
-The test should create two sites through SaaS onboarding before adding any units or people. Each manager then registers owners, tenants and household members attached to the person living in the unit. The managers accrue four periods and record a mix of full payments, partial payments and missed payments. After two periods, people move out, buyers take title, some homes remain empty, and other residents move in. By the final checkpoint, managers can explain every open balance by debtor, unit and period and reconcile each site's cash to its own posted receipts.
+The test creates two sites through SaaS onboarding, then **creates all five units during the journey**: three in Site A and two in Site B. Once the units exist, each manager registers owners, tenants and household members attached to the person living in the unit. The managers accrue four periods and record a mix of full payments, partial payments and missed payments. After two periods, people move out, buyers take title, some homes remain empty, and other residents move in. By the final checkpoint, managers can explain every open balance by debtor, unit and period and reconcile each site's cash to its own posted receipts.
 
 This is a proposal for review. The [existing journey plan](README.md) defines F0 as a site with a manager already present. Its billing and occupancy scenarios are useful references. This journey starts one step earlier and carries the same two sites through onboarding, billing, occupancy changes and reconciliation.
 
 ## Starting state and timeline
 
-Use a dedicated, empty test installation or a uniquely scoped onboarding environment whose initial site list is empty. Start with a SaaS administrator and zero sites, units, residents, liabilities or cash. The attempt owns both sites and their managers. Create the sites through the supported onboarding flow, then use each manager's normal site-scoped commands. Use the existing attempt manifest and capture evidence for both sites.
+Use a dedicated, empty test installation or a uniquely scoped onboarding environment whose initial site list is empty. Start with a SaaS administrator and zero sites, units, residents, liabilities or cash. The attempt owns both sites and their managers. Create the sites through the supported onboarding flow and verify that both have zero units. Use each manager's normal site-scoped commands to create a block where required and add each unit below. Capture the creation steps and both site IDs in the existing attempt evidence.
+
+| Site | Units the manager creates | Expected unit count |
+|---|---|---:|
+| Site A | A1, A2, A3 | 3 |
+| Site B | B1, B2 | 2 |
+| Total | All units created in this attempt | 5 |
+
+**Unit creation is part of the test.** Start each site with an empty unit list and create every unit through the supported product flow. Seeded units would skip this checkpoint. Before registering owners, tenants or household members, verify that each manager sees the exact units and count for their site. Use the IDs returned by creation for later occupancy, billing and payment steps.
 
 Use a controlled Europe/Istanbul clock. Accrue January through April 2027 on the first of each month, after that day's occupancy and title changes. Dues and payment checkpoints fall on the 10th. Use a fixed operating tariff per site, zero grace days, and the existing late-fee and payment-allocation rules. All amounts are TRY to two decimal places.
 
