@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-20T16:05:48Z",
- "run_id": "20261120T160548Z-7b6d856",
- "commit": "7b6d8566e1410b42fc9aebcdba1d0cb5288e4dc4",
+ "generated_at": "2026-11-20T16:17:49Z",
+ "run_id": "20261120T161749Z-c09e66c",
+ "commit": "c09e66c7a8c60151b0a6116d6c69761093e64b05",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 163,
-  "seconds": 2669.8,
+  "seconds": 2207.8,
   "files": 8,
   "unparseable": []
  },
@@ -19,11 +19,11 @@
   "stories": 110,
   "stories_with_scenarios": 110,
   "stories_passing": 32,
-  "scenarios": 430,
-  "automated": 339,
+  "scenarios": 434,
+  "automated": 343,
   "passing": 141,
   "failing": 0,
-  "no_result": 198,
+  "no_result": 202,
   "planned": 91,
   "epics": 13,
   "epics_verified": 2,
@@ -204,11 +204,11 @@
    "stories": 10,
    "stories_with_scenarios": 10,
    "stories_passing": 0,
-   "scenarios": 117,
-   "automated": 37,
+   "scenarios": 121,
+   "automated": 41,
    "passing": 28,
    "failing": 0,
-   "no_result": 9,
+   "no_result": 13,
    "planned": 80,
    "health": "in_progress"
   }
@@ -2788,9 +2788,33 @@
    "epic": "EPIC-13",
    "story": "STORY-13-11"
   },
+  "SC-13-12-01": {
+   "state": "no_result",
+   "name": "A unit is sold with its tenant, the tenant leaves without notice and both owners are involved",
+   "epic": "EPIC-13",
+   "story": "STORY-13-12"
+  },
+  "SC-13-12-02": {
+   "state": "no_result",
+   "name": "A capital project runs across a sale with or without a seller-pays override",
+   "epic": "EPIC-13",
+   "story": "STORY-13-12"
+  },
   "SC-13-12-03": {
    "state": "no_result",
-   "name": "Both supplementary charges of a back-dated owner count their fee from the creation date",
+   "name": "An owner back-dated into a closed month gets supplementary charges without changing the snapshot",
+   "epic": "EPIC-13",
+   "story": "STORY-13-12"
+  },
+  "SC-13-12-04": {
+   "state": "no_result",
+   "name": "Catch-up, a payment inside grace, a reversal and a final settlement",
+   "epic": "EPIC-13",
+   "story": "STORY-13-12"
+  },
+  "SC-13-12-05": {
+   "state": "no_result",
+   "name": "An unmatched transfer on a unit with several debtors is assigned once and never applied twice",
    "epic": "EPIC-13",
    "story": "STORY-13-12"
   }
@@ -2961,8 +2985,8 @@
    "epics": 13,
    "stories": 110,
    "stories_with_scenarios": 110,
-   "scenarios": 430,
-   "automated": 339
+   "scenarios": 434,
+   "automated": 343
   }
  ],
  "recent_changes": [
@@ -2971,8 +2995,8 @@
    "epic": "EPIC-13",
    "title": "Site Admin Journeys",
    "new_stories": 7,
-   "new_scenarios": 91,
-   "newly_automated": 28,
+   "new_scenarios": 95,
+   "newly_automated": 32,
    "items": 7,
    "samples": [
     "STORY-13-02: Accrual histories F4, F5 and F7",
@@ -3656,5 +3680,5 @@
    ]
   }
  ],
- "href": "reports/44768163363-1/"
+ "href": "reports/44770678827-1/"
 }
