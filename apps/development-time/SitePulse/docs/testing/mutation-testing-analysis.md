@@ -31,6 +31,10 @@ Generic tools (`cargo-mutants`, `mutmut`) produce thousands of mechanical mutant
 - Runner: [`scripts/mutation_scenarios.py`](../../scripts/mutation_scenarios.py). It supports `list`, `validate`, `baseline`, `run` and `restore`, plus `--json`.
 - Drift guard: [`harness/tests/test_mutation_scenarios.py`](../../harness/tests/test_mutation_scenarios.py) fails when production code changes under a scenario, so the catalogue cannot go stale silently.
 
+> **This drift check is a gate on every PR.** CI's lint job runs `harness/tests`, so a change to any line a scenario targets (dues ledger, allocation, late fees, proration, auth, tenancy, money formatting, the harness lints) fails CI until the scenario is updated. The fix is to rewrite that scenario's `original` and `mutant` against the new code, keeping the same bug, and re-run it (`mutation_scenarios.py run --id <ID>`). Never delete the scenario to make CI pass. `mutation_scenarios.py validate` names the scenarios that need rewriting.
+>
+> CI runs only these self-tests, not the mutation run. The scores below come from a local run and are not reproduced by CI.
+
 ### Suites
 
 | Suite | Command | Needs |

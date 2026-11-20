@@ -140,9 +140,32 @@ class RunScenarioTest(unittest.TestCase):
             target.write_text("mutated", encoding="utf-8")
             journal = Path(tmp) / "j.json"
             journal.write_text(json.dumps({"file": str(target), "text": "original"}), encoding="utf-8")
-            self.assertEqual(ms.restore(journal), str(target))
+            self.assertEqual(ms.restore(journal, root=Path(tmp)), str(target))
             self.assertEqual(target.read_text(encoding="utf-8"), "original")
-            self.assertIsNone(ms.restore(journal))
+            self.assertIsNone(ms.restore(journal, root=Path(tmp)))
+
+    def test_restore_ignores_an_entry_from_another_checkout(self):
+        with tempfile.TemporaryDirectory() as mine, tempfile.TemporaryDirectory() as other:
+            target = Path(other) / "code.py"
+            target.write_text("their mutant", encoding="utf-8")
+            journal = Path(mine) / "j.json"
+            journal.write_text(json.dumps({"file": str(target), "text": "original"}), encoding="utf-8")
+            self.assertIsNone(ms.restore(journal, root=Path(mine)))
+            self.assertEqual(target.read_text(encoding="utf-8"), "their mutant")
+            self.assertTrue(journal.exists())
+
+    def test_journal_is_specific_to_this_checkout(self):
+        self.assertNotEqual(ms.JOURNAL.name, "sitepulse-mutation-journal.json")
+        self.assertIn(__import__("hashlib").sha256(str(ms.PROJECT_ROOT).encode()).hexdigest()[:16], ms.JOURNAL.name)
+
+    def test_timeout_stops_the_whole_process_group(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "child-alive"
+            script = f"import subprocess,sys; subprocess.Popen([sys.executable,'-c','import time,pathlib; time.sleep(3); pathlib.Path(r\"{marker}\").write_text(\"x\")']); import time; time.sleep(30)"
+            suite = ms.Suite(name="slow", cwd=".", cmd=[sys.executable, "-c", script], timeout=1)
+            self.assertEqual(ms.run_suite(suite, Path(tmp)).status, "timeout")
+            __import__("time").sleep(3.5)
+            self.assertFalse(marker.exists(), "the grandchild outlived the timeout")
 
 
 class SummaryTest(unittest.TestCase):

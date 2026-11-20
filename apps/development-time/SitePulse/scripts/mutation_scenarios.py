@@ -40,8 +40,10 @@ is journalled before each mutation so ``restore`` can undo an interrupted run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -53,7 +55,11 @@ from typing import Callable, Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CATALOGUE = PROJECT_ROOT / "harness" / "mutation" / "scenarios.toml"
-JOURNAL = Path(tempfile.gettempdir()) / "sitepulse-mutation-journal.json"
+# One journal per checkout: worktrees run mutations side by side, and one run must
+# never overwrite, delete or restore another checkout's entry.
+JOURNAL = Path(tempfile.gettempdir()) / (
+    "sitepulse-mutation-journal-" + hashlib.sha256(str(PROJECT_ROOT).encode()).hexdigest()[:16] + ".json"
+)
 # Set while a mutant is applied, so self-checks that read production code
 # (such as the catalogue drift test) do not count as a kill.
 ACTIVE_ENV = "SITEPULSE_MUTATION_ACTIVE"
@@ -172,24 +178,38 @@ Runner = Callable[[Suite, Path], SuiteResult]
 def run_suite(suite: Suite, root: Path) -> SuiteResult:
     env = dict(os.environ, **{ACTIVE_ENV: "1"})
     started = time.monotonic()
+    # Own process group, so a timeout also stops the test binaries cargo/flutter
+    # started instead of leaving them running into the next mutant.
+    proc = subprocess.Popen(
+        suite.cmd,
+        cwd=root / suite.cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
     try:
-        proc = subprocess.run(
-            suite.cmd,
-            cwd=root / suite.cwd,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=suite.timeout,
-            check=False,
-        )
+        output, _ = proc.communicate(timeout=suite.timeout)
     except subprocess.TimeoutExpired:
+        _kill_group(proc)
         return SuiteResult(suite.name, "timeout", time.monotonic() - started)
-    output = proc.stdout + proc.stderr
+    except BaseException:
+        _kill_group(proc)
+        raise
     elapsed = time.monotonic() - started
     if proc.returncode == 0:
         return SuiteResult(suite.name, "passed", elapsed)
     status = "unviable" if any(m in output for m in UNVIABLE_MARKERS) else "failed"
     return SuiteResult(suite.name, status, elapsed, _tail(output))
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+    proc.wait()
 
 
 def _git_dirty(root: Path, rel: str) -> bool:
@@ -205,11 +225,22 @@ def _journal_write(journal: Path, path: Path, original: str) -> None:
     journal.write_text(json.dumps({"file": str(path), "text": original}), encoding="utf-8")
 
 
-def restore(journal: Path = JOURNAL) -> str | None:
-    """Writes back a file left mutated by an interrupted run; returns its path."""
+def _journal_entry(journal: Path, root: Path) -> dict | None:
+    """The journal entry, if it belongs to a file under `root` (this checkout)."""
     if not journal.exists():
         return None
     entry = json.loads(journal.read_text(encoding="utf-8"))
+    if not Path(entry["file"]).resolve().is_relative_to(root.resolve()):
+        return None
+    return entry
+
+
+def restore(journal: Path = JOURNAL, root: Path = PROJECT_ROOT) -> str | None:
+    """Writes back a file left mutated by an interrupted run in this checkout; returns its path.
+    An entry for a file outside `root` belongs to another checkout and is left alone."""
+    entry = _journal_entry(journal, root)
+    if entry is None:
+        return None
     Path(entry["file"]).write_text(entry["text"], encoding="utf-8")
     journal.unlink()
     return entry["file"]
@@ -373,7 +404,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"baseline {r.suite} {r.status}:\n{r.tail}", file=sys.stderr)
         return 1 if failing else 0
 
-    if JOURNAL.exists():
+    if _journal_entry(JOURNAL, PROJECT_ROOT) is not None:
         print(f"an interrupted run left {JOURNAL}; run `restore` first", file=sys.stderr)
         return 2
     if not args.allow_dirty:
