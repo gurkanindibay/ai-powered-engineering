@@ -431,24 +431,46 @@ impl OccupancyService {
             None => None,
         };
         tx.commit().await?;
-        if let Some(closed_item) = closed.as_ref() {
+        {
             let mut inner = self.state.inner.write().await;
             let history = inner.unit_occupancies.entry(unit.to_string()).or_default();
-            if let Some(existing) = history.iter_mut().find(|item| item.id == closed_item.id) {
-                *existing = closed_item.clone();
-            } else {
-                history.push(closed_item.clone());
+            if let Some(closed_item) = closed.as_ref() {
+                if let Some(existing) = history.iter_mut().find(|item| item.id == closed_item.id) {
+                    *existing = closed_item.clone();
+                } else {
+                    history.push(closed_item.clone());
+                }
             }
             if let Some(opened_item) = opened.as_ref() {
                 if !history.iter().any(|item| item.id == opened_item.id) {
                     history.push(opened_item.clone());
                 }
             }
-        } else if let Some(opened_item) = opened.as_ref() {
-            let mut inner = self.state.inner.write().await;
-            let history = inner.unit_occupancies.entry(unit.to_string()).or_default();
-            if !history.iter().any(|item| item.id == opened_item.id) {
-                history.push(opened_item.clone());
+
+            // The database may resolve a tenant or owner who has no login account.
+            // Keep the in-memory payer identity aligned with the committed session.
+            for cached_unit in inner
+                .units
+                .iter_mut()
+                .filter(|candidate| crate::db::parse_id_to_i64(&candidate.id) == Some(unit))
+            {
+                if closed
+                    .as_ref()
+                    .is_some_and(|session| session.role == DebtorType::Tenant)
+                {
+                    cached_unit.tenant_user_id = None;
+                }
+                if let Some(session) = opened.as_ref() {
+                    let person_id = format!("person-{}", session.person_id);
+                    match session.role {
+                        DebtorType::Owner => {
+                            cached_unit.owner_user_id = Some(person_id);
+                        }
+                        DebtorType::Tenant => {
+                            cached_unit.tenant_user_id = Some(person_id);
+                        }
+                    }
+                }
             }
         }
         tracing::info!(
