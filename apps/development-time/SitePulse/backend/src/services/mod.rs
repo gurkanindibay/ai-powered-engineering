@@ -48,6 +48,7 @@ pub mod person_service;
 pub mod plan_service;
 pub mod portfolio_service;
 pub mod resident_request_service;
+pub mod sale_clearance_service;
 pub mod supplementary_charge_service;
 
 pub use account_activation_service::AccountActivationService;

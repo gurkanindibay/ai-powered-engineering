@@ -422,6 +422,8 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
     final advanceAmountCtrl = TextEditingController();
     bool isSubmitting = false;
     bool newOwnerMovesIn = false;
+    bool sellerPaysRemaining = false;
+    final sellerPaysReasonCtrl = TextEditingController();
     var settlementChoice = AdvanceExitSettlementChoice.keep;
     const sourceDebtor = 'OWNER';
     final settlementRequestKey = '${ho.unitId}-${DateTime.now().microsecondsSinceEpoch}';
@@ -458,6 +460,12 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                             );
                             return;
                           }
+                          if (sellerPaysRemaining && sellerPaysReasonCtrl.text.trim().length < 5) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              appSnackBar(content: const Text('Satıcı öder talebi için en az 5 karakterlik gerekçe girin.')),
+                            );
+                            return;
+                          }
                           if (settlementChoice != AdvanceExitSettlementChoice.keep &&
                               (settlementAmount == null || settlementAmount! <= Decimal.zero)) {
                             ScaffoldMessenger.of(ctx).showSnackBar(
@@ -491,6 +499,8 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                                   newOwner: selected,
                                   notes: notesCtrl.text.trim(),
                                   newOwnerMovesIn: ho.isOwnerOccupied && newOwnerMovesIn,
+                                  sellerPaysOverrideReason:
+                                      sellerPaysRemaining ? sellerPaysReasonCtrl.text.trim() : null,
                                 ),
                               );
                               if (res == null) return;
@@ -509,6 +519,16 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                               }
                               transferCompleted = true;
                               transferMessage = res['message']?.toString() ?? 'Mülk tapu devri başarıyla tamamlandı.';
+                              if (res['seller_pays_override'] != null) {
+                                transferMessage += ' Satıcı öder talebi ikinci yetkili onayına gönderildi.';
+                              }
+                              if ((res['correction_requests'] as List?)?.isNotEmpty == true) {
+                                transferMessage += ' Satış ayının aidat bölüşümü ikinci yetkili onayına gönderildi.';
+                              }
+                              final warnings = (res['warnings'] as List?)?.map((w) => w.toString()).toList() ?? const <String>[];
+                              if (warnings.isNotEmpty) {
+                                transferMessage += ' ${warnings.join(' ')}';
+                              }
                             }
                             if (settlementChoice != AdvanceExitSettlementChoice.keep) {
                               final requestError = await widget.controller.requestAdvanceExitSettlement(
@@ -597,6 +617,9 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  // STORY-08-05: what stays with the seller and what goes to the buyer.
+                  SaleClearancePanel(unitId: ho.unitId),
                   const SizedBox(height: 20),
                   Text(
                     'Yeni Kat Maliki Bilgileri',
@@ -620,6 +643,25 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                     amountController: advanceAmountCtrl,
                     onAmountChanged: (amount) => setDlgState(() => settlementAmount = amount),
                   ),
+                  const SizedBox(height: 12),
+                  // STORY-08-05: by default each later installment goes to the owner at accrual.
+                  testId('module_transfer_seller_pays', CheckboxListTile(
+                    key: const Key('module_transfer_seller_pays'),
+                    value: sellerPaysRemaining,
+                    onChanged: (v) => setDlgState(() => sellerPaysRemaining = v ?? false),
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Kalan demirbaş taksitlerini satıcı öder'),
+                    subtitle: const Text('İkinci bir yetkili onaylayana kadar varsayılan kural geçerli kalır.'),
+                  )),
+                  if (sellerPaysRemaining)
+                    testId('module_transfer_seller_pays_reason', TextField(
+                      key: const Key('module_transfer_seller_pays_reason'),
+                      controller: sellerPaysReasonCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Satıcı öder gerekçesi (satış sözleşmesi)',
+                        border: OutlineInputBorder(),
+                      ),
+                    )),
                   const SizedBox(height: 12),
                   testId('module_transfer_notes_input', TextField(
                     key: const Key('module_transfer_notes_input'),

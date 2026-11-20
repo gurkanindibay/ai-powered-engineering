@@ -35,6 +35,7 @@ use crate::services::plan_service::PlanService;
 use crate::services::portfolio_service::PortfolioService;
 use crate::services::receipt_document::{render_text_document, TextDocument};
 use crate::services::resident_request_service::ResidentRequestService;
+use crate::services::sale_clearance_service::SaleClearanceService;
 use crate::state::AppState;
 
 type ApiError = (StatusCode, Json<serde_json::Value>);
@@ -487,6 +488,85 @@ pub async fn decide_advance_exit_settlement(
     Json(req): Json<DecideAdvanceExitSettlementRequest>,
 ) -> ApiResult<AdvanceExitSettlement> {
     ok(AdvanceExitSettlementService::new(&state)
+        .decide(&caller(&ctx), id, req)
+        .await)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaleClearanceQuery {
+    /// The sale's effective date (default: today in the site's time zone).
+    #[serde(default)]
+    pub effective_date: Option<NaiveDate>,
+    /// `csv` downloads the statement; anything else returns JSON.
+    #[serde(default)]
+    pub format: Option<String>,
+}
+
+pub async fn get_sale_clearance(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(unit_id): Path<String>,
+    Query(q): Query<SaleClearanceQuery>,
+) -> Result<Response, ApiError> {
+    let caller = caller(&ctx);
+    let effective_date = match q.effective_date {
+        Some(date) => date,
+        None => {
+            let inner = state.inner.read().await;
+            crate::services::finance_common::site_today(&inner, &caller.site_id)
+        }
+    };
+    let statement = SaleClearanceService::new(&state)
+        .statement(&caller, &unit_id, effective_date)
+        .await
+        .map_err(fail)?;
+    if q.format.as_deref() == Some("csv") {
+        let body = SaleClearanceService::render_csv(&statement);
+        return Ok((
+            [
+                (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!(
+                        "attachment; filename=\"sale-clearance-{}.csv\"",
+                        statement.unit_id
+                    ),
+                ),
+            ],
+            body,
+        )
+            .into_response());
+    }
+    Ok(Json(statement).into_response())
+}
+
+pub async fn create_seller_pays_override(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(unit_id): Path<String>,
+    Json(req): Json<RequestSellerPaysOverrideRequest>,
+) -> Result<(StatusCode, Json<SellerPaysOverride>), ApiError> {
+    created(
+        SaleClearanceService::new(&state)
+            .request(&caller(&ctx), &unit_id, req)
+            .await,
+    )
+}
+
+pub async fn list_seller_pays_overrides(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+) -> ApiResult<Vec<SellerPaysOverride>> {
+    ok(SaleClearanceService::new(&state).list(&caller(&ctx)).await)
+}
+
+pub async fn decide_seller_pays_override(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(id): Path<i64>,
+    Json(req): Json<DecideSellerPaysOverrideRequest>,
+) -> ApiResult<SellerPaysOverride> {
+    ok(SaleClearanceService::new(&state)
         .decide(&caller(&ctx), id, req)
         .await)
 }

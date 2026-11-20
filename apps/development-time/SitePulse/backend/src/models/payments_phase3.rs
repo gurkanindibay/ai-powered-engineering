@@ -1215,10 +1215,17 @@ pub struct AccrualCorrection {
     pub replacement_due_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CorrectionReplacementShare {
     pub debtor_type: DebtorType,
     pub amount: Decimal,
+    /// The person who owes the share. Needed when both shares have the same debtor type, as
+    /// when a sold owner-occupied unit splits a month between seller and buyer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liable_person_id: Option<i64>,
+    /// The share's own due date (default: the correction's or the original liability's).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_date: Option<NaiveDate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1686,4 +1693,84 @@ pub struct LegalBasisReport {
 pub struct SetTransitionRequest {
     /// Days from today (1–90); 0 ends the transition.
     pub transition_days: i64,
+}
+
+// ---------------------------------------------------------------------------
+// STORY-08-05: sale clearance statement and four-eyes seller-pays override
+// ---------------------------------------------------------------------------
+
+/// One open liability of the seller, principal and late fee apart.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ClearanceDebtItem {
+    pub due_id: String,
+    pub period: String,
+    pub expense_type: String,
+    pub due_date: NaiveDate,
+    pub principal: Decimal,
+    pub fee: Decimal,
+    pub total: Decimal,
+}
+
+/// A capital installment of the unit's share that is not accrued yet.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ClearanceInstallment {
+    pub project_id: String,
+    pub project_title: String,
+    pub installment_number: i32,
+    pub total_installments: i32,
+    pub due_date: NaiveDate,
+    pub amount: Decimal,
+}
+
+/// What stays with the seller and what goes to the buyer at a sale of one unit.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SaleClearanceStatement {
+    pub site_id: String,
+    pub unit_id: String,
+    pub unit_label: String,
+    pub seller_name: Option<String>,
+    pub effective_date: NaiveDate,
+    pub open_debt_principal: Decimal,
+    pub open_debt_fee: Decimal,
+    pub open_debt_total: Decimal,
+    pub debts: Vec<ClearanceDebtItem>,
+    /// The seller's advance on the unit; it is not moved to the buyer.
+    pub advance: Decimal,
+    pub upcoming_installments: Vec<ClearanceInstallment>,
+    pub upcoming_installments_total: Decimal,
+    /// The latest seller-pays override request of the unit, if any.
+    pub override_request: Option<SellerPaysOverride>,
+    pub notice: String,
+}
+
+/// A request that the seller pays the capital installments accruing after the sale.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SellerPaysOverride {
+    pub id: i64,
+    pub site_id: String,
+    pub unit_id: String,
+    pub seller_person_id: i64,
+    pub buyer_person_id: i64,
+    pub transfer_date: NaiveDate,
+    pub reason: String,
+    pub requested_by: String,
+    pub status: String,
+    pub decided_by: Option<String>,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub decision_note: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestSellerPaysOverrideRequest {
+    pub buyer_person_id: i64,
+    pub transfer_date: NaiveDate,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecideSellerPaysOverrideRequest {
+    pub approve: bool,
+    #[serde(default)]
+    pub note: Option<String>,
 }

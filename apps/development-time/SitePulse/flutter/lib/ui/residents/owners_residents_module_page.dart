@@ -37,6 +37,7 @@ import '../design_system/sp_semantics.dart';
 import '../design_system/sp_tone.dart';
 import '../design_system/sp_guidance_card.dart';
 import 'advance_exit_settlement_fields.dart';
+import 'sale_clearance_panel.dart';
 
 part 'owners_residents_unit_card.dart';
 part 'owners_residents_unit_workspace.dart';

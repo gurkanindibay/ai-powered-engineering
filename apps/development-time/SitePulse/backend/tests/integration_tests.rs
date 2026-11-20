@@ -4019,6 +4019,7 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
         notes: Some("Tapu devri noter onaylı satış belgesi".to_string()),
         new_owner_person_id: None,
         new_owner_moves_in: false,
+        seller_pays_override_reason: None,
     };
 
     let resp = service.transfer_ownership(transfer_req).await.unwrap();
@@ -4449,6 +4450,7 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
         notes: Some("Tapu devir işlemi yapıldı".to_string()),
         new_owner_person_id: None,
         new_owner_moves_in: false,
+        seller_pays_override_reason: None,
     };
 
     let res = service.transfer_ownership(req).await.unwrap();

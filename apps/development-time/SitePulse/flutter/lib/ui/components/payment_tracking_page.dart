@@ -15,6 +15,7 @@ import 'sp_dialog_pages.dart';
 import '../../domain/models/auth_models.dart';
 import '../payments/receipt_actions.dart';
 import '../payments/advance_exit_settlement_queue.dart';
+import '../payments/seller_pays_override_queue.dart';
 import '../design_system/sp_status_badge.dart';
 import '../design_system/sp_tone.dart';
 import '../design_system/sp_money_field.dart';
@@ -717,6 +718,15 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                 icon: const Icon(Icons.assignment_turned_in_outlined),
                 tooltip: 'Çıkış avans talepleri',
                 onPressed: () => AdvanceExitSettlementQueuePage.open(context),
+              ),
+            ),
+            testId(
+              'action_seller_pays_override_queue',
+              IconButton(
+                key: const Key('action_seller_pays_override_queue'),
+                icon: const Icon(Icons.swap_horiz),
+                tooltip: 'Satıcı öder talepleri',
+                onPressed: () => SellerPaysOverrideQueuePage.open(context),
               ),
             ),
             IconButton(
