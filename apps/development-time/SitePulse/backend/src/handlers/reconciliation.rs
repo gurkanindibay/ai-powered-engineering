@@ -196,6 +196,7 @@ pub async fn confirm_reconciliation(
         payer_name: String,
         request_designation: Option<crate::models::PaymentDesignation>,
         settles_owner_capital_dues: bool,
+        settles_tenant_joint_liability: bool,
         item: ReconciliationMatch,
     }
     let lines: Vec<Line> = {
@@ -298,6 +299,8 @@ pub async fn confirm_reconciliation(
                         due_ids: vec![due_id],
                         ..Default::default()
                     });
+            let settles_tenant_joint_liability = payer_role == DebtorType::Owner
+                && open_debtor_types(&inner, &unit.id) == [DebtorType::Tenant];
             lines.push(Line {
                 match_id: match_id.clone(),
                 unit,
@@ -305,6 +308,7 @@ pub async fn confirm_reconciliation(
                 payer_name,
                 request_designation,
                 settles_owner_capital_dues: payload.owner_capital_match_ids.contains(match_id),
+                settles_tenant_joint_liability,
                 item: {
                     let mut item = m.clone();
                     item.site_id = payload.site_id.clone();
@@ -342,7 +346,7 @@ pub async fn confirm_reconciliation(
                 idempotency_key: Some(format!("STMT:{}", key)),
                 designation: line.request_designation.clone(),
                 settles_owner_capital_dues: line.settles_owner_capital_dues,
-                settles_tenant_joint_liability: false,
+                settles_tenant_joint_liability: line.settles_tenant_joint_liability,
                 external_reference: txn.reference_no.clone().or_else(|| Some(key.clone())),
                 designate_from_description: true,
                 settles_unmatched_entry_id: None,
@@ -1398,6 +1402,8 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
     // 2. Settle through the canonical ingestion path (SPEC-005 R1): TAH- receipt,
     // allocation rows, penalty-first waterfall, idempotent on the bank transaction.
     let (payer_role, payer_name) = resolve_payer(&inner, &unit, payload.sender_name.as_deref());
+    let settles_tenant_joint_liability = payer_role == DebtorType::Owner
+        && open_debtor_types(&inner, &unit.id) == [DebtorType::Tenant];
     let matched_resident_name = unit
         .owner_user_id
         .as_ref()
@@ -1508,7 +1514,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             }),
             designation: None,
             settles_owner_capital_dues: false,
-            settles_tenant_joint_liability: false,
+            settles_tenant_joint_liability,
             external_reference: Some(payload.transaction_id.clone()),
             designate_from_description: true,
             settles_unmatched_entry_id: None,
@@ -1614,9 +1620,12 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
     ))
 }
 
-/// Who paid, for an incoming transfer: the unit's tenant when the sender name
-/// matches the tenant account, otherwise the owner (who may settle any of the
-/// unit's liabilities). Returns `(payer_role, payer_name)`.
+/// Who paid, for an incoming transfer:
+/// - The unit's tenant when the sender name matches the tenant account.
+/// - When only one debtor type has open debt on the unit, follow that debt.
+/// - Otherwise, the owner (who may settle owner liabilities, with surplus to advance).
+///
+/// Returns `(payer_role, payer_name)`.
 pub(crate) fn resolve_payer(
     inner: &crate::state::AppStateInner,
     unit: &crate::models::IndependentUnit,
@@ -1627,16 +1636,48 @@ pub(crate) fn resolve_payer(
             .and_then(|id| inner.users.iter().find(|u| &u.id == id))
             .map(|u| u.full_name.clone())
     };
+    let tenant_name = name_of(&unit.tenant_user_id).or_else(|| {
+        inner.unit_occupancies.get(&unit.id).and_then(|occ| {
+            occ.iter()
+                .find(|h| h.is_active && h.role == DebtorType::Tenant)
+                .map(|h| h.person_name.clone())
+        })
+    });
     let sender = sender_name.map(str::trim).filter(|s| !s.is_empty());
-    if let (Some(sender), Some(tenant)) = (sender, name_of(&unit.tenant_user_id)) {
+    if let (Some(sender), Some(ref tenant)) = (sender, &tenant_name) {
         let (a, b) = (
             crate::services::dues_ledger::fold_turkish(sender),
-            crate::services::dues_ledger::fold_turkish(&tenant),
+            crate::services::dues_ledger::fold_turkish(tenant),
         );
         if a.contains(&b) || b.contains(&a) {
             return (DebtorType::Tenant, sender.to_string());
         }
     }
+    let owner_name = name_of(&unit.owner_user_id);
+    if let (Some(sender), Some(ref owner)) = (sender, &owner_name) {
+        let (a, b) = (
+            crate::services::dues_ledger::fold_turkish(sender),
+            crate::services::dues_ledger::fold_turkish(owner),
+        );
+        if a.contains(&b) || b.contains(&a) {
+            return (DebtorType::Owner, sender.to_string());
+        }
+    }
+
+    // Follow the debt: when only one debtor type has open debt, resolve to that type.
+    let open_debtors = open_debtor_types(inner, &unit.id);
+    if open_debtors.len() == 1 {
+        let single_role = open_debtors[0];
+        let name = sender
+            .map(str::to_string)
+            .or_else(|| match single_role {
+                DebtorType::Tenant => tenant_name,
+                DebtorType::Owner => name_of(&unit.owner_user_id),
+            })
+            .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
+        return (single_role, name);
+    }
+
     let name = sender
         .map(str::to_string)
         .or_else(|| name_of(&unit.owner_user_id))

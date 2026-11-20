@@ -385,6 +385,7 @@ def test_resident_cannot_read_another_unit_financial_records(request, api, actor
 
 
 @pytest.mark.covers("SC-13-10-06")
+@pytest.mark.covers("SC-09-02-03")
 @pytest.mark.core
 @pytest.mark.role_resident
 def test_tenant_statement_excludes_owner_private_transactions(request, api, actors, stack):
@@ -441,6 +442,9 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
             Decimal(str(line["principal_paid"])) for line in owner_rcpt["allocation_breakdown"]
         ) == Decimal("940.00")
 
+        assert Decimal(str(tenant_rcpt["allocated_total"])) == Decimal("500.00")
+        assert Decimal(str(tenant_rcpt["allocated_penalty"])) == Decimal("90.00")
+        assert Decimal(str(tenant_rcpt["allocated_principal"])) == Decimal("410.00")
         paid_on_operational = sum(
             (
                 Decimal(str(line["principal_paid"]))
@@ -449,12 +453,11 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
             ),
             Decimal("0.00"),
         )
-        assert paid_on_operational == Decimal(str(tenant_rcpt["allocated_principal"]))
-        expected_principal = Decimal("1500.00") - paid_on_operational
+        assert paid_on_operational == Decimal("410.00")
         operational = [item for item in open_items if item.get("expense_type") == "OPERATIONAL_DUES"]
         assert sum(
             (Decimal(str(item.get("principal_outstanding", "0"))) for item in operational), Decimal("0.00")
-        ) == expected_principal, stmt
+        ) == Decimal("1090.00"), stmt
         rcpt_numbers = [r.get("receipt_number") for r in stmt.get("receipts", [])]
         assert tenant_rcpt.get("receipt_number") in rcpt_numbers
 

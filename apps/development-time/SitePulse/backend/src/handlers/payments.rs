@@ -25,7 +25,7 @@ pub async fn record_homeowner_payment(
     State(state): State<AppState>,
     Json(payload): Json<RecordHomeownerPaymentRequest>,
 ) -> Result<(StatusCode, Json<RecordHomeownerPaymentResponse>), (StatusCode, String)> {
-    let (unit, owner_name) = {
+    let (unit, payer_role, payer_name, settles_tenant_joint_liability) = {
         let inner = state.inner.read().await;
         let unit = inner
             .units
@@ -38,41 +38,32 @@ pub async fn record_homeowner_payment(
                     format!("Unit '{}' not found.", payload.unit_id),
                 )
             })?;
-        let owner_name = unit.owner_user_id.as_ref().and_then(|uid| {
-            inner
-                .users
-                .iter()
-                .find(|u| &u.id == uid)
-                .map(|u| u.full_name.clone())
-        });
-        (unit, owner_name)
+        let (payer_role, payer_name) =
+            crate::handlers::resolve_payer(&inner, &unit, payload.homeowner_name.as_deref());
+        let settles_tenant_joint_liability = payer_role == DebtorType::Owner
+            && crate::handlers::open_debtor_types(&inner, &unit.id) == [DebtorType::Tenant];
+        (unit, payer_role, payer_name, settles_tenant_joint_liability)
     };
-    let payer_name = payload
-        .homeowner_name
-        .clone()
-        .filter(|n| !n.trim().is_empty())
-        .or(owner_name)
-        .unwrap_or_else(|| "Kat Maliki".to_string());
     let reference = payload
         .reference_code
         .clone()
         .filter(|r| !r.trim().is_empty());
 
-    // Canonical ingestion (SPEC-005 R1). Recorded by site staff on behalf of the owner.
+    // Canonical ingestion (SPEC-005 R1).
     let receipt = crate::services::PaymentTrackingService::new(state.clone())
         .record_and_allocate_payment(crate::models::RecordManualPaymentRequest {
             site_id: Some(unit.site_id.clone()),
             unit_id: unit.id.clone(),
             amount: payload.amount,
             payer_name: payer_name.clone(),
-            payer_role: DebtorType::Owner,
+            payer_role,
             payment_channel: payload.payment_method,
             description: payload.note.clone(),
             payment_date: None,
             idempotency_key: reference.as_ref().map(|r| format!("HOP:{}", r)),
             designation: None,
             settles_owner_capital_dues: false,
-            settles_tenant_joint_liability: false,
+            settles_tenant_joint_liability,
             external_reference: reference.clone(),
             designate_from_description: true,
             settles_unmatched_entry_id: None,
@@ -218,23 +209,42 @@ pub async fn match_all_homeowner_payments(
     let mut matched_advance_count = 0;
     for (record, site_id) in pending {
         // The pending row becomes the settled entry (SPEC-005 R2): no duplicate.
+        let (payer_role, payer_name, settles_tenant_joint_liability) = {
+            let inner = state.inner.read().await;
+            let unit = inner.units.iter().find(|u| u.id == record.unit_id);
+            match unit {
+                Some(u) => {
+                    let (role, name) =
+                        crate::handlers::resolve_payer(&inner, u, record.homeowner_name.as_deref());
+                    let settles_joint = role == DebtorType::Owner
+                        && crate::handlers::open_debtor_types(&inner, &u.id)
+                            == [DebtorType::Tenant];
+                    (role, name, settles_joint)
+                }
+                None => (
+                    DebtorType::Owner,
+                    record
+                        .homeowner_name
+                        .clone()
+                        .unwrap_or_else(|| "Kat Maliki".to_string()),
+                    false,
+                ),
+            }
+        };
         let receipt = service
             .record_and_allocate_payment(crate::models::RecordManualPaymentRequest {
                 site_id: Some(site_id),
                 unit_id: record.unit_id.clone(),
                 amount: record.amount,
-                payer_name: record
-                    .homeowner_name
-                    .clone()
-                    .unwrap_or_else(|| "Kat Maliki".to_string()),
-                payer_role: DebtorType::Owner,
+                payer_name,
+                payer_role,
                 payment_channel: record.payment_method,
                 description: record.note.clone(),
                 payment_date: None,
                 idempotency_key: Some(format!("HOP:{}", record.id)),
                 designation: None,
                 settles_owner_capital_dues: false,
-                settles_tenant_joint_liability: false,
+                settles_tenant_joint_liability,
                 external_reference: record.reference_code.clone(),
                 designate_from_description: true,
                 settles_unmatched_entry_id: Some(record.id.clone()),
