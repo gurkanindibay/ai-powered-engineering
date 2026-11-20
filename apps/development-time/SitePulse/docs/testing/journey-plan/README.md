@@ -275,7 +275,7 @@ The plan is pending, so nothing below is changed yet. Each item has its own issu
 | [09-financial-state-transitions.feature](09-financial-state-transitions.feature) | J-16: targeting, partial and backdated payments, post-close changes, reconciliation and dual ledger |
 | [10-tenant-data-isolation.feature](10-tenant-data-isolation.feature) | J-17: cross-site reads, exports and mutations, private tenant statements and receipts, former occupants and session races |
 | [11-state-machines.feature](11-state-machines.feature) | J-18: every liability, period, reconciliation and unit occupancy status: entry, allowed commands and refused commands |
-| [12-multi-depth-chains.feature](12-multi-depth-chains.feature) | J-19: depth 3 to 5 chains that combine sale, departure, back-dating, catch-up and capital rules with a checkpoint per stage |
+| [STORY-13-12-multi-depth-chains.feature](../../.specify/features/EPIC-13/STORY-13-12-multi-depth-chains.feature) | J-19: depth 3 to 5 chains that combine sale, departure, back-dating, catch-up and capital rules with a checkpoint per stage |
 
 ## 10. Coverage map
 

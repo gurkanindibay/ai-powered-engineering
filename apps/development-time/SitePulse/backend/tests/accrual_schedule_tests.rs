@@ -174,7 +174,7 @@ async fn when_catch_up_reaches_the_limit_then_older_periods_are_reported_not_acc
     assert_eq!(site_dues(&state).await.len(), 12);
 }
 
-// covers: SC-07-10-05
+// covers: SC-07-10-05, SC-13-12-04
 #[tokio::test]
 async fn when_paid_inside_the_grace_period_then_the_late_fee_is_zero() {
     let state = AppState::new_with_test_fixtures();
