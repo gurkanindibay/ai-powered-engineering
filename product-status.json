@@ -1,30 +1,30 @@
 {
  "schema": 1,
- "generated_at": "2026-11-20T21:55:45Z",
- "run_id": "20261120T215545Z-e5a1b8a",
- "commit": "e5a1b8a0d3310866d1db188be1e24d2c6ac48fed",
+ "generated_at": "2026-11-20T22:08:53Z",
+ "run_id": "20261120T220852Z-127e5f1",
+ "commit": "127e5f1ce9ceb532a79540475075dbf220191b1f",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 167,
+  "tests": 176,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 166,
-  "seconds": 2285.5,
+  "passed": 175,
+  "seconds": 2245.8,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 112,
-  "stories_with_scenarios": 112,
+  "stories": 113,
+  "stories_with_scenarios": 113,
   "stories_passing": 32,
-  "scenarios": 442,
-  "automated": 343,
-  "passing": 141,
+  "scenarios": 449,
+  "automated": 348,
+  "passing": 146,
   "failing": 0,
   "no_result": 202,
-  "planned": 99,
+  "planned": 101,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 0
@@ -201,15 +201,15 @@
   {
    "id": "EPIC-13",
    "title": "Site Admin Journeys",
-   "stories": 12,
-   "stories_with_scenarios": 12,
+   "stories": 13,
+   "stories_with_scenarios": 13,
    "stories_passing": 0,
-   "scenarios": 129,
-   "automated": 41,
-   "passing": 28,
+   "scenarios": 136,
+   "automated": 46,
+   "passing": 33,
    "failing": 0,
    "no_result": 13,
-   "planned": 88,
+   "planned": 90,
    "health": "in_progress"
   }
  ],
@@ -2865,6 +2865,48 @@
    "name": "An unmatched transfer on a unit with several debtors is assigned once and never applied twice",
    "epic": "EPIC-13",
    "story": "STORY-13-12"
+  },
+  "SC-13-25-01": {
+   "state": "passing",
+   "name": "Posted operating cash equals cumulative gross receipts at every checkpoint",
+   "epic": "EPIC-13",
+   "story": "STORY-13-25"
+  },
+  "SC-13-25-02": {
+   "state": "passing",
+   "name": "Eleven open rows are matched by site, unit, primary debtor and period",
+   "epic": "EPIC-13",
+   "story": "STORY-13-25"
+  },
+  "SC-13-25-03": {
+   "state": "passing",
+   "name": "Homeowner totals separate primary debt from joint exposure",
+   "epic": "EPIC-13",
+   "story": "STORY-13-25"
+  },
+  "SC-13-25-04": {
+   "state": "passing",
+   "name": "Site totals are reconciled independently and count a joint receivable once",
+   "epic": "EPIC-13",
+   "story": "STORY-13-25"
+  },
+  "SC-13-25-05": {
+   "state": "passing",
+   "name": "Final period status distinguishes partial payment from a missed payment",
+   "epic": "EPIC-13",
+   "story": "STORY-13-25"
+  },
+  "SC-13-25-06": {
+   "state": "planned",
+   "name": "Site operating cash matches posted receipts and a Site A payment does not leak into Site B",
+   "epic": "EPIC-13",
+   "story": "STORY-13-25"
+  },
+  "SC-13-25-07": {
+   "state": "planned",
+   "name": "The manager statements match the eleven open rows and the site totals on 2027-04-10",
+   "epic": "EPIC-13",
+   "story": "STORY-13-25"
   }
  },
  "catalogue_history": [
@@ -3035,9 +3077,29 @@
    "stories_with_scenarios": 112,
    "scenarios": 442,
    "automated": 343
+  },
+  {
+   "date": "2026-11-21",
+   "epics": 13,
+   "stories": 113,
+   "stories_with_scenarios": 113,
+   "scenarios": 449,
+   "automated": 348
   }
  ],
  "recent_changes": [
+  {
+   "date": "2026-11-21",
+   "epic": "EPIC-13",
+   "title": "Site Admin Journeys",
+   "new_stories": 1,
+   "new_scenarios": 7,
+   "newly_automated": 5,
+   "items": 1,
+   "samples": [
+    "STORY-13-25: Reconcile homeowner debt and operating cash by site"
+   ]
+  },
   {
    "date": "2026-11-20",
    "epic": "EPIC-13",
@@ -3728,5 +3790,5 @@
    ]
   }
  ],
- "href": "reports/44822290859-1/"
+ "href": "reports/44823134921-1/"
 }
