@@ -1095,9 +1095,6 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         j.clock.advance_to("2027-03-10")
 
         # 4. Post payments on March 10
-        # Stop at defect #255: successor payment on A-01 allocates to predecessor's charge
-        pytest.xfail(f"Successor payment allocation defect ({PREDECESSOR_ALLOCATION_DEFECT})")
-
         # A-01: Ben pays 500.00
         rec_a01_mar = api.record_manual_payment(
             j.manager_a, j.unit_a("A-01"), Decimal("500.00"), "Ben Kaya",
@@ -1105,6 +1102,15 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
             idempotency_key="pay-a01-mar",
         )
         allocs_a01_mar = rec_a01_mar["allocation_breakdown"]
+        # TODO(#255): remove once PR #260 lands
+        # Defect #255: successor payment on A-01 allocates to predecessor's (Ada's) February charge
+        if not allocs_a01_mar or allocs_a01_mar[0].get("period") != "Mart 2027":
+            period_str = allocs_a01_mar[0].get("period") if allocs_a01_mar else "empty"
+            pytest.xfail(
+                f"Successor payment allocation defect ({PREDECESSOR_ALLOCATION_DEFECT}): "
+                f"allocated to {period_str}"
+            )
+
         assert len(allocs_a01_mar) == 1
         assert allocs_a01_mar[0]["period"] == "Mart 2027"
         assert Decimal(str(allocs_a01_mar[0]["penalty_paid"])) == Decimal("0.00")
