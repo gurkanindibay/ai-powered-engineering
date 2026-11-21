@@ -10,8 +10,7 @@ Feature: Accrual histories F4, F5 and F7
 
   # ------------------------------------------------------ F4 SINGLE_PERIOD
 
-  # Pending: GUI automation for collection tracking page with F4 is pending.
-  @SC-13-02-01 @J-07 @depth:1 @state:F4 @layer:gui @smoke @core @role_manager @pending
+  @SC-13-02-01 @J-07 @depth:1 @state:F4 @layer:gui @smoke @core @role_manager @linked
   Scenario: Residents with a single accrual period show one debt each on every screen
     Given the site is in state F4
     When the manager opens the collection tracking page
@@ -20,8 +19,7 @@ Feature: Accrual histories F4, F5 and F7
     And the debtors are tenant "Selin Demir" 1600.00, owner "Burak Şahin" 1600.00, owner "Ahmet Yılmaz" 1600.00, tenant "Deniz Arslan" 1600.00, owner "Elif Aydın" 2400.00
     And the ledger invariants hold
 
-  # Pending: Resident dashboard GUI automation for F4 is pending.
-  @SC-13-02-02 @J-07 @depth:1 @state:F4 @layer:gui @core @role_resident @pending
+  @SC-13-02-02 @J-07 @depth:1 @state:F4 @layer:gui @core @role_resident @linked
   Scenario: The resident sees exactly what the admin sees for the same unit
     Given the site is in state F4
     When tenant "Selin Demir" signs in
@@ -37,8 +35,7 @@ Feature: Accrual histories F4, F5 and F7
 
   # -------------------------------------------------------- F5 MULTI_PERIOD
 
-  # Pending: GUI automation for collection tracking page with F5 is pending.
-  @SC-13-02-04 @J-08 @depth:1 @state:F5 @layer:gui @smoke @core @role_manager @pending
+  @SC-13-02-04 @J-08 @depth:1 @state:F5 @layer:gui @smoke @core @role_manager @linked
   Scenario: Multiple periods with mixed debts add up per unit and per site
     Given the site is in state F5
     When the manager opens the collection tracking page

@@ -59,8 +59,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the "Kasım 2026" liabilities of "A-3" name "Oya Çelik" for 650.00 and "Burak Şahin" for 850.00
     And "Oya Çelik" owes 0.00 for "Eylül 2026" and "Ekim 2026"
 
-  # Pending: the effective due date and late fee read the real server date; the E2E clock drives the scheduler only.
-  @SC-13-03-20 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-03-20 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @linked
   Scenario: A re-split share keeps an effective due date and a late fee that follow its creation
     Given the site is in state F6
     Then Oya's share is due on the approval date "2026-11-18" with late fee 1.08 at the reference instant
@@ -136,8 +135,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | 1500.01 | owner days 1-15, tenant days 16-30                    | 750.01, 750.00           |
       | 1000.00 | owner days 1-10, tenant 1 days 11-20, tenant 2 days 21-30 | 333.33, 333.33, 333.34 |
 
-  # Pending: needs an effective date after the real server date (2026-12-01); the per-role resident statement listing is not automated yet.
-  @SC-13-03-10 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @pending
+  @SC-13-03-10 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @linked
   Scenario: One person who owns one unit and rents another is billed in each role
     Given the site is in state F6
     And the clock has advanced to "2026-12-01"
@@ -156,8 +154,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then the API returns the existing person as a match instead of creating a duplicate
     And the people directory still lists one "Mert Kılıç"
 
-  # Pending: needs an effective date after the real server date (2026-12-01); the E2E clock drives the scheduler only.
-  @SC-13-03-12 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-03-12 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @linked
   Scenario: Owner moves in after the tenant leaves and takes the operational dues back
     Given the site is in state F6
     And the clock has advanced to "2026-12-01"
@@ -204,8 +201,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the two shares add up to 1500.00
     And "Ahmet Yılmaz" has no active occupancy of "A-4" after "2026-11-05"
 
-  # Pending: the effective due date and late fee read the real server date; the E2E clock drives the scheduler only.
-  @SC-13-03-17 @J-10 @depth:1 @layer:backend @edge @role_manager @pending
+  @SC-13-03-17 @J-10 @depth:1 @layer:backend @edge @role_manager @linked
   Scenario Outline: A share whose responsibility starts after the period due date is not late before it existed
     Given unit "A-3" is owned and vacant with tariff 1500.00 and the period "Kasım 2026" is due "2026-11-10"
     And the days before the tenant's start belong to the owner (Q9, decided)

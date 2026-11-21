@@ -249,5 +249,38 @@ void main() {
       expect(find.text('Roof Renewal'), findsOneWidget);
       expect(find.textContaining('1.400,00'), findsNWidgets(2));
     });
+
+    testWidgets('HeroBalanceCard displays actual overdue days in badge', (tester) async {
+      final overdueDues = DuesLiability(
+        id: 'due-1',
+        unitId: 'unit-1',
+        period: 'Ekim 2026',
+        principalAmount: Decimal.parse('1500.00'),
+        delayPenalty: Decimal.parse('100.00'),
+        totalAmount: Decimal.parse('1600.00'),
+        dueDate: DateTime.parse('2026-10-10'),
+        daysOverdue: 40,
+        status: DebtStatus.overdue,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HeroBalanceCard(
+              dues: overdueDues,
+              siteName: 'Begonya Sitesi',
+              unitName: 'A Blok D:2',
+              isOffline: false,
+              onPayPressed: () {},
+              onDetailPressed: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('40 Gün Gecikme (%5 KMK)'), findsOneWidget);
+      expect(find.text('₺1.600,00'), findsWidgets);
+    });
   });
 }

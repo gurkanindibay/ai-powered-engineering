@@ -8,6 +8,7 @@
 pub mod accrual_schedule;
 pub mod apportionment;
 pub mod billing_period;
+pub mod clock;
 pub mod email;
 pub mod fingerprint;
 pub mod household_relationship;

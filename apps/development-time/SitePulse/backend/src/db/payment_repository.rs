@@ -1354,6 +1354,8 @@ pub async fn tx_apply_penalty_reevaluation(
     let n = tx
         .execute(
             "UPDATE dues_liabilities SET delay_penalty = $2, \
+                 status = CASE WHEN status <> 'CANCELLED' AND paid_principal >= principal_amount \
+                     AND paid_penalty - $3 >= $2 THEN 'PAID' ELSE status END, \
                  paid_penalty = paid_penalty - $3, paid_amount = paid_amount - $3, \
                  version = version + 1 WHERE id = $1",
             &[&due_id, &delay_penalty, &penalty_refund],

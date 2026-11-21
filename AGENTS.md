@@ -56,7 +56,19 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - Locate before reading: `graphify query`/`explain`, `rg -l`, or `grep -n ... | head -30`; then read only the needed range (`sed -n 'A,Bp'`, Read with offset/limit). Never `cat` whole large files, `ls -R`, or unbounded `find`.
    - Run gates in compact form: `run_tests.py --summary` (or `--json --summary`); pipe other build/test output through `tail -40` or a failure filter.
    - Browser checks: prefer `get_page_text`/`read_page`; screenshots only when visual layout matters, with `scale` ≤ 0.5.
-   - One task per session; `/compact` or start fresh once context passes ~200K tokens. Use Sonnet for routine edits, test runs and exploration; reserve Opus for design-heavy work.
+   - One task per session. Use `/compact` or start fresh once context passes ~200K tokens.
+   - For interactive sessions and their delegated work, choose an available, eligible model from the Antigravity, Claude, or Codex subscriptions according to the task. Set the model explicitly when delegating to a subagent. Honor explicit model requests.
+     - **Antigravity**: Use Gemini 3.8 Flash for routine edits, test runs, and exploration when it is available in Antigravity.
+     - **Claude**: Reserve Opus for planning, including architecture, issue decomposition, and fix plans. Use Sonnet for development and test design, including complex implementation and test runs. Use Haiku for simple chores such as cleanup, claim and label updates, mechanical edits, and status checks.
+     - **Codex**: Use GPT-6.2 Sol for routine implementation, debugging, and verification. Use GPT-6.2 Astra for design-heavy work and complex implementation or debugging.
+     - **DeepSeek**: Use an eligible DeepSeek model as the last fallback when the subscription-backed options cannot meet the task's needs. DeepSeek is billed by usage.
+   - Use the lowest reasoning effort that fits the task and is exposed by the selected model and harness. Honor explicit effort requests.
+     - **Low** for targeted lookups, mechanical edits, and running known checks.
+     - **Medium** by default for routine implementation, debugging, and review.
+     - **High** for architecture, cross-component changes, and bugs with several plausible causes.
+   - High is the maximum reasoning effort for workspace tasks, including critical work. Do not select `xhigh`, `max`, or `ultra` because of their cost.
+   - For Antigravity and DeepSeek, use the thinking controls available for the selected model. If the harness offers only a toggle, use the default for routine work and enable deeper thinking when the task calls for high effort.
+   - For durable T3 harness runs, [the T3 registry](config/engineering-harness/t3-registry.json) defines eligible models by role and tier, and maps tiers to effort settings capped at High. The registry currently covers Claude Haiku, Sonnet, and Opus and Codex GPT-6.1 Sol. GPT-6.2 Sol, Astra, Gemini, and DeepSeek are interactive choices when available.
    - The `.claude/settings.json` hook (`scripts/token_guard.py`) denies known-wasteful calls and warns on oversized output; follow its suggestion rather than working around it.
 
 10. **Issue Selection & Concurrent Agent Work**:

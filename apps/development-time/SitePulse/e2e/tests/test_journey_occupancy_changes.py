@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from support.journey_attempts import JourneyManifest, teardown_sites
-from support.known_issues import DEPARTED_TENANT_KEEPS_LATER_ACCRUAL, JOINT_OWNER_TRANSFER_DAY_OVERLAP
+from support.known_issues import DEPARTED_TENANT_KEEPS_LATER_ACCRUAL
 from support.journey_occupancy import (
     OccupancyJourney,
     build_base,
@@ -167,7 +167,6 @@ def test_unit_created_mid_month_is_billed_for_chargeable_days(journey_site):
 
 
 @pytest.mark.covers("SC-13-03-18")
-@pytest.mark.xfail(strict=True, reason=JOINT_OWNER_TRANSFER_DAY_OVERLAP)
 @pytest.mark.core
 @pytest.mark.role_manager
 def test_sale_of_a_tenant_occupied_unit_with_the_same_tenant_is_not_split(journey_site):
