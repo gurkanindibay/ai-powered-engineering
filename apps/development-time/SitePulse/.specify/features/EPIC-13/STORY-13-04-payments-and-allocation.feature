@@ -86,8 +86,7 @@ Feature: Paying, allocation and advance across periods
     Then the other site's liability and its fee are settled and only its payment stream shows the transfer
     And no balance of the original site changes
 
-  # Pending: Grace period boundary late fee test pending.
-  @SC-13-04-10 @J-11 @depth:1 @layer:backend @edge @role_manager @pending
+  @SC-13-04-10 @J-11 @depth:1 @layer:backend @edge @role_manager @linked
   Scenario Outline: The grace boundary decides whether a late fee is charged
     Given the site has a grace period of <grace> days and the clock is set to "<paid_on>"
     And a unit has a single 1500.00 liability due "2026-11-10" and nothing else

@@ -41,6 +41,7 @@ _SITE_SCOPED_DELETES = (
     "unit_sender_ibans WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
     "unit_payer_names WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
     "late_fee_accruals WHERE site_id = {site}",
+    "ledger_adjustments WHERE site_id = {site}",
     "accrual_corrections WHERE site_id = {site}",
     "dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
     "operating_budgets WHERE site_id = {site}",
@@ -188,6 +189,12 @@ class JourneyClock:
             raise ValueError("Journey clock cannot advance to an earlier date")
         result = self.api.e2e_clock("advance_to", target.isoformat())
         self.current_date = target
+        return result
+
+    def set_instant(self, value: str) -> dict:
+        """Set an exact RFC 3339 instant (for boundaries inside a UTC day); keeps the date in sync."""
+        result = self.api.clock.set_instant(value)
+        self.current_date = _parse_date(value[:10])
         return result
 
     def tick(self) -> dict:

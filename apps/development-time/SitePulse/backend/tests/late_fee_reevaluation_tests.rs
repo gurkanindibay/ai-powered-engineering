@@ -286,3 +286,27 @@ async fn when_a_backdated_payment_is_partial_then_late_fee_keeps_accruing_on_the
     assert_eq!(due.paid_principal, money("700.00"));
     assert_eq!(inner.finance.adjustments[0].amount, money("29.16"));
 }
+
+#[tokio::test]
+async fn when_penalty_is_fully_covered_by_reevaluation_but_principal_remains_unpaid_status_stays_overdue(
+) {
+    let (state, due_date) = state_with_charged_late_fee("70.00").await;
+    let service = PaymentTrackingService::new(state.clone());
+    service
+        .record_and_allocate_payment(backdated_payment(
+            "500.00",
+            due_date,
+            5,
+            PaymentChannel::ManualCash,
+        ))
+        .await
+        .unwrap();
+    let inner = state.inner.read().await;
+    let due = &inner.dues[0];
+    // 5 days on 1,400.00 (11.67) + 25 days on remaining 900.00 (37.50) = 49.17.
+    assert_eq!(due.delay_penalty, money("49.17"));
+    assert_eq!(due.paid_penalty, money("49.17"));
+    assert_eq!(due.paid_principal, money("500.00"));
+    assert_eq!(due.status, DebtStatus::Overdue);
+    assert_eq!(inner.advance_balances["d-14"].of("OWNER"), money("20.83"));
+}
