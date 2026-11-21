@@ -227,7 +227,7 @@ pub async fn get_resident_dashboard(
     // that create liabilities (accruals) through `settle_advances`.
     let inner = state.inner.read().await;
 
-    let today = crate::e2e_clock::now_utc().date_naive();
+    let today = crate::services::finance_common::site_today(&inner, &unit.site_id);
     let evaluated_dues: Vec<DuesLiability> = inner
         .dues
         .iter()
@@ -565,7 +565,7 @@ pub async fn get_site_overview(
     let selected_period = query
         .period
         .unwrap_or_else(|| available_periods.first().cloned().unwrap_or_default());
-    let today = crate::e2e_clock::now_utc().date_naive();
+    let today = crate::services::finance_common::site_today(&inner, &site_id);
 
     // 4. Available sites list for site switcher (deduplicated by name)
     let mut available_sites: Vec<crate::models::SiteSummaryBriefDto> = Vec::new();

@@ -59,7 +59,7 @@ pub fn record_offset_match(
         site_id: site_id.to_string(),
         transaction: BankTransactionItem {
             transaction_id: offset_txn_id,
-            date: crate::e2e_clock::now_utc().date_naive(),
+            date: crate::services::finance_common::site_today(inner, site_id),
             amount,
             currency: "TRY".to_string(),
             description: if full {
@@ -136,7 +136,6 @@ fn offset_units(
 ) -> (usize, Decimal) {
     let mut auto_settled_count = 0;
     let mut total_offset_amount = Decimal::ZERO;
-    let today = crate::e2e_clock::now_utc().date_naive();
 
     for u_id in unit_ids {
         let mut buckets = match inner.advance_balances.get(&u_id) {
@@ -160,6 +159,7 @@ fn offset_units(
             Some(u) => u.site_id.clone(),
             None => continue,
         };
+        let today = crate::services::finance_common::site_today(inner, &unit_site_id);
 
         let mut unpaid_indices: Vec<usize> = inner
             .dues
