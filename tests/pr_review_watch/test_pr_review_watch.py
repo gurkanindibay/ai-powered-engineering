@@ -48,17 +48,33 @@ class FakeClock:
 
 
 class Seen(unittest.TestCase):
-    def test_parse_and_filter(self):
-        seen = w.parse_seen(["#257@ab12cd34ef567890", "3@xyz"])
-        self.assertEqual(seen, {(257, "ab12cd34ef56"), (3, "xyz")})
+    def test_parse(self):
+        seen = w.parse_seen(["#257@ab12cd34ef567890", "3@xyz:failed"])
+        self.assertEqual(seen, {(257, "ab12cd34ef56"): None, (3, "xyz"): "failed"})
+
+    def test_rejects_bad_values(self):
+        for bad in ["257", "x@sha", "5@", "5@sha:green"]:
+            with self.assertRaises(ValueError):
+                w.parse_seen([bad])
+
+    def test_filter_by_head_and_ci_state(self):
+        seen = w.parse_seen(["257@ab12cd34ef56"])
         ready = [entry(257, "ab12cd34ef56"), entry(257, "ffffffffffff"), entry(9)]
         self.assertEqual([(e["number"], e["head"]) for e in w.unseen(ready, seen)],
                          [(257, "ffffffffffff"), (9, "aaa111bbb222")])
+        self.assertEqual(seen[(257, "ab12cd34ef56")], "passed")  # bound to the first state seen
 
-    def test_rejects_bad_values(self):
-        for bad in ["257", "x@sha", "5@"]:
-            with self.assertRaises(ValueError):
-                w.parse_seen([bad])
+    def test_same_head_ci_rerun_wakes(self):
+        # Reviewer left a COMMENT on a red head; the author reruns CI on the same commit.
+        seen = w.parse_seen(["4@aaa111bbb222"])
+        red = {**entry(4), "ci": "failed"}
+        self.assertEqual(w.unseen([red], seen), [])
+        self.assertEqual(w.unseen([red], seen), [])  # still red: stays quiet
+        self.assertEqual([e["ci"] for e in w.unseen([entry(4)], seen)], ["passed"])
+
+    def test_pinned_state(self):
+        seen = w.parse_seen(["4@aaa111bbb222:failed"])
+        self.assertEqual(len(w.unseen([entry(4)], seen)), 1)  # already green: not suppressed
 
 
 class QueueCheckTest(unittest.TestCase):
@@ -85,30 +101,48 @@ class QueueCheckTest(unittest.TestCase):
 
 class WatchLoop(unittest.TestCase):
     def test_returns_immediately_when_ready(self):
-        found = w.watch(lambda force: [entry(4)], lambda t: self.fail("no wait"), set(), 900, None)
+        found = w.watch(lambda force: [entry(4)], lambda t: self.fail("no wait"), {}, 900, None)
         self.assertEqual([e["number"] for e in found], [4])
 
-    def test_waits_for_event_then_returns(self):
+    def test_event_forces_refresh_and_debounces(self):
         results = [[], [], [entry(7)]]
-        forces, waits = [], []
+        forces = []
+        wakes = iter([w.TICK, w.EVENT])
 
         def check(force):
             forces.append(force)
             return results.pop(0)
 
-        def trigger(timeout):
-            waits.append(timeout)
-            return len(waits) == 2  # first wait times out (safety recheck), second is an event
-
         clock = FakeClock()
-        found = w.watch(check, trigger, set(), 900, None, debounce=5, clock=clock, sleep=clock.sleep)
+
+        def trigger(timeout):
+            clock.sleep(1)
+            return next(wakes)
+
+        found = w.watch(check, trigger, {}, 900, None, debounce=5, clock=clock, sleep=clock.sleep)
         self.assertEqual([e["number"] for e in found], [7])
-        self.assertEqual(forces, [True, True, False])  # initial + safety recheck force, event does not
-        self.assertEqual(clock.now, 5)  # debounced once, after the event
+        self.assertEqual(forces, [True, False, True])  # start forced, tick cheap, event forced
+        self.assertEqual(clock.now, 7)  # two waits of 1 s plus one 5 s debounce, after the event
+
+    def test_continuous_ticks_still_refresh_on_schedule(self):
+        """An unchanged PR list with a tick every 60 s must still get a full refresh every
+        `recheck` seconds, so a review dismissal is noticed."""
+        clock = FakeClock()
+        forced_at = []
+
+        def check(force):
+            if force:
+                forced_at.append(clock.now)
+            return [entry(9)] if clock.now >= 2000 else []
+
+        wait = w.poll_trigger(60, sleep=clock.sleep)
+        found = w.watch(check, wait, {}, 900, None, clock=clock, sleep=clock.sleep)
+        self.assertEqual([e["number"] for e in found], [9])
+        self.assertEqual(forced_at, [0, 900, 1800])  # independent of the 60 s ticks
 
     def test_seen_pr_does_not_wake(self):
         results = [[entry(4)], [entry(4), entry(5)]]
-        found = w.watch(lambda f: results.pop(0), lambda t: True, {(4, "aaa111bbb222")}, 900, None)
+        found = w.watch(lambda f: results.pop(0), lambda t: w.EVENT, w.parse_seen(["4@aaa111bbb222"]), 900, None)
         self.assertEqual([e["number"] for e in found], [5])
 
     def test_timeout(self):
@@ -116,9 +150,9 @@ class WatchLoop(unittest.TestCase):
 
         def trigger(timeout):
             clock.sleep(timeout)
-            return False
+            return w.TIMEOUT
 
-        found = w.watch(lambda f: [], trigger, set(), 900, 2000, clock=clock, sleep=clock.sleep)
+        found = w.watch(lambda f: [], trigger, {}, 900, 2000, clock=clock, sleep=clock.sleep)
         self.assertIsNone(found)
         self.assertEqual(clock.now, 2000)
 
@@ -154,9 +188,9 @@ class CiGrace(unittest.TestCase):
         def trigger(timeout):
             waits.append(timeout)
             clock.sleep(10)
-            return True
+            return w.EVENT
 
-        found = w.watch(lambda f: results.pop(0), trigger, set(), 900, None,
+        found = w.watch(lambda f: results.pop(0), trigger, {}, 900, None,
                         clock=clock, sleep=clock.sleep, ci_grace=300)
         self.assertEqual([e["ci"] for e in found], ["passed"])
         self.assertEqual(waits[0], 300)  # capped at the grace deadline, not the 900 s recheck
@@ -166,21 +200,21 @@ class CiGrace(unittest.TestCase):
 
         def trigger(timeout):
             clock.sleep(timeout)
-            return False
+            return w.TIMEOUT
 
-        found = w.watch(lambda f: [self.no_ci(8)], trigger, set(), 900, None,
+        found = w.watch(lambda f: [self.no_ci(8)], trigger, {}, 900, None,
                         clock=clock, sleep=clock.sleep, ci_grace=300)
         self.assertEqual([e["number"] for e in found], [8])
         self.assertEqual(clock.now, 300)
 
 
 class PollTrigger(unittest.TestCase):
-    def test_interval_counts_as_event_unless_cut_by_timeout(self):
+    def test_interval_is_a_tick_unless_cut_by_timeout(self):
         clock = FakeClock()
         wait = w.poll_trigger(60, sleep=clock.sleep)
-        self.assertTrue(wait(900))
+        self.assertEqual(wait(900), w.TICK)
         self.assertEqual(clock.now, 60)
-        self.assertFalse(wait(30))
+        self.assertEqual(wait(30), w.TIMEOUT)
         self.assertEqual(clock.now, 90)
 
 
@@ -215,11 +249,11 @@ class Webhook(unittest.TestCase):
 
         def fallback(timeout):
             fallback_calls.append(timeout)
-            return True
+            return w.TICK
 
         wait = w.webhook_trigger(QuietListener(), DeadForwarder(), fallback, notes.append)
-        self.assertTrue(wait(30))
-        self.assertTrue(wait(30))
+        self.assertEqual(wait(30), w.TICK)
+        self.assertEqual(wait(30), w.TICK)
         self.assertEqual(len(fallback_calls), 2)
         self.assertEqual(len(notes), 1)
         self.assertIn("hook already exists", notes[0])
@@ -236,6 +270,35 @@ class Webhook(unittest.TestCase):
             raise FileNotFoundError
 
         self.assertFalse(w.webhook_available(missing))
+
+
+class RepoScope(unittest.TestCase):
+    def test_scoped_gh_rewrites_listing_and_api(self):
+        calls = []
+        gh = w.scoped_gh(lambda a: calls.append(a) or "", "other/repo")
+        gh(["pr", "list", "--json", "number"])
+        gh(["api", "repos/{owner}/{repo}/pulls/3/reviews", "--paginate"])
+        gh(["repo", "view"])
+        self.assertEqual(calls[0][-2:], ["--repo", "other/repo"])
+        self.assertEqual(calls[1][1], "repos/other/repo/pulls/3/reviews")
+        self.assertEqual(calls[2], ["repo", "view"])
+
+    def test_main_reads_only_the_given_repo(self):
+        gh = FakeGh([pr(12)])
+        calls = []
+
+        def recording(args):
+            calls.append(args)
+            return gh(args)
+
+        code, _ = _capture(lambda: w.main(["--source", "poll", "--repo", "other/repo"], gh=recording))
+        self.assertEqual(code, 0)
+        self.assertFalse(any(a[0] == "repo" for a in calls))  # no fallback to the checkout's repo
+        for a in calls:
+            if a[0] == "pr":
+                self.assertIn("other/repo", a)
+            if a[0] == "api":
+                self.assertTrue(a[1].startswith("repos/other/repo/"), a[1])
 
 
 class Main(unittest.TestCase):

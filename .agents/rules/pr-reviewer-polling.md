@@ -15,7 +15,7 @@ The reviewer is **event-driven, not on a timer**. Start the watcher as a backgro
 
 ```bash
 python3 scripts/pr_review_watch.py --json                      # blocks; exits 0 with the ready PRs
-python3 scripts/pr_review_watch.py --json --seen 257@ab12cd34ef56   # ignore a PR you left without a verdict at that head
+python3 scripts/pr_review_watch.py --json --seen 257@ab12cd34ef56   # ignore a PR you left without a verdict, until its head or CI state changes
 ```
 
 It waits on GitHub events and costs no model tokens while it waits:
@@ -23,9 +23,10 @@ It waits on GitHub events and costs no model tokens while it waits:
 - **Webhook (preferred).** With the `cli/gh-webhook` extension installed (`gh extension install cli/gh-webhook`, needs admin on the repository), `gh webhook forward` relays `pull_request`, `pull_request_review`, `check_suite` and `workflow_run` events to a listener on 127.0.0.1. An event only triggers a recheck of the queue through the GitHub API; the payload is never trusted.
 - **Poll fallback.** Without the extension, or if the forwarder dies (for example another forwarder already holds the repository's hook), it checks with `gh` every `--interval` seconds (default 60) and runs the per-PR review lookups only when the open-PR list (heads, drafts, CI state) changed. That is still polling, but by a script, not by the model.
 - Right after a push GitHub briefly shows no checks for the new head; the watcher holds such a head for `--ci-grace` seconds (default 300) so it never wakes you before CI has even started. A PR that really runs no CI is released after the grace period.
-- A safety recheck (`--recheck`, default 900 s) runs whatever the source, so a lost event delays a review but never loses it.
+- A full refresh of the bot's review history runs on every webhook event and, whatever the source, every `--recheck` seconds (default 900) on its own deadline, so a lost event or a review-only change (for example a dismissed review) delays a review but never loses it.
+- `--repo owner/name` scopes the listener, the PR listing and the review history to one repository.
 
-Do not use a model-driven timer, `ScheduleWakeup`, a 30-minute cron or `/loop` for the reviewer. When the watcher exits, handle the wake-up below, then start it again. Pass `--seen N@SHA` for each ready PR you deliberately left without a final verdict on that head (for example a `COMMENT` saying you wait for CI to be fixed), otherwise the watcher wakes you again at once. Stop the watcher when you stop reviewing.
+Do not use a model-driven timer, `ScheduleWakeup`, a 30-minute cron or `/loop` for the reviewer. When the watcher exits, handle the wake-up below, then start it again. Pass `--seen N@SHA` for each ready PR you deliberately left without a final verdict on that head (the suppression lasts while the head *and* its CI state are unchanged, so a same-commit CI rerun from red to green wakes you; `N@SHA:failed` pins the state) (for example a `COMMENT` saying you wait for CI to be fixed), otherwise the watcher wakes you again at once. Stop the watcher when you stop reviewing.
 
 **Compact before every wake-up.** Before acting on a wake-up, compact your context (`/compact` in Claude Code, or your harness's equivalent; if none exists, continue in a fresh session). Nothing needs carrying over except the repo, the bot identity check, the watcher command and its `--seen` list: the per-PR state is read from the bot's review history below. Drop diffs and review drafts from earlier wake-ups.
 

@@ -17,16 +17,25 @@ Event sources (``--source``):
     auto      webhook when the extension is installed, else poll (default). A
               webhook forwarder that fails or dies falls back to poll.
 
-Whatever the source, a slow safety recheck (``--recheck``) runs too, so a lost
-event delays a review but never loses it.
+Only a poll tick uses the cheap path (review lookups skipped while the PR list
+is unchanged). A webhook event, which may be a review or a dismissal, always
+refreshes the review history. Whatever the source, a full safety refresh runs
+every ``--recheck`` seconds on its own deadline, so a lost event or a
+review-only change delays a review but never loses it.
 
 Right after a push GitHub briefly reports no checks for the new head. Such a
 head is held for ``--ci-grace`` seconds (default 300) and counts as ready only if
 no check shows up by then (a PR that really runs no CI).
 
 A ready PR that you have already handled for this head (for example one you
-left with a COMMENT because CI is red) can be ignored with ``--seen N@SHA``;
-the watcher then wakes only when that PR gets a new head.
+left with a COMMENT because CI is red) can be ignored with ``--seen N@SHA``. The
+suppression is tied to the CI state: ``N@SHA:failed`` pins it, and a bare
+``N@SHA`` takes the state the watcher first sees for that head. The watcher
+wakes again when that PR gets a new head *or* its CI state changes (for example
+a rerun on the same commit that turns red into green).
+
+``--repo owner/name`` scopes everything (listener, PR listing, review history)
+to that repository; by default the current checkout's repository is used.
 
 Usage:
     python3 scripts/pr_review_watch.py                      # wait, print ready PRs, exit 0
@@ -59,22 +68,50 @@ EXIT_READY, EXIT_ERROR, EXIT_TIMEOUT = 0, 2, 3
 
 Gh = queue_tool.Gh
 Entry = dict[str, Any]
-# wait(timeout_seconds) -> True when an event arrived, False on timeout.
-Trigger = Callable[[float], bool]
+# What woke a trigger: a poll tick (cheap recheck), an event (full refresh) or the timeout.
+TICK, EVENT, TIMEOUT = "tick", "event", "timeout"
+# wait(timeout_seconds) -> TICK | EVENT | TIMEOUT
+Trigger = Callable[[float], str]
+CI_STATES = {"none", "pending", "failed", "passed"}
+# (number, head[:12]) -> CI state the suppression applies to; None = take the first one seen.
+Seen = dict[tuple[int, str], "str | None"]
 
 
-def parse_seen(values: list[str]) -> set[tuple[int, str]]:
-    seen: set[tuple[int, str]] = set()
+def parse_seen(values: list[str]) -> Seen:
+    seen: Seen = {}
     for value in values:
-        number, sep, head = value.partition("@")
-        if not sep or not number.lstrip("#").isdigit() or not head:
-            raise ValueError(f"--seen expects N@SHA, got {value!r}")
-        seen.add((int(number.lstrip("#")), head[:12]))
+        number, sep, rest = value.partition("@")
+        head, _, ci = rest.partition(":")
+        if not sep or not number.lstrip("#").isdigit() or not head or (ci and ci not in CI_STATES):
+            raise ValueError(f"--seen expects N@SHA or N@SHA:<{'|'.join(sorted(CI_STATES))}>, got {value!r}")
+        seen[(int(number.lstrip("#")), head[:12])] = ci or None
     return seen
 
 
-def unseen(ready: list[Entry], seen: set[tuple[int, str]]) -> list[Entry]:
-    return [e for e in ready if (e["number"], e["head"][:12]) not in seen]
+def unseen(ready: list[Entry], seen: Seen) -> list[Entry]:
+    """Drop PRs suppressed by --seen while their head *and* CI state are unchanged."""
+    out = []
+    for e in ready:
+        key = (e["number"], e["head"][:12])
+        if key not in seen:
+            out.append(e)
+            continue
+        if seen[key] is None:
+            seen[key] = e.get("ci")  # bind to the first state observed
+        if seen[key] != e.get("ci"):
+            out.append(e)
+    return out
+
+
+def scoped_gh(gh: Gh, repo: str) -> Gh:
+    """Point every queue read at `repo`: `gh pr ...` gets --repo, API paths get the slug."""
+    def run(args: list[str]) -> str:
+        if args and args[0] == "pr":
+            return gh([*args, "--repo", repo])
+        if args and args[0] == "api":
+            return gh([a.replace("repos/{owner}/{repo}/", f"repos/{repo}/") for a in args])
+        return gh(args)
+    return run
 
 
 class QueueCheck:
@@ -122,35 +159,43 @@ def settle(found: list[Entry], first_seen: dict[tuple[int, str], float], now: fl
     return ready, next_due
 
 
-def watch(check: Callable[[bool], list[Entry]], trigger: Trigger, seen: set[tuple[int, str]],
+def watch(check: Callable[[bool], list[Entry]], trigger: Trigger, seen: Seen,
           recheck: float, timeout: float | None, debounce: float = 0.0,
           clock: Callable[[], float] = time.monotonic,
           sleep: Callable[[float], None] = time.sleep, ci_grace: float = 0.0) -> list[Entry] | None:
-    """Return the first non-empty list of unseen ready PRs, or None when `timeout` passes."""
+    """Return the first non-empty list of unseen ready PRs, or None when `timeout` passes.
+
+    A full refresh (review history included) runs at the start, on every EVENT, on a
+    TIMEOUT, and whenever the independent `recheck` deadline has passed, so frequent
+    poll ticks or webhook events can never postpone it."""
     deadline = None if timeout is None else clock() + timeout
     first_seen: dict[tuple[int, str], float] = {}
-    force = True
+    next_refresh = clock()
     while True:
+        force = clock() >= next_refresh
+        if force:
+            next_refresh = clock() + recheck
         found, next_due = settle(unseen(check(force), seen), first_seen, clock(), ci_grace)
         if found:
             return found
-        remaining = recheck if deadline is None else min(recheck, deadline - clock())
+        now = clock()
+        remaining = next_refresh - now if deadline is None else min(next_refresh, deadline) - now
         if next_due is not None:
-            remaining = min(remaining, max(next_due - clock(), 0.001))
-        if remaining <= 0:
+            remaining = min(remaining, next_due - now)
+        if deadline is not None and now >= deadline:
             return None
-        got_event = trigger(remaining)
-        if got_event and debounce:
-            sleep(debounce)  # let a burst of events (push + check runs) settle
-        # A safety recheck (no event) bypasses the fingerprint shortcut.
-        force = not got_event
+        woke = trigger(max(remaining, 0.001))
+        if woke == EVENT:
+            if debounce:
+                sleep(debounce)  # let a burst of events (push + check runs) settle
+            next_refresh = clock()  # an event may be a review change: refresh review history
 
 
 def poll_trigger(interval: float, sleep: Callable[[float], None] = time.sleep) -> Trigger:
-    """Every `interval` seconds count as an event; the fingerprint keeps it cheap."""
-    def wait(timeout: float) -> bool:
+    """Every `interval` seconds is a TICK; the fingerprint keeps it cheap."""
+    def wait(timeout: float) -> str:
         sleep(min(interval, timeout))
-        return interval <= timeout
+        return TICK if interval <= timeout else TIMEOUT
     return wait
 
 
@@ -234,16 +279,16 @@ def webhook_trigger(listener: WebhookListener, forwarder: Forwarder,
     """Wait on webhook events; switch to `fallback` for good if the forwarder exits."""
     state = {"fallen_back": False}
 
-    def wait(timeout: float) -> bool:
+    def wait(timeout: float) -> str:
         if state["fallen_back"]:
             return fallback(timeout)
         end = time.monotonic() + timeout
         while True:
             left = end - time.monotonic()
             if left <= 0:
-                return False
+                return TIMEOUT
             if listener.wait(min(left, 5.0)):
-                return True
+                return EVENT
             code = forwarder.poll()
             if code is not None:
                 note(f"webhook forwarder exited ({code}): {forwarder.last_output() or 'no output'}; polling instead")
@@ -266,8 +311,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--ci-grace", type=float, default=300.0,
                    help="seconds a head may show no CI checks before it counts as ready (default 300)")
     p.add_argument("--timeout", type=float, help="give up after this many seconds (exit 3)")
-    p.add_argument("--seen", action="append", default=[], metavar="N@SHA", help="ignore PR N while its head is SHA (repeatable)")
-    p.add_argument("--repo", help="owner/name (default: the current repository)")
+    p.add_argument("--seen", action="append", default=[], metavar="N@SHA[:CI]",
+                   help="ignore PR N while its head is SHA and its CI state is unchanged (repeatable)")
+    p.add_argument("--repo", help="owner/name for the listener, PR listing and review history (default: current repository)")
     p.add_argument("--bot-login", default=queue_tool.BOT_LOGIN, help=f"reviewer login (default {queue_tool.BOT_LOGIN})")
     p.add_argument("--skip-author", action="append", default=[], metavar="LOGIN", help="skip PRs by this author (repeatable)")
     p.add_argument("--limit", type=int, default=100, help="max open PRs to inspect")
@@ -286,15 +332,16 @@ def main(argv: list[str] | None = None, gh: Gh = queue_tool.run_gh) -> int:
         note(str(exc))
         return EXIT_ERROR
 
-    check = QueueCheck(gh, args.bot_login, set(args.skip_author), args.limit)
     poll = poll_trigger(args.interval)
     source, trigger = "poll", poll
     listener: WebhookListener | None = None
     forwarder: Forwarder | None = None
     try:
+        # One repository for the listener, the PR listing and the review history.
+        repo = args.repo or gh(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).strip()
+        check = QueueCheck(scoped_gh(gh, repo), args.bot_login, set(args.skip_author), args.limit)
         if args.source in ("auto", "webhook"):
             if webhook_available():
-                repo = args.repo or gh(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).strip()
                 listener = WebhookListener().start()
                 forwarder = Forwarder(repo, listener.url)
                 source, trigger = "webhook", webhook_trigger(listener, forwarder, poll, note)
@@ -303,9 +350,8 @@ def main(argv: list[str] | None = None, gh: Gh = queue_tool.run_gh) -> int:
                 return EXIT_ERROR
             else:
                 note("gh webhook extension not installed; polling every %gs" % args.interval)
-        note(f"watching via {source}")
-        found = watch(check, trigger, seen, args.recheck, args.timeout,
-                      args.debounce if source == "webhook" else 0.0, ci_grace=args.ci_grace)
+        note(f"watching {repo} via {source}")
+        found = watch(check, trigger, seen, args.recheck, args.timeout, args.debounce, ci_grace=args.ci_grace)
     except (queue_tool.GhError, json.JSONDecodeError) as exc:
         note(f"error: {exc}")
         return EXIT_ERROR
