@@ -171,6 +171,7 @@ def build_multi_site_journey(
             tenant=tenant_data,
             household_members=members,
             monthly_dues=Decimal("0.00"),
+            house_type="JourneyNoTariff",
             site_id=site_id,
         )
 
@@ -197,6 +198,14 @@ def build_multi_site_journey(
 
     # The manifest captures all resources created by these API calls. SQL is used here only
     # to read the IDs back for cleanup; no unit, person, user or occupancy is seeded directly.
+    initial_liabilities = stack.sql(
+        "SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+        f"WHERE u.site_id IN ({sa_id}, {sb_id}) AND d.status <> 'CANCELLED';"
+    )
+    assert initial_liabilities == "0", (
+        "manager registration must leave liabilities empty before the first planned accrual; "
+        f"found {initial_liabilities} rows"
+    )
     people_rows = stack.sql(
         f"SELECT id || '|' || full_name FROM persons WHERE site_id IN ({sa_id}, {sb_id}) ORDER BY id;"
     ).splitlines()
