@@ -968,10 +968,21 @@ async fn when_unit_has_former_and_current_debtors_then_each_receives_distinct_st
             created_at: Utc::now(),
             person_id: Some(pid),
         };
-        inner.users.push(make_user("person-101", 101, "Ada Kaya", Role::HomeOwner));
-        inner.users.push(make_user("person-102", 102, "Ben Kaya", Role::HomeOwner));
-        inner.users.push(make_user("person-201", 201, "Dan Yılmaz", Role::HomeResident));
-        inner.users.push(make_user("person-203", 203, "Eli Şen", Role::HomeResident));
+        inner
+            .users
+            .push(make_user("person-101", 101, "Ada Kaya", Role::HomeOwner));
+        inner
+            .users
+            .push(make_user("person-102", 102, "Ben Kaya", Role::HomeOwner));
+        inner.users.push(make_user(
+            "person-201",
+            201,
+            "Dan Yılmaz",
+            Role::HomeResident,
+        ));
+        inner
+            .users
+            .push(make_user("person-203", 203, "Eli Şen", Role::HomeResident));
 
         let unit = inner.units.iter_mut().find(|u| u.id == "d-14").unwrap();
         unit.owner_user_id = Some("person-102".to_string());
@@ -1097,10 +1108,63 @@ async fn when_unit_has_former_and_current_debtors_then_each_receives_distinct_st
     assert_eq!(dan.total_outstanding, d("823.75"));
     assert_eq!(dan.open_items.len(), 1);
     assert_eq!(dan.open_items[0].due_id, "due-dan-feb");
+
+    // A signed-in current owner sees only their own section, not the predecessor's.
+    let ben_view = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("OWNER"),
+        Some(102),
+        today,
+    );
+    assert_eq!(ben_view.debtors.len(), 1);
+    assert_eq!(ben_view.debtors[0].name, "Ben Kaya");
+    assert!(!ben_view.debtors[0].is_former);
+    assert_eq!(ben_view.debtors[0].open_items[0].due_id, "due-ben-apr");
+
+    // A former owner with outstanding items sees only their own section.
+    let ada_view = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("OWNER"),
+        Some(101),
+        today,
+    );
+    assert_eq!(ada_view.debtors.len(), 1);
+    assert_eq!(ada_view.debtors[0].name, "Ada Kaya");
+    assert!(ada_view.debtors[0].is_former);
+    assert_eq!(ada_view.debtors[0].open_items[0].due_id, "due-ada-feb");
+
+    // A signed-in current tenant sees only their own section, not the predecessor's.
+    let eli_view = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("TENANT"),
+        Some(203),
+        today,
+    );
+    assert_eq!(eli_view.debtors.len(), 1);
+    assert_eq!(eli_view.debtors[0].name, "Eli Şen");
+    assert!(!eli_view.debtors[0].is_former);
+    assert_eq!(eli_view.debtors[0].open_items[0].due_id, "due-eli-apr");
+
+    // A former tenant with outstanding items sees only their own section.
+    let dan_view = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("TENANT"),
+        Some(201),
+        today,
+    );
+    assert_eq!(dan_view.debtors.len(), 1);
+    assert_eq!(dan_view.debtors[0].name, "Dan Yılmaz");
+    assert!(dan_view.debtors[0].is_former);
+    assert_eq!(dan_view.debtors[0].open_items[0].due_id, "due-dan-feb");
 }
 
 #[tokio::test]
-async fn when_former_tenant_has_open_items_and_unit_is_vacant_then_only_former_tenant_entry_is_produced() {
+async fn when_former_tenant_has_open_items_and_unit_is_vacant_then_only_former_tenant_entry_is_produced(
+) {
     let state = site_with_two_units().await;
     let today = today();
     {
@@ -1147,10 +1211,17 @@ async fn when_former_tenant_has_open_items_and_unit_is_vacant_then_only_former_t
 
     let inner = state.inner.read().await;
     let unit = inner.units.iter().find(|u| u.id == "d-14").unwrap();
-    let tenant_stmt = resident_statement::build_statement(&inner, unit, Some("TENANT"), today);
+    let tenant_stmt = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("TENANT"),
+        Some(201),
+        today,
+    );
 
     assert_eq!(tenant_stmt.debtors.len(), 1);
     assert_eq!(tenant_stmt.debtors[0].name, "Dan Yılmaz");
+    assert!(tenant_stmt.debtors[0].is_former);
     assert_eq!(tenant_stmt.debtors[0].principal_outstanding, d("750.00"));
 }
 

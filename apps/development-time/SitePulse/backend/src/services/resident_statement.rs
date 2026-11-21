@@ -88,6 +88,8 @@ pub fn build_statement(
 fn create_statement_debtor(
     debtor_type: &str,
     name: String,
+    liable_person_id: Option<i64>,
+    is_former: bool,
     advance_balance: Decimal,
     items: Vec<StatementOpenItem>,
     jointly_liable_open_items: Vec<StatementOpenItem>,
@@ -95,6 +97,8 @@ fn create_statement_debtor(
     let mut row = StatementDebtor {
         debtor_type: debtor_type.to_string(),
         name,
+        liable_person_id,
+        is_former,
         current_due: Decimal::ZERO,
         overdue_1_30_days: Decimal::ZERO,
         overdue_31_60_days: Decimal::ZERO,
@@ -212,15 +216,21 @@ pub fn build_statement_for_person(
         } else {
             unit.owner_user_id.as_ref()
         };
-        let current_holder_name = name_of(&current_user_id.cloned());
         let current_person_id = current_user_id.and_then(|id| {
             inner
                 .users
                 .iter()
                 .find(|u| &u.id == id)
                 .and_then(|u| u.person_id)
-                .or_else(|| id.strip_prefix("person-").and_then(|p| p.parse::<i64>().ok()))
+                .or_else(|| {
+                    id.strip_prefix("person-")
+                        .and_then(|p| p.parse::<i64>().ok())
+                })
         });
+        // A holder without a login has no user row; their occupancy history still names them.
+        let current_holder_name = current_person_id
+            .and_then(name_of_person)
+            .or_else(|| name_of(&current_user_id.cloned()));
 
         // Collect all open items for this role, grouped by liable person.
         let mut items_by_person: std::collections::BTreeMap<Option<i64>, Vec<StatementOpenItem>> =
@@ -303,13 +313,17 @@ pub fn build_statement_for_person(
         if should_emit_current {
             let current_name = current_holder_name.unwrap_or_else(|| default_role_name.to_string());
             let current_joint = if debtor == DEBTOR_OWNER {
-                current_person_id.map(&joint_items_for_owner).unwrap_or_default()
+                current_person_id
+                    .map(&joint_items_for_owner)
+                    .unwrap_or_default()
             } else {
                 Vec::new()
             };
             debtors.push(create_statement_debtor(
                 debtor,
                 current_name,
+                current_person_id,
+                false,
                 advance,
                 current_items,
                 current_joint,
@@ -339,6 +353,8 @@ pub fn build_statement_for_person(
             let row = create_statement_debtor(
                 debtor,
                 name,
+                Some(pid),
+                true,
                 Decimal::ZERO,
                 former_items,
                 former_joint,
@@ -348,6 +364,19 @@ pub fn build_statement_for_person(
         former_entries.sort_by_key(|(date, _)| *date);
         for (_, row) in former_entries {
             debtors.push(row);
+        }
+    }
+
+    // A resident sees only their own section. A predecessor with outstanding
+    // items still sees their own (now former) section, never the current
+    // holder's; a caller with no attributed section (for example a household
+    // member) sees the current holder's section. Site staff keep every section.
+    if viewer.is_some() {
+        match viewer_person_id {
+            Some(pid) if debtors.iter().any(|d| d.liable_person_id == Some(pid)) => {
+                debtors.retain(|d| d.liable_person_id == Some(pid));
+            }
+            _ => debtors.retain(|d| !d.is_former),
         }
     }
 

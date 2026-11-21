@@ -32,6 +32,7 @@ from support.journey_attempts import (
 from support.journey_live_reconciliation import assert_cash_matches_model, assert_statements_match_model, posted_cash
 from support.journey_multi_site import build_multi_site_journey
 from support.journey_reconciliation import CHECKPOINTS
+from support.journey_snapshots import current_section
 from pages.login import LoginPage
 from pages.manager import PaymentStream, ResidentsTab
 from pages.person import UnitWorkspace
@@ -96,7 +97,7 @@ def test_single_debt_in_previous_month_stays_attached(request, api, actors, stac
         u3 = fixture.unit_ids[2]  # A-3
 
         stmt = api.resident_statement(fixture.manager, u3)
-        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "OWNER")
+        debtor = current_section(stmt, "OWNER")
         open_items = debtor["open_items"]
         assert len(open_items) == 1
         assert open_items[0]["period"] == "Eylül 2026"
@@ -131,7 +132,7 @@ def test_single_debt_in_current_month_in_youngest_bucket(request, api, actors, s
         u4 = fixture.unit_ids[3]  # A-4
 
         stmt = api.resident_statement(fixture.manager, u4)
-        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "OWNER")
+        debtor = current_section(stmt, "OWNER")
         open_items = debtor["open_items"]
         assert len(open_items) == 1
         assert open_items[0]["period"] == "Kasım 2026"
@@ -166,7 +167,7 @@ def test_payment_clears_oldest_period_first(request, api, actors, stack):
         api.record_manual_payment(fixture.manager, u5, Decimal("2000.00"), "Deniz Arslan", payer_role="TENANT")
 
         stmt = api.resident_statement(fixture.manager, u5)
-        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "TENANT")
+        debtor = current_section(stmt, "TENANT")
         open_items = debtor["open_items"]
         assert len(open_items) == 2
         periods = [i["period"] for i in open_items]
@@ -208,7 +209,7 @@ def test_exact_payment_settles_debt_leaving_zero(request, api, actors, stack):
         api.record_manual_payment(fixture.manager, u5, Decimal("4797.50"), "Deniz Arslan", payer_role="TENANT")
 
         stmt = api.resident_statement(fixture.manager, u5)
-        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "TENANT")
+        debtor = current_section(stmt, "TENANT")
         assert len(debtor["open_items"]) == 0
         assert Decimal(str(debtor["total_outstanding"])) == Decimal("0.00")
         assert Decimal(str(debtor["advance_balance"])) == Decimal("0.00")
@@ -241,7 +242,7 @@ def test_one_kurus_short_leaves_one_kurus_open(request, api, actors, stack):
         ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-04-03")
 
         stmt = api.resident_statement(fixture.manager, u5)
-        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "TENANT")
+        debtor = current_section(stmt, "TENANT")
         assert len(debtor["open_items"]) == 1
         assert debtor["open_items"][0]["period"] == "Kasım 2026"
         assert Decimal(str(debtor["total_outstanding"])) == Decimal("0.01")
@@ -270,7 +271,7 @@ def test_overpayment_becomes_advance_offsetting_next_accrual(request, api, actor
         ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-04-04-payment")
 
         stmt = api.resident_statement(fixture.manager, u5)
-        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "TENANT")
+        debtor = current_section(stmt, "TENANT")
         assert len(debtor["open_items"]) == 0
         assert Decimal(str(debtor["total_outstanding"])) == Decimal("0.00")
         assert Decimal(str(debtor["advance_balance"])) == Decimal("202.50")
@@ -278,7 +279,7 @@ def test_overpayment_becomes_advance_offsetting_next_accrual(request, api, actor
         api.accrue_period(fixture.manager, "Aralık 2026", None, "2026-12-10")
 
         stmt2 = api.resident_statement(fixture.manager, u5)
-        debtor2 = next(d for d in stmt2["debtors"] if d["debtor_type"] == "TENANT")
+        debtor2 = current_section(stmt2, "TENANT")
         assert len(debtor2["open_items"]) == 1
         assert debtor2["open_items"][0]["period"] == "Aralık 2026"
         assert Decimal(str(debtor2["open_items"][0]["principal_outstanding"])) == Decimal("1297.50")
@@ -322,7 +323,7 @@ def test_invalid_payment_amounts_rejected(request, api, actors, stack):
         ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-04-05-rejected-payments")
 
         stmt = api.resident_statement(fixture.manager, u5)
-        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "TENANT")
+        debtor = current_section(stmt, "TENANT")
         assert Decimal(str(debtor["total_outstanding"])) == Decimal("4797.50")
     except BaseException as failure:
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
@@ -349,7 +350,7 @@ def test_bank_webhook_matches_transfer_and_allocates(request, api, actors, stack
         ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-04-06")
 
         stmt = api.resident_statement(fixture.manager, u3)
-        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "OWNER")
+        debtor = current_section(stmt, "OWNER")
         assert len(debtor["open_items"]) == 0
         assert Decimal(str(debtor["total_outstanding"])) == Decimal("0.00")
 
@@ -545,7 +546,7 @@ def test_multi_site_journey_accruals_and_designated_payments(request, api, actor
         # Assert INTERMEDIATE history for A-03 and B2-01 BEFORE April 10 payments
         # A-03: Jan Paid, Feb Unpaid (1000 + 98.33), Mar Unpaid (1000 + 51.67), Apr Unpaid (1000 + 0)
         stmt_a03_before = api.resident_statement(j.manager_a, j.unit_a("A-03"))
-        debtor_a03_before = next(d for d in stmt_a03_before["debtors"] if d["debtor_type"] == "OWNER")
+        debtor_a03_before = current_section(stmt_a03_before, "OWNER")
         open_a03_before = {
             item["period"]: (Decimal(str(item["principal_outstanding"])), Decimal(str(item["penalty_outstanding"])))
             for item in debtor_a03_before["open_items"]
@@ -557,7 +558,7 @@ def test_multi_site_journey_accruals_and_designated_payments(request, api, actor
 
         # B2-01: Jan Paid, Feb Unpaid (750 + 73.75), Mar Unpaid (750 + 38.75), Apr Unpaid (750 + 0)
         stmt_b201_before = api.resident_statement(j.manager_b, j.unit_b("B2-01"))
-        debtor_b201_before = next(d for d in stmt_b201_before["debtors"] if d["debtor_type"] == "TENANT")
+        debtor_b201_before = current_section(stmt_b201_before, "TENANT")
         open_b201_before = {
             item["period"]: (Decimal(str(item["principal_outstanding"])), Decimal(str(item["penalty_outstanding"])))
             for item in debtor_b201_before["open_items"]
@@ -594,7 +595,7 @@ def test_multi_site_journey_accruals_and_designated_payments(request, api, actor
 
         # Verify POST-APRIL history for A-03 and B2-01: Paid -> Unpaid -> Unpaid -> Paid!
         stmt_a03_after = api.resident_statement(j.manager_a, j.unit_a("A-03"))
-        debtor_a03_after = next(d for d in stmt_a03_after["debtors"] if d["debtor_type"] == "OWNER")
+        debtor_a03_after = current_section(stmt_a03_after, "OWNER")
         open_a03_after = {
             item["period"]: (Decimal(str(item["principal_outstanding"])), Decimal(str(item["penalty_outstanding"])))
             for item in debtor_a03_after["open_items"]
@@ -605,7 +606,7 @@ def test_multi_site_journey_accruals_and_designated_payments(request, api, actor
         assert "Nisan 2027" not in open_a03_after  # Settled by designated payment!
 
         stmt_b201_after = api.resident_statement(j.manager_b, j.unit_b("B2-01"))
-        debtor_b201_after = next(d for d in stmt_b201_after["debtors"] if d["debtor_type"] == "TENANT")
+        debtor_b201_after = current_section(stmt_b201_after, "TENANT")
         open_b201_after = {
             item["period"]: (Decimal(str(item["principal_outstanding"])), Decimal(str(item["penalty_outstanding"])))
             for item in debtor_b201_after["open_items"]
@@ -1171,7 +1172,7 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         # 4. Assert INTERMEDIATE history for A-03 and B2-01 BEFORE April 10 payments
         # A-03: Jan Paid, Feb Unpaid (1000 + 98.33), Mar Unpaid (1000 + 51.67), Apr Unpaid (1000 + 0)
         stmt_a03_before = api.resident_statement(j.manager_a, j.unit_a("A-03"))
-        debtor_a03_before = next(d for d in stmt_a03_before["debtors"] if d["debtor_type"] == "OWNER")
+        debtor_a03_before = current_section(stmt_a03_before, "OWNER")
         open_a03_before = {
             item["period"]: (Decimal(str(item["principal_outstanding"])), Decimal(str(item["penalty_outstanding"])))
             for item in debtor_a03_before["open_items"]
@@ -1183,7 +1184,7 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
 
         # B2-01: Jan Paid, Feb Unpaid (750 + 73.75), Mar Unpaid (750 + 38.75), Apr Unpaid (750 + 0)
         stmt_b201_before = api.resident_statement(j.manager_b, j.unit_b("B2-01"))
-        debtor_b201_before = next(d for d in stmt_b201_before["debtors"] if d["debtor_type"] == "TENANT")
+        debtor_b201_before = current_section(stmt_b201_before, "TENANT")
         open_b201_before = {
             item["period"]: (Decimal(str(item["principal_outstanding"])), Decimal(str(item["penalty_outstanding"])))
             for item in debtor_b201_before["open_items"]
@@ -1267,7 +1268,7 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
 
         # 6. Verify POST-APRIL history for A-03 and B2-01: February and March remain unpaid with late fees!
         stmt_a03_after = api.resident_statement(j.manager_a, j.unit_a("A-03"))
-        debtor_a03_after = next(d for d in stmt_a03_after["debtors"] if d["debtor_type"] == "OWNER")
+        debtor_a03_after = current_section(stmt_a03_after, "OWNER")
         open_a03_after = {
             item["period"]: (Decimal(str(item["principal_outstanding"])), Decimal(str(item["penalty_outstanding"])))
             for item in debtor_a03_after["open_items"]
@@ -1278,7 +1279,7 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         assert "Nisan 2027" not in open_a03_after  # Settled by designated payment!
 
         stmt_b201_after = api.resident_statement(j.manager_b, j.unit_b("B2-01"))
-        debtor_b201_after = next(d for d in stmt_b201_after["debtors"] if d["debtor_type"] == "TENANT")
+        debtor_b201_after = current_section(stmt_b201_after, "TENANT")
         open_b201_after = {
             item["period"]: (Decimal(str(item["principal_outstanding"])), Decimal(str(item["penalty_outstanding"])))
             for item in debtor_b201_after["open_items"]
@@ -1320,10 +1321,11 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         assert [get_period_status(j.unit_b("B2-01"), p) for p in periods] == ["Paid", "Unpaid", "Unpaid", "Paid"]
 
         # SC-13-25-07: the manager statements show exactly the eleven open rows and the model's site totals.
-        # Historical debtor attribution across ownership changes is verified in test_unit_statement_attributes_open_items_to_former_debtors (BUG #295).
+        # Each row's debtor is the name on its own statement section, including a former holder's (#295);
+        # test_unit_statement_attributes_open_items_to_former_debtors pins that attribution.
         detailed = {("A", label): j.unit_a(label) for label in ("A-01", "A-02", "A-03")}
         detailed |= {("B", label): j.unit_b(label) for label in ("B1-01", "B2-01")}
-        assert_statements_match_model(api, stack, {"A": j.manager_a, "B": j.manager_b}, detailed)
+        assert_statements_match_model(api, {"A": j.manager_a, "B": j.manager_b}, detailed)
         assert stack.sql(
             "SELECT count(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
             f"WHERE u.site_id IN ({int(j.site_a_id)}, {int(j.site_b_id)}) AND d.status NOT IN ('PAID', 'CANCELLED') "

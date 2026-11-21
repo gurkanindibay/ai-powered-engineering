@@ -28,7 +28,7 @@ def assert_cash_matches_model(stack, site_a_id: str, site_b_id: str, day: date) 
         f"posted operating cash on {day} differs from the independent reconciliation: {actual} != {dict(expected)}")
 
 
-def live_open_rows(api, stack, sessions: dict[str, object], units: dict[tuple[str, str], str]) -> dict:
+def live_open_rows(api, sessions: dict[str, object], units: dict[tuple[str, str], str]) -> dict:
     """(site, unit, debtor first name, period) -> (principal, fee, jointly liable owner first name or None)."""
     rows: dict = {}
     for (site, label), unit_id in sorted(units.items()):
@@ -39,25 +39,21 @@ def live_open_rows(api, stack, sessions: dict[str, object], units: dict[tuple[st
                 joint[str(item["due_id"])] = debtor["name"].split()[0]
         for debtor in statement["debtors"]:
             for item in debtor["open_items"]:
-                # The resident statement groups items by role (OWNER / TENANT) under the unit's
-                # current occupant name (unit.owner_user_id / tenant_user_id). When ownership has
-                # transferred (e.g. A-01: Ada sold to Ben on March 1), Ada's February due is listed
-                # under the statement's OWNER card, but the primary debtor person at accrual time is
-                # recorded in dues_liabilities.liable_person_id. We look up the person to attribute the row.
-                name = stack.sql(
-                    "SELECT p.full_name FROM dues_liabilities d JOIN persons p ON p.id = d.liable_person_id "
-                    f"WHERE d.id = {int(item['due_id'])};").split()[0]
+                # The statement now groups open items by liable person (#295), so each row's debtor
+                # is the name on its own section: Ada's February due stays on Ada's former-owner
+                # section after Ben takes the title, instead of moving under the current holder.
+                name = debtor["name"].split()[0]
                 key = (site, label, name, LABEL_PERIODS[item["period"]])
                 rows[key] = (D(str(item["principal_outstanding"])), D(str(item["penalty_outstanding"])),
                              joint.get(str(item["due_id"])))
     return rows
 
 
-def assert_statements_match_model(api, stack, sessions: dict[str, object], units: dict[tuple[str, str], str]) -> None:
+def assert_statements_match_model(api, sessions: dict[str, object], units: dict[tuple[str, str], str]) -> None:
     """The eleven open rows and both site totals on the final checkpoint equal the model."""
     ledger = reconcile()
     expected = {(r.site, r.unit, r.debtor, r.period): (r.principal, r.fee, r.joint_owner) for r in ledger.open_rows()}
-    actual = live_open_rows(api, stack, sessions, units)
+    actual = live_open_rows(api, sessions, units)
     for key in sorted(set(expected) | set(actual)):
         site, unit, debtor, period = key
         assert actual.get(key) == expected.get(key), (

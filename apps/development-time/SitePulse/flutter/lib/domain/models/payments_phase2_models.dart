@@ -61,6 +61,8 @@ class StatementOpenItem {
 class StatementDebtor {
   final String debtorType;
   final String name;
+  final int? liablePersonId;
+  final bool isFormer;
   final Decimal currentDue;
   final Decimal overdue1To30;
   final Decimal overdue31To60;
@@ -77,6 +79,8 @@ class StatementDebtor {
   const StatementDebtor({
     required this.debtorType,
     required this.name,
+    this.liablePersonId,
+    this.isFormer = false,
     required this.currentDue,
     required this.overdue1To30,
     required this.overdue31To60,
@@ -94,6 +98,8 @@ class StatementDebtor {
   factory StatementDebtor.fromJson(Map<String, dynamic> j) => StatementDebtor(
     debtorType: j['debtor_type']?.toString() ?? 'OWNER',
     name: j['name']?.toString() ?? '',
+    liablePersonId: int.tryParse('${j['liable_person_id']}'),
+    isFormer: j['is_former'] == true,
     currentDue: _dec(j['current_due']),
     overdue1To30: _dec(j['overdue_1_30_days']),
     overdue31To60: _dec(j['overdue_31_60_days']),

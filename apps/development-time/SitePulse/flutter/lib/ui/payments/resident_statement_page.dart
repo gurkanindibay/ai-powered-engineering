@@ -34,6 +34,20 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
     _future = PaymentsPhase2Api.statement(widget.unitId);
   }
 
+  /// A role can have several sections since #295 (the current holder and the
+  /// predecessors still owing), so each section after the first of its role
+  /// gets an index in its widget ids. The first one keeps the plain id.
+  List<Widget> _debtorCards(ResidentStatement statement) {
+    final seen = <String, int>{};
+    final cards = <Widget>[];
+    for (final debtor in statement.debtors) {
+      final index = seen[debtor.debtorType] ?? 0;
+      seen[debtor.debtorType] = index + 1;
+      cards.add(_DebtorCard(debtor: debtor, sectionIndex: index));
+    }
+    return cards;
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppFullscreenPage(
@@ -61,7 +75,7 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
                 style: TextStyle(color: AppColors.textSecondary(context), fontSize: SpFontSize.caption),
               ),
               const SizedBox(height: 12),
-              for (final d in st.debtors) ...[_DebtorCard(debtor: d), const SizedBox(height: 14)],
+              for (final card in _debtorCards(st)) ...[card, const SizedBox(height: 14)],
               StatementSelfService(
                 unitId: widget.unitId,
                 statement: st,
@@ -83,11 +97,16 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
 
 class _DebtorCard extends StatelessWidget {
   final StatementDebtor debtor;
-  const _DebtorCard({required this.debtor});
+  final int sectionIndex;
+  const _DebtorCard({required this.debtor, required this.sectionIndex});
 
   @override
   Widget build(BuildContext context) {
-    final role = debtor.debtorType == 'TENANT' ? 'Kiracı' : 'Kat maliki';
+    final roleKey = debtor.debtorType.toLowerCase();
+    final idSuffix = sectionIndex == 0 ? '' : '_$sectionIndex';
+    final role = debtor.isFormer
+        ? (debtor.debtorType == 'TENANT' ? 'Önceki kiracı' : 'Önceki malik')
+        : (debtor.debtorType == 'TENANT' ? 'Kiracı' : 'Kat maliki');
     final buckets = <(String, Decimal)>[
       ('Vadesi gelmemiş', debtor.currentDue),
       ('1–30 gün', debtor.overdue1To30),
@@ -95,7 +114,7 @@ class _DebtorCard extends StatelessWidget {
       ('61–90 gün', debtor.overdue61To90),
       ('90+ gün', debtor.overdue90Plus),
     ];
-    return testId('statement_debtor_${debtor.debtorType.toLowerCase()}', Container(
+    return testId('statement_debtor_$roleKey$idSuffix', Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.card(context),
@@ -134,7 +153,7 @@ class _DebtorCard extends StatelessWidget {
           const SizedBox(height: 10),
           _line(context, 'Anapara', debtor.principalOutstanding),
           _line(context, 'Gecikme tazminatı', debtor.penaltyOutstanding),
-          _line(context, 'Toplam borç', debtor.totalOutstanding, bold: true, id: 'statement_total_${debtor.debtorType.toLowerCase()}'),
+          _line(context, 'Toplam borç', debtor.totalOutstanding, bold: true, id: 'statement_total_$roleKey$idSuffix'),
           if (debtor.advanceBalance > Decimal.zero) _line(context, 'Avans bakiyesi', debtor.advanceBalance),
           if (debtor.openItems.isNotEmpty) ...[
             const Divider(height: 20),
@@ -211,7 +230,7 @@ class _DebtorCard extends StatelessWidget {
               'Müşterek sorumluluk toplamı',
               debtor.jointlyLiableTotal,
               bold: true,
-              id: 'statement_joint_liability_total',
+              id: 'statement_joint_liability_total$idSuffix',
             ),
           ],
         ],
