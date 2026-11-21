@@ -159,6 +159,149 @@ impl OccupancyService {
         Ok(())
     }
 
+    /// Requests four-eyes corrections when an occupancy transition changes accrued
+    /// liabilities in open periods on or after `effective_date`.
+    ///
+    /// For the period containing `effective_date`, an accrued liability may be split
+    /// between tenant and owner (SPLIT_REISSUE) or transferred if 100% owner.
+    /// For later open periods already accrued (e.g. when a tenant moved out retrospectively),
+    /// liabilities that no longer match the active occupancy are re-issued or split.
+    pub async fn request_occupancy_corrections(
+        &self,
+        caller: &Caller,
+        unit_id: &str,
+        effective_date: NaiveDate,
+    ) -> FinanceResult<Vec<crate::models::AccrualCorrection>> {
+        let effective_period = BillingPeriod::of_date(effective_date);
+        let unit_key = parse_unit_id(unit_id)
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| unit_id.to_string());
+        let today = self.today(&caller.site_id).await;
+
+        let candidate_periods = {
+            let inner = self.state.inner.read().await;
+            let enabled = inner
+                .sites
+                .iter()
+                .find(|site| crate::auth::same_id(&site.id, &caller.site_id))
+                .is_some_and(|site| site.proration_enabled);
+            let Some(unit) = inner.units.iter().find(|unit| {
+                crate::auth::same_id(&unit.id, &unit_key)
+                    && crate::auth::same_id(&unit.site_id, &caller.site_id)
+            }) else {
+                return Ok(Vec::new());
+            };
+            if !enabled {
+                return Ok(Vec::new());
+            }
+            let created_on = unit.created_on;
+            let history = inner
+                .unit_occupancies
+                .get(&unit.id)
+                .cloned()
+                .unwrap_or_default();
+
+            let mut periods: Vec<BillingPeriod> = inner
+                .dues
+                .iter()
+                .filter(|due| {
+                    crate::auth::same_id(&due.unit_id, &unit_key)
+                        && due.expense_type == crate::models::ExpenseType::OperationalDues
+                        && due.status != crate::models::DebtStatus::Cancelled
+                })
+                .filter_map(|due| BillingPeriod::parse(&due.period).ok())
+                .filter(|p| *p >= effective_period)
+                .collect();
+            periods.sort();
+            periods.dedup();
+
+            let mut candidates = Vec::new();
+            for p in periods {
+                let is_closed = inner.dues_periods.iter().any(|row| {
+                    crate::auth::same_id(&row.site_id, &caller.site_id)
+                        && BillingPeriod::parse(&row.period_name).ok() == Some(p)
+                        && row.status.as_str() == "CLOSED"
+                });
+                if is_closed {
+                    continue;
+                }
+                let dues: Vec<_> = inner
+                    .dues
+                    .iter()
+                    .filter(|due| {
+                        crate::auth::same_id(&due.unit_id, &unit_key)
+                            && BillingPeriod::parse(&due.period).ok() == Some(p)
+                            && due.expense_type == crate::models::ExpenseType::OperationalDues
+                            && due.status != crate::models::DebtStatus::Cancelled
+                    })
+                    .cloned()
+                    .collect();
+                if dues.len() == 1 {
+                    candidates.push((p, dues[0].clone(), created_on, history.clone()));
+                }
+            }
+            candidates
+        };
+
+        let mut results = Vec::new();
+        let correction_service = CorrectionService::new(&self.state);
+        for (period, due, created_on, history) in candidate_periods {
+            let shares = accrual_shares(
+                due.principal_amount,
+                period,
+                created_on,
+                &history,
+                true,
+                effective_date,
+            );
+            if shares.len() == 2 {
+                let request = crate::models::RequestCorrectionRequest {
+                    due_id: due.id.clone(),
+                    kind: crate::models::CORRECTION_SPLIT_REISSUE.to_string(),
+                    amount: None,
+                    due_date: None,
+                    debtor_type: None,
+                    replacement_shares: shares
+                        .into_iter()
+                        .map(
+                            |(debtor_type, amount)| crate::models::CorrectionReplacementShare {
+                                debtor_type,
+                                amount,
+                                ..Default::default()
+                            },
+                        )
+                        .collect(),
+                    reason: format!("Occupancy changed during open period {}", period.key()),
+                };
+                if let Ok(c) = correction_service.request(caller, request).await {
+                    results.push(c);
+                }
+            } else if shares.len() == 1 {
+                let (target_debtor, target_amount) = shares[0];
+                if due.debtor_type != target_debtor || due.principal_amount != target_amount {
+                    let new_due_date = if due.debtor_type != target_debtor {
+                        Some(today)
+                    } else {
+                        None
+                    };
+                    let request = crate::models::RequestCorrectionRequest {
+                        due_id: due.id.clone(),
+                        kind: crate::models::CORRECTION_REISSUE.to_string(),
+                        amount: Some(target_amount),
+                        due_date: new_due_date,
+                        debtor_type: Some(target_debtor.as_str().to_string()),
+                        replacement_shares: Vec::new(),
+                        reason: format!("Occupancy changed during open period {}", period.key()),
+                    };
+                    if let Ok(c) = correction_service.request(caller, request).await {
+                        results.push(c);
+                    }
+                }
+            }
+        }
+        Ok(results)
+    }
+
     /// Requests a four-eyes split correction when a transition changes one
     /// accrued liability into owner and tenant shares in an open period.
     pub async fn request_open_period_split(
@@ -168,88 +311,12 @@ impl OccupancyService {
         effective_date: NaiveDate,
     ) -> FinanceResult<Option<crate::models::AccrualCorrection>> {
         let period = BillingPeriod::of_date(effective_date);
-        let unit_key = parse_unit_id(unit_id)
-            .map(|id| id.to_string())
-            .unwrap_or_else(|| unit_id.to_string());
-        let candidate = {
-            let inner = self.state.inner.read().await;
-            let enabled = inner
-                .sites
-                .iter()
-                .find(|site| crate::auth::same_id(&site.id, &caller.site_id))
-                .is_some_and(|site| site.proration_enabled);
-            let closed = inner.dues_periods.iter().any(|row| {
-                crate::auth::same_id(&row.site_id, &caller.site_id)
-                    && BillingPeriod::parse(&row.period_name).ok() == Some(period)
-                    && row.status.as_str() == "CLOSED"
-            });
-            let dues: Vec<_> = inner
-                .dues
-                .iter()
-                .filter(|due| {
-                    crate::auth::same_id(&due.unit_id, &unit_key)
-                        && BillingPeriod::parse(&due.period).ok() == Some(period)
-                        && due.expense_type == crate::models::ExpenseType::OperationalDues
-                        && due.status != crate::models::DebtStatus::Cancelled
-                })
-                .cloned()
-                .collect();
-            if !enabled || closed || dues.len() != 1 {
-                None
-            } else {
-                inner
-                    .units
-                    .iter()
-                    .find(|unit| {
-                        crate::auth::same_id(&unit.id, &unit_key)
-                            && crate::auth::same_id(&unit.site_id, &caller.site_id)
-                    })
-                    .map(|unit| {
-                        let history = inner
-                            .unit_occupancies
-                            .get(&unit.id)
-                            .cloned()
-                            .unwrap_or_default();
-                        (dues[0].clone(), unit.created_on, history)
-                    })
-            }
-        };
-        let Some((due, created_on, history)) = candidate else {
-            return Ok(None);
-        };
-        let shares = accrual_shares(
-            due.principal_amount,
-            period,
-            created_on,
-            &history,
-            true,
-            effective_date,
-        );
-        if shares.len() != 2 {
-            return Ok(None);
-        }
-        let request = crate::models::RequestCorrectionRequest {
-            due_id: due.id,
-            kind: crate::models::CORRECTION_SPLIT_REISSUE.to_string(),
-            amount: None,
-            due_date: None,
-            debtor_type: None,
-            replacement_shares: shares
-                .into_iter()
-                .map(
-                    |(debtor_type, amount)| crate::models::CorrectionReplacementShare {
-                        debtor_type,
-                        amount,
-                        ..Default::default()
-                    },
-                )
-                .collect(),
-            reason: format!("Occupancy changed during open period {}", period.key()),
-        };
-        CorrectionService::new(&self.state)
-            .request(caller, request)
-            .await
-            .map(Some)
+        let corrections = self
+            .request_occupancy_corrections(caller, unit_id, effective_date)
+            .await?;
+        Ok(corrections
+            .into_iter()
+            .find(|c| BillingPeriod::parse(&c.period).ok() == Some(period)))
     }
 
     /// Requests the four-eyes split of the sale month's operational dues of an owner-occupied
