@@ -1334,7 +1334,6 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         page.keyboard.press("Escape")
         UnitWorkspace(page).close()
         PaymentStream(page).open()
-        by_id(page, "tab_payment_stream").wait_for(timeout=15_000)
         expected_cash_a = format_try(j.expected_posted_cash_a)
         assert page.get_by_text(expected_cash_a, exact=True).count() > 0, (
             f"Site A, April 2027 cash view missing expected posted cash {expected_cash_a}"
