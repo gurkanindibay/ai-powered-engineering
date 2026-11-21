@@ -66,8 +66,7 @@ The workspace centers on **SitePulse**, a residential site platform built using 
      - **Low** for targeted lookups, mechanical edits, and running known checks.
      - **Medium** by default for routine implementation, debugging, and review.
      - **High** for architecture, cross-component changes, and bugs with several plausible causes.
-     - **Extra high (`xhigh`)** for critical work involving financial correctness, concurrency, or irreversible data changes, or when high effort leaves a material question unresolved.
-     - **`max` or `ultra`** for exceptional cases where additional reasoning could resolve a consequential uncertainty and the selected model supports the setting.
+   - High is the maximum reasoning effort for workspace tasks, including critical work. Do not select `xhigh`, `max`, or `ultra` because of their cost.
    - For Antigravity and DeepSeek, use the thinking controls available for the selected model. If the harness offers only a toggle, use the default for routine work and enable deeper thinking when the task calls for high effort. Durable harness runs use the configured tier-to-effort mapping.
    - The `.claude/settings.json` hook (`scripts/token_guard.py`) denies known-wasteful calls and warns on oversized output; follow its suggestion rather than working around it.
 
