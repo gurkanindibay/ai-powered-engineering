@@ -58,8 +58,7 @@ Feature: Every status of the billing state machines is reached and left correctl
 
   # ---------------------------------------------------------------- period
 
-  # Pending: the backend journey does not yet exercise DRAFT, OPEN and CLOSED through the complete command matrix with audit-state checks.
-  @SC-13-11-04 @J-18 @depth:1 @state:F2 @layer:backend @core @role_manager @pending
+  @SC-13-11-04 @J-18 @depth:1 @state:F2 @layer:backend @core @role_manager @linked
   Scenario Outline: Each period status allows only its own commands
     Given the site is in state F2
     And period "Ekim 2026" is <status>
