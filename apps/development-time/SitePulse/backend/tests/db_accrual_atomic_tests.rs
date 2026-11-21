@@ -509,3 +509,70 @@ async fn a_first_accrual_batch_keeps_both_debtor_shares_and_blocks_a_rerun() {
     );
     env.drop_db().await;
 }
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL and DB_PASS"]
+async fn reload_uses_account_ids_for_linked_unit_parties_and_person_keys_otherwise() {
+    let env = Env::new("sync_person_keys").await;
+    let unit = env
+        .int(&format!(
+            "SELECT id FROM units WHERE site_id = {} AND deleted_at IS NULL ORDER BY id LIMIT 1",
+            env.site
+        ))
+        .await;
+    let linked_person = env
+        .int(&format!(
+            "INSERT INTO persons (site_id, full_name, email, person_type) VALUES ({}, 'Linked Owner', 'linked.owner@sync.test', 'HOME_OWNER') RETURNING id",
+            env.site
+        ))
+        .await;
+    let unlinked_person = env
+        .int(&format!(
+            "INSERT INTO persons (site_id, full_name, email, person_type) VALUES ({}, 'Unlinked Tenant', 'unlinked.tenant@sync.test', 'HOME_RESIDENT') RETURNING id",
+            env.site
+        ))
+        .await;
+    let password_hash =
+        auth::hash_password(manager_password()).expect("hash linked owner password");
+    env.exec(&format!(
+        "INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password) VALUES ({}, {}, 'linked.owner@sync.test', '{}', 'HOME_OWNER', FALSE); UPDATE units SET owner_person_id = {}, tenant_person_id = {} WHERE id = {}",
+        env.site, linked_person, password_hash, linked_person, unlinked_person, unit
+    ))
+    .await;
+
+    env.state.reload_from_db().await.expect("reload state");
+
+    let inner = env.state.inner.read().await;
+    let synced_unit = inner
+        .units
+        .iter()
+        .find(|candidate| candidate.id == unit.to_string())
+        .expect("synced unit");
+    let linked_user_id = inner
+        .users
+        .iter()
+        .find(|user| user.person_id == Some(linked_person))
+        .map(|user| user.id.clone())
+        .expect("linked owner account");
+    assert_eq!(
+        synced_unit.owner_user_id.as_deref(),
+        Some(linked_user_id.as_str())
+    );
+    let unlinked_person_key =
+        sitepulse_backend::domain::person_identity::person_key(unlinked_person);
+    assert_eq!(
+        synced_unit.tenant_user_id.as_deref(),
+        Some(unlinked_person_key.as_str())
+    );
+    let payer_names = inner
+        .unit_payer_names
+        .get(&unit.to_string())
+        .expect("payer names");
+    assert_eq!(
+        payer_names.first().map(String::as_str),
+        Some("Unlinked Tenant")
+    );
+    assert!(payer_names.iter().any(|name| name == "Linked Owner"));
+    drop(inner);
+    env.drop_db().await;
+}

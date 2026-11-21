@@ -209,16 +209,21 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 )
                 .ok()
             });
+            let unit_site_id = site_id.map(|s| s.to_string()).unwrap_or_default();
+            let owner_user_id = owner_person_id
+                .map(|person_id| state.user_or_person_key_for_person(&unit_site_id, person_id));
+            let tenant_user_id = tenant_person_id
+                .map(|person_id| state.user_or_person_key_for_person(&unit_site_id, person_id));
 
             let unit = IndependentUnit {
                 id: id.to_string(),
-                site_id: site_id.map(|s| s.to_string()).unwrap_or_default(),
+                site_id: unit_site_id,
                 block_id: block_id.to_string(),
                 unit_number,
                 floor,
                 land_share,
-                owner_user_id: owner_person_id.map(crate::domain::person_identity::person_key),
-                tenant_user_id: tenant_person_id.map(crate::domain::person_identity::person_key),
+                owner_user_id,
+                tenant_user_id,
                 virtual_iban: resolved_viban,
                 house_type,
                 created_on,
@@ -227,7 +232,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             // Register unit payer names (tenant first as primary payer, then owner)
             for (p_id, primary) in [(tenant_person_id, true), (owner_person_id, false)] {
                 let Some(p_id) = p_id else { continue };
-                let key = crate::domain::person_identity::person_key(p_id);
+                let key = state.user_or_person_key_for_person(&unit.site_id, p_id);
                 if let Some(p) = state.users.iter().find(|u| u.id == key) {
                     let name = p.full_name.clone();
                     let entry = state.unit_payer_names.entry(unit.id.clone()).or_default();

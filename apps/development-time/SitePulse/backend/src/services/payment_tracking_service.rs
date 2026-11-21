@@ -564,14 +564,7 @@ impl PaymentTrackingService {
                     .map(|user| user.full_name.clone())
             });
             let person_id_for_user = |user_id: Option<&String>| {
-                user_id.and_then(|id| {
-                    inner
-                        .users
-                        .iter()
-                        .find(|user| &user.id == id)
-                        .and_then(|user| user.person_id)
-                        .or_else(|| crate::domain::person_identity::parse_person_key(id))
-                })
+                user_id.and_then(|id| inner.person_id_for_user_or_person_key(id))
             };
             let tenant_person_id = person_id_for_user(unit.tenant_user_id.as_ref());
             let owner_person_id = person_id_for_user(unit.owner_user_id.as_ref());
@@ -590,10 +583,7 @@ impl PaymentTrackingService {
                         && !payer_name_key.is_empty()
                         && crate::domain::fold_turkish(user.full_name.trim()) == payer_name_key
                 })
-                .filter_map(|user| {
-                    user.person_id
-                        .or_else(|| crate::domain::person_identity::parse_person_key(&user.id))
-                })
+                .filter_map(|user| inner.person_id_for_user_or_person_key(&user.id))
                 .filter(|person_id| {
                     inner.dues.iter().any(|due| {
                         crate::auth::same_id(&due.unit_id, &unit.id)
@@ -2002,14 +1992,7 @@ impl PaymentTrackingService {
         // unknown owner is recorded as 0 (never as someone else's person id).
         let old_person_id = old_owner_user_id
             .as_deref()
-            .and_then(|uid| {
-                inner
-                    .users
-                    .iter()
-                    .find(|u| u.id == uid)
-                    .and_then(|u| u.person_id)
-                    .or_else(|| crate::domain::person_identity::parse_person_key(uid))
-            })
+            .and_then(|uid| inner.person_id_for_user_or_person_key(uid))
             .unwrap_or(0);
         let old_owner_start_date = old_owner_user_id
             .as_deref()

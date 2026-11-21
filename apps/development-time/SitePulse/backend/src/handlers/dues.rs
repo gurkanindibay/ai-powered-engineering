@@ -384,14 +384,7 @@ pub async fn accrue_monthly_dues(
             };
             let liable_person_id = {
                 let inner = state.inner.read().await;
-                liable_user_id.and_then(|user_id| {
-                    inner
-                        .users
-                        .iter()
-                        .find(|user| user.id == user_id)
-                        .and_then(|user| user.person_id)
-                        .or_else(|| crate::domain::person_identity::parse_person_key(user_id))
-                })
+                liable_user_id.and_then(|user_id| inner.person_id_for_user_or_person_key(user_id))
             };
             accrued.push((
                 DuesLiability {
