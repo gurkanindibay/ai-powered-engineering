@@ -23,7 +23,7 @@ The accepted data, dates, amounts, and invariants remain defined by [the approve
 5. Use manager-facing checks for onboarding and inventory, one household or title transition, unit statements, and site cash/receipt evidence. Compare the cash view with posted receipts and check Site B before and after a Site A payment.
 6. Make failures identify the site, period, unit, debtor, and expected/actual amount. Preserve the attempt trace and browser evidence in the existing CI artifacts.
 
-The April 10 expected posted cash is TRY 90,658.50 for Site A and TRY 189,538.75 for Site B. Expected open primary debt including fees is TRY 5,804.09 and TRY 2,661.67 respectively. Count an owner's joint exposure separately in owner reporting and once only in site debt totals.
+The April 10 expected posted cash is TRY 90,658.50 for Site A and TRY 189,538.75 for Site B. Expected open primary debt including fees is TRY 5,804.09 and TRY 2,661.67 respectively. Count an owner's joint exposure separately in owner reporting and once only in site debt totals. These values and the joint-exposure rule are defined in the analysis's [final debt checkpoint](zero-to-multi-site-financial-journey.md#final-debt-checkpoint) and [payment and cash checkpoints](zero-to-multi-site-financial-journey.md#payment-and-cash-checkpoints); if they differ, the analysis wins.
 
 ## Completion gate and current dependencies
 
