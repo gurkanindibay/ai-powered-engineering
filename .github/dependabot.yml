@@ -6,6 +6,9 @@ updates:
   - package-ecosystem: pub
     directory: /apps/development-time/SitePulse/flutter
     schedule: {interval: weekly}
+  - package-ecosystem: npm
+    directory: /apps/development-time/SitePulse/e2e-cucumber
+    schedule: {interval: weekly}
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: weekly}
