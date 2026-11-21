@@ -18,6 +18,8 @@ gh pr list --state open --json number,title,isDraft,headRefOid,author \
   --jq '.[]|select(.isDraft|not)|[.number,.headRefOid[0:12],.author.login,.title]|@tsv'
 ```
 
+**Compact before every iteration.** Before each cycle, compact your context (`/compact` in Claude Code, or your harness's equivalent; if none exists, continue in a fresh session). Nothing needs carrying over except the repo, the bot identity check and the schedule: the per-PR state is read from the bot's review history below. Drop diffs and review drafts from earlier cycles.
+
 For each non-draft PR, decide from the bot's own review history, which is the state (no local file to lose):
 
 ```bash

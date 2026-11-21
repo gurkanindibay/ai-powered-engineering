@@ -13,6 +13,8 @@ Pair rule for reviewers: [pr-reviewer-polling.md](pr-reviewer-polling.md).
 
 After the PR is open, labelled (rule 10) and its first CI run is green (rule 12), wait and poll **every 30 minutes** until the PR is merged or closed. Use your harness's own scheduler (for example `ScheduleWakeup` with `delaySeconds=1800`, a cron job, or a sleeping loop). Keep the claim labels on the issue and the PR while you wait.
 
+**Compact before every iteration.** Before each poll, compact your context (`/compact` in Claude Code, or your harness's equivalent; if none exists, continue in a fresh session). Keep only this handoff state, and write it into the compaction summary or the scheduled prompt so the next iteration can resume cold: PR number, issue number, branch, worktree path, harness and claim session id, last pushed head SHA, last review or comment you handled, and the number of fix rounds per blocking note. Drop diffs, logs and earlier tool output; re-read only what the poll needs (AGENTS.md rule 9).
+
 Each poll, read the current state (cheap, compact output):
 
 ```bash

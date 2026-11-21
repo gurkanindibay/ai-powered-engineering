@@ -104,11 +104,13 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - Opening a PR (rule 12) does not end the task. After the PR is open and green, poll it **every 30 minutes**: if the reviewer left notes, fix them in the same worktree and branch, run the suite, push, wait for CI, and keep polling.
    - **Approved** means a GitHub approval on the PR (`reviewDecision` `APPROVED` or an `APPROVED` review from the reviewer) or a reviewer comment starting with `APPROVED`. Once approved and every check is green, **merge your own PR** (`gh pr merge <pr> --squash --delete-branch`). If it is approved with minor notes, fix them, wait for CI to go green, then merge without waiting for another approval.
    - After the merge: close the linked issue, release the claim labels, remove the worktree (rule 11), delete the local and remote branches, and `git worktree prune`. Never merge with a failing or pending check, never use `--admin`, never merge a PR that is not yours.
+   - Compact your context before every 30-minute iteration, carrying only the handoff state (PR, issue, branch, worktree, claim id, last handled SHA).
    - Stop and ask the user if the PR is closed unmerged or the same blocking note survives two fixes. Full procedure: [.agents/rules/pr-author-followup.md](file:///.agents/rules/pr-author-followup.md).
 
 16. **PR Reviewer Polling Loop (All Agents)**:
    - The reviewer agent acts as `local-reviewer-agent` (rule 14) and checks for open PRs **every 30 minutes**. It reviews a PR with no bot review yet, and re-reviews a PR whose head changed since the bot's last review; it skips unchanged PRs, drafts and its own PRs.
    - Reviews go on the PR. Blocking problems get `REQUEST_CHANGES`. If the changes are OK, post a real GitHub `APPROVE` (with any minor notes listed); only if GitHub refuses the formal approval, post a comment starting with `APPROVED`. Do not approve while CI is red or pending.
+   - Compact your context before every 30-minute cycle; per-PR state comes from the bot's review history, not memory.
    - The reviewer never merges or pushes. Full procedure: [.agents/rules/pr-reviewer-polling.md](file:///.agents/rules/pr-reviewer-polling.md).
 
 ## Durable engineering harness
