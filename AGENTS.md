@@ -56,7 +56,12 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - Locate before reading: `graphify query`/`explain`, `rg -l`, or `grep -n ... | head -30`; then read only the needed range (`sed -n 'A,Bp'`, Read with offset/limit). Never `cat` whole large files, `ls -R`, or unbounded `find`.
    - Run gates in compact form: `run_tests.py --summary` (or `--json --summary`); pipe other build/test output through `tail -40` or a failure filter.
    - Browser checks: prefer `get_page_text`/`read_page`; screenshots only when visual layout matters, with `scale` ≤ 0.5.
-   - One task per session; `/compact` or start fresh once context passes ~200K tokens. Use Sonnet for routine edits, test runs and exploration; reserve Opus for design-heavy work.
+   - One task per session. Use `/compact` or start fresh once context passes ~200K tokens.
+   - Choose an available, eligible model from the Antigravity, Claude, or Codex subscriptions according to the task. Honor explicit model requests.
+     - **Antigravity**: Use Gemini 3.8 Flash for routine edits, test runs, and exploration when it is available in Antigravity.
+     - **Claude**: Use Sonnet for routine edits, test runs, and exploration. Reserve Opus for design-heavy work.
+     - **Codex**: Use GPT-6.2 Sol for routine implementation, debugging, and verification. Use GPT-6.2 Astra for design-heavy work and complex implementation or debugging.
+     - **DeepSeek**: Use an eligible DeepSeek model as the last fallback when the subscription-backed options cannot meet the task's needs. DeepSeek is billed by usage.
    - The `.claude/settings.json` hook (`scripts/token_guard.py`) denies known-wasteful calls and warns on oversized output; follow its suggestion rather than working around it.
 
 10. **Issue Selection & Concurrent Agent Work**:
