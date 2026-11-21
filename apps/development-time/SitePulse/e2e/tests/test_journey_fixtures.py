@@ -189,8 +189,8 @@ def test_parallel_journey_managers_only_see_their_site_data(request, api, actors
         first = site_in_state("F5", api=api, stack=stack, saas=saas, manifest=manifest, name_suffix="first")
         second = site_in_state("F4", api=api, stack=stack, saas=saas, manifest=manifest, name_suffix="second")
         for own, other, expected_outstanding in (
-            (first, second, Decimal("4567.50")),
-            (second, first, Decimal("8800.00")),
+            (first, second, EXPECTED["F5"]["overdue"]),
+            (second, first, EXPECTED["F4"]["overdue"]),
         ):
             overview = api.site_overview(own.manager, own.site_id)
             assert Decimal(str(overview["summary"]["total_overdue_with_interest"])) == expected_outstanding

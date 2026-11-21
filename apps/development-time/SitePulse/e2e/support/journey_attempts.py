@@ -3,6 +3,7 @@
 Journey attempts can share an E2E database. The manifest is written as resources
 are created, so teardown can be retried after a process or evidence-capture
 failure without truncating another attempt's data.
+Attempt locks use POSIX ``flock``; the E2E runner targets Linux and macOS.
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import fcntl
 import json
 import re
 import uuid
+import warnings
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -114,6 +116,7 @@ class JourneyManifest:
             fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_UN)
             self._lock_file.close()
             self._lock_file = None
+        # Keep the lock path: unlinking can split flock ownership across old and new inodes.
 
     def record(self, resource: str, resource_id: str | int) -> None:
         if resource not in {"site_ids", "unit_ids", "person_ids", "user_ids"}:
@@ -655,7 +658,15 @@ def reclaim_stale_attempts(stack: E2EStack, directory: Path) -> list[str]:
     """Clean incomplete manifests for this database when their process lock is gone."""
     reclaimed: list[str] = []
     for path in sorted(directory.glob("*.json")):
-        manifest = JourneyManifest.load(path)
+        try:
+            manifest = JourneyManifest.load(path)
+        except (OSError, ValueError, KeyError) as error:
+            warnings.warn(
+                f"Skipped unreadable journey manifest {path.name}: {type(error).__name__}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
         if manifest.teardown_completed or manifest.database_name != stack.db_name:
             continue
         with manifest.lock_path.open("a+", encoding="utf-8") as lock_file:
@@ -666,6 +677,12 @@ def reclaim_stale_attempts(stack: E2EStack, directory: Path) -> list[str]:
             try:
                 teardown_sites(stack, manifest)
                 reclaimed.append(manifest.attempt_id)
+            except Exception as error:
+                warnings.warn(
+                    f"Could not reclaim journey manifest {path.name}: {type(error).__name__}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
             finally:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
     return reclaimed

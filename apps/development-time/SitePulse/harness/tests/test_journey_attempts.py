@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -112,6 +113,25 @@ class JourneyAttemptTests(unittest.TestCase):
 
             self.assertEqual(reclaim_stale_attempts(stack, Path(directory)), [])
             self.assertEqual(stack.statements, [])
+
+    def test_stale_recovery_skips_corrupt_manifests_and_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "broken.json").write_text("{", encoding="utf-8")
+            manifest = JourneyManifest.create(root, "run", "shard", "recoverable")
+            manifest.bind_database("sitepulse_e2e_test")
+            manifest.record("site_ids", 51)
+            manifest.release_lock()
+            stack = FakeStack()
+
+            with warnings.catch_warnings(record=True) as captured:
+                warnings.simplefilter("always")
+                recovered = reclaim_stale_attempts(stack, root)
+
+            self.assertEqual(recovered, ["recoverable"])
+            self.assertEqual(stack.restarts, 1)
+            self.assertEqual(len(captured), 1)
+            self.assertIn("broken.json", str(captured[0].message))
 
     def test_teardown_is_idempotent_and_scoped_to_manifest_site_ids(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
