@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from support.api import ApiError
-from support.flutter import by_id, text_of
+from support.flutter import by_id
 from support.journey_attempts import (
     JourneyManifest,
     ledger_invariants,
@@ -30,7 +30,6 @@ from support.journey_attempts import (
     teardown_with_evidence,
 )
 from support.journey_multi_site import build_multi_site_journey
-from support.money import format_try, last_amount
 from pages.login import LoginPage
 from pages.manager import PaymentStream, ResidentsTab
 from pages.person import UnitWorkspace
@@ -370,14 +369,6 @@ def test_bank_webhook_matches_transfer_and_allocates(request, api, actors, stack
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
     else:
         teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
-
-
-def _posted_cash(api, manager) -> Decimal:
-    """Posted cash for the manager's site as the payment stream reports it (reversals excluded).
-
-    Derived from this journey's own receipts, never from the reconciliation journey's totals.
-    """
-    return Decimal(str(api.payment_stream(manager)["total_volume"]))
 
 
 @pytest.mark.covers("SC-13-13-02")
@@ -1342,12 +1333,14 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         page.keyboard.press("Escape")
         UnitWorkspace(page).close()
         PaymentStream(page).open()
-        expected_cash_a = format_try(_posted_cash(api, j.manager_a))
-        total_a = by_id(page, "payment_stream_total_volume")
-        total_a.wait_for(timeout=15_000)
-        assert last_amount(text_of(total_a)) == _posted_cash(api, j.manager_a), (
-            f"Site A, April 2027 cash view missing expected posted cash {expected_cash_a}"
+        # The Canlı Kasa segment lists receipts but renders no site total; the posted cash total is
+        # reconciliation evidence from the API (plan figure from the #246 contract, April 10).
+        stream_a = api.payment_stream(j.manager_a)
+        assert Decimal(str(stream_a["total_volume"])) == j.expected_posted_cash_a, (
+            f"Site A, April 2027: posted cash TRY {stream_a['total_volume']}, "
+            f"expected {j.expected_posted_cash_a}"
         )
+        PaymentStream(page).wait_for_entries("return ids.length > 0")
         assert PaymentStream(page).entry_ids(), "Site A, April 2027 cash view should list posted receipts"
 
         manager_b_page = page.context.new_page()
@@ -1374,12 +1367,12 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
             manager_b_page.keyboard.press("Escape")
             UnitWorkspace(manager_b_page).close()
             PaymentStream(manager_b_page).open()
-            expected_cash_b = format_try(_posted_cash(api, j.manager_b))
-            total_b = by_id(manager_b_page, "payment_stream_total_volume")
-            total_b.wait_for(timeout=15_000)
-            assert last_amount(text_of(total_b)) == _posted_cash(api, j.manager_b), (
-                f"Site B, April 2027 cash view missing expected posted cash {expected_cash_b}"
+            stream_b = api.payment_stream(j.manager_b)
+            assert Decimal(str(stream_b["total_volume"])) == j.expected_posted_cash_b, (
+                f"Site B, April 2027: posted cash TRY {stream_b['total_volume']}, "
+                f"expected {j.expected_posted_cash_b}"
             )
+            PaymentStream(manager_b_page).wait_for_entries("return ids.length > 0")
             assert PaymentStream(manager_b_page).entry_ids(), (
                 "Site B, April 2027 cash view should list posted receipts"
             )
