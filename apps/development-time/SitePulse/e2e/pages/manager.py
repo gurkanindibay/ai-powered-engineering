@@ -126,11 +126,34 @@ class AddResidentForm:
         return self
 
     def fill(self, unit_no: str, full_name: str, email: str, phone: str,
-             reuse_existing: bool = False) -> "AddResidentForm":
+             reuse_existing: bool = False, house_type: str | None = None,
+             occupancy: str | None = None) -> "AddResidentForm":
         fill(self.page, "module_new_resident_unit", unit_no)
         PersonPicker(self.page, "module_new_resident_name").create(
             full_name, phone=phone, email=email, reuse_existing=reuse_existing)
+        if occupancy is not None:
+            self._set_occupancy(occupancy)
+        if house_type is not None:
+            self._set_house_type(house_type)
         return self
+
+    def _set_occupancy(self, label: str) -> None:
+        """Choose 'Malik Oturuyor', 'Daire Kirada' or 'Boş Daire' on the registration page."""
+        selector = by_id(self.page, "module_occupancy_status_selector")
+        selector.wait_for(timeout=10_000)
+        selector.get_by_text(label, exact=True).click()
+        self.page.wait_for_timeout(150)
+
+    def _set_house_type(self, type_name: str) -> None:
+        """Choose the unit's existing tariff from the registration page's house type menu."""
+        dropdown = by_id(self.page, "module_new_resident_house_type")
+        dropdown.wait_for(timeout=10_000)
+        dropdown.click()
+        # Flutter exposes the menu items as role=menuitem with the tariff in their accessible name.
+        option = self.page.get_by_role("menuitem", name=re.compile(rf"^{re.escape(type_name)} \(")).last
+        option.wait_for(timeout=5_000)
+        option.click()
+        self.page.wait_for_timeout(150)
 
     def save(self) -> None:
         """Save, then dismiss the 'Sakin Kaydedildi!' confirmation and close the module."""

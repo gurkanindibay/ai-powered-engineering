@@ -216,7 +216,8 @@ class _BlockUnitsCreatePageState extends State<BlockUnitsCreatePage> {
               message:
                   'Blok adını ve daire numaralarını girin. Kaydettiğinizde blok açılır, '
                   'daireler boş olarak eklenir. İsteğe bağlı konut tipi ve aylık aidat girerseniz '
-                  'tarife de tanımlanır.',
+                  'tarife de tanımlanır. Var olan bir konut tipi yalnızca aynı aidatla kullanılır; '
+                  'başka blokların tarifesi buradan değiştirilmez.',
               tip: 'Daireler "A Blok 1", "A Blok 2" gibi etiketlenir; numaralandırma sizin girdiğiniz başlangıçtan başlar.',
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -230,6 +231,10 @@ class _BlockUnitsCreatePageState extends State<BlockUnitsCreatePage> {
                 decoration: const InputDecoration(
                   labelText: 'Blok adı',
                   hintText: 'örn. A Blok',
+                  helperText:
+                      'Yeni bir blok adı girin. Aynı adlı blok varsa yalnızca boş daire '
+                      'numaraları eklenir; dolu numaralar sunucu tarafından reddedilir.',
+                  helperMaxLines: 3,
                 ),
                 validator: (value) {
                   final name = (value ?? '').trim();
@@ -342,6 +347,10 @@ class _BlockUnitsCreatePageState extends State<BlockUnitsCreatePage> {
                 decoration: const InputDecoration(
                   labelText: 'Konut tipi',
                   hintText: 'örn. 2+1',
+                  helperText:
+                      'Var olan bir konut tipi yalnızca aynı aidatla kullanılabilir; '
+                      'farklı aidat kaydedilmez.',
+                  helperMaxLines: 2,
                 ),
               ),
             ),

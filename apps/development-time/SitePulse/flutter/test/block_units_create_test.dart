@@ -87,6 +87,37 @@ Future<void> _submit(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+void _withManagedSite(DashboardController controller, {String id = '42'}) {
+  controller.setManagedSitesForTesting(
+    TenantSiteItem(
+      id: id,
+      name: 'Test Sitesi',
+      city: 'İstanbul',
+      address: '',
+      status: 'ACTIVE',
+      planType: 'STANDARD',
+      totalUnits: 0,
+      monthlyCollectionVolume: Decimal.zero,
+      adminName: 'Test Manager',
+      adminEmail: 'manager@sitepulse.test',
+      adminPhone: '',
+    ),
+    const [],
+  );
+}
+
+void _seedExistingTariff(DashboardController controller) {
+  controller.setHouseTypesForTesting([
+    HouseTypeTariff(
+      id: '2',
+      siteId: 'site-1',
+      typeName: '2+1',
+      duesAmount: Decimal.parse('1400.00'),
+      description: '2 Oda 1 Salon',
+    ),
+  ]);
+}
+
 Map<String, dynamic> _auth() => {
   'access_token': 'access',
   'refresh_token': 'refresh',
@@ -197,6 +228,67 @@ void main() {
       );
       expect(controller.homeOwners, isEmpty);
     });
+
+    testWidgets(
+      'an existing house type with a different tariff is refused without repricing',
+      (tester) async {
+        final controller = DashboardController()
+          ..loadZeroDataFixtures(role: UserRole.siteManager);
+        addTearDown(controller.dispose);
+        _seedExistingTariff(controller);
+        await _openForm(tester, controller);
+
+        await _fillForm(tester, houseType: '2+1', dues: '1.600,00');
+        await _submit(tester);
+
+        expect(find.textContaining("'2+1' konut tipi zaten"), findsOneWidget);
+        expect(
+          find.byKey(const Key(BlockUnitsCreatePage.nameId)),
+          findsOneWidget,
+        );
+        expect(controller.homeOwners, isEmpty);
+        expect(controller.houseTypes, hasLength(1));
+        expect(
+          controller.houseTypes.single.duesAmount,
+          Decimal.parse('1400.00'),
+        );
+      },
+    );
+
+    testWidgets(
+      'an existing house type at the same tariff is reused, not rewritten',
+      (tester) async {
+        final controller = DashboardController()
+          ..loadZeroDataFixtures(role: UserRole.siteManager);
+        addTearDown(controller.dispose);
+        _seedExistingTariff(controller);
+        await _openForm(tester, controller);
+
+        await _fillForm(tester, houseType: '2+1', dues: '1.400,00');
+        await _submit(tester);
+
+        expect(
+          find.byKey(const Key(BlockUnitsCreatePage.nameId)),
+          findsNothing,
+        );
+        expect(controller.homeOwners, hasLength(7));
+        expect(
+          controller.homeOwners.every((unit) => unit.houseType == '2+1'),
+          isTrue,
+        );
+        expect(
+          controller.homeOwners.every(
+            (unit) => unit.monthlyDues == Decimal.parse('1400.00'),
+          ),
+          isTrue,
+        );
+        expect(controller.houseTypes, hasLength(1));
+        expect(
+          controller.houseTypes.single.duesAmount,
+          Decimal.parse('1400.00'),
+        );
+      },
+    );
 
     testWidgets(
       'a successful create adds the block, seven units and the tariff',
@@ -370,6 +462,160 @@ void main() {
       });
     });
 
+    test(
+      'an existing tariff at the same amount is reused without a tariff write',
+      () async {
+        final calls = <http.Request>[];
+        ApiClient.transport = MockClient((request) async {
+          calls.add(request);
+          final path = request.url.path;
+          if (path == '/api/v1/auth/login') {
+            return _json(_auth());
+          }
+          if (request.method == 'GET' &&
+              path == '/api/v1/site-admin/house-types') {
+            return _json([
+              {
+                'id': '2',
+                'site_id': '42',
+                'type_name': '2+1',
+                'dues_amount': '1400.00',
+                'description': '2 Oda 1 Salon',
+              },
+            ]);
+          }
+          if (request.method == 'POST' && path == '/api/v1/site-admin/blocks') {
+            return _json(const <String, Object>{}, 201);
+          }
+          if (request.method == 'POST' && path == '/api/v1/site-admin/units') {
+            return _json(const <Object>[], 201);
+          }
+          if (path.endsWith('/overview')) {
+            return _json(const <String, Object>{});
+          }
+          return _json(const <Object>[]);
+        });
+
+        final controller = DashboardController();
+        addTearDown(controller.dispose);
+        expect(
+          await controller.loginWithPassword(
+            'manager@sitepulse.test',
+            'Permanent-Pass-1',
+          ),
+          isTrue,
+        );
+        calls.clear();
+
+        final error = await controller.createBlockWithUnits(
+          blockName: 'A Blok',
+          startUnit: 1,
+          unitCount: 7,
+          houseType: '2+1',
+          monthlyDues: Decimal.parse('1400.00'),
+          siteId: '42',
+        );
+
+        expect(error, isNull);
+        expect(
+          calls
+              .where((call) => call.method == 'POST')
+              .map((call) => call.url.path),
+          ['/api/v1/site-admin/blocks', '/api/v1/site-admin/units'],
+        );
+        final units = calls.firstWhere(
+          (call) =>
+              call.method == 'POST' &&
+              call.url.path == '/api/v1/site-admin/units',
+        );
+        expect(jsonDecode(units.body)['house_type'], '2+1');
+        expect(
+          controller.houseTypes.single.duesAmount,
+          Decimal.parse('1400.00'),
+        );
+      },
+    );
+
+    test(
+      'an existing tariff at a different amount is refused before any write',
+      () async {
+        final calls = <http.Request>[];
+        ApiClient.transport = MockClient((request) async {
+          calls.add(request);
+          final path = request.url.path;
+          if (path == '/api/v1/auth/login') {
+            return _json(_auth());
+          }
+          if (request.method == 'GET' &&
+              path == '/api/v1/site-admin/house-types') {
+            return _json([
+              {
+                'id': '2',
+                'site_id': '42',
+                'type_name': '2+1',
+                'dues_amount': '1400.00',
+                'description': '2 Oda 1 Salon',
+              },
+            ]);
+          }
+          if (path.endsWith('/overview')) {
+            return _json(const <String, Object>{});
+          }
+          return _json(const <Object>[]);
+        });
+
+        final controller = DashboardController();
+        addTearDown(controller.dispose);
+        expect(
+          await controller.loginWithPassword(
+            'manager@sitepulse.test',
+            'Permanent-Pass-1',
+          ),
+          isTrue,
+        );
+        calls.clear();
+
+        final error = await controller.createBlockWithUnits(
+          blockName: 'A Blok',
+          startUnit: 1,
+          unitCount: 7,
+          houseType: '2+1',
+          monthlyDues: Decimal.parse('1600.00'),
+          siteId: '42',
+        );
+
+        expect(error, contains("'2+1' konut tipi zaten"));
+        expect(error, contains('₺1.400,00'));
+        expect(calls.where((call) => call.method == 'POST'), isEmpty);
+        expect(
+          controller.houseTypes.single.duesAmount,
+          Decimal.parse('1400.00'),
+        );
+      },
+    );
+
+    test(
+      'refuses when no managed site is loaded instead of posting to site 1',
+      () async {
+        final calls = <http.Request>[];
+        ApiClient.transport = MockClient((request) async {
+          calls.add(request);
+          return _json(const <Object>[]);
+        });
+
+        final controller = DashboardController();
+        addTearDown(controller.dispose);
+        final error = await controller.createBlockWithUnits(
+          blockName: 'A Blok',
+          startUnit: 1,
+          unitCount: 7,
+        );
+
+        expect(error, contains('Yönetilen site bilgisi yüklenemedi'));
+        expect(calls, isEmpty);
+      },
+    );
+
     testWidgets(
       'a refused create keeps the form open and shows the server reason',
       (tester) async {
@@ -395,6 +641,7 @@ void main() {
 
         final controller = DashboardController();
         addTearDown(controller.dispose);
+        _withManagedSite(controller);
         await _openForm(tester, controller);
 
         await _fillForm(tester, houseType: '2+1', dues: '1.500,00');

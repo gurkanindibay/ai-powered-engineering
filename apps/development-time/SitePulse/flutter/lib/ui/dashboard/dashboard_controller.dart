@@ -502,21 +502,27 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<void> fetchHouseTypes({String? siteId}) async {
+    await refreshHouseTypes(siteId: siteId);
+  }
+
+  /// Loads the site's house types and reports whether the server answered, so a
+  /// caller that must not guess a tariff can refuse instead.
+  Future<bool> refreshHouseTypes({String? siteId}) async {
+    if (isTestMode) return true;
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
-    if (!isTestMode) {
-      try {
-        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/house-types?site_id=$effectiveSiteId');
-        final response = await ApiClient.get(url).timeout(const Duration(seconds: 4));
-        if (response.statusCode == 200) {
-          final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
-          _houseTypes = list.map((item) => HouseTypeTariff.fromJson(item as Map<String, dynamic>)).toList();
-          notifyListeners();
-          return;
-        }
-      } catch (e) {
-        debugPrint('fetchHouseTypes error: $e');
+    try {
+      final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/house-types?site_id=$effectiveSiteId');
+      final response = await ApiClient.get(url).timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+        _houseTypes = list.map((item) => HouseTypeTariff.fromJson(item as Map<String, dynamic>)).toList();
+        notifyListeners();
+        return true;
       }
+    } catch (e) {
+      debugPrint('fetchHouseTypes error: $e');
     }
+    return false;
   }
 
   Future<bool> saveHouseType({
@@ -689,9 +695,11 @@ class DashboardController extends ChangeNotifier {
   /// Runs the two commands the backend exposes for site structure:
   /// `POST /api/v1/site-admin/blocks` and `POST /api/v1/site-admin/units`, then
   /// reloads the blocks and the unit directory so every screen shows the new
-  /// units. When [monthlyDues] is given the tariff is stored first through
+  /// units. When [monthlyDues] is given the tariff is checked against the
+  /// site's existing types first: an existing type is reused only at the same
+  /// amount, and a new type is created through
   /// `POST /api/v1/site-admin/house-types` (a unit can only point at a
-  /// registered house type), so [houseType] is then a real tariff.
+  /// registered house type). This form never reprices another block's units.
   ///
   /// Returns `null` on success, or a Turkish message for the form to show. A
   /// refused or unreachable call never pretends the structure was created.
@@ -732,7 +740,33 @@ class DashboardController extends ChangeNotifier {
 
     final effectiveSiteId = siteId ??
         _currentManagedSite?.id ??
-        (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+        (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '');
+    if (effectiveSiteId.isEmpty) {
+      return 'Yönetilen site bilgisi yüklenemedi. Sayfayı yenileyip tekrar deneyin.';
+    }
+
+    // A house type and its tariff are site-wide, so an existing type is reused
+    // and never repriced from this form: the manager changes a tariff in
+    // "Konut Tipleri & Tarifeler", which is the screen built for that.
+    HouseTypeTariff? existingTariff;
+    if (monthlyDues != null) {
+      if (!isTestMode && !await refreshHouseTypes(siteId: effectiveSiteId)) {
+        return 'Konut tipleri yüklenemedi; aidat tarifesi doğrulanmadığı için kayıt yapılmadı. Lütfen tekrar deneyin.';
+      }
+      final wantedName = trimmedHouseType.toLowerCase();
+      for (final type in _houseTypes) {
+        if (type.typeName.toLowerCase() == wantedName) {
+          existingTariff = type;
+          break;
+        }
+      }
+      if (existingTariff != null && existingTariff.duesAmount != monthlyDues) {
+        return "'${existingTariff.typeName}' konut tipi zaten ${formatTry(existingTariff.duesAmount)} aidatla tanımlı. "
+            'Aynı konut tipine farklı aidat kaydedilemez; Konut Tipleri & Tarifeler ekranından güncelleyin '
+            'veya yeni bir konut tipi adı girin.';
+      }
+    }
+    final createsTariff = monthlyDues != null && existingTariff == null;
 
     if (isTestMode) {
       _addBlockWithUnitsLocally(
@@ -742,6 +776,7 @@ class DashboardController extends ChangeNotifier {
         unitCount: unitCount,
         houseType: trimmedHouseType.isEmpty ? null : trimmedHouseType,
         monthlyDues: monthlyDues,
+        createTariff: createsTariff,
       );
       notify();
       return null;
@@ -759,13 +794,13 @@ class DashboardController extends ChangeNotifier {
       ).timeout(const Duration(seconds: 10));
       ApiClient.decode(blockResponse);
 
-      if (monthlyDues != null) {
+      if (createsTariff) {
         final tariffResponse = await ApiClient.post(
           Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/house-types?site_id=$effectiveSiteId'),
           headers: headers,
           body: json.encode({
             'type_name': trimmedHouseType,
-            'dues_amount': monthlyDues.toString(),
+            'dues_amount': monthlyDues!.toString(),
             'description': 'Blok oluşturulurken tanımlandı',
           }),
         ).timeout(const Duration(seconds: 10));
@@ -791,17 +826,17 @@ class DashboardController extends ChangeNotifier {
       );
       // A failed unit call after a successful block call leaves the block in
       // place; reload it so the directory reflects what really exists.
-      await _reloadStructure(effectiveSiteId, refreshTariffs: monthlyDues != null);
+      await _reloadStructure(effectiveSiteId, refreshTariffs: createsTariff);
       return e.statusCode >= 500
           ? 'Blok veya daireler oluşturulamadı. Lütfen tekrar deneyin. (Referans: ${e.traceId ?? '-'})'
           : AppStrings.localizedErrorMessage(e.code, fallback: e.message);
     } catch (e) {
       AppLogger.warn('Block or unit create did not reach the server: $e', tag: 'Residents');
-      await _reloadStructure(effectiveSiteId, refreshTariffs: monthlyDues != null);
+      await _reloadStructure(effectiveSiteId, refreshTariffs: createsTariff);
       return 'Sunucuya ulaşılamadı. Blok veya daireler oluşturulmadı; bağlantınızı kontrol edip tekrar deneyin.';
     }
 
-    await _reloadStructure(effectiveSiteId, refreshTariffs: monthlyDues != null);
+    await _reloadStructure(effectiveSiteId, refreshTariffs: createsTariff);
     return null;
   }
 
@@ -821,25 +856,20 @@ class DashboardController extends ChangeNotifier {
     required int unitCount,
     required String? houseType,
     required Decimal? monthlyDues,
+    required bool createTariff,
   }) {
     final existingBlockIdx = _blocks.indexWhere((b) => b.toLowerCase() == blockName.toLowerCase());
     if (existingBlockIdx == -1) {
       _blocks.add(blockName);
     }
-    if (monthlyDues != null && houseType != null) {
-      final tariffIdx = _houseTypes.indexWhere((h) => h.typeName.toLowerCase() == houseType.toLowerCase());
-      final tariff = HouseTypeTariff(
-        id: tariffIdx != -1 ? _houseTypes[tariffIdx].id : '${_houseTypes.length + 1}',
+    if (createTariff && monthlyDues != null && houseType != null) {
+      _houseTypes.add(HouseTypeTariff(
+        id: '${_houseTypes.length + 1}',
         siteId: siteId,
         typeName: houseType,
         duesAmount: monthlyDues,
         description: 'Blok oluşturulurken tanımlandı',
-      );
-      if (tariffIdx != -1) {
-        _houseTypes[tariffIdx] = tariff;
-      } else {
-        _houseTypes.add(tariff);
-      }
+      ));
     }
     final existingKeys = {
       for (final unit in _homeOwners) '${unit.block.toLowerCase().trim()}-${unit.unitNo}',
