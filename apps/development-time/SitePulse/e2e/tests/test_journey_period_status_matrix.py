@@ -53,7 +53,7 @@ def test_each_period_status_allows_only_its_own_commands(request, api, actors, s
         site, token = fixture.site_id, fixture.manager.token
         api.create_period(fixture.manager, PERIOD, DUE)
         if status in ("OPEN", "CLOSED"):
-            api.accrue_period(fixture.manager, PERIOD, D("0"), DUE)
+            api.accrue_period(fixture.manager, PERIOD, None, DUE)
         period_id = stack.sql(f"SELECT id FROM dues_periods WHERE site_id = {int(site)};")
         if status == "CLOSED":
             assert raw_call(api, "POST", f"/api/v1/dues/periods/{period_id}/close", token, {"site_id": site})[0] == 200
@@ -61,7 +61,7 @@ def test_each_period_status_allows_only_its_own_commands(request, api, actors, s
         before, audit_before = financial_snapshot(stack, site), _audit_count(stack, site)
 
         def accrue() -> tuple[int, str]:
-            body = {"site_id": site, "period": PERIOD, "amount": "0", "due_date": DUE}
+            body = {"site_id": site, "period": PERIOD, "due_date": DUE}
             return raw_call(api, "POST", "/api/v1/dues/accrue-period", token, body)
 
         def close() -> tuple[int, str]:

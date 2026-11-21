@@ -38,7 +38,7 @@ def test_partial_payment_reduces_the_principal_used_for_later_fees(request, api,
     with journey_site(request, api, actors, stack, "F2") as (fixture, _):
         a5 = fixture.unit_ids[4]
         clock = JourneyClock(api, "2026-11-01")
-        api.accrue_period(fixture.manager, "Kasım 2026", D("0"), "2026-11-10")
+        api.accrue_period(fixture.manager, "Kasım 2026", None, "2026-11-10")
         clock.advance_to("2026-11-16")
         api.clock.tick()
 
@@ -164,7 +164,7 @@ def test_aging_bucket_changes_at_each_day_boundary(
     with journey_site(request, api, actors, stack, "F2") as (fixture, _):
         a5 = fixture.unit_ids[4]  # tenant Deniz Arslan: one liability of 1500.00, no grace days
         clock = JourneyClock(api, "2026-11-01")
-        api.accrue_period(fixture.manager, "Kasım 2026", D("0"), "2026-11-10")
+        api.accrue_period(fixture.manager, "Kasım 2026", None, "2026-11-10")
         clock.advance_to((datetime.date(2026, 11, 10) + datetime.timedelta(days=days)).isoformat())
 
         report = api.debt_aging_report(fixture.manager, fixture.site_id)

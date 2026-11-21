@@ -33,19 +33,14 @@ D = Decimal
 ZERO_SITE = "0|0|0|0|0|0|0:0:0:0:0|0|0|0"  # no payment, advance, liability or period rows yet
 
 
-AMOUNT_BUG = "BUG #287: accrue-period accepts a non-positive amount and accrues from the tariffs"
-
-
 @pytest.mark.covers("SC-13-05-01")
 @pytest.mark.edge
 @pytest.mark.role_manager
 @pytest.mark.parametrize(
     "period, amount, due, reason",
     [
-        pytest.param("Ekim 2026", "0.00", "2026-10-10", "amount must be positive",
-                     marks=pytest.mark.xfail(strict=True, raises=pytest.fail.Exception, reason=AMOUNT_BUG), id="zero-amount"),
-        pytest.param("Ekim 2026", "-1500.00", "2026-10-10", "amount must be positive",
-                     marks=pytest.mark.xfail(strict=True, raises=pytest.fail.Exception, reason=AMOUNT_BUG), id="negative-amount"),
+        pytest.param("Ekim 2026", "0.00", "2026-10-10", "amount must be positive", id="zero-amount"),
+        pytest.param("Ekim 2026", "-1500.00", "2026-10-10", "amount must be positive", id="negative-amount"),
         pytest.param("Ekim 2026", "1500.00", "2026-02-30", "due_date", id="invalid-date"),
         pytest.param("Ekim 2025", "1500.00", "2026-10-10", "outside period", id="date-outside-period"),
     ],
@@ -94,7 +89,7 @@ def test_two_managers_accruing_at_once_create_one_set_of_liabilities(request, ap
         first = api.login(fixture.manager_email, fixture.manager_password)
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = [
-                pool.submit(api.accrue_period, session, "Ekim 2026", D("0"), "2026-10-10")
+                pool.submit(api.accrue_period, session, "Ekim 2026", None, "2026-10-10")
                 for session in (first, reviewer)
             ]
             results = [future.result() for future in futures]
@@ -208,7 +203,7 @@ def test_resident_cannot_call_manager_actions(request, api, actors, stack):
 
         calls = [
             ("POST", "/api/v1/dues/accrue-period",
-             {"site_id": site, "period": "Aralık 2026", "amount": "0", "due_date": "2026-12-10"}),
+             {"site_id": site, "period": "Aralık 2026", "due_date": "2026-12-10"}),
             ("POST", "/api/v1/payments/record-manual",
              {"site_id": site, "unit_id": a5, "amount": "100.00", "payer_name": "Deniz Arslan", "payer_role": "TENANT",
               "payment_channel": "MANUAL_CASH", "idempotency_key": "resident-denied"}),
