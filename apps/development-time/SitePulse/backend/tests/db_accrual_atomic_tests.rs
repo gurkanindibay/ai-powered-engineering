@@ -561,6 +561,20 @@ async fn joint_liability_owner_intervals_do_not_overlap_on_transfer_day_and_excl
         .await
         .expect("update unit");
 
+    // Clear existing occupancies for this unit and insert tenant occupancy for p1
+    client
+        .execute("DELETE FROM unit_occupancies WHERE unit_id = $1", &[&unit])
+        .await
+        .expect("clear occupancies");
+    client
+        .execute(
+            "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active)
+             VALUES ($1, $2, 'TENANT', DATE '2026-12-01', TRUE)",
+            &[&unit, &p1],
+        )
+        .await
+        .expect("insert tenant occupancy");
+
     // Clear existing ownerships for this unit
     client
         .execute("DELETE FROM unit_ownerships WHERE unit_id = $1", &[&unit])
