@@ -71,18 +71,14 @@ Feature: Reconcile homeowner debt and operating cash by site after four periods
       | B2-01 | Paid    | Unpaid   | Unpaid | Paid    |
     And A-01 is partial for January at the January 10 checkpoint
 
-  # Pending: the system side needs the onboarding fixture (#247: empty installation, two sites, 88 units
-  # created through the product) and the accrual and payment histories (#248). Without them there is no
-  # live site to read cash and statements from.
-  @SC-13-25-06 @layer:backend @pending
+  @SC-13-25-06 @layer:backend @linked
   Scenario: Site operating cash matches posted receipts and a Site A payment does not leak into Site B
     Given the journey sites exist with 0.00 cash
     When Site B cash is captured immediately before and after a Site A payment
     Then Site B cash is unchanged and Site A cash grows by exactly the payment
     And at each checkpoint both sites' posted operating cash equals the independent reconciliation
 
-  # Pending: same prerequisites (#247, #248); compares the manager statements and aging report with the model.
-  @SC-13-25-07 @layer:backend @pending
+  @SC-13-25-07 @layer:backend @linked
   Scenario: The manager statements match the eleven open rows and the site totals on 2027-04-10
     Given the journey is posted through the final receipts with the clock on 2027-04-10
     When the manager reads the unit statements including former debtors

@@ -29,7 +29,9 @@ from support.journey_attempts import (
     teardown_sites,
     teardown_with_evidence,
 )
+from support.journey_live_reconciliation import assert_cash_matches_model, assert_statements_match_model, posted_cash
 from support.journey_multi_site import build_multi_site_journey
+from support.journey_reconciliation import CHECKPOINTS
 from support.money import format_try
 from pages.login import LoginPage
 from pages.manager import PaymentStream, ResidentsTab
@@ -849,6 +851,8 @@ def test_multi_site_journey_accruals_through_march_first(request, api, actors, s
 
 @pytest.mark.covers("SC-13-13-02")
 @pytest.mark.covers("SC-13-26-02")
+@pytest.mark.covers("SC-13-25-06")
+@pytest.mark.covers("SC-13-25-07")
 @pytest.mark.gui_id("GUI-13-04")
 @pytest.mark.smoke
 @pytest.mark.core
@@ -886,12 +890,16 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         j.clock.advance_to("2027-01-10")
 
         # 3. Post payments on January 10
+        # SC-13-25-06: a Site A payment moves Site A cash by exactly its amount and leaves Site B alone.
+        cash_a_before, cash_b_before = posted_cash(stack, j.site_a_id), posted_cash(stack, j.site_b_id)
         # A-01: Ada pays 400.00
         rec_a01_jan = api.record_manual_payment(
             j.manager_a, j.unit_a("A-01"), Decimal("400.00"), "Ada Kaya",
             payer_role="OWNER", channel="MANUAL_CASH", description="Ocak 2027 kısmi ödeme",
             idempotency_key="pay-a01-jan",
         )
+        assert posted_cash(stack, j.site_a_id) == cash_a_before + Decimal("400.00")
+        assert posted_cash(stack, j.site_b_id) == cash_b_before
         assert len(rec_a01_jan["allocation_breakdown"]) == 1
         assert rec_a01_jan["allocation_breakdown"][0]["period"] == "Ocak 2027"
         assert Decimal(str(rec_a01_jan["allocation_breakdown"][0]["principal_paid"])) == Decimal("400.00")
@@ -932,6 +940,7 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
 
         # 83 Routine payments
         j.post_routine_payments("Ocak 2027")
+        assert_cash_matches_model(stack, j.site_a_id, j.site_b_id, CHECKPOINTS[0])
 
         # Assert intermediate state after January 10
         # A-01 is PARTIAL for January
@@ -1025,6 +1034,7 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
 
         # 83 Routine payments
         j.post_routine_payments("Şubat 2027")
+        assert_cash_matches_model(stack, j.site_a_id, j.site_b_id, CHECKPOINTS[1])
 
         j.invariants_a("February posted")
         j.invariants_b("February posted")
@@ -1111,6 +1121,7 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
 
         # 83 Routine payments
         j.post_routine_payments("Mart 2027")
+        assert_cash_matches_model(stack, j.site_a_id, j.site_b_id, CHECKPOINTS[2])
 
         j.invariants_a("March posted")
         j.invariants_b("March posted")
@@ -1253,6 +1264,7 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
 
         # 83 Routine payments
         j.post_routine_payments("Nisan 2027")
+        assert_cash_matches_model(stack, j.site_a_id, j.site_b_id, CHECKPOINTS[3])
 
         # 6. Verify POST-APRIL history for A-03 and B2-01: February and March remain unpaid with late fees!
         stmt_a03_after = api.resident_statement(j.manager_a, j.unit_a("A-03"))
@@ -1307,6 +1319,15 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         assert [get_period_status(j.unit_a("A-03"), p) for p in periods] == ["Paid", "Unpaid", "Unpaid", "Paid"]
         assert [get_period_status(j.unit_b("B1-01"), p) for p in periods] == ["Paid", "Partial", "Paid", "Partial"]
         assert [get_period_status(j.unit_b("B2-01"), p) for p in periods] == ["Paid", "Unpaid", "Unpaid", "Paid"]
+
+        # SC-13-25-07: the manager statements show exactly the eleven open rows and the model's site totals.
+        detailed = {("A", label): j.unit_a(label) for label in ("A-01", "A-02", "A-03")}
+        detailed |= {("B", label): j.unit_b(label) for label in ("B1-01", "B2-01")}
+        assert_statements_match_model(api, stack, {"A": j.manager_a, "B": j.manager_b}, detailed)
+        assert stack.sql(
+            "SELECT count(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id IN ({int(j.site_a_id)}, {int(j.site_b_id)}) AND d.status NOT IN ('PAID', 'CANCELLED') "
+            f"AND d.unit_id NOT IN ({', '.join(str(int(u)) for u in detailed.values())});") == "0"
 
         # Final ledger invariants
         j.invariants_a("April final")

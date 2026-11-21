@@ -472,3 +472,31 @@ async fn cors_preflight_allows_the_client_correlation_header() {
         resp.status()
     );
 }
+
+// covers: SC-06-04-01
+#[tokio::test]
+async fn profile_reports_role_unit_and_permissions_of_the_signed_in_owner() {
+    let state = AppState::new_with_test_fixtures();
+    let owner = support::token(
+        &state,
+        "usr-home-owner-1",
+        Role::HomeOwner,
+        "site-1",
+        Some("d-14"),
+    )
+    .await;
+    let (status, body) = call(
+        build_router(state.clone()),
+        "GET",
+        "/api/v1/auth/me",
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let profile: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(profile["role"], "HOME_OWNER");
+    assert_eq!(profile["unit_id"], "d-14");
+    let permissions = profile["permissions"].as_array().unwrap();
+    assert!(permissions.iter().any(|p| p == "UNIT_INVITE_CO_RESIDENT"));
+}

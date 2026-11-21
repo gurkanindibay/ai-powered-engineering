@@ -27,6 +27,7 @@ Feature: Manual unit and home owner registration
     When the manager deletes the resident and confirms
     Then the delete is refused and the resident card stays
 
+  # Pending: scenario is outdated: owner registration now sends an activation link (activation status SENT in the register response) instead of showing a generated temporary password; rewrite it against the activation flow, then automate it.
   @SC-02-03-05 @pending @core @role_manager
   Scenario: Registration shows generated temporary credentials
     Given the Site Manager opens the add owner modal

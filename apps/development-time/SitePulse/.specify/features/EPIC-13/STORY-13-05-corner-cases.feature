@@ -68,8 +68,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ------------------------------------------------------------- occupancy
 
-  # Pending: blocked by #207, which is still in progress; the scenario requires owner joint-liability to be recorded and shown.
-  @SC-13-05-06 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-06 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager
   Scenario: Moving out with debt keeps the debt and the history
     Given the site is in state F5
     And the clock has advanced to "2026-12-01" before any December accrual
@@ -187,7 +186,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ------------------------------------------------- tenant departure (Q9)
 
-  # Pending: blocked by #207, which is still in progress; checkout must show the owner’s joint collection right alongside tenant debt.
+  # Pending: GUI check-out screen is not automated; tracked by #273 (automate the @pending GUI journey scenarios). The backend side of the same flow is covered by SC-13-05-06.
   @SC-13-05-17 @J-12 @depth:2 @state:F5 @layer:gui @core @role_manager @pending
   Scenario: Check-out shows the tenant's debt and the owner can still be collected from
     Given the site is in state F5
@@ -201,8 +200,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     And the owner does not see the tenant's own receipts or contact details
     And the ledger invariants hold
 
-  # Pending: blocked by #207, which is still in progress; the owner-takeover result depends on joint-liability behavior.
-  @SC-13-05-18 @J-12 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-05-18 @J-12 @depth:1 @state:F6 @layer:backend @core @role_manager
   Scenario: A tenant who left without notice is moved out at the real date and the owner takes over
     Given the site is in state F6
     And the clock has advanced to "2026-12-05" after "Aralık 2026" was accrued to "Mert Kılıç"
