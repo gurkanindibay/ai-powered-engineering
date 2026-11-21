@@ -1215,13 +1215,13 @@ def check_person_tenant_isolation(ctx: Context) -> Tuple[bool, str]:
 
     # F11: a failure late in registration leaves no person, account or unit behind.
     rolled = f"rolled-{suffix}@example.com"
-    ctx.psql.run(db, """CREATE FUNCTION reject_registration_dues() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Injected dues failure'; END $$;
-        CREATE TRIGGER reject_registration_dues BEFORE INSERT ON dues_liabilities FOR EACH ROW EXECUTE FUNCTION reject_registration_dues();""")
+    ctx.psql.run(db, """CREATE FUNCTION reject_registration_ownership() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Injected ownership failure'; END $$;
+        CREATE TRIGGER reject_registration_ownership BEFORE INSERT ON unit_ownerships FOR EACH ROW EXECUTE FUNCTION reject_registration_ownership();""")
     try:
         failed, failed_body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
                                    body=_owner_body(800 + int(suffix[-2:]), rolled))
     finally:
-        ctx.psql.run(db, "DROP TRIGGER reject_registration_dues ON dues_liabilities; DROP FUNCTION reject_registration_dues();")
+        ctx.psql.run(db, "DROP TRIGGER reject_registration_ownership ON unit_ownerships; DROP FUNCTION reject_registration_ownership();")
     orphans = ctx.psql.run(db, f"SELECT (SELECT count(*) FROM persons WHERE email='{rolled}') + (SELECT count(*) FROM users WHERE email='{rolled}');")
     generic = "Injected" not in failed_body and "db error" not in failed_body
 
