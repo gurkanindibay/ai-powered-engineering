@@ -8,7 +8,6 @@ use axum::{
     response::{Html, IntoResponse, Response},
     Form, Json,
 };
-use chrono::Utc;
 use serde::Deserialize;
 
 use crate::auth::Claims;
@@ -167,7 +166,11 @@ pub async fn finalize_operating_budget(
     Query(q): Query<SiteQuery>,
 ) -> Result<Json<OperatingBudget>, ApiError> {
     OperatingBudgetService::new(state)
-        .finalize(&site_of(&q, &claims), &id, Utc::now().date_naive())
+        .finalize(
+            &site_of(&q, &claims),
+            &id,
+            crate::e2e_clock::now_utc().date_naive(),
+        )
         .await
         .map(Json)
         .map_err(budget_status)
@@ -222,7 +225,10 @@ pub async fn get_budget_compliance(
 ) -> Json<BudgetComplianceStatus> {
     Json(
         OperatingBudgetService::new(state)
-            .compliance(&site_of(&q, &claims), Utc::now().date_naive())
+            .compliance(
+                &site_of(&q, &claims),
+                crate::e2e_clock::now_utc().date_naive(),
+            )
             .await,
     )
 }
@@ -244,7 +250,9 @@ pub async fn set_budget_policy(
         .await
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     Ok(Json(
-        service.compliance(&site, Utc::now().date_naive()).await,
+        service
+            .compliance(&site, crate::e2e_clock::now_utc().date_naive())
+            .await,
     ))
 }
 
@@ -275,7 +283,7 @@ pub async fn get_resident_operating_budget(
         .iter()
         .find(|u| crate::auth::same_id(&u.id, &unit_id))
         .ok_or((StatusCode::NOT_FOUND, "Unit not found".to_string()))?;
-    let today = Utc::now().date_naive();
+    let today = crate::e2e_clock::now_utc().date_naive();
     let Some(budget) =
         crate::services::operating_budget_service::budget_in_force(&inner, &unit.site_id, today)
     else {

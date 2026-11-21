@@ -10,7 +10,6 @@
 //! so a stale copy could overwrite a committed payment or re-credit a spent
 //! advance.
 
-use chrono::Utc;
 use rust_decimal::Decimal;
 
 use crate::models::{
@@ -60,7 +59,7 @@ pub fn record_offset_match(
         site_id: site_id.to_string(),
         transaction: BankTransactionItem {
             transaction_id: offset_txn_id,
-            date: Utc::now().date_naive(),
+            date: crate::e2e_clock::now_utc().date_naive(),
             amount,
             currency: "TRY".to_string(),
             description: if full {
@@ -137,7 +136,7 @@ fn offset_units(
 ) -> (usize, Decimal) {
     let mut auto_settled_count = 0;
     let mut total_offset_amount = Decimal::ZERO;
-    let today = Utc::now().date_naive();
+    let today = crate::e2e_clock::now_utc().date_naive();
 
     for u_id in unit_ids {
         let mut buckets = match inner.advance_balances.get(&u_id) {

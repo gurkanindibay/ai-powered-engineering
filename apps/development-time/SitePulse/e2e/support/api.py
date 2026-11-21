@@ -51,6 +51,10 @@ class E2EClock:
             "action": "advance_to", "date": self._date_text(value),
         })
 
+    def set_instant(self, value: str) -> dict:
+        """Set an exact instant (RFC 3339, e.g. `2026-11-30T20:30:00Z`), for boundaries inside a UTC day."""
+        return self.api.call("POST", "/__e2e/clock", body={"action": "set_instant", "at": value})
+
     def tick(self) -> dict:
         return self.api.call("POST", "/__e2e/clock", body={"action": "tick"})
 

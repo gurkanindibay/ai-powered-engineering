@@ -1523,7 +1523,7 @@ impl PaymentTrackingService {
             return Err("The operator reversing the payment must be known".to_string());
         }
         let identifier = req.receipt.trim().to_string();
-        let now = Utc::now();
+        let now = crate::e2e_clock::now_utc();
         let today = now.date_naive();
 
         let existing_reversal = |inner: &crate::state::AppStateInner, original: &PaymentReceipt| {
@@ -1796,7 +1796,7 @@ impl PaymentTrackingService {
     /// (O-8, regulatory report F17). Re-running on the same day replaces that
     /// day's rows. Returns the number of unit/debtor rows written.
     pub async fn snapshot_debt_aging(&self, site_filter: Option<&str>) -> Result<usize, String> {
-        self.snapshot_debt_aging_at(site_filter, Utc::now())
+        self.snapshot_debt_aging_at(site_filter, crate::e2e_clock::now_utc())
             .await
             .map_err(|error| error.to_string())
     }
@@ -1883,7 +1883,7 @@ impl PaymentTrackingService {
     ) -> Result<TransferOwnershipResponse, String> {
         let site_id = req.site_id.unwrap_or_default();
         let unit_id = req.unit_id.clone();
-        let now = Utc::now();
+        let now = crate::e2e_clock::now_utc();
         let mut inner = self.state.inner.write().await;
         // Dates are the site's local dates (an Istanbul evening is already tomorrow in UTC).
         let today = crate::services::finance_common::site_today(&inner, &site_id);
@@ -2241,7 +2241,7 @@ fn penalty_reevaluation_adjustment(
     receipt_number: &str,
     booked_on: NaiveDate,
 ) -> crate::models::LedgerAdjustment {
-    let now = Utc::now();
+    let now = crate::e2e_clock::now_utc();
     crate::models::LedgerAdjustment {
         id: 0,
         site_id: site_id.to_string(),

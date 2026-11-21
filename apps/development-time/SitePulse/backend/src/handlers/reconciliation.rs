@@ -68,7 +68,7 @@ pub async fn parse_bank_statement(
     let parser = crate::services::BankStatementParser::new();
     let recon_service = crate::services::ReconciliationService::new();
 
-    let today = Utc::now().date_naive();
+    let today = crate::e2e_clock::now_utc().date_naive();
     let report = parser
         .parse_statement_report(&payload.content, effective_format, today)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
@@ -1261,7 +1261,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
                 site_id: bank_site_id,
                 transaction: BankTransactionItem {
                     transaction_id: payload.transaction_id.clone(),
-                    date: Utc::now().date_naive(),
+                    date: crate::e2e_clock::now_utc().date_naive(),
                     amount: payload.amount,
                     currency: payload.currency.clone().unwrap_or_else(|| "TRY".to_string()),
                     description: txn_desc,
@@ -1342,7 +1342,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             site_id: unit.site_id.clone(),
             transaction: BankTransactionItem {
                 transaction_id: payload.transaction_id.clone(),
-                date: Utc::now().date_naive(),
+                date: crate::e2e_clock::now_utc().date_naive(),
                 amount: payload.amount,
                 currency: payload
                     .currency
@@ -1419,7 +1419,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             site_id: unit.site_id.clone(),
             transaction: BankTransactionItem {
                 transaction_id: payload.transaction_id.clone(),
-                date: Utc::now().date_naive(),
+                date: crate::e2e_clock::now_utc().date_naive(),
                 amount: payload.amount,
                 currency: payload.currency.clone().unwrap_or_else(|| "TRY".to_string()),
                 description: txn_desc,
@@ -1572,7 +1572,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
         site_id: unit.site_id.clone(),
         transaction: BankTransactionItem {
             transaction_id: payload.transaction_id.clone(),
-            date: Utc::now().date_naive(),
+            date: crate::e2e_clock::now_utc().date_naive(),
             amount: payload.amount,
             currency: payload.currency.unwrap_or_else(|| "TRY".to_string()),
             description: txn_desc,

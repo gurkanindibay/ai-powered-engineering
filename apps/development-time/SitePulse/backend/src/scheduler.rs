@@ -45,8 +45,7 @@ struct CommittedSiteBatch {
 
 /// Today's date in a site's time zone (falls back to Europe/Istanbul).
 pub fn site_local_date(timezone: &str, now: chrono::DateTime<Utc>) -> NaiveDate {
-    let tz: chrono_tz::Tz = timezone.parse().unwrap_or(chrono_tz::Europe::Istanbul);
-    now.with_timezone(&tz).date_naive()
+    crate::domain::clock::local_date(timezone, now)
 }
 
 /// Monthly dues for a unit: the tariff of its house type in its own site.
