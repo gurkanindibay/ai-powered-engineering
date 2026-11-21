@@ -27,6 +27,7 @@ Feature: First story
       | a | b |
     Then it works
 
+  # Pending: blocked on #7, still open.
   @SC-42-01-02 @pending
   Scenario: Later
     Given a thing
@@ -76,6 +77,38 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual(scenarios[0].steps, ["Given a thing", "When it is used:", "Then it works"])
         self.assertEqual((scenarios[0].mode, scenarios[0].layer), ("gherkin", "gui"))
         self.assertEqual(scenarios[1].mode, "pending")
+        self.assertEqual(scenarios[1].pending_note, "blocked on #7, still open.")
+        self.assertEqual(scenarios[0].pending_note, "")
+
+    def test_pending_note_joins_continuation_lines_and_ignores_other_comments(self):
+        text = FEATURE.replace("  # Pending: blocked on #7, still open.\n",
+                               "  # Pending: needs the clock\n  # and the fixture (#8).\n")
+        text = text.replace("  Scenario: Later\n", "  # Backend coverage: elsewhere.\n  Scenario: Later\n")
+        _, scenarios, _ = ft.parse_feature(text, "f.feature")
+        self.assertEqual(scenarios[1].pending_note, "needs the clock and the fixture (#8).")
+
+    def test_pending_scenario_without_a_reason_is_reported(self):
+        for text in (FEATURE.replace("  # Pending: blocked on #7, still open.\n", ""),
+                     FEATURE.replace("# Pending:", "# Note:")):
+            with tempfile.TemporaryDirectory() as tmp:
+                problems = ft.check(ft.load_catalogue(_workspace(tmp, text)))
+            self.assertTrue(any("SC-42-01-02 is @pending but has no `# Pending:" in p for p in problems), problems)
+
+    def test_pending_note_citing_a_closed_issue_is_a_warning_not_a_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            catalogue = ft.load_catalogue(_workspace(tmp))
+        self.assertEqual(ft.check(catalogue), [])
+        self.assertEqual(ft.closed_issue_warnings(catalogue, {8, 9}), [])
+        warnings = ft.closed_issue_warnings(catalogue, {7, 9})
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("SC-42-01-02 is @pending on closed issue #7", warnings[0])
+
+    def test_closed_issue_lookup_is_best_effort(self):
+        with mock.patch.object(ft.subprocess, "run", side_effect=OSError("no gh")):
+            self.assertIsNone(ft.fetch_closed_issues())
+        done = subprocess.CompletedProcess([], 0, stdout='[{"number": 3}, {"number": 9}]', stderr="")
+        with mock.patch.object(ft.subprocess, "run", return_value=done):
+            self.assertEqual(ft.fetch_closed_issues(), {3, 9})
 
     def test_valid_workspace_has_no_problems(self):
         with tempfile.TemporaryDirectory() as tmp:

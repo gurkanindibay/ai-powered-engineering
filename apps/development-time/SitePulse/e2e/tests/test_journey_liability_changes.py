@@ -253,3 +253,23 @@ def test_final_open_debt_stays_with_each_former_and_current_debtor(journey):
     assert sum(f for (u, _), (_, f) in FINAL_OPEN.items() if u.startswith("A")) == D("354.09")
     assert sum(p for (u, _), (p, _) in FINAL_OPEN.items() if not u.startswith("A")) == D("2500.00")
     assert sum(f for (u, _), (_, f) in FINAL_OPEN.items() if not u.startswith("A")) == D("161.67")
+
+
+@pytest.mark.covers("SC-13-25-07")
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="BUG #295: unit statement lists former owner Ada's February charge under successor Ben Kaya",
+)
+def test_unit_statement_attributes_open_items_to_former_debtors(journey):
+    """SC-13-25-07: reading the manager statements including former debtors attributes open charges to their debtor."""
+    j = journey().run_through("apr_paid")
+    stmt = j.statement("A-01")
+    debtor_names = {d["name"].split()[0]: d for d in stmt["debtors"]}
+    assert "Ada" in debtor_names, (
+        f"site A, period Şubat 2027, unit A-01, debtor Ada: statement lists former owner charge under {list(debtor_names.keys())}"
+    )
+    ada_open = {item["period"]: item for item in debtor_names["Ada"]["open_items"]}
+    assert "Şubat 2027" in ada_open, (
+        f"site A, period Şubat 2027, unit A-01, debtor Ada: February open item missing from Ada's statement items"
+    )

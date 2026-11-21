@@ -9,6 +9,7 @@ Feature: Flat-by-flat dues ledger and filtering
     When the "Geciken" filter is selected
     Then only the overdue flats are listed and the filter count equals their number
 
+  # Pending: GUI e2e not written: the 'N Gün Gecikti' badge (flutter/lib/ui/components/dues_management_view.dart) has no semantics identifier yet. The overdue filter itself is covered by SC-02-02-01.
   @SC-02-02-02 @pending @core @role_manager
   Scenario: Overdue flats show the exact days overdue in a red badge
     Given the flat A Blok D:14 is 14 days overdue and B Blok D:8 is 8 days overdue

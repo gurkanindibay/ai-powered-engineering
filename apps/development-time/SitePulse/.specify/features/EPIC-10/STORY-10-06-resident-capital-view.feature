@@ -16,12 +16,14 @@ Feature: Resident view separates operational and capital dues
     When the home owner signs in
     Then the owner responsibility capital badge is shown
 
+  # Pending: GUI e2e not written; tracked by #273 (automate the @pending GUI journey scenarios).
   @SC-10-06-03 @layer:gui @pending
   Scenario: Owner opens the project detail from the capital card
     Given property owner "Ahmet Yılmaz" has operational dues of 1500.00 and a capital installment of 3000.00
     When the owner selects "Detay" on the capital balance card
     Then the project breakdown, contractor info and installment schedule are shown
 
+  # Pending: the statutory-protection banner text is not implemented in the Flutter app (no such string under flutter/lib); #273 tracks the GUI test once it exists.
   @SC-10-06-04 @layer:gui @pending
   Scenario: Tenant reads the statutory protection guidance
     Given tenant "Canan Can" signs in to a unit with an active capital project
