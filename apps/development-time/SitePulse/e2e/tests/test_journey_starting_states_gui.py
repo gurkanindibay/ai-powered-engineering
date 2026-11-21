@@ -66,7 +66,7 @@ def _aging_rows(page) -> dict[str, tuple[str, Decimal]]:
 @pytest.mark.role_manager
 @pytest.mark.covers("SC-13-01-01")
 @pytest.mark.gui_id("GUI-13-05")
-@pytest.mark.xfail(strict=True, reason=BUG_EMPTY_STATES)
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=BUG_EMPTY_STATES)
 def test_f0_every_page_shows_an_empty_state(request, api, actors, stack, page, login_page):
     with journey_site(request, api, actors, stack, "F0") as fixture:
         sign_in_manager(page, login_page, fixture)
@@ -118,7 +118,7 @@ def test_f1_units_without_people_show_as_unassigned(request, api, actors, stack,
 @pytest.mark.role_manager
 @pytest.mark.covers("SC-13-01-05")
 @pytest.mark.gui_id("GUI-13-07")
-@pytest.mark.xfail(strict=True, reason=(
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=(
     "BUG: registering the first owner of an empty unit creates a 1500.00 liability although no period "
     "was accrued; see #286"))
 def test_f1_manager_adds_first_owners_and_tenant(request, api, actors, stack, page, login_page):
@@ -210,7 +210,7 @@ def test_f3_accruing_the_same_period_again_is_blocked(request, api, actors, stac
 @pytest.mark.role_manager
 @pytest.mark.covers("SC-13-01-12")
 @pytest.mark.gui_id("GUI-13-10")
-@pytest.mark.xfail(strict=True, reason="BUG: the manager screens cannot add a block or units; see #285")
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG: the manager screens cannot add a block or units; see #285")
 def test_f0_site_grows_to_f2_through_the_screens(request, api, actors, stack, page, login_page):
     with journey_site(request, api, actors, stack, "F0") as fixture:
         sign_in_manager(page, login_page, fixture)
@@ -247,7 +247,7 @@ def test_f4_single_period_shows_one_debt_each(request, api, actors, stack, page,
 @pytest.mark.role_resident
 @pytest.mark.covers("SC-13-02-02")
 @pytest.mark.gui_id("GUI-13-12")
-@pytest.mark.xfail(strict=True, reason=BUG_RESIDENT_CLOCK)
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=BUG_RESIDENT_CLOCK)
 def test_f4_resident_sees_what_the_admin_sees(request, api, actors, stack, page, login_page):
     with journey_site(request, api, actors, stack, "F4") as fixture:
         tenant_page = page.context.new_page()
