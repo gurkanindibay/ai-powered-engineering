@@ -277,6 +277,30 @@ pub fn open_dues_for(
         .collect()
 }
 
+/// Filters candidates so that non-designated liabilities must belong to the paying person.
+///
+/// A receipt from a person settles only that person's liabilities (plus explicit designation).
+/// When `due.liable_person_id` and `payer_person_id` are both known, candidate liabilities
+/// must match the payer unless explicitly designated.
+pub fn filter_candidates_by_payer(
+    dues: &[DuesLiability],
+    candidates: &[usize],
+    designated: &[usize],
+    payer_person_id: Option<i64>,
+) -> Vec<usize> {
+    candidates
+        .iter()
+        .copied()
+        .filter(|&i| {
+            designated.contains(&i)
+                || match (dues[i].liable_person_id, payer_person_id) {
+                    (Some(due_pid), Some(payer_pid)) => due_pid == payer_pid,
+                    _ => true,
+                }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,6 +332,7 @@ mod tests {
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         }
     }
 
@@ -394,6 +419,41 @@ mod tests {
         ];
         assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_TENANT), vec![1]);
         assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_OWNER), vec![0]);
+    }
+
+    // covers: SC-13-14-08
+    #[test]
+    fn successor_payment_isolates_from_predecessor_charges() {
+        let mut d1 = due(
+            "feb",
+            "800.00",
+            "0.00",
+            1,
+            DEBTOR_OWNER,
+            EXPENSE_OPERATIONAL,
+        );
+        d1.liable_person_id = Some(101); // Predecessor owner (Ada)
+        let mut d2 = due(
+            "mar",
+            "1000.00",
+            "0.00",
+            2,
+            DEBTOR_OWNER,
+            EXPENSE_OPERATIONAL,
+        );
+        d2.liable_person_id = Some(102); // Successor owner (Ben)
+        let dues = vec![d1, d2];
+
+        let candidates = open_dues_for(&dues, |_| true, DEBTOR_OWNER);
+        assert_eq!(candidates, vec![0, 1]);
+
+        // Successor pays without designation: only their own charge is eligible.
+        let successor_candidates = filter_candidates_by_payer(&dues, &candidates, &[], Some(102));
+        assert_eq!(successor_candidates, vec![1]);
+
+        // Explicit designation allows settling predecessor's charge.
+        let designated_candidates = filter_candidates_by_payer(&dues, &candidates, &[0], Some(102));
+        assert_eq!(designated_candidates, vec![0, 1]);
     }
 
     // covers: SC-09-02-02

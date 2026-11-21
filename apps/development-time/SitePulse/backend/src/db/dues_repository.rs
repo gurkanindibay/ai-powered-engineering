@@ -313,11 +313,11 @@ pub async fn insert_accrued_due(
             r#"
             INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type, grace_days, effective_due_date, liable_person_id)
             VALUES ($1, $2, $3, $4, $5, 'PENDING', 0, $6::text, $7, $8, $9,
-                    CASE WHEN $6::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) END)
+                    COALESCE($10, CASE WHEN $6::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) ELSE (SELECT owner_person_id FROM units WHERE id = $1) END))
             ON CONFLICT DO NOTHING
             RETURNING id
             "#,
-            &[&unit, &due.period, &key, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type, &i32::try_from(due.grace_days).unwrap_or(0), &due.fee_due_date()],
+            &[&unit, &due.period, &key, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type, &i32::try_from(due.grace_days).unwrap_or(0), &due.fee_due_date(), &due.liable_person_id],
         )
         .await?;
     let Some(row) = row else {
@@ -490,6 +490,8 @@ pub struct CommittedAccrual {
     pub due_ids: Vec<Option<i64>>,
     /// Jointly liable owners and date ranges for newly created tenant liabilities.
     pub joint_owners: std::collections::HashMap<String, Vec<crate::models::JointLiabilityOwner>>,
+    /// Liable person ID per input liability.
+    pub liable_person_ids: Vec<Option<i64>>,
 }
 
 /// Commits one site's accrual atomically (STORY-07-08): a database error at any liability
@@ -575,6 +577,7 @@ pub async fn commit_accrual_batch(
             .get(0),
     });
     let mut due_ids = Vec::with_capacity(batch.dues.len());
+    let mut liable_person_ids = Vec::with_capacity(batch.dues.len());
     let mut joint_owners = std::collections::HashMap::new();
     let period = crate::domain::billing_period::BillingPeriod::parse(batch.period_key)
         .map_err(std::io::Error::other)?;
@@ -584,6 +587,7 @@ pub async fn commit_accrual_batch(
         let unit = require_id("unit", &due.unit_id)?;
         if existing_liability_keys.contains(&(unit, due.expense_type.as_str().to_string())) {
             due_ids.push(None);
+            liable_person_ids.push(None);
             continue;
         }
         let budget = basis
@@ -597,9 +601,9 @@ pub async fn commit_accrual_batch(
                     (unit_id, period, period_key, dues_period_id, principal_amount, due_date, status,
                      delay_penalty, debtor_type, expense_type, operating_budget_id, grace_days, effective_due_date, liable_person_id)
                 VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', 0, $7::text, $8, $9, $10, $11,
-                        CASE WHEN $7::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) END)
+                        COALESCE($12, CASE WHEN $7::text = 'TENANT' THEN (SELECT tenant_person_id FROM units WHERE id = $1) ELSE (SELECT owner_person_id FROM units WHERE id = $1) END))
                 ON CONFLICT DO NOTHING
-                RETURNING id
+                RETURNING id, liable_person_id
                 "#,
                 &[
                     &unit,
@@ -613,10 +617,12 @@ pub async fn commit_accrual_batch(
                     &budget,
                     &i32::try_from(due.grace_days).unwrap_or(0),
                     &due.fee_due_date(),
+                    &due.liable_person_id,
                 ],
             )
             .await?;
-        let created_id = row.map(|r| r.get::<_, i64>(0));
+        let created_id = row.as_ref().map(|r| r.get::<_, i64>(0));
+        let created_liable_pid = row.as_ref().and_then(|r| r.get::<_, Option<i64>>(1));
         if due.debtor_type == crate::models::DebtorType::Tenant {
             if let Some(due_id) = created_id {
                 let owner_rows = tx
@@ -662,6 +668,7 @@ pub async fn commit_accrual_batch(
             }
         }
         due_ids.push(created_id);
+        liable_person_ids.push(created_liable_pid);
     }
     let accrued = due_ids.iter().flatten().count() as i32;
     tx.execute(
@@ -683,6 +690,7 @@ pub async fn commit_accrual_batch(
         period_id,
         due_ids,
         joint_owners,
+        liable_person_ids,
     })
 }
 
@@ -808,6 +816,7 @@ pub async fn fetch_debt_aging_report_from_db(
                     dl.penalty_accrued_through,
                     dl.grace_days,
                     dl.effective_due_date,
+                    dl.liable_person_id,
                     b.block_name,
                     u.unit_number,
                     COALESCE(
@@ -844,6 +853,7 @@ pub async fn fetch_debt_aging_report_from_db(
                     dl.penalty_accrued_through,
                     dl.grace_days,
                     dl.effective_due_date,
+                    dl.liable_person_id,
                     b.block_name,
                     u.unit_number,
                     COALESCE(
@@ -884,9 +894,10 @@ pub async fn fetch_debt_aging_report_from_db(
         let penalty_accrued_through: Option<NaiveDate> = row.get(12);
         let grace_days = u32::try_from(row.get::<_, i32>(13)).unwrap_or(0);
         let effective_due_date: Option<NaiveDate> = row.get(14);
-        let block_name: String = row.get(15);
-        let unit_number: i32 = row.get(16);
-        let resident_name: String = row.get(17);
+        let liable_person_id: Option<i64> = row.get(15);
+        let block_name: String = row.get(16);
+        let unit_number: i32 = row.get(17);
+        let resident_name: String = row.get(18);
 
         let status = match status_str.as_str() {
             "PAID" => DebtStatus::Paid,
@@ -919,6 +930,7 @@ pub async fn fetch_debt_aging_report_from_db(
             penalty_accrued_through,
             grace_days,
             effective_due_date,
+            liable_person_id,
         };
 
         let due = calc.calculate_delay_penalty(stored, today);

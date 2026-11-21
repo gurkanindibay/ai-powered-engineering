@@ -563,8 +563,19 @@ impl PaymentTrackingService {
                 .tenant_user_id
                 .as_ref()
                 .and_then(|id| inner.users.iter().find(|user| &user.id == id))
-                .and_then(|user| user.person_id);
-            let owner_person_id = owner.and_then(|user| user.person_id);
+                .and_then(|user| user.person_id)
+                .or_else(|| {
+                    unit.tenant_user_id
+                        .as_ref()
+                        .and_then(|id| id.strip_prefix("person-"))
+                        .and_then(|id| id.parse::<i64>().ok())
+                });
+            let owner_person_id = owner.and_then(|user| user.person_id).or_else(|| {
+                unit.owner_user_id
+                    .as_ref()
+                    .and_then(|id| id.strip_prefix("person-"))
+                    .and_then(|id| id.parse::<i64>().ok())
+            });
             let eligible_joint_due_ids = owner_person_id
                 .map(|person_id| {
                     inner
@@ -617,6 +628,49 @@ impl PaymentTrackingService {
                 eligible_joint_due_ids,
             )
         };
+        let resolved_payer_person_id = {
+            let folded_payer = crate::domain::fold_turkish(req.payer_name.trim());
+            if owner_name
+                .as_ref()
+                .is_some_and(|n| crate::domain::fold_turkish(n.trim()) == folded_payer)
+            {
+                owner_person_id
+            } else if tenant_name
+                .as_ref()
+                .is_some_and(|n| crate::domain::fold_turkish(n.trim()) == folded_payer)
+            {
+                tenant_person_id
+            } else {
+                let inner = self.state.inner.read().await;
+                let from_occupancies = inner.unit_occupancies.get(&unit.id).and_then(|history| {
+                    history
+                        .iter()
+                        .find(|item| {
+                            crate::domain::fold_turkish(item.person_name.trim()) == folded_payer
+                        })
+                        .map(|item| item.person_id)
+                });
+                let from_users = from_occupancies.or_else(|| {
+                    inner
+                        .users
+                        .iter()
+                        .find(|u| crate::domain::fold_turkish(u.full_name.trim()) == folded_payer)
+                        .and_then(|u| {
+                            u.person_id.or_else(|| {
+                                u.id.strip_prefix("person-")
+                                    .and_then(|s| s.parse::<i64>().ok())
+                            })
+                        })
+                });
+                from_users.or_else(|| {
+                    if payer_role == DebtorType::Owner {
+                        owner_person_id
+                    } else {
+                        tenant_person_id
+                    }
+                })
+            }
+        };
         if on_behalf_of_tenant {
             if eligible_joint_due_ids.is_empty() {
                 return Err("Owner has no jointly liable tenant balance for this unit".to_string());
@@ -644,6 +698,14 @@ impl PaymentTrackingService {
                 designation.as_ref(),
                 description_hint.as_deref(),
             );
+            if !on_behalf_of_owner && !on_behalf_of_tenant {
+                candidates = dues_ledger::filter_candidates_by_payer(
+                    dues,
+                    &candidates,
+                    &designated,
+                    resolved_payer_person_id,
+                );
+            }
             let (lines, surplus) = dues_ledger::allocate_with_designation(
                 dues,
                 &candidates,
@@ -675,11 +737,7 @@ impl PaymentTrackingService {
                 .unit_label(&unit.block_id, unit.unit_number),
             payer_name: req.payer_name.clone(),
             payer_role,
-            payer_person_id: if payer_role == DebtorType::Owner {
-                owner_person_id
-            } else {
-                tenant_person_id
-            },
+            payer_person_id: resolved_payer_person_id,
             on_behalf_of_person_id: if on_behalf_of_owner {
                 owner_person_id
             } else if on_behalf_of_tenant {
@@ -1170,6 +1228,11 @@ impl PaymentTrackingService {
                 uid.as_ref()
                     .and_then(|id| inner.users.iter().find(|u| &u.id == id))
                     .and_then(|user| user.person_id)
+                    .or_else(|| {
+                        uid.as_ref()
+                            .and_then(|id| id.strip_prefix("person-"))
+                            .and_then(|id| id.parse::<i64>().ok())
+                    })
             };
             (
                 unit.clone(),
@@ -1236,11 +1299,18 @@ impl PaymentTrackingService {
                 source, target
             )
         });
+        let target_person_id = if target == dues_ledger::DEBTOR_OWNER {
+            owner_person_id
+        } else {
+            tenant_person_id
+        };
         let allocate = |dues: &mut Vec<DuesLiability>| {
             let candidates: Vec<usize> = dues_ledger::open_dues_for(dues, |_| true, target)
                 .into_iter()
                 .filter(|&i| dues[i].debtor_type.as_str().eq_ignore_ascii_case(target))
                 .collect();
+            let candidates =
+                dues_ledger::filter_candidates_by_payer(dues, &candidates, &[], target_person_id);
             dues_ledger::allocate_waterfall(dues, &candidates, transfer_amount)
         };
 

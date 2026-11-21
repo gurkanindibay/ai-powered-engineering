@@ -41,6 +41,7 @@ fn liability(
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     }
 }
 
@@ -763,4 +764,95 @@ async fn when_identified_owner_pays_tenanted_unit_with_only_tenant_debt_then_ten
     assert_eq!(receipts[0].payer_role, DebtorType::Owner);
     assert_eq!(receipts[0].allocated_principal, Decimal::ZERO);
     assert_eq!(receipts[0].allocated_advance, d("1000.00"));
+}
+
+// covers: SC-13-14-08
+#[tokio::test]
+async fn successor_owner_payment_does_not_settle_predecessor_charges() {
+    let mut ada_feb = liability(
+        "ada-feb",
+        "Şubat 2027",
+        "800.00",
+        NaiveDate::from_ymd_opt(2027, 2, 10).unwrap(),
+        "OWNER",
+        "OPERATIONAL_DUES",
+    );
+    ada_feb.liable_person_id = Some(101); // Ada (predecessor owner)
+
+    let mut ben_mar = liability(
+        "ben-mar",
+        "Mart 2027",
+        "1000.00",
+        NaiveDate::from_ymd_opt(2027, 3, 10).unwrap(),
+        "OWNER",
+        "OPERATIONAL_DUES",
+    );
+    ben_mar.liable_person_id = Some(102); // Ben (successor owner)
+
+    let state = state_with(vec![ada_feb, ben_mar]).await;
+    {
+        let mut inner = state.inner.write().await;
+        // Register Ben as current owner with person_id 102
+        if let Some(unit) = inner.units.iter_mut().find(|u| u.id == UNIT) {
+            unit.owner_user_id = Some("person-102".to_string());
+        }
+        inner.users.push(sitepulse_backend::models::User {
+            id: "person-102".to_string(),
+            site_id: "site-1".to_string(),
+            full_name: "Ben Bilgin".to_string(),
+            email: "ben@sitepulse.test".to_string(),
+            phone: "+905550000002".to_string(),
+            password_hash: None,
+            role: sitepulse_backend::models::Role::HomeOwner,
+            must_change_password: false,
+            auth_provider: sitepulse_backend::models::AuthProvider::Local,
+            google_sub: None,
+            avatar_url: None,
+            created_at: Utc::now(),
+            person_id: Some(102),
+        });
+    }
+
+    let svc = PaymentTrackingService::new(state.clone());
+    let receipt = svc
+        .record_and_allocate_payment(RecordManualPaymentRequest {
+            site_id: Some("site-1".to_string()),
+            unit_id: UNIT.to_string(),
+            amount: d("500.00"),
+            payer_name: "Ben Bilgin".to_string(),
+            payer_role: DebtorType::Owner,
+            payment_channel: PaymentChannel::ManualCash,
+            description: Some("Mart 2027 kısmi ödeme".to_string()),
+            payment_date: Some(Utc::now()),
+            idempotency_key: Some("ben-pay-mar".to_string()),
+            designation: None,
+            settles_owner_capital_dues: false,
+            settles_tenant_joint_liability: false,
+            external_reference: None,
+            settles_unmatched_entry_id: None,
+            designate_from_description: false,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(receipt.allocated_principal, d("500.00"));
+    assert_eq!(receipt.allocation_breakdown.len(), 1);
+    assert_eq!(receipt.allocation_breakdown[0].period, "Mart 2027");
+    assert_eq!(receipt.allocation_breakdown[0].principal_paid, d("500.00"));
+
+    let inner = state.inner.read().await;
+    let ada_due = inner.dues.iter().find(|d| d.id == "ada-feb").unwrap();
+    assert_eq!(
+        ada_due.paid_principal,
+        Decimal::ZERO,
+        "Ada's February debt must remain untouched"
+    );
+    assert_eq!(ada_due.status, DebtStatus::Pending);
+
+    let ben_due = inner.dues.iter().find(|d| d.id == "ben-mar").unwrap();
+    assert_eq!(
+        ben_due.paid_principal,
+        d("500.00"),
+        "Ben's payment settled Ben's March debt"
+    );
 }

@@ -747,6 +747,9 @@ pub struct DuesLiability {
     /// `due_date`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effective_due_date: Option<NaiveDate>,
+    /// The person liable for this charge (persons.id in PostgreSQL).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liable_person_id: Option<i64>,
 }
 
 impl DuesLiability {

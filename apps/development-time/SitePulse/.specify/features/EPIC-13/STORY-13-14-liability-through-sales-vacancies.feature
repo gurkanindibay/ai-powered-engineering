@@ -69,9 +69,8 @@ Feature: Liability follows titles, vacancies and move-ins across four billing pe
     Then the title transfers, move-outs and accruals change no cash balance
     And no receipt of one site changes the other site's posted operating cash
 
-  # Defect #255: the receipt is allocated by debtor role, so it settles the predecessor's open charges first.
-  # The linked tests are strict xfails that keep these expectations; they must be removed when #255 is fixed.
-  @SC-13-14-08 @layer:backend @core @role_manager @linked @defect:255
+  # A successor's receipt settles only their own charges (invariant I7, issue #255).
+  @SC-13-14-08 @layer:backend @core @role_manager @linked
   Scenario Outline: A successor's receipt settles only the successor's own charges
     Given all receipts before "<month>" 10 were posted
     When "<payer>" pays on 2027-<date> to "<unit>"
@@ -85,8 +84,8 @@ Feature: Liability follows titles, vacancies and move-ins across four billing pe
       | A-02  | Eli   | Nisan | 04-10 | Nisan 600.00                                         |
       | B1-01 | Hana  | Nisan | 04-10 | Mart 750.00 and 38.75 fee, Nisan 250.00              |
 
-  # Defect #255: Ada's, Dan's and Gus's February charges are settled by their successors' receipts.
-  @SC-13-14-09 @layer:backend @core @role_manager @linked @defect:255
+  # Final open debt stays with former and current debtors respectively (invariant I7, issue #255).
+  @SC-13-14-09 @layer:backend @core @role_manager @linked
   Scenario: The final open debt stays with each former and current debtor
     Given the April 10 receipts were posted
     Then the open principal and fee per unit and period are
