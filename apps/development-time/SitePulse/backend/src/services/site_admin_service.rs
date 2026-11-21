@@ -1510,10 +1510,14 @@ impl SiteAdminService {
                 .or_else(|| {
                     matching_unit.and_then(|u| {
                         let ht = u.house_type.as_deref()?;
-                        inner.house_types.iter().find(|h| {
-                            (h.site_id == site_id || crate::auth::same_id(&h.site_id, site_id))
-                                && h.type_name.eq_ignore_ascii_case(ht)
-                        }).map(|h| h.dues_amount)
+                        inner
+                            .house_types
+                            .iter()
+                            .find(|h| {
+                                (h.site_id == site_id || crate::auth::same_id(&h.site_id, site_id))
+                                    && h.type_name.eq_ignore_ascii_case(ht)
+                            })
+                            .map(|h| h.dues_amount)
                     })
                 })
                 .or_else(|| {
@@ -1808,10 +1812,13 @@ impl SiteAdminService {
                             .map_err(|e| e.to_string())?;
                     }
                     if let Some(dues) = req.monthly_dues {
-                        client.execute(
-                            "UPDATE units SET monthly_tariff_override = $1 WHERE id = $2",
-                            &[&dues, &u_id],
-                        ).await.map_err(|e| e.to_string())?;
+                        client
+                            .execute(
+                                "UPDATE units SET monthly_tariff_override = $1 WHERE id = $2",
+                                &[&dues, &u_id],
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
                         client.execute(
                             "UPDATE dues_liabilities SET principal_amount = $1 WHERE unit_id = $2 AND status = 'PENDING'",
                             &[&dues, &u_id],
@@ -3517,6 +3524,69 @@ mod tests {
         assert!(
             created_dues.is_empty(),
             "registering an owner must not generate dues liabilities (issue #286)"
+        );
+
+        let unit = inner
+            .units
+            .iter()
+            .find(|u| u.id == response.unit_id)
+            .expect("unit must exist");
+        assert_eq!(
+            unit.monthly_tariff_override,
+            Some(Decimal::new(1500, 0)),
+            "per-unit custom tariff override must be persisted on unit (issue #297)"
+        );
+        assert_eq!(
+            response.monthly_dues,
+            Decimal::new(1500, 0),
+            "registration response must return the custom tariff override (issue #297)"
+        );
+        assert_eq!(
+            crate::scheduler::tariff_for(&inner, unit),
+            Some(Decimal::new(1500, 0)),
+            "scheduler::tariff_for must prefer custom override over house type tariff (issue #297)"
+        );
+    }
+
+    #[tokio::test]
+    async fn when_updating_unit_monthly_dues_then_tariff_override_is_updated() {
+        let state = AppState::new_with_test_fixtures();
+        let service = SiteAdminService::new(state.clone());
+
+        let req = crate::models::UpdateHomeOwnerRequest {
+            owner_full_name: None,
+            email: None,
+            phone: None,
+            tenant_full_name: None,
+            tenant_email: None,
+            tenant_phone: None,
+            remove_tenant: None,
+            house_type: None,
+            monthly_dues: Some(Decimal::new(2500, 0)),
+            land_share: None,
+            is_resident: None,
+        };
+
+        service
+            .update_home_owner("site-1", "d-14", req, false)
+            .await
+            .expect("update should succeed");
+
+        let inner = state.inner.read().await;
+        let unit = inner
+            .units
+            .iter()
+            .find(|u| u.id == "d-14")
+            .expect("unit d-14 must exist");
+        assert_eq!(
+            unit.monthly_tariff_override,
+            Some(Decimal::new(2500, 0)),
+            "unit update must store monthly_tariff_override (issue #297)"
+        );
+        assert_eq!(
+            crate::scheduler::tariff_for(&inner, unit),
+            Some(Decimal::new(2500, 0)),
+            "tariff_for must reflect the updated override"
         );
     }
 }
