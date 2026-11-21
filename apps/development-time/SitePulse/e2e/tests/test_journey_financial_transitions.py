@@ -110,6 +110,7 @@ def test_unmatched_statement_item_is_queued_and_changes_no_balance(request, api,
 @pytest.mark.role_manager
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="BUG #288: no API assigns an unmatched statement item to a unit; confirm-reconciliation confirms 0 items",
 )
 def test_unmatched_statement_item_can_be_assigned_and_approved_exactly_once(request, api, actors, stack):
@@ -155,7 +156,6 @@ def test_aging_bucket_changes_at_each_day_boundary(
         clock = JourneyClock(api, "2026-11-01")
         api.accrue_period(fixture.manager, "Kasım 2026", D("0"), "2026-11-10")
         clock.advance_to((datetime.date(2026, 11, 10) + datetime.timedelta(days=days)).isoformat())
-        api.clock.tick()
 
         report = api.debt_aging_report(fixture.manager, fixture.site_id)
         bracket = next(b for b in report["brackets"] if str(b["unit_id"]) == str(a5) and b["debtor_type"] == "TENANT")
