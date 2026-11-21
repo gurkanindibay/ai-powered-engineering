@@ -1655,7 +1655,7 @@ async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_ge
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: Decimal::from_str_exact("1400.00").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000012345678".to_string()),
         description: Some("Eylül 2026 Aidatı FAST Ödemesi".to_string()),
         signature: Some("HMAC_SHA256_VALID_SIG".to_string()),
@@ -1704,7 +1704,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: Decimal::from_str_exact("1400.00").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000012345678".to_string()),
         description: Some("Eylül 2026 Aidatı".to_string()),
         signature: Some("HMAC_VALID".to_string()),
@@ -1728,7 +1728,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: Decimal::from_str_exact("1460.67").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000012345678".to_string()),
         description: Some("Ekim 2026 Avans Aidatı".to_string()),
         signature: Some("HMAC_VALID".to_string()),
@@ -1754,7 +1754,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: Decimal::from_str_exact("500.00").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000012345678".to_string()),
         description: Some("Ekstra Avans".to_string()),
         signature: Some("HMAC_VALID".to_string()),
@@ -1815,6 +1815,12 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
 ) {
     let state = AppState::new();
     fixture_dues_not_yet_due(&state).await;
+    {
+        let mut inner = state.inner.write().await;
+        if let Some(d) = inner.dues.iter_mut().find(|d| d.id == "b-101") {
+            d.debtor_type = DebtorType::Owner;
+        }
+    }
 
     // 1. Payment of ₺2860.67 clears September due (₺1400.00) and leaves ₺1460.67 surplus in advance
     let webhook_req = BankIncomingWebhookRequest {
@@ -2027,7 +2033,7 @@ async fn when_homeowner_records_payment_with_existing_debt_then_clears_debt() {
         payment_method: PaymentMethod::CreditCard,
         reference_code: Some("CC-TEST-001".to_string()),
         note: Some("Eylül aidat kart ödemesi".to_string()),
-        homeowner_name: Some("Ahmet Yılmaz".to_string()),
+        homeowner_name: Some("Zeynep Kaya".to_string()),
     };
 
     let (status, axum::Json(res)) = sitepulse_backend::handlers::record_homeowner_payment(
@@ -2128,7 +2134,7 @@ async fn when_homeowner_records_payment_exceeding_debt_then_clears_debt_and_cred
         payment_method: PaymentMethod::CreditCard,
         reference_code: Some("CC-SURPLUS-001".to_string()),
         note: Some("Aidat + avans ödemesi".to_string()),
-        homeowner_name: Some("Ahmet Yılmaz".to_string()),
+        homeowner_name: Some("Zeynep Kaya".to_string()),
     };
 
     let (status, axum::Json(res)) = sitepulse_backend::handlers::record_homeowner_payment(
@@ -2195,7 +2201,7 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
                 unit_id: "d-14".to_string(),
                 block_id: "A".to_string(),
                 unit_number: 14,
-                homeowner_name: Some("Ahmet Yılmaz".to_string()),
+                homeowner_name: Some("Zeynep Kaya".to_string()),
                 amount: Decimal::from_str_exact("1400.00").unwrap(),
                 payment_method: PaymentMethod::BankTransfer,
                 reference_code: Some("REF-1".to_string()),
@@ -2271,8 +2277,8 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
         date: NaiveDate::from_ymd_opt(2026, 9, 20).unwrap(),
         amount: Decimal::from_str_exact("2000.00").unwrap(),
         currency: "TRY".to_string(),
-        description: "HAVALE - AHMET YILMAZ A BLOK D:14 FAZLA ODEME".to_string(),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        description: "HAVALE - ZEYNEP KAYA A BLOK D:14 FAZLA ODEME".to_string(),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: None,
         reference_no: None,
     };
@@ -2291,7 +2297,7 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
     assert_eq!(matches.len(), 1);
     let m = &matches[0];
     assert_eq!(m.matched_unit_id.as_deref(), Some("d-14"));
-    assert_eq!(m.confidence_score, 90);
+    assert_eq!(m.confidence_score, 80);
     assert_eq!(
         m.status,
         sitepulse_backend::models::ReconciliationStatus::PendingApproval
@@ -2516,7 +2522,7 @@ async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_cle
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: rust_decimal::Decimal::from_str_exact("2000.00").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000000000001".to_string()),
         description: Some("Aidat".to_string()),
         signature: None,
@@ -4352,7 +4358,7 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
             status: DebtStatus::Overdue,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: DebtorType::Tenant,
+            debtor_type: DebtorType::Owner,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
             grace_days: 0,
@@ -4725,4 +4731,201 @@ fn payment_date_violation_is_deterministic_for_a_given_window() {
     assert!(v(now - chrono::Duration::days(31), now, 30).is_some());
     assert!(v(now - chrono::Duration::days(29), now, 30).is_none());
     assert!(v(now + chrono::Duration::hours(1), now, 30).is_some());
+}
+
+#[tokio::test]
+async fn when_create_units_block_name_empty_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "  ".to_string(),
+        unit_number: Some(1),
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req).await.unwrap_err();
+    assert!(
+        err.to_string().contains("Block name cannot be empty"),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn when_create_units_unit_zero_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: Some(0),
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req).await.unwrap_err();
+    assert!(err.to_string().contains("greater than 0"), "{err}");
+}
+
+#[tokio::test]
+async fn when_create_units_start_greater_than_end_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: None,
+        start_unit: Some(10),
+        end_unit: Some(5),
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req).await.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("greater than or equal to start_unit"),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn when_create_units_exceeds_500_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: None,
+        start_unit: Some(1),
+        end_unit: Some(501),
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req).await.unwrap_err();
+    assert!(err.to_string().contains("more than 500"), "{err}");
+}
+
+#[tokio::test]
+async fn when_create_units_list_validation_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    // Empty list
+    let req_empty = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: None,
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: Some(vec![]),
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req_empty).await.unwrap_err();
+    assert!(err.to_string().contains("cannot be empty"), "{err}");
+
+    // Invalid unit number (0)
+    let req_zero = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: None,
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: Some(vec![1, 0, 3]),
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err2 = service.create_units("site-1", req_zero).await.unwrap_err();
+    assert!(err2.to_string().contains("greater than 0"), "{err2}");
+}
+
+#[tokio::test]
+async fn when_create_units_duplicate_then_conflict_returned() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "TestBlock".to_string(),
+        unit_number: None,
+        start_unit: Some(1),
+        end_unit: Some(5),
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let created = service.create_units("site-1", req).await.unwrap();
+    assert_eq!(created.len(), 5);
+
+    // Duplicate unit in same block
+    let req_dup = CreateUnitsRequest {
+        block_name: "TestBlock".to_string(),
+        unit_number: Some(3),
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req_dup).await.unwrap_err();
+    match err {
+        sitepulse_backend::error::AppError::Conflict(msg) => {
+            assert!(msg.contains("already exist"), "{msg}");
+            assert!(msg.contains("3"), "{msg}");
+        }
+        other => panic!("expected AppError::Conflict, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn when_create_units_foreign_site_then_tenant_denied() {
+    let state = AppState::new();
+    let scope = sitepulse_backend::tenancy::TenantScope::site("site-1".to_string());
+    let query = sitepulse_backend::handlers::SiteIdParam {
+        site_id: Some("site-2".to_string()),
+    };
+    let req = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: Some(1),
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = sitepulse_backend::handlers::create_units(
+        axum::extract::State(state),
+        scope,
+        axum::extract::Query(query),
+        axum::Json(req),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.to_string().contains("Site belongs to another tenant"),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn when_get_units_foreign_site_then_tenant_denied() {
+    let state = AppState::new();
+    let scope = sitepulse_backend::tenancy::TenantScope::site("site-1".to_string());
+    let query = sitepulse_backend::handlers::SiteIdParam {
+        site_id: Some("site-2".to_string()),
+    };
+    let err = sitepulse_backend::handlers::get_units(
+        axum::extract::State(state),
+        scope,
+        axum::extract::Query(query),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.to_string().contains("Site belongs to another tenant"),
+        "{err}"
+    );
 }

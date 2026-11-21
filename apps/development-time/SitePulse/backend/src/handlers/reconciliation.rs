@@ -1614,9 +1614,12 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
     ))
 }
 
-/// Who paid, for an incoming transfer: the unit's tenant when the sender name
-/// matches the tenant account, otherwise the owner (who may settle any of the
-/// unit's liabilities). Returns `(payer_role, payer_name)`.
+/// Who paid, for an incoming transfer:
+/// - The unit's tenant when the sender name matches the tenant account.
+/// - When only one debtor type has open debt on the unit, follow that debt.
+/// - Otherwise, the owner (who may settle owner liabilities, with surplus to advance).
+///
+/// Returns `(payer_role, payer_name)`.
 pub(crate) fn resolve_payer(
     inner: &crate::state::AppStateInner,
     unit: &crate::models::IndependentUnit,
@@ -1627,16 +1630,48 @@ pub(crate) fn resolve_payer(
             .and_then(|id| inner.users.iter().find(|u| &u.id == id))
             .map(|u| u.full_name.clone())
     };
+    let tenant_name = name_of(&unit.tenant_user_id).or_else(|| {
+        inner.unit_occupancies.get(&unit.id).and_then(|occ| {
+            occ.iter()
+                .find(|h| h.is_active && h.role == DebtorType::Tenant)
+                .map(|h| h.person_name.clone())
+        })
+    });
     let sender = sender_name.map(str::trim).filter(|s| !s.is_empty());
-    if let (Some(sender), Some(tenant)) = (sender, name_of(&unit.tenant_user_id)) {
+    if let (Some(sender), Some(ref tenant)) = (sender, &tenant_name) {
         let (a, b) = (
             crate::services::dues_ledger::fold_turkish(sender),
-            crate::services::dues_ledger::fold_turkish(&tenant),
+            crate::services::dues_ledger::fold_turkish(tenant),
         );
         if a.contains(&b) || b.contains(&a) {
             return (DebtorType::Tenant, sender.to_string());
         }
     }
+    let owner_name = name_of(&unit.owner_user_id);
+    if let (Some(sender), Some(ref owner)) = (sender, &owner_name) {
+        let (a, b) = (
+            crate::services::dues_ledger::fold_turkish(sender),
+            crate::services::dues_ledger::fold_turkish(owner),
+        );
+        if a.contains(&b) || b.contains(&a) {
+            return (DebtorType::Owner, sender.to_string());
+        }
+    }
+
+    // Follow the debt: when only one debtor type has open debt, resolve to that type.
+    let open_debtors = open_debtor_types(inner, &unit.id);
+    if open_debtors.len() == 1 {
+        let single_role = open_debtors[0];
+        let name = sender
+            .map(str::to_string)
+            .or_else(|| match single_role {
+                DebtorType::Tenant => tenant_name,
+                DebtorType::Owner => name_of(&unit.owner_user_id),
+            })
+            .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
+        return (single_role, name);
+    }
+
     let name = sender
         .map(str::to_string)
         .or_else(|| name_of(&unit.owner_user_id))

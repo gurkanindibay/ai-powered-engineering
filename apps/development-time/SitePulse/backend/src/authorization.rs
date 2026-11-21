@@ -668,3 +668,57 @@ pub async fn assign_platform_role(
     tx.commit().await.map_err(|_| SecurityError::Unavailable)?;
     Ok(Json(serde_json::json!({"status":"SUCCESS"})))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn context(site_id: &str, permissions: Vec<Permission>) -> AuthzContext {
+        AuthzContext {
+            claims: Claims {
+                sid: "sid-1".into(),
+                ver: 1,
+                iss: "iss".into(),
+                aud: "aud".into(),
+                jti: "jti-1".into(),
+                sub: "usr-1".into(),
+                email: "a@example.test".into(),
+                role: Role::SiteManager,
+                site_id: site_id.into(),
+                unit_id: None,
+                iat: 0,
+                exp: 0,
+            },
+            permissions,
+            request_id: "req-1".into(),
+            stepped_up: false,
+        }
+    }
+
+    #[test]
+    fn require_refuses_a_permission_the_caller_does_not_hold() {
+        let ctx = context("1", vec![Permission::UnitRead]);
+        assert!(ctx.require(Permission::UnitRead, "1").is_ok());
+        assert!(matches!(
+            ctx.require(Permission::RoleGrant, "1"),
+            Err(SecurityError::Forbidden)
+        ));
+        assert!(matches!(
+            context("1", vec![]).require(Permission::UnitRead, "1"),
+            Err(SecurityError::Forbidden)
+        ));
+    }
+
+    #[test]
+    fn require_refuses_another_sites_resource_even_with_the_permission() {
+        let ctx = context("1", vec![Permission::RoleGrant]);
+        assert!(matches!(
+            ctx.require(Permission::RoleGrant, "2"),
+            Err(SecurityError::NotFound)
+        ));
+        assert!(matches!(
+            ctx.require(Permission::RoleGrant, "site-2"),
+            Err(SecurityError::NotFound)
+        ));
+    }
+}

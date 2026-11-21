@@ -312,6 +312,18 @@ python3 apps/development-time/SitePulse/scripts/publish_test_report.py --report 
 ./scripts/product_status.py html --site /tmp/test-report-site --out /tmp/product-status.html
 ```
 
+## 5b-9. Mutation Scenarios (`mutation_scenarios.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/mutation_scenarios.py](file:///apps/development-time/SitePulse/scripts/mutation_scenarios.py) (symlinked to `scripts/mutation_scenarios.py`)
+- **Purpose:** Tests the tests. Applies hand-designed mutants from [harness/mutation/scenarios.toml](file:///apps/development-time/SitePulse/harness/mutation/scenarios.toml) (one realistic bug each: boundaries, rounding, sign, tenancy and authorization checks) one at a time, runs the suites named for each, restores the file, and reports killed / survived / unviable / skipped with a mutation score. `validate` fails when production code drifts from a scenario. The check also runs in `harness/tests/test_mutation_scenarios.py`, so it gates every PR: if a refactor touches a targeted line, rewrite that scenario's `original`/`mutant` for the new code instead of deleting it. CI does not run the mutation run itself. Each checkout has its own crash-recovery journal, and a suite that times out has its whole process group killed. Suites that need PostgreSQL run only with `--with postgres`. Analysis and results: [docs/testing/mutation-testing-analysis.md](file:///apps/development-time/SitePulse/docs/testing/mutation-testing-analysis.md).
+
+```bash
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py validate
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py list --layer rust
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py run --area late-fee --markdown /tmp/mut.md --output /tmp/mut.json
+python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py restore   # after an interrupted run
+```
+
 ## 5c. Test Execution & Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
@@ -358,6 +370,18 @@ python3 scripts/issue_claim.py claim 123 --harness claude --session <id> --pr 13
 python3 scripts/issue_claim.py status 123 --json
 python3 scripts/issue_claim.py release 123 --harness claude --session <id> --pr 130   # clears issue and PR
 python3 -m unittest discover -s tests/issue_claim
+```
+
+## 5c-3b. PR Review Queue (`pr_review_queue.py`)
+
+- **Executable Script:** [scripts/pr_review_queue.py](file:///scripts/pr_review_queue.py)
+- **Purpose:** Tells the reviewer agent which open PRs need a review now (AGENTS.md rule 16): not a draft, CI finished, and no final bot verdict on the current head. Reasons: `new`, `new_head` (commits after the last review), `unfinished` (last bot review is a `COMMENT`). PRs still running CI are listed as `waiting_ci`. The bot's review history is the state.
+
+```bash
+python3 scripts/pr_review_queue.py             # ready PRs
+python3 scripts/pr_review_queue.py --json      # ready / waiting_ci / skipped with reasons
+python3 scripts/pr_review_queue.py --all --skip-author my-login
+python3 -m unittest discover -s tests/pr_review_queue
 ```
 
 ## 5c-4. PR Review Bot (`review_bot.py`)

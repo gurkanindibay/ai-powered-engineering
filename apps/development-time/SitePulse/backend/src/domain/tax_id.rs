@@ -129,4 +129,10 @@ mod tests {
         assert_eq!(TaxId::parse("123"), Err(TaxIdError::Length));
         assert_eq!(TaxId::parse("10000000147"), Err(TaxIdError::Checksum));
     }
+
+    #[test]
+    fn a_ten_digit_number_with_a_wrong_check_digit_is_not_a_vkn() {
+        assert_eq!(TaxId::parse("0010180006"), Err(TaxIdError::Checksum));
+        assert_eq!(TaxId::parse("1234567891"), Err(TaxIdError::Checksum));
+    }
 }

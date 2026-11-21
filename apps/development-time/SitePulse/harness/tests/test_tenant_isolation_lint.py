@@ -50,6 +50,26 @@ class TenantIsolationLintTests(unittest.TestCase):
         })
         self.assertEqual(rules, [])
 
+    def test_authz_context_handler_needs_a_site_check(self):
+        unscoped = (
+            "pub async fn leak(ctx: AuthzContext, State(s): State<AppState>, Query(q): Query<SiteQ>) -> X {\n"
+            "    s.list(q.site_id).await\n}\n"
+        )
+        rules = _run(tenant_lint, {"src/models/mod.rs": MODELS, "src/handlers/mod.rs": unscoped})
+        self.assertEqual(rules, ["unscoped-site-input"])
+
+    def test_authz_context_handler_that_checks_the_site_passes(self):
+        checked = (
+            "pub async fn by_require(ctx: AuthzContext, Query(q): Query<SiteQ>) -> X {\n"
+            "    ctx.require(Permission::UnitRead, &site)?;\n}\n"
+            "pub async fn by_claims(ctx: AuthzContext, Query(q): Query<SiteQ>) -> X {\n"
+            "    svc.list(&ctx.claims.site_id).await\n}\n"
+            "pub async fn by_context(ctx: AuthzContext, Query(q): Query<SiteQ>) -> X {\n"
+            "    svc.list(&ctx, q).await\n}\n"
+        )
+        rules = _run(tenant_lint, {"src/models/mod.rs": MODELS, "src/handlers/mod.rs": checked})
+        self.assertEqual(rules, [])
+
     def test_object_path_needs_a_scope_unless_the_middleware_owns_it(self):
         rules = _run(tenant_lint, {
             "src/models/mod.rs": MODELS,

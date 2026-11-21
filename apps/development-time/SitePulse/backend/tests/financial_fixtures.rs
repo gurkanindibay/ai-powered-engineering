@@ -113,6 +113,7 @@ fn penalty_cases_match_the_fixture() {
     }
 }
 
+// covers: SC-09-02-03
 #[test]
 fn allocation_cases_match_the_fixture() {
     for c in fixture().allocation_cases {

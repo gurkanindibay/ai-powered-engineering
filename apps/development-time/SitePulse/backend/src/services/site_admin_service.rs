@@ -2740,7 +2740,12 @@ impl SiteAdminService {
             .cloned()
             .collect();
 
-        if list.is_empty() {
+        let site_exists = inner.sites.iter().any(|s| {
+            s.id == site_id
+                || (site_numeric.is_some() && crate::db::parse_id_to_i64(&s.id) == site_numeric)
+        });
+
+        if !site_exists && list.is_empty() {
             list = vec![
                 crate::models::BlockDto {
                     id: "b-1".to_string(),
@@ -2845,6 +2850,315 @@ impl SiteAdminService {
         }
 
         Ok(block)
+    }
+
+    pub async fn create_units(
+        &self,
+        site_id: &str,
+        req: crate::models::CreateUnitsRequest,
+    ) -> crate::error::AppResult<Vec<crate::models::UnitDto>> {
+        let block_name_trimmed = req.block_name.trim();
+        if block_name_trimmed.is_empty() {
+            return Err(crate::error::AppError::Validation(
+                "Block name cannot be empty".to_string(),
+                None,
+            ));
+        }
+
+        let mut unit_numbers: Vec<i32> = if let Some(nums) = req.unit_numbers.clone() {
+            if nums.is_empty() {
+                return Err(crate::error::AppError::Validation(
+                    "unit_numbers list cannot be empty".to_string(),
+                    None,
+                ));
+            }
+            if nums.len() > 500 {
+                return Err(crate::error::AppError::Validation(
+                    "Cannot create more than 500 units at once".to_string(),
+                    None,
+                ));
+            }
+            for &n in &nums {
+                if n <= 0 {
+                    return Err(crate::error::AppError::Validation(
+                        format!("unit_number must be greater than 0, got {}", n),
+                        None,
+                    ));
+                }
+            }
+            nums
+        } else if let (Some(s), Some(e)) = (req.start_unit, req.end_unit) {
+            if s <= 0 {
+                return Err(crate::error::AppError::Validation(
+                    "start_unit must be greater than 0".to_string(),
+                    None,
+                ));
+            }
+            if e < s {
+                return Err(crate::error::AppError::Validation(
+                    "end_unit must be greater than or equal to start_unit".to_string(),
+                    None,
+                ));
+            }
+            if e - s + 1 > 500 {
+                return Err(crate::error::AppError::Validation(
+                    "Cannot create more than 500 units at once".to_string(),
+                    None,
+                ));
+            }
+            (s..=e).collect()
+        } else if let Some(u) = req.unit_number {
+            if u <= 0 {
+                return Err(crate::error::AppError::Validation(
+                    "unit_number must be greater than 0".to_string(),
+                    None,
+                ));
+            }
+            vec![u]
+        } else {
+            return Err(crate::error::AppError::Validation(
+                "Either unit_number, start_unit..end_unit, or unit_numbers must be specified"
+                    .to_string(),
+                None,
+            ));
+        };
+
+        unit_numbers.sort_unstable();
+        unit_numbers.dedup();
+
+        let site_numeric = crate::db::require_id("entity", site_id)
+            .map_err(|e| crate::error::AppError::Validation(e.to_string(), None))?;
+        let land_share = req.land_share.unwrap_or(1).max(1);
+
+        tracing::info!(
+            site_id = %site_id,
+            block = %block_name_trimmed,
+            count = unit_numbers.len(),
+            "Creating units for site"
+        );
+
+        let storage = crate::db::Storage::of(&self.state);
+        if let crate::db::Storage::Postgres(ref pool) = storage {
+            let result_dtos = crate::db::create_units_in_db(pool, site_id, &req, &unit_numbers)
+                .await
+                .map_err(|e| {
+                    let err_msg = e.to_string();
+                    if err_msg.contains("already exist") {
+                        crate::error::AppError::Conflict(err_msg)
+                    } else {
+                        crate::error::AppError::Internal(err_msg)
+                    }
+                })?;
+
+            // Also keep in-memory cache in sync without overwriting occupied units
+            {
+                let mut inner = self.state.inner.write().await;
+                if let Some(first) = result_dtos.first() {
+                    let block_id_str = &first.block_id;
+                    let actual_block_name = &first.block_name;
+                    if !inner.blocks.iter().any(|b| {
+                        b.id == *block_id_str
+                            || (b.site_id == site_id && b.block_name == *actual_block_name)
+                    }) {
+                        inner.blocks.push(crate::models::BlockDto {
+                            id: block_id_str.clone(),
+                            site_id: site_id.to_string(),
+                            block_name: actual_block_name.clone(),
+                            total_floors: 10,
+                        });
+                    }
+
+                    for dto in &result_dtos {
+                        let ind_unit = crate::models::IndependentUnit {
+                            id: dto.id.clone(),
+                            site_id: site_id.to_string(),
+                            block_id: dto.block_id.clone(),
+                            unit_number: dto.unit_number,
+                            floor: dto.floor,
+                            land_share,
+                            owner_user_id: None,
+                            tenant_user_id: None,
+                            virtual_iban: dto.virtual_iban.clone(),
+                            house_type: req.house_type.clone(),
+                            created_on: Some(chrono::Utc::now().date_naive()),
+                        };
+                        if !inner.units.iter().any(|u| u.id == dto.id) {
+                            inner.units.push(ind_unit);
+                        }
+                    }
+                }
+            }
+
+            return Ok(result_dtos);
+        }
+
+        let mut inner = self.state.inner.write().await;
+        let existing_block = inner
+            .blocks
+            .iter()
+            .find(|b| {
+                (b.site_id == site_id
+                    || crate::db::parse_id_to_i64(&b.site_id) == Some(site_numeric))
+                    && (b.block_name.eq_ignore_ascii_case(block_name_trimmed)
+                        || b.block_name
+                            .eq_ignore_ascii_case(&format!("{} Blok", block_name_trimmed)))
+            })
+            .cloned();
+
+        let (blk_id, blk_name) = if let Some(b) = existing_block {
+            (b.id, b.block_name)
+        } else {
+            let new_id = format!("blk-{}-{}", site_id, inner.blocks.len() + 1);
+            let new_b = crate::models::BlockDto {
+                id: new_id.clone(),
+                site_id: site_id.to_string(),
+                block_name: block_name_trimmed.to_string(),
+                total_floors: 10,
+            };
+            inner.blocks.push(new_b);
+            (new_id, block_name_trimmed.to_string())
+        };
+
+        // Check if any unit already exists in this block in memory
+        let existing_in_mem: Vec<i32> = inner
+            .units
+            .iter()
+            .filter(|u| u.block_id == blk_id && unit_numbers.contains(&u.unit_number))
+            .map(|u| u.unit_number)
+            .collect();
+        if !existing_in_mem.is_empty() {
+            return Err(crate::error::AppError::Conflict(format!(
+                "Units already exist in block {}: {:?}",
+                blk_name, existing_in_mem
+            )));
+        }
+
+        let mut result_dtos = Vec::new();
+        for unit_no in &unit_numbers {
+            let floor = req.floor.unwrap_or_else(|| ((unit_no - 1) / 4) + 1);
+            let clean_block = blk_name
+                .trim()
+                .trim_end_matches(" Blok")
+                .trim_end_matches(" blok")
+                .trim_end_matches(" BLOK")
+                .trim();
+            let label = format!("{}-{:02}", clean_block, unit_no);
+            let viban =
+                VirtualIbanService::generate_virtual_iban("00205", site_id, clean_block, *unit_no)
+                    .ok();
+
+            let unit_id = format!("u-{}-{}-{}", site_id, blk_id, unit_no);
+            let ind_unit = crate::models::IndependentUnit {
+                id: unit_id.clone(),
+                site_id: site_id.to_string(),
+                block_id: blk_id.clone(),
+                unit_number: *unit_no,
+                floor,
+                land_share,
+                owner_user_id: None,
+                tenant_user_id: None,
+                virtual_iban: viban.clone(),
+                house_type: req.house_type.clone(),
+                created_on: Some(chrono::Utc::now().date_naive()),
+            };
+
+            inner.units.push(ind_unit);
+
+            result_dtos.push(crate::models::UnitDto {
+                id: unit_id,
+                site_id: site_id.to_string(),
+                block_id: blk_id.clone(),
+                block_name: blk_name.clone(),
+                unit_number: *unit_no,
+                floor,
+                label,
+                owner_person_id: None,
+                tenant_person_id: None,
+                virtual_iban: viban,
+                occupancy_status: "VACANT".to_string(),
+            });
+        }
+
+        Ok(result_dtos)
+    }
+
+    pub async fn get_units_for_site(
+        &self,
+        site_id: &str,
+        block_id: Option<&str>,
+    ) -> Result<Vec<crate::models::UnitDto>, crate::error::AppError> {
+        let storage = crate::db::Storage::of(&self.state);
+        if let crate::db::Storage::Postgres(ref pool) = storage {
+            match crate::db::get_units_for_site_from_db(pool, site_id, block_id).await {
+                Ok(db_units) => return Ok(db_units),
+                Err(e) => {
+                    tracing::error!(
+                        site_id = %site_id,
+                        error = %e,
+                        "Failed to load units from database"
+                    );
+                    return Err(crate::error::AppError::Internal(e.to_string()));
+                }
+            }
+        }
+
+        let site_numeric = match crate::db::require_id("entity", site_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(Vec::new()),
+        };
+
+        // In-memory fallback
+        let inner = self.state.inner.read().await;
+        let mut list = Vec::new();
+        for u in &inner.units {
+            if u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric)
+            {
+                let blk_name = inner
+                    .blocks
+                    .iter()
+                    .find(|b| b.id == u.block_id)
+                    .map(|b| b.block_name.clone())
+                    .unwrap_or_else(|| "A".to_string());
+                let clean_block = blk_name
+                    .trim()
+                    .trim_end_matches(" Blok")
+                    .trim_end_matches(" blok")
+                    .trim_end_matches(" BLOK")
+                    .trim();
+                let label = format!("{}-{:02}", clean_block, u.unit_number);
+
+                let occ_status = if u.tenant_user_id.is_some() {
+                    "TENANT_OCCUPIED"
+                } else if u.owner_user_id.is_some() {
+                    "OWNER_OCCUPIED"
+                } else {
+                    "VACANT"
+                };
+
+                list.push(crate::models::UnitDto {
+                    id: u.id.clone(),
+                    site_id: site_id.to_string(),
+                    block_id: u.block_id.clone(),
+                    block_name: blk_name,
+                    unit_number: u.unit_number,
+                    floor: u.floor,
+                    label,
+                    owner_person_id: u.owner_user_id.clone(),
+                    tenant_person_id: u.tenant_user_id.clone(),
+                    virtual_iban: u.virtual_iban.clone(),
+                    occupancy_status: occ_status.to_string(),
+                });
+            }
+        }
+        list.sort_by(|a, b| {
+            a.block_name
+                .cmp(&b.block_name)
+                .then_with(|| a.unit_number.cmp(&b.unit_number))
+        });
+        if let Some(b_id) = block_id {
+            list.retain(|u| u.block_id == b_id);
+        }
+        Ok(list)
     }
 
     /// T4/T5 move-out through the guarded transition service (STORY-08-07).
