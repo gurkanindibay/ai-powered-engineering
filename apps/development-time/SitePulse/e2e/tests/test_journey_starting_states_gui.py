@@ -28,11 +28,6 @@ from support.journey_gui import (
 
 EMPTY_STATE = re.compile(r"Henüz|bulunamadı|bulunmuyor", re.IGNORECASE)
 
-BUG_EMPTY_STATES = (
-    "BUG: on a site with no data the units list and the people directory show no empty-state message "
-    "and no next action (the dues pages say 'Henüz Aidat Dönemi Yok'); see #283"
-)
-
 
 def _units_page_lines(page) -> list[str]:
     Shell(page).nav("residents")
@@ -62,7 +57,6 @@ def _aging_rows(page) -> dict[str, tuple[str, Decimal]]:
 @pytest.mark.role_manager
 @pytest.mark.covers("SC-13-01-01")
 @pytest.mark.gui_id("GUI-13-05")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=BUG_EMPTY_STATES)
 def test_f0_every_page_shows_an_empty_state(request, api, actors, stack, page, login_page):
     with journey_site(request, api, actors, stack, "F0") as fixture:
         sign_in_manager(page, login_page, fixture)

@@ -9,14 +9,22 @@ import 'package:sitepulse/ui/residents/people_directory_page.dart';
 import 'package:sitepulse/ui/residents/person_profile_page.dart';
 import 'package:sitepulse/ui/theme/app_theme.dart';
 
-PersonSummary _person(int id, String name, {PersonLogin login = PersonLogin.active}) => PersonSummary(
+PersonSummary _person(
+  int id,
+  String name, {
+  PersonLogin login = PersonLogin.active,
+  String role = 'HOME_OWNER',
+  int ownedUnits = 1,
+  int occupiedUnits = 0,
+}) =>
+    PersonSummary(
       personId: id,
       fullName: name,
       email: 'p$id@example.com',
       phone: '0532 000 00 0$id',
-      role: 'HOME_OWNER',
-      ownedUnits: 1,
-      occupiedUnits: 0,
+      role: role,
+      ownedUnits: ownedUnits,
+      occupiedUnits: occupiedUnits,
       login: login,
     );
 
@@ -142,4 +150,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.resent, 1);
   });
+
+  testWidgets('shows empty state guidance with action when no residents or owners exist', (tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = _StaticApi([
+      _person(1, 'Ali Müdür', role: 'SITE_MANAGER', ownedUnits: 0, occupiedUnits: 0),
+    ]);
+    await tester.pumpWidget(_host(PeopleDirectoryPage(api: api)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Henüz kayıtlı kat maliki veya sakin bulunmuyor'), findsOneWidget);
+    expect(find.byKey(const Key('people_guidance_import_btn')), findsOneWidget);
+    expect(find.text('Ali Müdür'), findsOneWidget);
+  });
+
+  testWidgets('shows empty state when directory has zero people', (tester) async {
+    final api = _StaticApi([]);
+    await tester.pumpWidget(_host(PeopleDirectoryPage(api: api)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Henüz kayıtlı kat maliki veya sakin bulunmuyor'), findsOneWidget);
+    expect(find.byKey(const Key('people_empty_import_btn')), findsOneWidget);
+  });
+}
+
+class _StaticApi extends PersonDirectoryApi {
+  final List<PersonSummary> items;
+  _StaticApi(this.items);
+
+  @override
+  Future<DirectoryPage> directory({String query = '', String? role, String? login, int page = 1, int pageSize = 25}) async {
+    return DirectoryPage(items: items, total: items.length, page: page, pageSize: pageSize);
+  }
 }
