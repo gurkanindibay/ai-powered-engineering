@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T15:40:25Z",
- "run_id": "20261121T154025Z-2ba380e",
- "commit": "2ba380e4ed20f041faa48951745d3097173fd0c9",
+ "generated_at": "2026-11-21T15:58:18Z",
+ "run_id": "20261121T155818Z-934ef58",
+ "commit": "934ef58b1160f7ae5bc529c09cf3bccf38d1c0e6",
  "task": "master",
  "status": "DEFECT",
  "junit": {
   "tests": 238,
   "failures": 0,
   "errors": 0,
-  "skipped": 5,
-  "passed": 233,
-  "seconds": 2907.9,
+  "skipped": 4,
+  "passed": 234,
+  "seconds": 2760.3,
   "files": 8,
   "unparseable": []
  },
@@ -21,8 +21,8 @@
   "stories_passing": 33,
   "scenarios": 465,
   "automated": 395,
-  "passing": 185,
-  "failing": 4,
+  "passing": 186,
+  "failing": 3,
   "no_result": 206,
   "planned": 70,
   "epics": 13,
@@ -206,8 +206,8 @@
    "stories_passing": 1,
    "scenarios": 151,
    "automated": 92,
-   "passing": 71,
-   "failing": 4,
+   "passing": 72,
+   "failing": 3,
    "no_result": 17,
    "planned": 59,
    "health": "failing"
@@ -2129,7 +2129,7 @@
    "story": "STORY-13-01"
   },
   "SC-13-01-05": {
-   "state": "failing",
+   "state": "passing",
    "name": "The manager can add the first owner and tenant from an empty unit",
    "epic": "EPIC-13",
    "story": "STORY-13-01"
@@ -3901,5 +3901,5 @@
    ]
   }
  ],
- "href": "reports/44918304423-1/"
+ "href": "reports/44919826421-1/"
 }
