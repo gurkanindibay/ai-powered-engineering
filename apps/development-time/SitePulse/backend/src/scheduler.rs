@@ -53,6 +53,12 @@ pub fn tariff_for(
     inner: &crate::state::AppStateInner,
     unit: &crate::models::IndependentUnit,
 ) -> Option<Decimal> {
+    // An explicit amount the manager typed for this unit wins over the
+    // house-type tariff (issue #297); the budget share still wins over both,
+    // and that precedence lives in `operational_dues_basis`.
+    if let Some(override_amount) = unit.monthly_tariff_override {
+        return Some(override_amount);
+    }
     let house_type = unit.house_type.as_deref()?;
     inner
         .house_types

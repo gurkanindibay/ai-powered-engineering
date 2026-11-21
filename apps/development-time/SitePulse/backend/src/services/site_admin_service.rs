@@ -359,6 +359,7 @@ impl SiteAdminService {
             .house_type
             .clone()
             .or_else(|| Some("2+1".to_string()));
+        let custom_tariff_override = request.monthly_dues;
         let mut resolved_dues = request.monthly_dues;
 
         // Resolve monthly dues from house_type tariff
@@ -370,7 +371,9 @@ impl SiteAdminService {
                         == crate::db::parse_id_to_i64(site_id))
                     && t.type_name.eq_ignore_ascii_case(ht_name)
             }) {
-                resolved_dues = Some(tariff.dues_amount);
+                if resolved_dues.is_none() {
+                    resolved_dues = Some(tariff.dues_amount);
+                }
             }
         }
         // F4: a fallback amount is never applied silently; the response says so.
@@ -722,8 +725,8 @@ impl SiteAdminService {
                     .map_err(|e| e.to_string())?;
                     client
                         .execute(
-                            "UPDATE units SET house_type = COALESCE($1, house_type), virtual_iban = COALESCE(virtual_iban, $2) WHERE id = $3",
-                            &[&effective_house_type, &viban, &unit_numeric_id],
+                            "UPDATE units SET house_type = COALESCE($1, house_type), virtual_iban = COALESCE(virtual_iban, $2), monthly_tariff_override = COALESCE($3, monthly_tariff_override) WHERE id = $4",
+                            &[&effective_house_type, &viban, &custom_tariff_override, &unit_numeric_id],
                         )
                         .await
                         .map_err(|e| e.to_string())?;
@@ -737,15 +740,16 @@ impl SiteAdminService {
                 let unit_row = client
                     .query_one(
                         r#"
-                        INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban, house_type, occupancy_status)
-                        VALUES ($1, $2, $3, $4, $10, $5, $6, $7, $8, $9)
+                        INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban, house_type, occupancy_status, monthly_tariff_override)
+                        VALUES ($1, $2, $3, $4, $10, $5, $6, $7, $8, $9, $11)
                         ON CONFLICT (block_id, unit_number) DO UPDATE SET
                             deleted_at = NULL,
                             floor = EXCLUDED.floor,
                             owner_person_id = EXCLUDED.owner_person_id,
                             tenant_person_id = EXCLUDED.tenant_person_id,
                             house_type = EXCLUDED.house_type,
-                            occupancy_status = EXCLUDED.occupancy_status
+                            occupancy_status = EXCLUDED.occupancy_status,
+                            monthly_tariff_override = COALESCE(EXCLUDED.monthly_tariff_override, units.monthly_tariff_override)
                         -- only an archived (soft-deleted) flat is revived; an active one still conflicts
                         WHERE units.deleted_at IS NOT NULL
                         RETURNING id
@@ -761,6 +765,7 @@ impl SiteAdminService {
                             &effective_house_type,
                             &occ_status,
                             &effective_land_share,
+                            &custom_tariff_override,
                         ],
                     )
                     .await
@@ -1051,6 +1056,7 @@ impl SiteAdminService {
                 },
                 virtual_iban: Some(viban),
                 house_type: effective_house_type.clone(),
+                monthly_tariff_override: custom_tariff_override,
                 created_on: Some(Utc::now().date_naive()),
             };
 
@@ -1300,7 +1306,12 @@ impl SiteAdminService {
                         COALESCE(po.phone, '') as phone,
                         COALESCE(u.land_share, 24) as land_share,
                         u.house_type,
-                        COALESCE((SELECT principal_amount FROM dues_liabilities WHERE unit_id = u.id ORDER BY id DESC LIMIT 1), 1400.00) as monthly_dues,
+                        COALESCE(
+                            u.monthly_tariff_override,
+                            (SELECT ht.dues_amount FROM house_types ht WHERE ht.site_id = u.site_id AND LOWER(ht.type_name) = LOWER(u.house_type) LIMIT 1),
+                            (SELECT principal_amount FROM dues_liabilities WHERE unit_id = u.id ORDER BY id DESC LIMIT 1),
+                            1400.00
+                        ) as monthly_dues,
                         COALESCE(usr.must_change_password, false) as must_change_password,
                         COALESCE(usr.created_at, NOW()) as created_at,
                         COALESCE(u.occupancy_status, 'OWNER_OCCUPIED') as occupancy_status,
@@ -1494,11 +1505,28 @@ impl SiteAdminService {
                 continue;
             }
 
-            let monthly_dues = inner
-                .dues
-                .iter()
-                .find(|d| d.unit_id == unit_id)
-                .map(|d| d.principal_amount)
+            let monthly_dues = matching_unit
+                .and_then(|u| u.monthly_tariff_override)
+                .or_else(|| {
+                    matching_unit.and_then(|u| {
+                        let ht = u.house_type.as_deref()?;
+                        inner
+                            .house_types
+                            .iter()
+                            .find(|h| {
+                                (h.site_id == site_id || crate::auth::same_id(&h.site_id, site_id))
+                                    && h.type_name.eq_ignore_ascii_case(ht)
+                            })
+                            .map(|h| h.dues_amount)
+                    })
+                })
+                .or_else(|| {
+                    inner
+                        .dues
+                        .iter()
+                        .find(|d| d.unit_id == unit_id)
+                        .map(|d| d.principal_amount)
+                })
                 .unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
 
             let household = inner
@@ -1784,6 +1812,13 @@ impl SiteAdminService {
                             .map_err(|e| e.to_string())?;
                     }
                     if let Some(dues) = req.monthly_dues {
+                        client
+                            .execute(
+                                "UPDATE units SET monthly_tariff_override = $1 WHERE id = $2",
+                                &[&dues, &u_id],
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
                         client.execute(
                             "UPDATE dues_liabilities SET principal_amount = $1 WHERE unit_id = $2 AND status = 'PENDING'",
                             &[&dues, &u_id],
@@ -1895,6 +1930,7 @@ impl SiteAdminService {
                 inner.units[uidx].house_type = Some(ht.clone());
             }
             if let Some(dues) = req.monthly_dues {
+                inner.units[uidx].monthly_tariff_override = Some(dues);
                 let unit_id = inner.units[uidx].id.clone();
                 for d in inner
                     .dues
@@ -2894,6 +2930,7 @@ impl SiteAdminService {
                             tenant_user_id: None,
                             virtual_iban: dto.virtual_iban.clone(),
                             house_type: req.house_type.clone(),
+                            monthly_tariff_override: None,
                             created_on: Some(chrono::Utc::now().date_naive()),
                         };
                         if !inner.units.iter().any(|u| u.id == dto.id) {
@@ -2973,6 +3010,7 @@ impl SiteAdminService {
                 tenant_user_id: None,
                 virtual_iban: viban.clone(),
                 house_type: req.house_type.clone(),
+                monthly_tariff_override: None,
                 created_on: Some(chrono::Utc::now().date_naive()),
             };
 
@@ -3486,6 +3524,69 @@ mod tests {
         assert!(
             created_dues.is_empty(),
             "registering an owner must not generate dues liabilities (issue #286)"
+        );
+
+        let unit = inner
+            .units
+            .iter()
+            .find(|u| u.id == response.unit_id)
+            .expect("unit must exist");
+        assert_eq!(
+            unit.monthly_tariff_override,
+            Some(Decimal::new(1500, 0)),
+            "per-unit custom tariff override must be persisted on unit (issue #297)"
+        );
+        assert_eq!(
+            response.monthly_dues,
+            Decimal::new(1500, 0),
+            "registration response must return the custom tariff override (issue #297)"
+        );
+        assert_eq!(
+            crate::scheduler::tariff_for(&inner, unit),
+            Some(Decimal::new(1500, 0)),
+            "scheduler::tariff_for must prefer custom override over house type tariff (issue #297)"
+        );
+    }
+
+    #[tokio::test]
+    async fn when_updating_unit_monthly_dues_then_tariff_override_is_updated() {
+        let state = AppState::new_with_test_fixtures();
+        let service = SiteAdminService::new(state.clone());
+
+        let req = crate::models::UpdateHomeOwnerRequest {
+            owner_full_name: None,
+            email: None,
+            phone: None,
+            tenant_full_name: None,
+            tenant_email: None,
+            tenant_phone: None,
+            remove_tenant: None,
+            house_type: None,
+            monthly_dues: Some(Decimal::new(2500, 0)),
+            land_share: None,
+            is_resident: None,
+        };
+
+        service
+            .update_home_owner("site-1", "d-14", req, false)
+            .await
+            .expect("update should succeed");
+
+        let inner = state.inner.read().await;
+        let unit = inner
+            .units
+            .iter()
+            .find(|u| u.id == "d-14")
+            .expect("unit d-14 must exist");
+        assert_eq!(
+            unit.monthly_tariff_override,
+            Some(Decimal::new(2500, 0)),
+            "unit update must store monthly_tariff_override (issue #297)"
+        );
+        assert_eq!(
+            crate::scheduler::tariff_for(&inner, unit),
+            Some(Decimal::new(2500, 0)),
+            "tariff_for must reflect the updated override"
         );
     }
 }

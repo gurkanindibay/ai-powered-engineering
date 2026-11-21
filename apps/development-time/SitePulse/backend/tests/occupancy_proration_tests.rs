@@ -75,6 +75,7 @@ async fn state_with_unit(
         tenant_user_id: tenant_user_id.map(str::to_string),
         virtual_iban: None,
         house_type: Some("2+1".to_string()),
+        monthly_tariff_override: None,
         created_on: Some(date(created_on)),
     });
     inner.house_types.push(HouseTypeTariff {
