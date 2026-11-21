@@ -82,18 +82,21 @@ def parse_seen(values: list[str]) -> Seen:
     for value in values:
         number, sep, rest = value.partition("@")
         head, _, ci = rest.partition(":")
-        if not sep or not number.lstrip("#").isdigit() or not head or (ci and ci not in CI_STATES):
-            raise ValueError(f"--seen expects N@SHA or N@SHA:<{'|'.join(sorted(CI_STATES))}>, got {value!r}")
+        if (not sep or not number.lstrip("#").isdigit() or len(head) < 7
+                or (ci and ci not in CI_STATES)):
+            raise ValueError(f"--seen expects N@SHA (7+ hex chars) or N@SHA:<{'|'.join(sorted(CI_STATES))}>, got {value!r}")
         seen[(int(number.lstrip("#")), head[:12])] = ci or None
     return seen
 
 
 def unseen(ready: list[Entry], seen: Seen) -> list[Entry]:
-    """Drop PRs suppressed by --seen while their head *and* CI state are unchanged."""
+    """Drop PRs suppressed by --seen while their head *and* CI state are unchanged.
+    SHAs match by prefix, so `264@5a9f4328` and the queue's 12-char head agree."""
     out = []
     for e in ready:
-        key = (e["number"], e["head"][:12])
-        if key not in seen:
+        head = e["head"][:12]
+        key = next((k for k in seen if k[0] == e["number"] and (head.startswith(k[1]) or k[1].startswith(head))), None)
+        if key is None:
             out.append(e)
             continue
         if seen[key] is None:

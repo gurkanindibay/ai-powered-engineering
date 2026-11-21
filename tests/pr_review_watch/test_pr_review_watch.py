@@ -49,11 +49,11 @@ class FakeClock:
 
 class Seen(unittest.TestCase):
     def test_parse(self):
-        seen = w.parse_seen(["#257@ab12cd34ef567890", "3@xyz:failed"])
-        self.assertEqual(seen, {(257, "ab12cd34ef56"): None, (3, "xyz"): "failed"})
+        seen = w.parse_seen(["#257@ab12cd34ef567890", "3@abc1234:failed"])
+        self.assertEqual(seen, {(257, "ab12cd34ef56"): None, (3, "abc1234"): "failed"})
 
     def test_rejects_bad_values(self):
-        for bad in ["257", "x@sha", "5@", "5@sha:green"]:
+        for bad in ["257", "x@abcdef1", "5@", "5@abc", "5@abcdef1:green"]:
             with self.assertRaises(ValueError):
                 w.parse_seen([bad])
 
@@ -63,6 +63,13 @@ class Seen(unittest.TestCase):
         self.assertEqual([(e["number"], e["head"]) for e in w.unseen(ready, seen)],
                          [(257, "ffffffffffff"), (9, "aaa111bbb222")])
         self.assertEqual(seen[(257, "ab12cd34ef56")], "passed")  # bound to the first state seen
+
+    def test_short_sha_matches_queue_head(self):
+        # The queue reports 12-char heads; a 7- or 8-char SHA from `git log --oneline` must match.
+        seen = w.parse_seen(["264@5a9f4328"])
+        self.assertEqual(w.unseen([entry(264, "5a9f432883b0")], seen), [])
+        self.assertEqual(len(w.unseen([entry(264, "5a9f999999b0")], seen)), 1)
+        self.assertEqual(len(w.unseen([entry(265, "5a9f432883b0")], seen)), 1)  # other PR
 
     def test_same_head_ci_rerun_wakes(self):
         # Reviewer left a COMMENT on a red head; the author reruns CI on the same commit.
