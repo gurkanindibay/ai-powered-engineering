@@ -263,6 +263,59 @@ async fn when_assignment_targets_an_approved_match_then_it_is_conflict() {
 }
 
 #[tokio::test]
+async fn when_the_match_has_no_site_then_assignment_is_forbidden() {
+    let state = state_with(vec![due("stmt-owner", DebtorType::Owner, "1675.00")]).await;
+    let state = &state;
+    let match_id = import_unmatched(state, "TX-STMT-296-NO-SITE", "1675.00").await;
+    {
+        let mut inner = state.inner.write().await;
+        let item = inner
+            .reconciliation_queue
+            .iter_mut()
+            .find(|m| m.match_id == match_id)
+            .expect("the fixture item exists");
+        item.site_id = String::new();
+    }
+
+    let refused = assign(state, &match_id, SITE, UNIT, DebtorType::Owner)
+        .await
+        .expect_err("an item with no site is not assignable");
+    assert_eq!(refused.0, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn when_the_unit_has_no_open_debt_for_the_assigned_role_then_it_is_unprocessable() {
+    // An owner-occupied unit: assigning the transfer to a tenant would create a
+    // tenant advance instead of settling the owner's charge.
+    let state = state_with(vec![due("stmt-owner", DebtorType::Owner, "1675.00")]).await;
+    let state = &state;
+    let match_id = import_unmatched(state, "TX-STMT-296-ROLE", "1675.00").await;
+    let refused = assign(state, &match_id, SITE, UNIT, DebtorType::Tenant)
+        .await
+        .expect_err("the unit owes the tenant nothing");
+    assert_eq!(refused.0, StatusCode::UNPROCESSABLE_ENTITY);
+    {
+        let inner = state.inner.read().await;
+        let item = inner
+            .reconciliation_queue
+            .iter()
+            .find(|m| m.match_id == match_id)
+            .expect("the fixture item exists");
+        assert!(item.assigned_unit_id.is_none());
+        assert!(item.assigned_debtor_role.is_none());
+    }
+
+    // A unit with no charge at all also has no role to settle to.
+    let empty = state_with(Vec::new()).await;
+    let empty = &empty;
+    let empty_match = import_unmatched(empty, "TX-STMT-296-NO-DEBT", "1675.00").await;
+    let refused = assign(empty, &empty_match, SITE, UNIT, DebtorType::Owner)
+        .await
+        .expect_err("the unit owes nothing");
+    assert_eq!(refused.0, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
 async fn when_assignment_targets_an_automatically_matched_item_then_it_is_conflict() {
     let state = state_with(vec![due("stmt-owner", DebtorType::Owner, "1675.00")]).await;
     let state = &state;

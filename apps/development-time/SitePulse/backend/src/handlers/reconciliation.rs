@@ -536,7 +536,18 @@ pub async fn assign_reconciliation_match(
                 format!("Match {} not found", match_id),
             ));
         };
-        if !queued.site_id.is_empty() && !crate::auth::same_id(&queued.site_id, &payload.site_id) {
+        // An item with no site belongs to no tenant; assigning it would let any
+        // site's manager settle another tenant's statement line.
+        if queued.site_id.is_empty() {
+            return Err((
+                StatusCode::FORBIDDEN,
+                format!(
+                    "Match {} is not bound to a site and cannot be assigned",
+                    match_id
+                ),
+            ));
+        }
+        if !crate::auth::same_id(&queued.site_id, &payload.site_id) {
             return Err((
                 StatusCode::FORBIDDEN,
                 format!(
@@ -576,6 +587,18 @@ pub async fn assign_reconciliation_match(
                 format!("Unit '{}' not found in this site.", payload.unit_id),
             ));
         };
+        // Settling a role the unit does not owe would turn the line into that
+        // role's advance, so only a role with an open charge can be assigned.
+        if !open_debtor_types(&inner, &unit.id).contains(&payload.debtor_role) {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                format!(
+                    "Unit {} has no open {} debt to settle; the assignment was not stored",
+                    unit.id,
+                    payload.debtor_role.as_str()
+                ),
+            ));
+        }
         unit
     };
 

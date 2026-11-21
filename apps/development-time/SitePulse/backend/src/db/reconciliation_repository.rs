@@ -82,7 +82,9 @@ pub async fn save_reconciliation_assignment(
         .execute(
             "UPDATE reconciliation_queue \
              SET assigned_unit_id = $3, assigned_debtor_role = $4 \
-             WHERE match_id = $1 AND site_id = $2",
+             WHERE match_id = $1 AND site_id = $2 \
+               AND status NOT IN ('APPROVED', 'ALREADY_PROCESSED') \
+               AND matched_unit_id IS NULL",
             &[&match_id, &site_id_num, &unit_id_num, &debtor_role.as_str()],
         )
         .await?;

@@ -698,5 +698,40 @@ async fn reconciliation_assignment_is_persisted_for_its_site_only() {
         item.assigned_debtor_role,
         Some(sitepulse_backend::models::DebtorType::Owner)
     );
+
+    // The UPDATE carries the handler's guards, so a confirmation that lands
+    // between its read and write cannot be overwritten by a stale assignment.
+    t.exec("UPDATE reconciliation_queue SET status = 'APPROVED' WHERE match_id = 'MATCH-ASSIGN-1'")
+        .await;
+    let approved = sitepulse_backend::db::save_reconciliation_assignment(
+        &t.pool,
+        "MATCH-ASSIGN-1",
+        &site_text,
+        &unit_text,
+        sitepulse_backend::models::DebtorType::Tenant,
+    )
+    .await
+    .expect("the guarded update runs");
+    assert!(!approved, "an approved item takes no assignment");
+
+    t.exec(&format!(
+        "UPDATE reconciliation_queue SET status = 'UNMATCHED', matched_unit_id = {unit} \
+         WHERE match_id = 'MATCH-ASSIGN-1'"
+    ))
+    .await;
+    let matched = sitepulse_backend::db::save_reconciliation_assignment(
+        &t.pool,
+        "MATCH-ASSIGN-1",
+        &site_text,
+        &unit_text,
+        sitepulse_backend::models::DebtorType::Owner,
+    )
+    .await
+    .expect("the guarded update runs");
+    assert!(
+        !matched,
+        "an automatically matched item takes no assignment"
+    );
+
     t.drop_db().await;
 }
