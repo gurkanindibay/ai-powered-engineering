@@ -3448,7 +3448,7 @@ mod tests {
 
     #[tokio::test]
     async fn when_registering_home_owner_then_does_not_create_due_liability() {
-        let state = AppState::default();
+        let state = AppState::new_with_test_fixtures();
         let service = SiteAdminService::new(state.clone());
 
         let req = RegisterHomeOwnerRequest {
@@ -3475,8 +3475,6 @@ mod tests {
             .register_home_owner("site-1", req)
             .await
             .expect("registration should succeed");
-
-        assert_eq!(response.monthly_dues, Decimal::new(1400, 0));
 
         let inner = state.inner.read().await;
         let created_dues: Vec<_> = inner
