@@ -69,7 +69,7 @@ The workspace centers on **SitePulse**, a residential site platform built using 
      - `git fetch origin master`
      - `git worktree add -b <branch> <worktree-path> origin/master`
      - Never start a new task in a worktree left over from earlier work, and never stack unrelated work on another task's branch or PR.
-   - **After the task's PR is merged (rule 15; or closed, or green with no further follow-up expected), you MUST remove your worktree.** Cleanup is part of the task, not optional, and this rule is the permission to do it:
+   - **After the task's PR is merged (rule 15), or closed unmerged, or the user told you not to follow it up, you MUST remove your worktree.** Cleanup is part of the task, not optional, and this rule is the permission to do it:
      - "Green" means every PR check passed, or no check ran for the PR (for example, a docs-only change that no workflow triggers on). It does not mean "checks still pending".
      - "Your worktree" is the worktree your task's work was done in, whether you created it or your host (Claude Code app, IDE, harness) created it for your session. Never remove a worktree used by another agent or task.
      - Before removing, verify that every change is committed, the branch is pushed (`git status` is clean and the branch has no unpushed commits), and the PR exists.

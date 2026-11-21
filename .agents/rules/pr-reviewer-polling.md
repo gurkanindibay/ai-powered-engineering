@@ -29,7 +29,8 @@ gh api repos/{owner}/{repo}/pulls/<n>/reviews --paginate \
 
 - **No bot review yet**: review the PR.
 - **Bot reviewed a commit that is not the current head**: the author pushed since. Re-review, looking first at what changed since that commit (`git diff <reviewed-sha>..<head>`), then at the whole PR if the change is wide.
-- **Bot reviewed the current head**: skip it, even if comments exist. If the author replied with a disagreement on the same head, answer it once with a comment, do not repeat the review.
+- **Bot's last review on the current head is `COMMENT`** (for example it was waiting on CI): not final. Re-check CI this cycle and finish the review (approve or request changes) once CI has finished.
+- **Bot's last review on the current head is `APPROVED` or `CHANGES_REQUESTED`**: skip it, even if comments exist. If the author replied with a disagreement on the same head, answer it once with a comment, do not repeat the review.
 - **Draft PRs and PRs you authored**: skip.
 
 When nothing changed anywhere, end the cycle silently with one line. Do not re-read diffs you already reviewed (AGENTS.md rule 9).
@@ -52,7 +53,7 @@ When nothing changed anywhere, end the cycle silently with one line. Do not re-r
    ```
 
 5. **Approval is a real GitHub approval** whenever it is available. Only if GitHub refuses the formal review, fall back to a conversation comment that starts with `APPROVED` (`review_bot.py comment`), so the author's loop still recognises it.
-6. Do not approve while CI is failing or still running on the head. Post `COMMENT` saying you are waiting on CI, and look again next cycle.
+6. Do not approve while CI is failing or still running on the head. Post nothing (or at most one `COMMENT` saying you are waiting on CI; a `COMMENT` is never a final verdict, see the loop above) and look again next cycle.
 
 ## Limits
 
