@@ -28,7 +28,7 @@ pub fn caller_debtor_role(
         return None;
     }
     // Units reference parties as `person-<id>`; a durable person id beats the login id.
-    if let Some(person_ref) = viewer_person_id.map(|id| format!("person-{id}")) {
+    if let Some(person_ref) = viewer_person_id.map(crate::domain::person_identity::person_key) {
         if unit.tenant_user_id.as_deref() == Some(person_ref.as_str()) {
             return Some(DEBTOR_TENANT);
         }

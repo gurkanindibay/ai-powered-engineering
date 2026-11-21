@@ -446,6 +446,9 @@ impl OccupancyService {
                     history.push(opened_item.clone());
                 }
             }
+            let opened_user_or_person_key = opened
+                .as_ref()
+                .map(|session| inner.user_or_person_key_for_person(site_id, session.person_id));
 
             // The database may resolve a tenant or owner who has no login account.
             // Keep the in-memory payer identity aligned with the committed session.
@@ -460,14 +463,15 @@ impl OccupancyService {
                 {
                     cached_unit.tenant_user_id = None;
                 }
-                if let Some(session) = opened.as_ref() {
-                    let person_id = format!("person-{}", session.person_id);
+                if let (Some(session), Some(person_id)) =
+                    (opened.as_ref(), opened_user_or_person_key.as_ref())
+                {
                     match session.role {
                         DebtorType::Owner => {
-                            cached_unit.owner_user_id = Some(person_id);
+                            cached_unit.owner_user_id = Some(person_id.clone());
                         }
                         DebtorType::Tenant => {
-                            cached_unit.tenant_user_id = Some(person_id);
+                            cached_unit.tenant_user_id = Some(person_id.clone());
                         }
                     }
                 }

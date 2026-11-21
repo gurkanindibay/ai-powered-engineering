@@ -158,7 +158,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             // Persons live in their own id namespace (`person-<id>`) so they can
             // never collide with, or overwrite, a real login account.
             let user = User {
-                id: format!("person-{}", p_id),
+                id: crate::domain::person_identity::person_key(p_id),
                 // Persons belong to one site (V21); the in-memory copy keeps it.
                 site_id: p_site,
                 full_name: p_name,
@@ -217,8 +217,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 unit_number,
                 floor,
                 land_share,
-                owner_user_id: owner_person_id.map(|p| format!("person-{}", p)),
-                tenant_user_id: tenant_person_id.map(|p| format!("person-{}", p)),
+                owner_user_id: owner_person_id.map(crate::domain::person_identity::person_key),
+                tenant_user_id: tenant_person_id.map(crate::domain::person_identity::person_key),
                 virtual_iban: resolved_viban,
                 house_type,
                 created_on,
@@ -227,7 +227,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             // Register unit payer names (tenant first as primary payer, then owner)
             for (p_id, primary) in [(tenant_person_id, true), (owner_person_id, false)] {
                 let Some(p_id) = p_id else { continue };
-                let key = format!("person-{}", p_id);
+                let key = crate::domain::person_identity::person_key(p_id);
                 if let Some(p) = state.users.iter().find(|u| u.id == key) {
                     let name = p.full_name.clone();
                     let entry = state.unit_payer_names.entry(unit.id.clone()).or_default();

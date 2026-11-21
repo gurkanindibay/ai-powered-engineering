@@ -570,10 +570,7 @@ impl PaymentTrackingService {
                         .iter()
                         .find(|user| &user.id == id)
                         .and_then(|user| user.person_id)
-                        .or_else(|| {
-                            id.strip_prefix("person-")
-                                .and_then(|value| value.parse().ok())
-                        })
+                        .or_else(|| crate::domain::person_identity::parse_person_key(id))
                 })
             };
             let tenant_person_id = person_id_for_user(unit.tenant_user_id.as_ref());
@@ -594,11 +591,8 @@ impl PaymentTrackingService {
                         && crate::domain::fold_turkish(user.full_name.trim()) == payer_name_key
                 })
                 .filter_map(|user| {
-                    user.person_id.or_else(|| {
-                        user.id
-                            .strip_prefix("person-")
-                            .and_then(|value| value.parse().ok())
-                    })
+                    user.person_id
+                        .or_else(|| crate::domain::person_identity::parse_person_key(&user.id))
                 })
                 .filter(|person_id| {
                     inner.dues.iter().any(|due| {
@@ -2014,7 +2008,7 @@ impl PaymentTrackingService {
                     .iter()
                     .find(|u| u.id == uid)
                     .and_then(|u| u.person_id)
-                    .or_else(|| uid.strip_prefix("person-").and_then(|n| n.parse().ok()))
+                    .or_else(|| crate::domain::person_identity::parse_person_key(uid))
             })
             .unwrap_or(0);
         let old_owner_start_date = old_owner_user_id

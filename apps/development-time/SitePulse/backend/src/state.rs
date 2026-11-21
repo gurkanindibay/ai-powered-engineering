@@ -109,6 +109,26 @@ impl Default for AppStateInner {
 }
 
 impl AppStateInner {
+    /// Resolves a cached account ID or a synthetic person key to its person ID.
+    pub fn person_id_for_user_or_person_key(&self, user_or_person_key: &str) -> Option<i64> {
+        self.users
+            .iter()
+            .find(|user| user.id == user_or_person_key)
+            .and_then(|user| user.person_id)
+            .or_else(|| crate::domain::person_identity::parse_person_key(user_or_person_key))
+    }
+
+    /// Uses a same-site account ID when available, otherwise a synthetic person key.
+    pub fn user_or_person_key_for_person(&self, site_id: &str, person_id: i64) -> String {
+        self.users
+            .iter()
+            .find(|user| {
+                crate::auth::same_id(&user.site_id, site_id) && user.person_id == Some(person_id)
+            })
+            .map(|user| user.id.clone())
+            .unwrap_or_else(|| crate::domain::person_identity::person_key(person_id))
+    }
+
     pub fn new() -> Self {
         let mut inner = Self::blank();
         inner.seed_system_lookups();
@@ -984,6 +1004,34 @@ mod fixture_detection_tests {
         assert_eq!(
             state.available_advance_of("14", "TENANT"),
             Decimal::new(80000, 2)
+        );
+    }
+
+    #[test]
+    fn occupancy_person_resolution_prefers_same_site_account_and_uses_person_key_without_one() {
+        let mut state = AppStateInner::blank();
+        state.seed_test_fixtures();
+        let mut account = state.users[0].clone();
+        account.id = "usr-linked-resident".to_string();
+        account.site_id = "site-1".to_string();
+        account.person_id = Some(27);
+        state.users.push(account);
+
+        assert_eq!(
+            state.user_or_person_key_for_person("site-1", 27),
+            "usr-linked-resident"
+        );
+        assert_eq!(
+            state.user_or_person_key_for_person("site-2", 27),
+            "person-27"
+        );
+        assert_eq!(
+            state.person_id_for_user_or_person_key("usr-linked-resident"),
+            Some(27)
+        );
+        assert_eq!(
+            state.person_id_for_user_or_person_key("person-28"),
+            Some(28)
         );
     }
 }
