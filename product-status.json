@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T17:36:26Z",
- "run_id": "20261121T173625Z-0223fde",
- "commit": "0223fde6d64fb0f691f6f0adb84ea57d8dfd9616",
+ "generated_at": "2026-11-21T18:14:45Z",
+ "run_id": "20261121T181444Z-5f21fac",
+ "commit": "5f21fac066828ce98b76a4c428cc8052024d3a88",
  "task": "master",
  "status": "DEFECT",
  "junit": {
   "tests": 272,
   "failures": 0,
   "errors": 0,
-  "skipped": 5,
-  "passed": 267,
-  "seconds": 3178.8,
+  "skipped": 4,
+  "passed": 268,
+  "seconds": 3161.2,
   "files": 8,
   "unparseable": []
  },
@@ -21,8 +21,8 @@
   "stories_passing": 33,
   "scenarios": 465,
   "automated": 415,
-  "passing": 202,
-  "failing": 4,
+  "passing": 203,
+  "failing": 3,
   "no_result": 209,
   "planned": 50,
   "epics": 13,
@@ -206,8 +206,8 @@
    "stories_passing": 1,
    "scenarios": 151,
    "automated": 109,
-   "passing": 88,
-   "failing": 4,
+   "passing": 89,
+   "failing": 3,
    "no_result": 17,
    "planned": 42,
    "health": "failing"
@@ -2105,7 +2105,7 @@
    "story": "STORY-13-01"
   },
   "SC-13-01-01": {
-   "state": "failing",
+   "state": "passing",
    "name": "A site with no data shows empty states, not errors",
    "epic": "EPIC-13",
    "story": "STORY-13-01"
@@ -3926,5 +3926,5 @@
    ]
   }
  ],
- "href": "reports/44929943607-1/"
+ "href": "reports/44933568695-1/"
 }
