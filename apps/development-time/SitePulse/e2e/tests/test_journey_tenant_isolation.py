@@ -403,15 +403,15 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
         selin_person_id = stack.sql(f"SELECT id FROM persons WHERE site_id = {site_a.site_id} AND email = '{selin_email}';")
         ahmet_person_id = stack.sql(f"SELECT id FROM persons WHERE site_id = {site_a.site_id} AND email = '{ahmet_email}';")
 
-        # Tenant owes 1500 operational principal; owner has 1000 capital liability (both 36 days overdue)
+        # Tenant owes 1500 operational principal; owner has 1000 capital liability (both 36 days overdue in site timezone)
         stack.sql(
             "BEGIN; "
             f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, "
             f"principal_amount, due_date, status) VALUES "
-            f"({unit_2}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {selin_person_id}, 1500.00, CURRENT_DATE - INTERVAL '36 days', 'PENDING'); "
+            f"({unit_2}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {selin_person_id}, 1500.00, (now() AT TIME ZONE 'Europe/Istanbul')::date - 36, 'PENDING'); "
             f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, "
             f"principal_amount, due_date, status) VALUES "
-            f"({unit_2}, 'Ekim 2026', 'OWNER', 'CAPITAL_DUES', {ahmet_person_id}, 1000.00, CURRENT_DATE - INTERVAL '36 days', 'PENDING'); "
+            f"({unit_2}, 'Ekim 2026', 'OWNER', 'CAPITAL_DUES', {ahmet_person_id}, 1000.00, (now() AT TIME ZONE 'Europe/Istanbul')::date - 36, 'PENDING'); "
             "COMMIT;"
         )
 
