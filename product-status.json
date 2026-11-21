@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T14:06:11Z",
- "run_id": "20261121T140610Z-2cc8f75",
- "commit": "2cc8f75bc8715c5c742812d10e5a29af28d66b7e",
+ "generated_at": "2026-11-21T14:30:39Z",
+ "run_id": "20261121T143039Z-340b59e",
+ "commit": "340b59ebacf4a90cff9313f830aa9bf59f882f7d",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 193,
+  "tests": 196,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 192,
-  "seconds": 2394.4,
+  "passed": 195,
+  "seconds": 2549.9,
   "files": 8,
   "unparseable": []
  },
@@ -20,11 +20,11 @@
   "stories_with_scenarios": 116,
   "stories_passing": 33,
   "scenarios": 465,
-  "automated": 362,
-  "passing": 160,
+  "automated": 369,
+  "passing": 163,
   "failing": 0,
-  "no_result": 202,
-  "planned": 103,
+  "no_result": 206,
+  "planned": 96,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 0
@@ -205,11 +205,11 @@
    "stories_with_scenarios": 16,
    "stories_passing": 1,
    "scenarios": 151,
-   "automated": 59,
-   "passing": 46,
+   "automated": 66,
+   "passing": 49,
    "failing": 0,
-   "no_result": 13,
-   "planned": 92,
+   "no_result": 17,
+   "planned": 85,
    "health": "in_progress"
   }
  ],
@@ -2603,19 +2603,19 @@
    "story": "STORY-13-07"
   },
   "SC-13-07-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Teardown removes every row of the site",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
   },
   "SC-13-07-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Teardown never touches shared seed data",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
   },
   "SC-13-07-04": {
-   "state": "planned",
+   "state": "passing",
    "name": "Teardown runs when the journey fails",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
@@ -2627,25 +2627,25 @@
    "story": "STORY-13-07"
   },
   "SC-13-07-06": {
-   "state": "planned",
-   "name": "Two journeys in parallel do not see each other's data",
+   "state": "passing",
+   "name": "Two active journeys do not see each other's data",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
   },
   "SC-13-07-07": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A finished run leaves the database as it started",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
   },
   "SC-13-07-08": {
-   "state": "planned",
+   "state": "passing",
    "name": "A leftover site from a crashed earlier run is cleaned before the next run starts",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
   },
   "SC-13-07-09": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Cleanup is safe to retry after an evidence capture failure",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
@@ -3180,7 +3180,7 @@
    "stories": 116,
    "stories_with_scenarios": 116,
    "scenarios": 465,
-   "automated": 362
+   "automated": 369
   }
  ],
  "recent_changes": [
@@ -3190,7 +3190,7 @@
    "title": "Site Admin Journeys",
    "new_stories": 4,
    "new_scenarios": 22,
-   "newly_automated": 18,
+   "newly_automated": 25,
    "items": 4,
    "samples": [
     "STORY-13-13: Zero to multi-site financial journey",
@@ -3901,5 +3901,5 @@
    ]
   }
  ],
- "href": "reports/44910570230-1/"
+ "href": "reports/44913134332-1/"
 }
