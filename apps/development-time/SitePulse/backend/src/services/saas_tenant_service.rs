@@ -64,10 +64,10 @@ impl SaasTenantService {
                 .unwrap_or(PlanType::Standard);
             let license_end = Utc::now().date_naive() + chrono::Days::new(365);
 
-            let blocks_list: Vec<String> = request
-                .blocks
-                .filter(|b| !b.is_empty())
-                .unwrap_or_else(|| vec!["A Blok".to_string(), "B Blok".to_string()]);
+            let blocks_list: Vec<String> = match request.blocks {
+                Some(b) => b,
+                None => vec!["A Blok".to_string(), "B Blok".to_string()],
+            };
 
             (slug, plan, license_end, blocks_list)
         };
@@ -223,11 +223,7 @@ impl SaasTenantService {
                     .filter(|b| b.site_id == site.id || site.id.ends_with(&b.site_id))
                     .map(|b| b.block_name.clone())
                     .collect();
-                let blocks = if site_blocks.is_empty() {
-                    vec!["A Blok".to_string(), "B Blok".to_string()]
-                } else {
-                    site_blocks
-                };
+                let blocks = site_blocks;
 
                 SaasSiteSummaryDto {
                     site_id: site.id.clone(),

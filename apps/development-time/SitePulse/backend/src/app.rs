@@ -118,6 +118,8 @@ routes! {
     delete "/api/v1/site-admin/house-types/{id}" => handlers::delete_house_type, Require(SiteManage);
     get "/api/v1/site-admin/blocks" => handlers::get_blocks, Require(SiteManage);
     post "/api/v1/site-admin/blocks" => handlers::create_block, Require(SiteManage);
+    get "/api/v1/site-admin/units" => handlers::get_units, Require(SiteManage);
+    post "/api/v1/site-admin/units" => handlers::create_units, Require(SiteManage);
     get "/api/v1/registration/invite-link" => handlers::generate_registration_link, Require(ResidentInviteSite);
     post "/api/v1/registration/submit/{slug}" => handlers::submit_self_registration, Public;
     get "/api/v1/registration/pending" => handlers::get_pending_registrations, Require(ResidentApprove);

@@ -225,6 +225,108 @@ class Api:
             body["designation"] = designation
         return self.call("POST", "/api/v1/payments/record-manual", session.token, body=body)
 
+    def get_blocks(self, session: Session, site_id: str | None = None) -> list[dict]:
+        """Lists blocks for the site."""
+        query = f"?site_id={site_id}" if site_id else ""
+        return self.call("GET", f"/api/v1/site-admin/blocks{query}", session.token)
+
+    def create_block(self, session: Session, block_name: str, total_floors: int = 10,
+                     site_id: str | None = None) -> dict:
+        """Creates a block in the site."""
+        query = f"?site_id={site_id}" if site_id else ""
+        return self.call("POST", f"/api/v1/site-admin/blocks{query}", session.token,
+                         body={"block_name": block_name, "total_floors": total_floors})
+
+    def get_units(self, session: Session, site_id: str | None = None) -> list[dict]:
+        """Lists units for the site."""
+        query = f"?site_id={site_id}" if site_id else ""
+        return self.call("GET", f"/api/v1/site-admin/units{query}", session.token)
+
+    def create_units(self, session: Session, block_name: str, start_unit: int | None = None,
+                     end_unit: int | None = None, unit_number: int | None = None,
+                     unit_numbers: list[int] | None = None, site_id: str | None = None) -> list[dict]:
+        """Creates units in a block."""
+        query = f"?site_id={site_id}" if site_id else ""
+        body: dict = {"block_name": block_name}
+        if start_unit is not None and end_unit is not None:
+            body["start_unit"] = start_unit
+            body["end_unit"] = end_unit
+        elif unit_number is not None:
+            body["unit_number"] = unit_number
+        elif unit_numbers is not None:
+            body["unit_numbers"] = unit_numbers
+        return self.call("POST", f"/api/v1/site-admin/units{query}", session.token, body=body)
+
+    def register_home_owner(self, session: Session, block: str, unit_no: int,
+                            owner_full_name: str, email: str, phone: str = "+90 532 000 00 00",
+                            is_resident: bool = True, tenant: dict | None = None,
+                            household_members: list[dict] | None = None,
+                            monthly_dues: Decimal = Decimal("0.00"),
+                            floor: int | None = None,
+                            site_id: str | None = None) -> dict:
+        """Registers a resident/owner into a unit."""
+        query = f"?site_id={site_id}" if site_id else ""
+        if floor is None:
+            floor = ((unit_no - 1) // 4) + 1
+        body: dict = {
+            "block": block,
+            "unit_no": unit_no,
+            "floor": floor,
+            "owner_full_name": owner_full_name,
+            "email": email,
+            "phone": phone,
+            "is_resident": is_resident,
+            "monthly_dues": str(monthly_dues),
+        }
+        if tenant:
+            if "new" in tenant or "id" in tenant:
+                body["tenant"] = tenant
+            else:
+                body["tenant_full_name"] = tenant.get("full_name")
+                body["tenant_email"] = tenant.get("email")
+                body["tenant_phone"] = tenant.get("phone", "+90 532 000 00 00")
+        if household_members:
+            body["members"] = [
+                {
+                    "person": {
+                        "kind": "new",
+                        "card": {
+                            "full_name": m["full_name"],
+                            "phone": m.get("phone", "+90 532 000 00 00"),
+                            "email": m.get("email", ""),
+                        },
+                    } if "person" not in m else m["person"],
+                    "relationship": m.get("relationship", "OTHER"),
+                }
+                for m in household_members
+            ]
+        return self.call("POST", f"/api/v1/site-admin/home-owners{query}", session.token, body=body)
+
+    def get_unit_occupancy_state(self, session: Session, unit_id: str, site_id: str | None = None) -> dict:
+        site = site_id or session.user["site_id"]
+        return self.call("GET", f"/api/v1/site-admin/units/{unit_id}/occupancy-state?site_id={site}", session.token)
+
+    def get_unit_members(self, session: Session, unit_id: str, site_id: str | None = None) -> list[dict]:
+        site = site_id or session.user["site_id"]
+        return self.call("GET", f"/api/v1/home-residents/members/{unit_id}?site_id={site}", session.token)
+
+    def add_unit_member(self, session: Session, unit_id: str, full_name: str,
+                        relationship: str = "OTHER", phone: str = "+90 532 000 00 00",
+                        email: str = "", site_id: str | None = None) -> dict:
+        site = site_id or session.user["site_id"]
+        body = {
+            "person": {
+                "kind": "new",
+                "card": {
+                    "full_name": full_name,
+                    "phone": phone,
+                    "email": email,
+                },
+            },
+            "relationship": relationship,
+        }
+        return self.call("POST", f"/api/v1/home-residents/members/{unit_id}?site_id={site}", session.token, body=body)
+
 
 class Builders:
     """Arrange helpers. Each returns what it created."""

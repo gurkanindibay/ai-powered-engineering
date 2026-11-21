@@ -1195,6 +1195,43 @@ pub struct CreateBlockRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateUnitsRequest {
+    pub block_name: String,
+    #[serde(default)]
+    pub unit_number: Option<i32>,
+    #[serde(default)]
+    pub start_unit: Option<i32>,
+    #[serde(default)]
+    pub end_unit: Option<i32>,
+    #[serde(default)]
+    pub unit_numbers: Option<Vec<i32>>,
+    #[serde(default)]
+    pub floor: Option<i32>,
+    #[serde(default)]
+    pub land_share: Option<i32>,
+    #[serde(default)]
+    pub house_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnitDto {
+    pub id: String,
+    pub site_id: String,
+    pub block_id: String,
+    pub block_name: String,
+    pub unit_number: i32,
+    pub floor: i32,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_person_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_person_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub virtual_iban: Option<String>,
+    pub occupancy_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaasGlobalStatsDto {
     pub total_sites: usize,
     pub active_sites: usize,
