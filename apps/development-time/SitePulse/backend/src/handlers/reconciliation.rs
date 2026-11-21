@@ -554,6 +554,17 @@ pub async fn assign_reconciliation_match(
                 format!("Match {} is already approved", match_id),
             ));
         }
+        // An automatic match always wins at confirmation, so accepting an
+        // assignment for it would report success while settling another unit.
+        if let Some(matched_unit) = queued.matched_unit_id.as_deref() {
+            return Err((
+                StatusCode::CONFLICT,
+                format!(
+                    "Match {} is already matched to unit {}; only unmatched items can be assigned",
+                    match_id, matched_unit
+                ),
+            ));
+        }
         let Some(unit) = inner
             .units
             .iter()

@@ -263,6 +263,36 @@ async fn when_assignment_targets_an_approved_match_then_it_is_conflict() {
 }
 
 #[tokio::test]
+async fn when_assignment_targets_an_automatically_matched_item_then_it_is_conflict() {
+    let state = state_with(vec![due("stmt-owner", DebtorType::Owner, "1675.00")]).await;
+    let state = &state;
+    let match_id = import_unmatched(state, "TX-STMT-296-MATCHED", "1675.00").await;
+    {
+        // An item a matching rule already resolved is not an assignment
+        // candidate: confirmation would settle the automatic unit instead.
+        let mut inner = state.inner.write().await;
+        let item = inner
+            .reconciliation_queue
+            .iter_mut()
+            .find(|m| m.match_id == match_id)
+            .expect("the fixture item exists");
+        item.matched_unit_id = Some(UNIT.to_string());
+    }
+
+    let refused = assign(state, &match_id, SITE, UNIT, DebtorType::Owner)
+        .await
+        .expect_err("an automatically matched item cannot be assigned");
+    assert_eq!(refused.0, StatusCode::CONFLICT);
+    let inner = state.inner.read().await;
+    let item = inner
+        .reconciliation_queue
+        .iter()
+        .find(|m| m.match_id == match_id)
+        .expect("the fixture item exists");
+    assert!(item.assigned_unit_id.is_none());
+}
+
+#[tokio::test]
 async fn when_debtor_role_is_not_owner_or_tenant_then_the_body_is_unprocessable() {
     let request = Request::post("/api/v1/bank/statements/reconciliation-queue/MATCH-1/assign")
         .header("content-type", "application/json")
