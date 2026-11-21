@@ -173,7 +173,7 @@ class HeroBalanceCard extends StatelessWidget {
                 ),
               ),
               child: testId('hero_overdue_badge', Text(
-                '10 Gün Gecikme (%5 KMK)',
+                '${dues.daysOverdue} Gün Gecikme (%5 KMK)',
                 style: TextStyle(
                   color: AppColors.dangerText(context),
                   fontSize: 12,

@@ -32,10 +32,6 @@ BUG_EMPTY_STATES = (
     "BUG: on a site with no data the units list and the people directory show no empty-state message "
     "and no next action (the dues pages say 'Henüz Aidat Dönemi Yok'); see #283"
 )
-BUG_RESIDENT_CLOCK = (
-    "BUG: the resident dashboard computes the late fee on the client (10 days, 105.00 at the device date) "
-    "instead of showing the backend figure the admin statement shows (1600.00 at the scenario clock); see #284"
-)
 
 
 def _units_page_lines(page) -> list[str]:
@@ -247,7 +243,6 @@ def test_f4_single_period_shows_one_debt_each(request, api, actors, stack, page,
 @pytest.mark.role_resident
 @pytest.mark.covers("SC-13-02-02")
 @pytest.mark.gui_id("GUI-13-12")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=BUG_RESIDENT_CLOCK)
 def test_f4_resident_sees_what_the_admin_sees(request, api, actors, stack, page, login_page):
     with journey_site(request, api, actors, stack, "F4") as fixture:
         tenant_page = page.context.new_page()
