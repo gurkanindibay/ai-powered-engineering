@@ -340,6 +340,33 @@ pub async fn execute_plan(
         opened.as_ref(),
     )
     .await?;
+    let (new_occupancy_status, new_tenant_person_id) = match plan.to.occupancy {
+        crate::domain::unit_state::Occupancy::Vacant => ("VACANT", None),
+        crate::domain::unit_state::Occupancy::OwnerOccupied => ("OWNER_OCCUPIED", None),
+        crate::domain::unit_state::Occupancy::TenantOccupied => {
+            let pid = opened
+                .as_ref()
+                .filter(|o| o.role == SessionRole::Tenant)
+                .map(|o| o.person_id)
+                .or_else(|| {
+                    snapshot
+                        .session
+                        .as_ref()
+                        .filter(|s| s.role == SessionRole::Tenant)
+                        .map(|s| s.person_id)
+                });
+            ("TENANT_OCCUPIED", pid)
+        }
+    };
+    tx.execute(
+        "UPDATE units SET occupancy_status = $1, tenant_person_id = $2 WHERE id = $3",
+        &[
+            &new_occupancy_status,
+            &new_tenant_person_id,
+            &snapshot.unit_id,
+        ],
+    )
+    .await?;
     super::responsible_contact_repository::clear_stale_primary_contact(tx, snapshot.unit_id)
         .await?;
     Ok(TransitionOutcome {

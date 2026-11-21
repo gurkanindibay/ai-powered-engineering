@@ -671,6 +671,7 @@ impl PaymentTrackingService {
                 })
             }
         };
+
         if on_behalf_of_tenant {
             if eligible_joint_due_ids.is_empty() {
                 return Err("Owner has no jointly liable tenant balance for this unit".to_string());
@@ -2005,10 +2006,11 @@ impl PaymentTrackingService {
         // PostgreSQL is the source of truth: a refused transfer changes nothing,
         // in the database or in memory.
         let mut old_owner_exit_balance = old_owner_exit_balance;
+        let mut buyer_person_id = req.new_owner_person_id;
         if let Some(pool) = self.state.pool.clone() {
             let unit_index_id = inner.units[unit_idx].id.clone();
             drop(inner);
-            let persisted = crate::db::transfer_unit_ownership_db(
+            let (persisted, buyer_pid) = crate::db::transfer_unit_ownership_db(
                 &pool,
                 &crate::db::TitleTransfer {
                     unit_id: &unit_id,
@@ -2023,6 +2025,7 @@ impl PaymentTrackingService {
             )
             .await
             .map_err(|e| e.to_string())?;
+            buyer_person_id = Some(buyer_pid);
             if let Some(balance) = persisted {
                 old_owner_exit_balance = balance;
             }
@@ -2039,6 +2042,21 @@ impl PaymentTrackingService {
             .to_string());
         }
 
+        let assigned_person_id = buyer_person_id.unwrap_or_else(|| {
+            inner
+                .users
+                .iter()
+                .filter_map(|u| u.person_id)
+                .max()
+                .unwrap_or(100)
+                + 1
+        });
+        let new_user = User {
+            id: format!("person-{}", assigned_person_id),
+            person_id: Some(assigned_person_id),
+            ..new_user
+        };
+
         let history_item = OccupancyHistoryItem {
             exit_balance: old_owner_exit_balance,
             ..history_item
@@ -2051,7 +2069,10 @@ impl PaymentTrackingService {
             .push(history_item);
 
         // Update unit owner
-        inner.units[unit_idx].owner_user_id = Some(new_user_id);
+        inner.units[unit_idx].owner_user_id = Some(format!("person-{}", assigned_person_id));
+        if req.new_owner_moves_in {
+            inner.units[unit_idx].tenant_user_id = None;
+        }
         drop(inner);
 
         Ok(TransferOwnershipResponse {

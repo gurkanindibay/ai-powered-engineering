@@ -400,6 +400,16 @@ pub async fn accrue_monthly_dues(
                         .and_then(|s| s.parse::<i64>().ok())
                 })
             });
+            let history_pid = if debtor_type == DebtorType::Tenant {
+                history
+                    .iter()
+                    .filter(|h| h.role == DebtorType::Tenant && h.is_active && h.person_id > 0)
+                    .map(|h| h.person_id)
+                    .last()
+            } else {
+                None
+            };
+            let liable_person_id = liable_person_id.or(history_pid);
             accrued.push((
                 DuesLiability {
                     id: String::new(),
