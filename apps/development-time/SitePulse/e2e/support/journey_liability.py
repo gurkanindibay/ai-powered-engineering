@@ -86,6 +86,7 @@ class Posting:
 
 class LiabilityJourney:
     def __init__(self, api: Api, stack: E2EStack, saas: Session, manifest: JourneyManifest) -> None:
+        manifest.bind_database(stack.db_name)
         self.api, self.stack, self.manifest = api, stack, manifest
         self.sites: dict[str, Site] = {}
         self.postings: list[Posting] = []

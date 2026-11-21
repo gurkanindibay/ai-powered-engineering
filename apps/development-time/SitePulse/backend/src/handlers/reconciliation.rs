@@ -68,7 +68,10 @@ pub async fn parse_bank_statement(
     let parser = crate::services::BankStatementParser::new();
     let recon_service = crate::services::ReconciliationService::new();
 
-    let today = Utc::now().date_naive();
+    let today = {
+        let inner = state.inner.read().await;
+        crate::services::finance_common::site_today(&inner, &payload.site_id)
+    };
     let report = parser
         .parse_statement_report(&payload.content, effective_format, today)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
@@ -1258,10 +1261,10 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
 
             let unmatched = ReconciliationMatch {
                 match_id: match_id.clone(),
-                site_id: bank_site_id,
+                site_id: bank_site_id.clone(),
                 transaction: BankTransactionItem {
                     transaction_id: payload.transaction_id.clone(),
-                    date: Utc::now().date_naive(),
+                    date: crate::services::finance_common::site_today(&inner, &bank_site_id),
                     amount: payload.amount,
                     currency: payload.currency.clone().unwrap_or_else(|| "TRY".to_string()),
                     description: txn_desc,
@@ -1342,7 +1345,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             site_id: unit.site_id.clone(),
             transaction: BankTransactionItem {
                 transaction_id: payload.transaction_id.clone(),
-                date: Utc::now().date_naive(),
+                date: crate::services::finance_common::site_today(&inner, &unit.site_id),
                 amount: payload.amount,
                 currency: payload
                     .currency
@@ -1419,7 +1422,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             site_id: unit.site_id.clone(),
             transaction: BankTransactionItem {
                 transaction_id: payload.transaction_id.clone(),
-                date: Utc::now().date_naive(),
+                date: crate::services::finance_common::site_today(&inner, &unit.site_id),
                 amount: payload.amount,
                 currency: payload.currency.clone().unwrap_or_else(|| "TRY".to_string()),
                 description: txn_desc,
@@ -1567,12 +1570,13 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
     };
 
     let match_seq = inner.reconciliation_queue.len() + 1;
+    let today = crate::services::finance_common::site_today(&inner, &unit.site_id);
     inner.reconciliation_queue.push(ReconciliationMatch {
         match_id: format!("MATCH-{}", match_seq),
         site_id: unit.site_id.clone(),
         transaction: BankTransactionItem {
             transaction_id: payload.transaction_id.clone(),
-            date: Utc::now().date_naive(),
+            date: today,
             amount: payload.amount,
             currency: payload.currency.unwrap_or_else(|| "TRY".to_string()),
             description: txn_desc,

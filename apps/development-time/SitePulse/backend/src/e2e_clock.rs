@@ -20,6 +20,21 @@ pub fn now_utc() -> DateTime<Utc> {
     Utc::now()
 }
 
+/// The process-wide [`crate::domain::clock::Clock`]: the E2E fixture time once a runner has set
+/// the clock in an `e2e` build, the system clock otherwise. Date-dependent rules (effective
+/// dates, due dates, late fees, value dates) read "now" through it.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ProcessClock;
+
+impl crate::domain::clock::Clock for ProcessClock {
+    fn now(&self) -> DateTime<Utc> {
+        now_utc()
+    }
+}
+
+/// Shared handle to the process clock.
+pub const PROCESS_CLOCK: ProcessClock = ProcessClock;
+
 #[cfg(feature = "e2e")]
 use chrono::NaiveDate;
 #[cfg(feature = "e2e")]
@@ -118,7 +133,7 @@ mod configuration_tests {
 #[derive(Debug)]
 #[cfg(feature = "e2e")]
 pub struct E2eClock {
-    date: RwLock<NaiveDate>,
+    instant: RwLock<DateTime<Utc>>,
     tick_in_progress: AtomicBool,
 }
 
@@ -127,42 +142,45 @@ impl E2eClock {
     /// Creates a clock at `date`.
     pub fn new(date: NaiveDate) -> Self {
         Self {
-            date: RwLock::new(date),
+            instant: RwLock::new(midnight_utc(date)),
             tick_in_progress: AtomicBool::new(false),
         }
     }
 
-    /// Returns the current fixture date at UTC midnight.
+    /// Returns the current fixture instant (UTC midnight after a date was set).
     pub fn now(&self) -> Result<DateTime<Utc>, E2eClockError> {
-        let date = *self
-            .date
+        self.instant
             .read()
-            .map_err(|_| E2eClockError::LockUnavailable)?;
-        Ok(DateTime::<Utc>::from_naive_utc_and_offset(
-            date.and_time(chrono::NaiveTime::MIN),
-            Utc,
-        ))
+            .map(|guard| *guard)
+            .map_err(|_| E2eClockError::LockUnavailable)
     }
 
-    /// Sets the fixture date, allowing a test to reset its timeline.
+    /// Sets the fixture date (UTC midnight), allowing a test to reset its timeline.
     pub fn set_date(&self, date: NaiveDate) -> Result<(), E2eClockError> {
+        self.set_instant(midnight_utc(date))
+    }
+
+    /// Sets the fixture instant, for boundaries that fall inside a UTC day
+    /// (for example the Europe/Istanbul midnight, 21:00 UTC the evening before).
+    pub fn set_instant(&self, at: DateTime<Utc>) -> Result<(), E2eClockError> {
         *self
-            .date
+            .instant
             .write()
-            .map_err(|_| E2eClockError::LockUnavailable)? = date;
+            .map_err(|_| E2eClockError::LockUnavailable)? = at;
         Ok(())
     }
 
     /// Advances the fixture date without allowing time to move backwards.
     pub fn advance_to(&self, date: NaiveDate) -> Result<(), E2eClockError> {
+        let target = midnight_utc(date);
         let mut current = self
-            .date
+            .instant
             .write()
             .map_err(|_| E2eClockError::LockUnavailable)?;
-        if date < *current {
+        if target < *current {
             return Err(E2eClockError::CannotRewind);
         }
-        *current = date;
+        *current = target;
         Ok(())
     }
 
@@ -172,6 +190,11 @@ impl E2eClock {
             .map_err(|_| E2eClockError::TickInProgress)?;
         Ok(E2eTickGuard(&self.tick_in_progress))
     }
+}
+
+#[cfg(feature = "e2e")]
+fn midnight_utc(date: NaiveDate) -> DateTime<Utc> {
+    DateTime::<Utc>::from_naive_utc_and_offset(date.and_time(chrono::NaiveTime::MIN), Utc)
 }
 
 #[cfg(feature = "e2e")]
@@ -194,6 +217,10 @@ pub enum ClockRequest {
     AdvanceTo {
         date: NaiveDate,
     },
+    /// Sets an exact instant (RFC 3339), e.g. `2026-11-30T20:30:00Z`.
+    SetInstant {
+        at: DateTime<Utc>,
+    },
     /// Returns the process to the system clock until the next date is set.
     Clear,
     Tick,
@@ -208,6 +235,9 @@ pub enum ClockResponse {
     },
     Advanced {
         date: NaiveDate,
+    },
+    InstantSet {
+        at: DateTime<Utc>,
     },
     Cleared,
     Ticked {
@@ -236,7 +266,9 @@ pub async fn control(
     };
     let publishes_fixture_time = matches!(
         request,
-        ClockRequest::SetDate { .. } | ClockRequest::AdvanceTo { .. }
+        ClockRequest::SetDate { .. }
+            | ClockRequest::AdvanceTo { .. }
+            | ClockRequest::SetInstant { .. }
     );
     let response = match request {
         ClockRequest::SetDate { date } => {
@@ -246,6 +278,10 @@ pub async fn control(
         ClockRequest::AdvanceTo { date } => {
             clock.advance_to(date)?;
             ClockResponse::Advanced { date }
+        }
+        ClockRequest::SetInstant { at } => {
+            clock.set_instant(at)?;
+            ClockResponse::InstantSet { at }
         }
         ClockRequest::Clear => {
             clear_fixture_now()?;
@@ -284,6 +320,15 @@ mod tests {
         assert_eq!(clock.advance_to(date(30)), Ok(()));
         assert_eq!(clock.now().map(|now| now.date_naive()), Ok(date(30)));
         assert!(clock.advance_to(date(29)).is_err());
+        let evening = DateTime::parse_from_rfc3339("2026-11-30T21:30:00Z")
+            .map(|at| at.with_timezone(&Utc))
+            .unwrap_or(DateTime::<Utc>::MIN_UTC);
+        assert_eq!(clock.set_instant(evening), Ok(()));
+        assert_eq!(clock.now(), Ok(evening));
+        assert_eq!(
+            crate::domain::clock::local_date("Europe/Istanbul", evening),
+            NaiveDate::from_ymd_opt(2026, 12, 1).unwrap_or(NaiveDate::MIN)
+        );
         assert_eq!(clock.set_date(date(2)), Ok(()));
         assert_eq!(clock.now().map(|now| now.date_naive()), Ok(date(2)));
     }

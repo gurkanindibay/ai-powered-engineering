@@ -8,7 +8,6 @@ use axum::{
     response::{Html, IntoResponse, Response},
     Form, Json,
 };
-use chrono::Utc;
 use serde::Deserialize;
 
 use crate::auth::Claims;
@@ -166,8 +165,13 @@ pub async fn finalize_operating_budget(
     Path(id): Path<String>,
     Query(q): Query<SiteQuery>,
 ) -> Result<Json<OperatingBudget>, ApiError> {
+    let site = site_of(&q, &claims);
+    let today = {
+        let inner = state.inner.read().await;
+        crate::services::finance_common::site_today(&inner, &site)
+    };
     OperatingBudgetService::new(state)
-        .finalize(&site_of(&q, &claims), &id, Utc::now().date_naive())
+        .finalize(&site, &id, today)
         .await
         .map(Json)
         .map_err(budget_status)
@@ -220,9 +224,14 @@ pub async fn get_budget_compliance(
     axum::Extension(claims): axum::Extension<Claims>,
     Query(q): Query<SiteQuery>,
 ) -> Json<BudgetComplianceStatus> {
+    let site = site_of(&q, &claims);
+    let today = {
+        let inner = state.inner.read().await;
+        crate::services::finance_common::site_today(&inner, &site)
+    };
     Json(
         OperatingBudgetService::new(state)
-            .compliance(&site_of(&q, &claims), Utc::now().date_naive())
+            .compliance(&site, today)
             .await,
     )
 }
@@ -238,14 +247,16 @@ pub async fn set_budget_policy(
         .clone()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| site_of(&q, &claims));
-    let service = OperatingBudgetService::new(state);
+    let service = OperatingBudgetService::new(state.clone());
     service
         .set_policy(&site, req.require_operating_budget)
         .await
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-    Ok(Json(
-        service.compliance(&site, Utc::now().date_naive()).await,
-    ))
+    let today = {
+        let inner = state.inner.read().await;
+        crate::services::finance_common::site_today(&inner, &site)
+    };
+    Ok(Json(service.compliance(&site, today).await))
 }
 
 pub async fn list_revaluation_rates(State(state): State<AppState>) -> Json<Vec<RevaluationRate>> {
@@ -275,7 +286,7 @@ pub async fn get_resident_operating_budget(
         .iter()
         .find(|u| crate::auth::same_id(&u.id, &unit_id))
         .ok_or((StatusCode::NOT_FOUND, "Unit not found".to_string()))?;
-    let today = Utc::now().date_naive();
+    let today = crate::services::finance_common::site_today(&inner, &unit.site_id);
     let Some(budget) =
         crate::services::operating_budget_service::budget_in_force(&inner, &unit.site_id, today)
     else {
@@ -323,7 +334,7 @@ pub async fn get_resident_statement(
         unit,
         viewer,
         viewer_person_id,
-        crate::e2e_clock::now_utc().date_naive(),
+        crate::services::finance_common::site_today(&inner, &unit.site_id),
     )))
 }
 

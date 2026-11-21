@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,6 +17,7 @@ from support.journey_attempts import (  # noqa: E402
     JourneyFixturePending,
     JourneyManifest,
     make_viban,
+    reclaim_stale_attempts,
     site_in_state,
     teardown_sites,
     teardown_with_evidence,
@@ -24,6 +26,7 @@ from support.journey_attempts import (  # noqa: E402
 
 class FakeStack:
     def __init__(self) -> None:
+        self.db_name = "sitepulse_e2e_test"
         self.statements: list[str] = []
         self.restarts = 0
 
@@ -74,6 +77,61 @@ class JourneyAttemptTests(unittest.TestCase):
             self.assertEqual((loaded.site_ids, loaded.unit_ids), (["17"], ["29"]))
             self.assertEqual((loaded.person_ids, loaded.user_ids), (["31"], ["37"]))
             self.assertNotIn("email", manifest.path.read_text(encoding="utf-8"))
+            manifest.release_lock()
+
+    def test_active_manifest_is_not_reclaimed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = JourneyManifest.create(Path(directory), "run", "shard", "active")
+            manifest.bind_database("sitepulse_e2e_test")
+            manifest.record("site_ids", 48)
+            stack = FakeStack()
+
+            self.assertEqual(reclaim_stale_attempts(stack, Path(directory)), [])
+            self.assertEqual(stack.statements, [])
+            manifest.release_lock()
+
+    def test_stale_manifest_is_reclaimed_only_for_its_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = JourneyManifest.create(Path(directory), "run", "shard", "stale")
+            manifest.bind_database("sitepulse_e2e_test")
+            manifest.record("site_ids", 49)
+            manifest.release_lock()
+            stack = FakeStack()
+
+            self.assertEqual(reclaim_stale_attempts(stack, Path(directory)), ["stale"])
+            self.assertEqual(stack.restarts, 1)
+            self.assertTrue(JourneyManifest.load(manifest.path).teardown_completed)
+            self.assertIn("DELETE FROM sites WHERE id = 49", stack.statements[0])
+
+    def test_stale_manifest_for_another_database_is_not_reclaimed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = JourneyManifest.create(Path(directory), "run", "shard", "other")
+            manifest.bind_database("sitepulse_e2e_other")
+            manifest.record("site_ids", 50)
+            manifest.release_lock()
+            stack = FakeStack()
+
+            self.assertEqual(reclaim_stale_attempts(stack, Path(directory)), [])
+            self.assertEqual(stack.statements, [])
+
+    def test_stale_recovery_skips_corrupt_manifests_and_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "broken.json").write_text("{", encoding="utf-8")
+            manifest = JourneyManifest.create(root, "run", "shard", "recoverable")
+            manifest.bind_database("sitepulse_e2e_test")
+            manifest.record("site_ids", 51)
+            manifest.release_lock()
+            stack = FakeStack()
+
+            with warnings.catch_warnings(record=True) as captured:
+                warnings.simplefilter("always")
+                recovered = reclaim_stale_attempts(stack, root)
+
+            self.assertEqual(recovered, ["recoverable"])
+            self.assertEqual(stack.restarts, 1)
+            self.assertEqual(len(captured), 1)
+            self.assertIn("broken.json", str(captured[0].message))
 
     def test_teardown_is_idempotent_and_scoped_to_manifest_site_ids(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -113,6 +171,7 @@ class JourneyAttemptTests(unittest.TestCase):
 
             self.assertEqual(stack.statements, [])
             self.assertEqual(stack.restarts, 0)
+            manifest.release_lock()
 
     def test_evidence_failure_does_not_skip_teardown_and_keeps_original_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -177,6 +236,7 @@ class JourneyAttemptTests(unittest.TestCase):
             self.assertTrue(any("INSERT INTO dues_periods" in s and "Ekim 2026" in s for s in stack.statements))
             self.assertTrue(any("UPDATE sites SET proration_enabled = TRUE" in s for s in stack.statements))
             self.assertGreaterEqual(stack.restarts, 1)
+            manifest.release_lock()
 
     def test_site_in_state_f6_and_f7_raise_pending(self) -> None:
         from unittest.mock import MagicMock
@@ -189,6 +249,7 @@ class JourneyAttemptTests(unittest.TestCase):
             for state in ["F6", "F7"]:
                 with self.assertRaises(JourneyFixturePending):
                     site_in_state(state, api=api, stack=stack, saas=saas, manifest=manifest)
+            manifest.release_lock()
 
 
 if __name__ == "__main__":

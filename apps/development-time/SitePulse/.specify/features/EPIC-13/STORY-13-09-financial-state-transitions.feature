@@ -21,8 +21,7 @@ Feature: Financial transitions that cross periods or ledgers
     Then outstanding principal is 1000.00 and outstanding fee is 5.00
     And the retry creates no second fee entry
 
-  # Pending: the journey harness lacks a controllable value-date timeline for recalculating fees and reversing overpayment.
-  @SC-13-09-03 @J-16 @depth:1 @layer:backend @core @role_manager @pending
+  @SC-13-09-03 @J-16 @depth:1 @layer:backend @core @role_manager @linked
   Scenario: A backdated payment recalculates fees using its value date
     Given a 1500.00 liability due on "2026-11-10" has accrued fee 22.50 through "2026-11-19"
     When a 1500.00 payment with value date "2026-11-10" is recorded on "2026-11-19"

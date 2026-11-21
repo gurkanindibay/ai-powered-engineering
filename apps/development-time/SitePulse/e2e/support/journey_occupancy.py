@@ -121,6 +121,7 @@ def seed_tenant_occupancy(j: "OccupancyJourney", unit_number: int, person_name: 
         f"UPDATE units SET tenant_person_id = {person}, occupancy_status = 'TENANT_OCCUPIED' WHERE id = {unit}; COMMIT;"
     )
     j.stack.restart_backend()
+    j.clock.set_date(j.clock.current_date.isoformat())
     j.manager = j.api.login(j.fixture.manager_email, j.fixture.manager_password)
 
 
@@ -133,6 +134,7 @@ def build_base(
     proration: bool = True, vacate_a2: bool = True,
 ) -> OccupancyJourney:
     """F2 plus a clock and the proration switch; A-2 is vacant when `vacate_a2` (F6 start)."""
+    manifest.bind_database(stack.db_name)
     fixture = site_in_state("F2", api=api, stack=stack, saas=saas, manifest=manifest)
     if vacate_a2:
         unit = int(fixture.unit_ids[1])
@@ -200,6 +202,7 @@ def second_manager(j: OccupancyJourney, person_name: str = "Ayşe Kaya") -> Sess
     email = j.stack.sql(f"SELECT email FROM persons WHERE id = {int(j.people[person_name])};")
     j.stack.sql(f"UPDATE users SET role = 'SITE_MANAGER' WHERE lower(email) = lower('{email}');")
     j.stack.restart_backend()
+    j.clock.set_date(j.clock.current_date.isoformat())
     return j.api.login(email, j.fixture.manager_password)
 
 
