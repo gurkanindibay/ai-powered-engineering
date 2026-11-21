@@ -29,8 +29,10 @@ no check shows up by then (a PR that really runs no CI).
 
 A ready PR that you have already handled for this head (for example one you
 left with a COMMENT because CI is red) can be ignored with ``--seen N@SHA``. The
-suppression is tied to the CI state: ``N@SHA:failed`` pins it, and a bare
-``N@SHA`` takes the state the watcher first sees for that head. The watcher
+suppression is tied to the CI state: ``N@SHA:failed`` pins it (preferred: pass
+the state from the wake-up you handled), and a bare ``N@SHA`` takes the state the
+watcher first sees for that head, or ``absent`` if the PR is not ready then (for
+example a rerun is still pending), so its next appearance wakes you. The watcher
 wakes again when that PR gets a new head *or* its CI state changes (for example
 a rerun on the same commit that turns red into green).
 
@@ -94,8 +96,7 @@ def unseen(ready: list[Entry], seen: Seen) -> list[Entry]:
     SHAs match by prefix, so `264@5a9f4328` and the queue's 12-char head agree."""
     out = []
     for e in ready:
-        head = e["head"][:12]
-        key = next((k for k in seen if k[0] == e["number"] and (head.startswith(k[1]) or k[1].startswith(head))), None)
+        key = seen_key(seen, e)
         if key is None:
             out.append(e)
             continue
@@ -104,6 +105,20 @@ def unseen(ready: list[Entry], seen: Seen) -> list[Entry]:
         if seen[key] != e.get("ci"):
             out.append(e)
     return out
+
+
+def seen_key(seen: Seen, e: Entry) -> tuple[int, str] | None:
+    head = e["head"][:12]
+    return next((k for k in seen if k[0] == e["number"] and (head.startswith(k[1]) or k[1].startswith(head))), None)
+
+
+def bind_absent(seen: Seen, ready: list[Entry]) -> None:
+    """At the first check, a bare --seen PR that is not ready (for example its CI rerun is
+    still pending) binds to "absent", so its later appearance in any state wakes the reviewer."""
+    present = {seen_key(seen, e) for e in ready}
+    for key, state in seen.items():
+        if state is None and key not in present:
+            seen[key] = "absent"
 
 
 def scoped_gh(gh: Gh, repo: str) -> Gh:
@@ -174,11 +189,16 @@ def watch(check: Callable[[bool], list[Entry]], trigger: Trigger, seen: Seen,
     deadline = None if timeout is None else clock() + timeout
     first_seen: dict[tuple[int, str], float] = {}
     next_refresh = clock()
+    first = True
     while True:
         force = clock() >= next_refresh
         if force:
             next_refresh = clock() + recheck
-        found, next_due = settle(unseen(check(force), seen), first_seen, clock(), ci_grace)
+        ready = check(force)
+        if first:
+            bind_absent(seen, ready)
+            first = False
+        found, next_due = settle(unseen(ready, seen), first_seen, clock(), ci_grace)
         if found:
             return found
         now = clock()

@@ -79,6 +79,23 @@ class Seen(unittest.TestCase):
         self.assertEqual(w.unseen([red], seen), [])  # still red: stays quiet
         self.assertEqual([e["ci"] for e in w.unseen([entry(4)], seen)], ["passed"])
 
+    def test_restart_during_pending_rerun_wakes_when_green(self):
+        """Reviewer restarts with a bare --seen while a same-commit rerun is still pending:
+        the PR is not ready at the first check, so turning green must wake the reviewer."""
+        results = [[], [entry(4)]]  # first: rerun pending (absent from ready), then passed
+        seen = w.parse_seen(["4@aaa111bbb222"])
+        found = w.watch(lambda f: results.pop(0), lambda t: w.EVENT, seen, 900, None)
+        self.assertEqual([(e["number"], e["ci"]) for e in found], [(4, "passed")])
+        self.assertEqual(seen[(4, "aaa111bbb222")], "absent")
+
+    def test_restart_with_red_ci_stays_quiet_until_green(self):
+        red = {**entry(4), "ci": "failed"}
+        results = [[red], [red], [], [entry(4)]]
+        seen = w.parse_seen(["4@aaa111bbb222:failed"])
+        found = w.watch(lambda f: results.pop(0), lambda t: w.EVENT, seen, 900, None)
+        self.assertEqual([e["ci"] for e in found], ["passed"])
+        self.assertEqual(results, [])  # woke only on the green snapshot
+
     def test_pinned_state(self):
         seen = w.parse_seen(["4@aaa111bbb222:failed"])
         self.assertEqual(len(w.unseen([entry(4)], seen)), 1)  # already green: not suppressed

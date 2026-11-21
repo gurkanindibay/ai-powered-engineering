@@ -391,7 +391,7 @@ python3 -m unittest discover -s tests/pr_review_queue
 
 ```bash
 python3 scripts/pr_review_watch.py                           # wait, then print ready PRs
-python3 scripts/pr_review_watch.py --json --seen 257@ab12cd34ef56
+python3 scripts/pr_review_watch.py --json --seen 257@ab12cd34ef56:failed
 python3 scripts/pr_review_watch.py --source poll --interval 60 --timeout 3600
 gh extension install cli/gh-webhook                          # optional: enables --source webhook
 python3 -m unittest discover -s tests/pr_review_watch
