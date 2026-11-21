@@ -239,6 +239,11 @@ async fn accrue(
     amount: &str,
     due: NaiveDate,
 ) -> Result<AccrueDuesPeriodResponse, (axum::http::StatusCode, String)> {
+    let amt = if amount.is_empty() || amount == "0" {
+        None
+    } else {
+        Some(d(amount))
+    };
     sitepulse_backend::handlers::accrue_monthly_dues(
         State(state.clone()),
         sitepulse_backend::tenancy::TenantScope::platform(),
@@ -246,7 +251,7 @@ async fn accrue(
             site_id: SITE.to_string(),
             // A period is a canonical month (STORY-07-08): the one of the due date.
             period: sitepulse_backend::domain::billing_period::BillingPeriod::of_date(due).key(),
-            amount: d(amount),
+            amount: amt,
             due_date: due,
         }),
     )
@@ -355,7 +360,7 @@ async fn when_a_unit_has_no_tariff_then_manual_accrual_skips_it_instead_of_charg
         "due_date": tariff_due.to_string(),
     }))
     .unwrap();
-    assert_eq!(request.amount, Decimal::ZERO);
+    assert_eq!(request.amount, None);
     let (_, Json(resp)) = sitepulse_backend::handlers::accrue_monthly_dues(
         State(state.clone()),
         sitepulse_backend::tenancy::TenantScope::platform(),

@@ -58,7 +58,7 @@ class OccupancyJourney:
     def invariants(self, stage: str) -> dict:
         return ledger_invariants(self.api, self.manager, self.site_id, stage=stage)
 
-    def accrue(self, period: str, due: str | None = None, amount: Decimal = Decimal("0")) -> dict:
+    def accrue(self, period: str, due: str | None = None, amount: Decimal | None = None) -> dict:
         return self.api.accrue_period(self.manager, period, amount, due or DUE_DATES[period])
 
     def shares(self, unit_number: int, period: str, expense_type: str = "OPERATIONAL_DUES") -> dict[str, Decimal]:

@@ -13,12 +13,16 @@ from pathlib import Path
 import pytest
 
 from support.journey_attempts import JourneyManifest, teardown_sites
+from support.known_issues import DEPARTED_TENANT_KEEPS_LATER_ACCRUAL
 from support.journey_occupancy import (
     OccupancyJourney,
     build_base,
     build_f6,
+    second_manager,
+    sell_unit,
     seed_tenant_occupancy,
     tenant_move_in,
+    transition,
 )
 
 E2E = Path(__file__).resolve().parents[1]
@@ -160,3 +164,50 @@ def test_unit_created_mid_month_is_billed_for_chargeable_days(journey_site):
     assert j.shares(3, "Kasım 2026") == {"Burak Şahin": D("750.00")}
     j.invariants("SC-13-03-15")
 
+
+
+@pytest.mark.covers("SC-13-03-18")
+@pytest.mark.core
+@pytest.mark.role_manager
+def test_sale_of_a_tenant_occupied_unit_with_the_same_tenant_is_not_split(journey_site):
+    j = journey_site("BASE")
+    j.clock.advance_to("2026-10-11")
+    tenant_move_in(j, 2, "Selin Demir", "selin")
+    j.clock.advance_to("2026-12-15")
+    sell_unit(j, 2, "Gül Tanrıverdi", "gul", moves_in=False)
+    j.accrue("Aralık 2026", due="2026-12-10")
+
+    assert j.shares(2, "Aralık 2026") == {"Selin Demir": D("1500.00")}
+    assert j.roles(2, "Aralık 2026") == {"TENANT": D("1500.00")}
+    unit = int(j.unit_id(2))
+    joint = j.stack.sql(
+        "SELECT p.full_name || '|' || jo.liable_from || '|' || jo.liable_through "
+        "FROM dues_liability_joint_owners jo JOIN persons p ON p.id = jo.owner_person_id "
+        "JOIN dues_liabilities d ON d.id = jo.due_id "
+        f"WHERE d.unit_id = {unit} AND d.period = 'Aralık 2026' AND d.status <> 'CANCELLED' "
+        "ORDER BY jo.liable_from;").splitlines()
+    assert joint == ["Ahmet Yılmaz|2026-12-01|2026-12-14", "Gül Tanrıverdi|2026-12-15|2026-12-31"]
+    j.invariants("SC-13-03-18")
+
+
+@pytest.mark.covers("SC-13-05-18")
+@pytest.mark.xfail(strict=True, reason=DEPARTED_TENANT_KEEPS_LATER_ACCRUAL)
+@pytest.mark.core
+@pytest.mark.role_manager
+def test_tenant_left_without_notice_is_moved_out_at_the_real_date(journey_site):
+    j = journey_site("F6")
+    j.clock.advance_to("2026-12-01")
+    j.accrue("Aralık 2026", due="2026-12-10")
+    j.clock.advance_to("2026-12-05")
+    transition(j, 2, "MOVE_OUT", effective_date="2026-11-25")
+    reviewer = second_manager(j)
+    for correction in j.api.call("GET", "/api/v1/accrual-corrections", reviewer.token):
+        if correction.get("status") == "PENDING":
+            j.api.call("POST", f"/api/v1/accrual-corrections/{correction['id']}/decide", reviewer.token,
+                       body={"approve": True, "note": "SC-13-05-18 split approved"})
+
+    # November is split between the tenants and the owner; rows re-issued by a correction carry no person (SC-13-03-21).
+    assert j.roles(2, "Kasım 2026") == {"TENANT": D("1200.00"), "OWNER": D("300.00")}
+    assert j.roles(2, "Aralık 2026") == {"OWNER": D("1500.00")}
+    assert {row["due"] for row in j.share_rows(2, "Aralık 2026")} == {"2026-12-05"}
+    j.invariants("SC-13-05-18")

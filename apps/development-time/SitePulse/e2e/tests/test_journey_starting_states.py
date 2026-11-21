@@ -112,7 +112,7 @@ def test_f2_first_accrual_charges_units_tariffs_and_debtors(request, api, actors
     try:
         fixture = site_in_state("F2", api=api, stack=stack, saas=saas, manifest=manifest)
         api.create_period(fixture.manager, "Ekim 2026", "2026-10-10")
-        res = api.accrue_period(fixture.manager, "Ekim 2026", Decimal("0.00"), "2026-10-10")
+        res = api.accrue_period(fixture.manager, "Ekim 2026", None, "2026-10-10")
         assert res is not None
 
         # In F2:
@@ -166,7 +166,7 @@ def test_f2_units_without_owner_reported_separately(request, api, actors, stack)
     try:
         fixture = site_in_state("F2", api=api, stack=stack, saas=saas, manifest=manifest)
         api.create_period(fixture.manager, "Ekim 2026", "2026-10-10")
-        res = api.accrue_period(fixture.manager, "Ekim 2026", Decimal("0.00"), "2026-10-10")
+        res = api.accrue_period(fixture.manager, "Ekim 2026", None, "2026-10-10")
 
         # No liability for unit A-7
         assert stack.sql(

@@ -223,7 +223,7 @@ class LiabilityJourney:
 
     def accrue(self, period: str) -> None:
         for site in self.sites.values():
-            self.api.accrue_period(site.manager, period, D("0"), DUE[period])
+            self.api.accrue_period(site.manager, period, None, DUE[period])
 
     def _email_of_new(self, short: str) -> str:
         return self._email(short)

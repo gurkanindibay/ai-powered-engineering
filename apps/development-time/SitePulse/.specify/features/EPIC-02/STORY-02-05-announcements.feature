@@ -8,6 +8,7 @@ Feature: Site-wide announcement broadcasting
     When entering title "Planlı Su Kesintisi" and details and publishing
     Then an ANNOUNCEMENT notification with that subject is stored
 
+  # Pending: no GUI e2e yet for the resident announcement feed; publishing is covered by SC-02-05-01 but nothing opens the feed as a resident.
   @SC-02-05-02 @GUI-02-07 @pending @core @role_manager
   Scenario: Announcement appears on the resident feed
     Given the manager published "Planlı Su Kesintisi"

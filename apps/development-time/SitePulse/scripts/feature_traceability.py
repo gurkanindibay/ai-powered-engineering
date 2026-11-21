@@ -113,6 +113,7 @@ class Scenario:
     line: int
     steps: list[str] = field(default_factory=list)
     feature_tags: list[str] = field(default_factory=list)
+    pending_note: str = ""
 
     @property
     def all_tags(self) -> set[str]:
@@ -135,12 +136,22 @@ def parents_of(scenario_id: str) -> tuple[str, str]:
     return f"EPIC-{m.group(1)}", f"STORY-{m.group(1)}-{m.group(2)}"
 
 
+def _pending_note(comments: list[str]) -> str:
+    """The `# Pending:` reason (with its continuation lines) from the comment block above a scenario's tags."""
+    for index, text in enumerate(comments):
+        if text.lower().startswith("pending:"):
+            return " ".join(comments[index:])[len("pending:"):].strip()
+    return ""
+
+
 def parse_feature(text: str, file: str) -> tuple[list[str], list[Scenario], list[str]]:
     """Returns (feature tags, scenarios, problems). Reads tags, scenario titles and step lines only."""
     feature_tags: list[str] = []
     scenarios: list[Scenario] = []
     problems: list[str] = []
     pending_tags: list[str] = []
+    comments: list[str] = []
+    pending_note = ""
     current: Scenario | None = None
     in_docstring = False
     for number, raw in enumerate(text.splitlines(), start=1):
@@ -148,9 +159,18 @@ def parse_feature(text: str, file: str) -> tuple[list[str], list[Scenario], list
         if line.startswith(('"""', "```")):
             in_docstring = not in_docstring
             continue
-        if in_docstring or not line or line.startswith(("#", "|")):
+        if in_docstring or line.startswith("|"):
+            continue
+        if not line:
+            comments = []
+            continue
+        if line.startswith("#"):
+            comments.append(line.lstrip("#").strip())
             continue
         if line.startswith("@"):
+            if comments:
+                pending_note = _pending_note(comments)
+                comments = []
             pending_tags += [t[1:] for t in line.split() if t.startswith("@")]
             continue
         if line.startswith("Feature:"):
@@ -161,9 +181,11 @@ def parse_feature(text: str, file: str) -> tuple[list[str], list[Scenario], list
             ids = [t for t in pending_tags if SCENARIO_ID.fullmatch(t)]
             if len(ids) != 1:
                 problems.append(f"{file}:{number}: scenario '{m.group(2)}' needs exactly one @SC-xx-yy-nn tag")
-            current = Scenario(ids[0] if ids else "", m.group(2), pending_tags, file, number, feature_tags=feature_tags)
+            current = Scenario(ids[0] if ids else "", m.group(2), pending_tags, file, number,
+                               feature_tags=feature_tags, pending_note=pending_note)
             scenarios.append(current)
-            pending_tags = []
+            pending_tags, pending_note = [], ""
+            comments = []
             continue
         if line.startswith(("Background:", "Rule:", "Examples:", "Scenarios:")):
             current, pending_tags = None, []
@@ -271,12 +293,41 @@ def check(catalogue: Catalogue) -> list[str]:
             problems.append(f"{where} has no steps")
         if scenario.mode != "pending" and not scenario.layer:
             problems.append(f"{where} needs a @layer:<name> tag")
+        if scenario.mode == "pending" and not scenario.pending_note:
+            problems.append(f"{where} is @pending but has no `# Pending: <reason>` comment above its tags")
         if scenario.mode == "linked" and scenario.id not in catalogue.links:
             problems.append(f"{where} is @linked but no test declares `covers: {scenario.id}`")
     for sid, refs in sorted(catalogue.links.items()):
         if sid not in known:
             problems += [f"{ref['file']}:{ref['line']}: covers unknown scenario {sid}" for ref in refs]
     return problems
+
+
+ISSUE_REFERENCE = re.compile(r"#(\d+)\b")
+
+
+def closed_issue_warnings(catalogue: Catalogue, closed: set[int]) -> list[str]:
+    """Warnings for @pending scenarios whose `# Pending:` reason cites an issue that is already closed."""
+    warnings = []
+    for scenario in catalogue.scenarios:
+        if scenario.mode != "pending":
+            continue
+        cited = sorted({int(n) for n in ISSUE_REFERENCE.findall(scenario.pending_note)} & closed)
+        if cited:
+            refs = ", ".join(f"#{n}" for n in cited)
+            warnings.append(f"{scenario.file}:{scenario.line}: {scenario.id} is @pending on closed issue {refs}; "
+                            "automate it or name the open blocker")
+    return warnings
+
+
+def fetch_closed_issues() -> set[int] | None:
+    """Numbers of closed GitHub issues via `gh`; None when gh is missing, offline or unauthenticated."""
+    try:
+        result = subprocess.run(["gh", "issue", "list", "--state", "closed", "--limit", "1000",
+                                 "--json", "number"], capture_output=True, text=True, timeout=60, check=True)
+        return {int(item["number"]) for item in json.loads(result.stdout)}
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+        return None
 
 
 # ---------------------------------------------------------------- history store
@@ -939,6 +990,8 @@ def main(argv: list[str] | None = None) -> int:
                         help=f"history store: git:<branch> or a directory (default {DEFAULT_STORE})")
     sub = parser.add_subparsers(dest="command", required=True)
     chk = sub.add_parser("check", help="static consistency gate")
+    chk.add_argument("--offline", action="store_true",
+                     help="skip the closed-issue warning for @pending notes (it needs the gh CLI)")
     chk.add_argument("--require-run", action="store_true",
                      help="also fail when the current branch has no recorded run in the history")
     sub.add_parser("affected", help="which tests the changes on this branch call for")
@@ -974,14 +1027,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.require_run:
             run_problems, note = require_run(catalogue, open_store(args.store))
             problems += run_problems
+        closed = None if args.offline else fetch_closed_issues()
+        warnings = closed_issue_warnings(catalogue, closed) if closed is not None else []
         summary = {"migrated_epics": catalogue.migrated_epics, "scenarios": len(catalogue.scenarios),
                    "by_mode": dict(Counter(s.mode for s in catalogue.scenarios)),
                    "linked_tests": sum(len(v) for v in catalogue.links.values())}
         if args.require_run:
             summary["test_run"] = note
         if args.json:
-            print(json.dumps({"status": "FAILED" if problems else "PASSED", "problems": problems, **summary}, indent=2))
+            print(json.dumps({"status": "FAILED" if problems else "PASSED", "problems": problems,
+                              "warnings": warnings, **summary}, indent=2))
         else:
+            if warnings:
+                print("\n".join(f"warning: {w}" for w in warnings), file=sys.stderr)
             print("\n".join(problems) if problems else
                   f"OK: {summary['scenarios']} scenarios in {', '.join(summary['migrated_epics']) or 'no epic'} "
                   f"({summary['by_mode']}), {summary['linked_tests']} linked tests"

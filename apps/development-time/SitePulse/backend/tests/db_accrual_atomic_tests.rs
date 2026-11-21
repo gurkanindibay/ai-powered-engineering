@@ -180,7 +180,6 @@ impl Env {
             Some(json!({
                 "site_id": self.site.to_string(),
                 "period": period,
-                "amount": "0",
                 "due_date": due,
             })),
         )
@@ -399,7 +398,6 @@ async fn two_sites_accrue_in_a_row_each_with_its_own_period_row() {
                 Some(json!({
                     "site_id": site.to_string(),
                     "period": "2026-10",
-                    "amount": "0",
                     "due_date": "2026-10-15",
                 })),
             )
@@ -507,5 +505,199 @@ async fn a_first_accrual_batch_keeps_both_debtor_shares_and_blocks_a_rerun() {
         .await,
         2
     );
+    env.drop_db().await;
+}
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL and DB_PASS"]
+async fn joint_liability_owner_intervals_do_not_overlap_on_transfer_day_and_exclude_day_one_seller()
+{
+    let env = Env::new("joint_overlap").await;
+    let unit = env
+        .int(&format!(
+            "SELECT id FROM units WHERE site_id = {} AND deleted_at IS NULL ORDER BY id LIMIT 1",
+            env.site
+        ))
+        .await;
+
+    // Create 3 persons to represent:
+    // 1. Owner who sold on day 1 (2026-12-01) -> 0 days in Dec 2026
+    // 2. Seller who owned from 2026-12-01 until 2026-12-15 (transferred on day 15) -> 14 days
+    // 3. Buyer who acquired on 2026-12-15 -> 17 days
+    let client = env.pool.get().await.expect("connection");
+    let p1: i64 = client
+        .query_one(
+            "INSERT INTO persons (full_name, email, person_type, site_id) VALUES ('Day1 Seller', 'p1@test.local', 'HOME_OWNER', $1) RETURNING id",
+            &[&env.site],
+        )
+        .await
+        .expect("insert p1")
+        .get(0);
+    let p2: i64 = client
+        .query_one(
+            "INSERT INTO persons (full_name, email, person_type, site_id) VALUES ('Mid-Month Seller', 'p2@test.local', 'HOME_OWNER', $1) RETURNING id",
+            &[&env.site],
+        )
+        .await
+        .expect("insert p2")
+        .get(0);
+    let p3: i64 = client
+        .query_one(
+            "INSERT INTO persons (full_name, email, person_type, site_id) VALUES ('Mid-Month Buyer', 'p3@test.local', 'HOME_OWNER', $1) RETURNING id",
+            &[&env.site],
+        )
+        .await
+        .expect("insert p3")
+        .get(0);
+
+    // Set tenant on the unit
+    client
+        .execute(
+            "UPDATE units SET tenant_person_id = $1, owner_person_id = $2 WHERE id = $3",
+            &[&p1, &p3, &unit],
+        )
+        .await
+        .expect("update unit");
+
+    // Clear existing occupancies for this unit and insert tenant occupancy for p1
+    client
+        .execute("DELETE FROM unit_occupancies WHERE unit_id = $1", &[&unit])
+        .await
+        .expect("clear occupancies");
+    client
+        .execute(
+            "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active)
+             VALUES ($1, $2, 'TENANT', DATE '2026-12-01', TRUE)",
+            &[&unit, &p1],
+        )
+        .await
+        .expect("insert tenant occupancy");
+
+    // Clear existing ownerships for this unit
+    client
+        .execute("DELETE FROM unit_ownerships WHERE unit_id = $1", &[&unit])
+        .await
+        .expect("clear ownerships");
+
+    // Insert the 3 ownership records:
+    // p1: start 2025-01-01, end 2026-12-01 (sold on day 1)
+    // p2: start 2026-12-01, end 2026-12-15 (seller)
+    // p3: start 2026-12-15, end NULL (buyer)
+    client
+        .execute(
+            "INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, end_date, is_active)
+             VALUES ($1, $2, 100.0, DATE '2025-01-01', DATE '2026-12-01', FALSE),
+                    ($1, $3, 100.0, DATE '2026-12-01', DATE '2026-12-15', FALSE),
+                    ($1, $4, 100.0, DATE '2026-12-15', NULL, TRUE)",
+            &[&unit, &p1, &p2, &p3],
+        )
+        .await
+        .expect("insert ownerships");
+
+    let site_id = env.site.to_string();
+    let unit_id = unit.to_string();
+    let period_key = "2026-12";
+    let period_label = "Aralık 2026";
+    let due_date = NaiveDate::from_ymd_opt(2026, 12, 15).expect("fixture date");
+    let dues = vec![(
+        DuesLiability {
+            id: String::new(),
+            unit_id: unit_id.clone(),
+            period: period_label.to_string(),
+            principal_amount: Decimal::from(1000),
+            delay_penalty: Decimal::ZERO,
+            total_amount: Decimal::from(1000),
+            due_date,
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: None,
+            grace_days: 0,
+            effective_due_date: None,
+            liable_person_id: Some(p1),
+        },
+        None,
+    )];
+    let batch = db::AccrualBatch {
+        site_id: &site_id,
+        period_key,
+        period_label,
+        due_date,
+        source: "SCHEDULER",
+        dues: &dues,
+        skipped: &[],
+    };
+
+    let result = db::commit_accrual_batch(&env.pool, &batch)
+        .await
+        .expect("commit accrual batch");
+    assert_eq!(result.due_ids.len(), 1);
+    let due_id = result.due_ids[0].expect("due created");
+
+    let joint_owners = result
+        .joint_owners
+        .get(&due_id.to_string())
+        .expect("joint owners found");
+
+    // p1 (sold on day 1) must be completely excluded
+    assert!(
+        !joint_owners.iter().any(|o| o.person_id == p1),
+        "Day 1 seller should not be included"
+    );
+
+    // Exactly p2 and p3 must be present
+    assert_eq!(joint_owners.len(), 2, "Expected seller and buyer");
+
+    let seller = joint_owners
+        .iter()
+        .find(|o| o.person_id == p2)
+        .expect("seller");
+    assert_eq!(
+        seller.start_date,
+        NaiveDate::from_ymd_opt(2026, 12, 1).unwrap()
+    );
+    assert_eq!(
+        seller.end_date,
+        Some(NaiveDate::from_ymd_opt(2026, 12, 14).unwrap())
+    );
+
+    let buyer = joint_owners
+        .iter()
+        .find(|o| o.person_id == p3)
+        .expect("buyer");
+    assert_eq!(
+        buyer.start_date,
+        NaiveDate::from_ymd_opt(2026, 12, 15).unwrap()
+    );
+    assert_eq!(
+        buyer.end_date,
+        Some(NaiveDate::from_ymd_opt(2026, 12, 31).unwrap())
+    );
+
+    // Also verify persistence in DB table dues_liability_joint_owners
+    let rows = client
+        .query(
+            "SELECT owner_person_id, liable_from, liable_through FROM dues_liability_joint_owners WHERE due_id = $1 ORDER BY liable_from",
+            &[&due_id],
+        )
+        .await
+        .expect("query joint owners table");
+    assert_eq!(rows.len(), 2);
+    let r1_pid: i64 = rows[0].get(0);
+    let r1_from: NaiveDate = rows[0].get(1);
+    let r1_through: NaiveDate = rows[0].get(2);
+    assert_eq!(r1_pid, p2);
+    assert_eq!(r1_from, NaiveDate::from_ymd_opt(2026, 12, 1).unwrap());
+    assert_eq!(r1_through, NaiveDate::from_ymd_opt(2026, 12, 14).unwrap());
+
+    let r2_pid: i64 = rows[1].get(0);
+    let r2_from: NaiveDate = rows[1].get(1);
+    let r2_through: NaiveDate = rows[1].get(2);
+    assert_eq!(r2_pid, p3);
+    assert_eq!(r2_from, NaiveDate::from_ymd_opt(2026, 12, 15).unwrap());
+    assert_eq!(r2_through, NaiveDate::from_ymd_opt(2026, 12, 31).unwrap());
+
     env.drop_db().await;
 }

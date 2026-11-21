@@ -192,9 +192,15 @@ class Api:
         return self.call("POST", "/api/v1/dues/periods", session.token,
                          body={"site_id": session.user["site_id"], "period_name": name, "due_date": due_date})
 
-    def accrue_period(self, session: Session, period: str, amount: Decimal, due_date: str) -> dict:
-        return self.call("POST", "/api/v1/dues/accrue-period", session.token, body={
-            "site_id": session.user["site_id"], "period": period, "amount": str(amount), "due_date": due_date})
+    def accrue_period(self, session: Session, period: str, amount: Decimal | str | None, due_date: str) -> dict:
+        body = {
+            "site_id": session.user["site_id"],
+            "period": period,
+            "due_date": due_date,
+        }
+        if amount is not None:
+            body["amount"] = str(amount)
+        return self.call("POST", "/api/v1/dues/accrue-period", session.token, body=body)
 
     def create_capital_project(self, session: Session, title: str, budget: Decimal,
                                basis: str = "BY_LAND_SHARE", installments: int = 1,

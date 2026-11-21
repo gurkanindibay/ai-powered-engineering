@@ -114,7 +114,7 @@ def test_interim_operating_budget_becomes_the_legal_basis_of_accrued_dues(login_
     manager = api.login(**actors["manager"])
     due = stack.sql("SELECT (CURRENT_DATE + 10)::text;")
     period_key = stack.sql("SELECT to_char(CURRENT_DATE + 10, 'YYYY-MM');")  # a canonical month (STORY-07-08)
-    api.accrue_period(manager, period_key, Decimal("0"), due)
+    api.accrue_period(manager, period_key, None, due)
     row = stack.sql("SELECT count(*) || '|' || count(*) FILTER (WHERE operating_budget_id = "
                     f"{int(budget_id)}) FROM dues_liabilities WHERE period_key = '{period_key}';")
     count, linked = row.split("|")
