@@ -1320,6 +1320,7 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         assert [get_period_status(j.unit_b("B2-01"), p) for p in periods] == ["Paid", "Unpaid", "Unpaid", "Paid"]
 
         # SC-13-25-07: the manager statements show exactly the eleven open rows and the model's site totals.
+        # Historical debtor attribution across ownership changes is verified in test_unit_statement_attributes_open_items_to_former_debtors (BUG #295).
         detailed = {("A", label): j.unit_a(label) for label in ("A-01", "A-02", "A-03")}
         detailed |= {("B", label): j.unit_b(label) for label in ("B1-01", "B2-01")}
         assert_statements_match_model(api, stack, {"A": j.manager_a, "B": j.manager_b}, detailed)
