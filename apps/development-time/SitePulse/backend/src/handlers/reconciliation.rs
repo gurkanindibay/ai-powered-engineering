@@ -196,7 +196,6 @@ pub async fn confirm_reconciliation(
         payer_name: String,
         request_designation: Option<crate::models::PaymentDesignation>,
         settles_owner_capital_dues: bool,
-        settles_tenant_joint_liability: bool,
         item: ReconciliationMatch,
     }
     let lines: Vec<Line> = {
@@ -299,8 +298,6 @@ pub async fn confirm_reconciliation(
                         due_ids: vec![due_id],
                         ..Default::default()
                     });
-            let settles_tenant_joint_liability = payer_role == DebtorType::Owner
-                && open_debtor_types(&inner, &unit.id) == [DebtorType::Tenant];
             lines.push(Line {
                 match_id: match_id.clone(),
                 unit,
@@ -308,7 +305,6 @@ pub async fn confirm_reconciliation(
                 payer_name,
                 request_designation,
                 settles_owner_capital_dues: payload.owner_capital_match_ids.contains(match_id),
-                settles_tenant_joint_liability,
                 item: {
                     let mut item = m.clone();
                     item.site_id = payload.site_id.clone();
@@ -346,7 +342,7 @@ pub async fn confirm_reconciliation(
                 idempotency_key: Some(format!("STMT:{}", key)),
                 designation: line.request_designation.clone(),
                 settles_owner_capital_dues: line.settles_owner_capital_dues,
-                settles_tenant_joint_liability: line.settles_tenant_joint_liability,
+                settles_tenant_joint_liability: false,
                 external_reference: txn.reference_no.clone().or_else(|| Some(key.clone())),
                 designate_from_description: true,
                 settles_unmatched_entry_id: None,
@@ -1402,8 +1398,6 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
     // 2. Settle through the canonical ingestion path (SPEC-005 R1): TAH- receipt,
     // allocation rows, penalty-first waterfall, idempotent on the bank transaction.
     let (payer_role, payer_name) = resolve_payer(&inner, &unit, payload.sender_name.as_deref());
-    let settles_tenant_joint_liability = payer_role == DebtorType::Owner
-        && open_debtor_types(&inner, &unit.id) == [DebtorType::Tenant];
     let matched_resident_name = unit
         .owner_user_id
         .as_ref()
@@ -1514,7 +1508,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             }),
             designation: None,
             settles_owner_capital_dues: false,
-            settles_tenant_joint_liability,
+            settles_tenant_joint_liability: false,
             external_reference: Some(payload.transaction_id.clone()),
             designate_from_description: true,
             settles_unmatched_entry_id: None,

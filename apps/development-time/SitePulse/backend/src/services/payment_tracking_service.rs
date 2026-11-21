@@ -565,40 +565,29 @@ impl PaymentTrackingService {
                 .and_then(|id| inner.users.iter().find(|user| &user.id == id))
                 .and_then(|user| user.person_id);
             let owner_person_id = owner.and_then(|user| user.person_id);
-            let eligible_joint_due_ids = {
-                let mut set = owner_person_id
-                    .map(|person_id| {
-                        inner
-                            .joint_liability_owners
-                            .iter()
-                            .filter(|(_, owners)| {
-                                owners.iter().any(|owner| owner.person_id == person_id)
-                            })
-                            .filter_map(|(due_id, _)| {
-                                inner
-                                    .dues
-                                    .iter()
-                                    .any(|due| {
-                                        due.id == *due_id
-                                            && crate::auth::same_id(&due.unit_id, &unit.id)
-                                            && due.debtor_type == DebtorType::Tenant
-                                            && due.status.is_collectable()
-                                    })
-                                    .then_some(due_id.clone())
-                            })
-                            .collect::<std::collections::HashSet<_>>()
-                    })
-                    .unwrap_or_default();
-                for due in inner.dues.iter().filter(|d| {
-                    crate::auth::same_id(&d.unit_id, &unit.id)
-                        && d.debtor_type == DebtorType::Tenant
-                        && d.status.is_collectable()
-                        && !inner.joint_liability_owners.contains_key(&d.id)
-                }) {
-                    set.insert(due.id.clone());
-                }
-                set
-            };
+            let eligible_joint_due_ids = owner_person_id
+                .map(|person_id| {
+                    inner
+                        .joint_liability_owners
+                        .iter()
+                        .filter(|(_, owners)| {
+                            owners.iter().any(|owner| owner.person_id == person_id)
+                        })
+                        .filter_map(|(due_id, _)| {
+                            inner
+                                .dues
+                                .iter()
+                                .any(|due| {
+                                    due.id == *due_id
+                                        && crate::auth::same_id(&due.unit_id, &unit.id)
+                                        && due.debtor_type == DebtorType::Tenant
+                                        && due.status.is_collectable()
+                                })
+                                .then_some(due_id.clone())
+                        })
+                        .collect::<std::collections::HashSet<_>>()
+                })
+                .unwrap_or_default();
             let tenant_name = active_tenant_name.or_else(|| {
                 eligible_joint_due_ids.iter().find_map(|due_id| {
                     inner

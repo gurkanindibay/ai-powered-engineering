@@ -25,7 +25,7 @@ pub async fn record_homeowner_payment(
     State(state): State<AppState>,
     Json(payload): Json<RecordHomeownerPaymentRequest>,
 ) -> Result<(StatusCode, Json<RecordHomeownerPaymentResponse>), (StatusCode, String)> {
-    let (unit, payer_role, payer_name, settles_tenant_joint_liability) = {
+    let (unit, payer_role, payer_name) = {
         let inner = state.inner.read().await;
         let unit = inner
             .units
@@ -40,9 +40,7 @@ pub async fn record_homeowner_payment(
             })?;
         let (payer_role, payer_name) =
             crate::handlers::resolve_payer(&inner, &unit, payload.homeowner_name.as_deref());
-        let settles_tenant_joint_liability = payer_role == DebtorType::Owner
-            && crate::handlers::open_debtor_types(&inner, &unit.id) == [DebtorType::Tenant];
-        (unit, payer_role, payer_name, settles_tenant_joint_liability)
+        (unit, payer_role, payer_name)
     };
     let reference = payload
         .reference_code
@@ -63,7 +61,7 @@ pub async fn record_homeowner_payment(
             idempotency_key: reference.as_ref().map(|r| format!("HOP:{}", r)),
             designation: None,
             settles_owner_capital_dues: false,
-            settles_tenant_joint_liability,
+            settles_tenant_joint_liability: false,
             external_reference: reference.clone(),
             designate_from_description: true,
             settles_unmatched_entry_id: None,
@@ -209,17 +207,12 @@ pub async fn match_all_homeowner_payments(
     let mut matched_advance_count = 0;
     for (record, site_id) in pending {
         // The pending row becomes the settled entry (SPEC-005 R2): no duplicate.
-        let (payer_role, payer_name, settles_tenant_joint_liability) = {
+        let (payer_role, payer_name) = {
             let inner = state.inner.read().await;
             let unit = inner.units.iter().find(|u| u.id == record.unit_id);
             match unit {
                 Some(u) => {
-                    let (role, name) =
-                        crate::handlers::resolve_payer(&inner, u, record.homeowner_name.as_deref());
-                    let settles_joint = role == DebtorType::Owner
-                        && crate::handlers::open_debtor_types(&inner, &u.id)
-                            == [DebtorType::Tenant];
-                    (role, name, settles_joint)
+                    crate::handlers::resolve_payer(&inner, u, record.homeowner_name.as_deref())
                 }
                 None => (
                     DebtorType::Owner,
@@ -227,7 +220,6 @@ pub async fn match_all_homeowner_payments(
                         .homeowner_name
                         .clone()
                         .unwrap_or_else(|| "Kat Maliki".to_string()),
-                    false,
                 ),
             }
         };
@@ -244,7 +236,7 @@ pub async fn match_all_homeowner_payments(
                 idempotency_key: Some(format!("HOP:{}", record.id)),
                 designation: None,
                 settles_owner_capital_dues: false,
-                settles_tenant_joint_liability,
+                settles_tenant_joint_liability: false,
                 external_reference: record.reference_code.clone(),
                 designate_from_description: true,
                 settles_unmatched_entry_id: Some(record.id.clone()),
