@@ -53,19 +53,20 @@ Use the repository's merge style (squash). Never use `--admin`, never bypass bra
 
 ## Close and clean up (all of it, in this order)
 
-1. **Close the issue**: confirm it is closed (the PR body should say `Closes #<n>`); if not, `gh issue close <issue> --comment "Delivered in #<pr>"`.
-2. **Release the claims** on the issue and the PR: `python3 scripts/issue_claim.py release <issue> --harness <name> --session <id> --pr <pr>`.
-3. **Remove your worktree** (rule 11): confirm it is clean and pushed, then `git -C <main-checkout> worktree remove <worktree-path>`. If your host manages the worktree and you cannot remove it from inside, use the host's cleanup, or report the path and branch as ready to delete.
-4. **Delete the local branch**: `git -C <main-checkout> branch -D <branch>` (it is merged by squash, so `-d` will refuse).
-5. **Delete the remote branch** if still present: `git ls-remote --exit-code --heads origin <branch>` then `git push origin --delete <branch>`.
-6. **Prune**: `git worktree prune` and `git fetch --prune origin`.
-7. Report the merge commit, the closed issue and what was cleaned.
+1. **Remove the 30-minute schedule first**, so no poll fires mid-cleanup or after the worktree is gone: cancel the job you created (for example `CronDelete`, stop the `ScheduleWakeup` loop by calling it with `stop: true`, or kill the sleeping loop) and confirm none is left (`CronList`, or your harness equivalent). Do this on every exit from the loop, not only after a merge: PR closed unmerged, user says stop, or you hand the PR to the user.
+2. **Close the issue**: confirm it is closed (the PR body should say `Closes #<n>`); if not, `gh issue close <issue> --comment "Delivered in #<pr>"`.
+3. **Release the claims** on the issue and the PR: `python3 scripts/issue_claim.py release <issue> --harness <name> --session <id> --pr <pr>`.
+4. **Remove your worktree** (rule 11): confirm it is clean and pushed, then `git -C <main-checkout> worktree remove <worktree-path>`. If your host manages the worktree and you cannot remove it from inside, use the host's cleanup, or report the path and branch as ready to delete.
+5. **Delete the local branch**: `git -C <main-checkout> branch -D <branch>` (it is merged by squash, so `-d` will refuse).
+6. **Delete the remote branch** if still present: `git ls-remote --exit-code --heads origin <branch>` then `git push origin --delete <branch>`.
+7. **Prune**: `git worktree prune` and `git fetch --prune origin`.
+8. Report the merge commit, the closed issue and what was cleaned.
 
 Never force-remove a dirty worktree, and never touch a worktree or branch that belongs to another agent or task.
 
 ## Stop conditions
 
-- **PR closed without merging**: stop polling, release the claims, report it, and leave cleanup decisions to the user.
+- **PR closed without merging**: stop polling (remove the schedule), release the claims, report it, and leave cleanup decisions to the user.
 - **Failure unrelated to your change** (also red on `master`, infra outage): report it with the check name and log excerpt, keep polling only if the user has not said otherwise.
 - **The same note comes back after you fixed it twice**, or the reviewer and you disagree on a blocking point: stop and ask the user instead of looping.
 - **The user says stop**, or asks you to merge or not merge a specific PR: the user wins.

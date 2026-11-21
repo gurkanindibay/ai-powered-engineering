@@ -103,7 +103,7 @@ The workspace centers on **SitePulse**, a residential site platform built using 
 15. **PR Author Follow-up Loop (All Agents)**:
    - Opening a PR (rule 12) does not end the task. After the PR is open and green, poll it **every 30 minutes**: if the reviewer left notes, fix them in the same worktree and branch, run the suite, push, wait for CI, and keep polling.
    - **Approved** means a GitHub approval on the PR (`reviewDecision` `APPROVED` or an `APPROVED` review from the reviewer) or a reviewer comment starting with `APPROVED`. Once approved and every check is green, **merge your own PR** (`gh pr merge <pr> --squash --delete-branch`). If it is approved with minor notes, fix them, wait for CI to go green, then merge without waiting for another approval.
-   - After the merge: close the linked issue, release the claim labels, remove the worktree (rule 11), delete the local and remote branches, and `git worktree prune`. Never merge with a failing or pending check, never use `--admin`, never merge a PR that is not yours.
+   - After the merge: first remove the 30-minute schedule (also on any other exit from the loop), then close the linked issue, release the claim labels, remove the worktree (rule 11), delete the local and remote branches, and `git worktree prune`. Never merge with a failing or pending check, never use `--admin`, never merge a PR that is not yours.
    - Compact your context before every 30-minute iteration, carrying only the handoff state (PR, issue, branch, worktree, claim id, last handled SHA).
    - Stop and ask the user if the PR is closed unmerged or the same blocking note survives two fixes. Full procedure: [.agents/rules/pr-author-followup.md](file:///.agents/rules/pr-author-followup.md).
 
