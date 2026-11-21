@@ -38,11 +38,16 @@ def live_open_rows(api, stack, sessions: dict[str, object], units: dict[tuple[st
             for item in debtor["jointly_liable_open_items"]:
                 joint[str(item["due_id"])] = debtor["name"].split()[0]
         for debtor in statement["debtors"]:
+            debtor_name = debtor["name"].split()[0]
             for item in debtor["open_items"]:
-                name = stack.sql(
-                    "SELECT p.full_name FROM dues_liabilities d JOIN persons p ON p.id = d.liable_person_id "
-                    f"WHERE d.id = {int(item['due_id'])};").split()[0]
-                key = (site, label, name, LABEL_PERIODS[item["period"]])
+                if stack is not None:
+                    db_name = stack.sql(
+                        "SELECT p.full_name FROM dues_liabilities d JOIN persons p ON p.id = d.liable_person_id "
+                        f"WHERE d.id = {int(item['due_id'])};").split()[0]
+                    assert debtor_name == db_name, (
+                        f"due {item['due_id']} listed under statement debtor {debtor['name']} "
+                        f"differs from DB liable person {db_name}")
+                key = (site, label, debtor_name, LABEL_PERIODS[item["period"]])
                 rows[key] = (D(str(item["principal_outstanding"])), D(str(item["penalty_outstanding"])),
                              joint.get(str(item["due_id"])))
     return rows
