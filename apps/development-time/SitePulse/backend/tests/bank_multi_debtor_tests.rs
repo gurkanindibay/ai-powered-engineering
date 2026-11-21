@@ -79,7 +79,8 @@ async fn confirm(
         debtor_assignments: Default::default(),
     };
     if let Some(debtor) = debtor {
-        req.debtor_assignments.insert(match_id.to_string(), debtor);
+        req.debtor_assignments
+            .insert(match_id.to_string(), debtor.into());
     }
     sitepulse_backend::handlers::confirm_reconciliation(
         axum::extract::State(state.clone()),
@@ -172,4 +173,219 @@ async fn when_unit_has_one_open_debtor_then_transfer_still_matches_automatically
     let res = send(&state, webhook("TX-MD-03", None)).await;
     assert_eq!(res.status, "CLEARED");
     assert_eq!(state.inner.read().await.payment_receipts.len(), 1);
+}
+
+// Issue #278: approving held transfer for TENANT resolves to active tenant, settles their debt, and names them as payer.
+#[tokio::test]
+async fn when_held_transfer_approved_for_tenant_then_settles_active_tenant_charges() {
+    let state = state_with(vec![
+        DuesLiability {
+            liable_person_id: Some(101),
+            ..due("owner-sept", DebtorType::Owner)
+        },
+        DuesLiability {
+            liable_person_id: Some(102),
+            ..due("selin-oct", DebtorType::Tenant)
+        },
+        DuesLiability {
+            liable_person_id: Some(103),
+            ..due("mert-nov", DebtorType::Tenant)
+        },
+    ])
+    .await;
+    {
+        let mut inner = state.inner.write().await;
+        inner.unit_occupancies.insert(
+            UNIT.to_string(),
+            vec![
+                OccupancyHistoryItem {
+                    id: 1,
+                    unit_id: 14,
+                    person_id: 101,
+                    person_name: "Ahmet Yılmaz".to_string(),
+                    person_phone: None,
+                    person_email: None,
+                    role: DebtorType::Owner,
+                    start_date: "2026-01-01".to_string(),
+                    end_date: None,
+                    is_active: true,
+                    exit_balance: Decimal::ZERO,
+                    notes: None,
+                    created_at: chrono::Utc::now(),
+                },
+                OccupancyHistoryItem {
+                    id: 2,
+                    unit_id: 14,
+                    person_id: 102,
+                    person_name: "Selin Demir".to_string(),
+                    person_phone: None,
+                    person_email: None,
+                    role: DebtorType::Tenant,
+                    start_date: "2026-10-01".to_string(),
+                    end_date: Some("2026-10-31".to_string()),
+                    is_active: false,
+                    exit_balance: Decimal::ZERO,
+                    notes: None,
+                    created_at: chrono::Utc::now(),
+                },
+                OccupancyHistoryItem {
+                    id: 3,
+                    unit_id: 14,
+                    person_id: 103,
+                    person_name: "Mert Kılıç".to_string(),
+                    person_phone: None,
+                    person_email: None,
+                    role: DebtorType::Tenant,
+                    start_date: "2026-11-01".to_string(),
+                    end_date: None,
+                    is_active: true,
+                    exit_balance: Decimal::ZERO,
+                    notes: None,
+                    created_at: chrono::Utc::now(),
+                },
+            ],
+        );
+        if let Some(u) = inner.units.iter_mut().find(|u| u.id == UNIT) {
+            u.owner_user_id = Some("person-101".to_string());
+            u.tenant_user_id = Some("person-103".to_string());
+        }
+    }
+
+    let res = send(&state, webhook("TX-MD-278-1", None)).await;
+    assert_eq!(res.status, "UNMATCHED");
+    assert_eq!(res.message, "several open debtors");
+
+    let match_id = state.inner.read().await.reconciliation_queue[0]
+        .match_id
+        .clone();
+
+    let done = confirm(&state, &match_id, Some(DebtorType::Tenant))
+        .await
+        .unwrap();
+    assert_eq!(done.confirmed_count, 1);
+
+    let inner = state.inner.read().await;
+    assert_eq!(inner.payment_receipts.len(), 1);
+    let receipt = &inner.payment_receipts[0];
+    assert_eq!(receipt.payer_name, "Mert Kılıç");
+    assert_eq!(receipt.payer_role, DebtorType::Tenant);
+    assert_eq!(receipt.payer_person_id, Some(103));
+    assert_eq!(receipt.allocated_principal, d("800.00"));
+    assert_eq!(receipt.allocated_advance, Decimal::ZERO);
+
+    let by = |id: &str| {
+        inner
+            .dues
+            .iter()
+            .find(|x| x.id == id)
+            .unwrap()
+            .paid_principal
+    };
+    assert_eq!(by("mert-nov"), d("800.00"));
+    assert_eq!(by("selin-oct"), Decimal::ZERO);
+    assert_eq!(by("owner-sept"), Decimal::ZERO);
+}
+
+// Issue #278: approving held transfer by specific person name settles that person's open liabilities.
+#[tokio::test]
+async fn when_held_transfer_approved_by_person_name_then_settles_that_person() {
+    let state = state_with(vec![
+        DuesLiability {
+            liable_person_id: Some(101),
+            ..due("owner-sept", DebtorType::Owner)
+        },
+        DuesLiability {
+            liable_person_id: Some(102),
+            ..due("selin-oct", DebtorType::Tenant)
+        },
+        DuesLiability {
+            liable_person_id: Some(103),
+            ..due("mert-nov", DebtorType::Tenant)
+        },
+    ])
+    .await;
+    {
+        let mut inner = state.inner.write().await;
+        inner.unit_occupancies.insert(
+            UNIT.to_string(),
+            vec![
+                OccupancyHistoryItem {
+                    id: 2,
+                    unit_id: 14,
+                    person_id: 102,
+                    person_name: "Selin Demir".to_string(),
+                    person_phone: None,
+                    person_email: None,
+                    role: DebtorType::Tenant,
+                    start_date: "2026-10-01".to_string(),
+                    end_date: Some("2026-10-31".to_string()),
+                    is_active: false,
+                    exit_balance: Decimal::ZERO,
+                    notes: None,
+                    created_at: chrono::Utc::now(),
+                },
+                OccupancyHistoryItem {
+                    id: 3,
+                    unit_id: 14,
+                    person_id: 103,
+                    person_name: "Mert Kılıç".to_string(),
+                    person_phone: None,
+                    person_email: None,
+                    role: DebtorType::Tenant,
+                    start_date: "2026-11-01".to_string(),
+                    end_date: None,
+                    is_active: true,
+                    exit_balance: Decimal::ZERO,
+                    notes: None,
+                    created_at: chrono::Utc::now(),
+                },
+            ],
+        );
+    }
+
+    send(&state, webhook("TX-MD-278-2", None)).await;
+    let match_id = state.inner.read().await.reconciliation_queue[0]
+        .match_id
+        .clone();
+
+    // Manager assigns to Selin Demir specifically
+    let mut req = ConfirmReconciliationRequest {
+        site_id: "site-1".to_string(),
+        match_ids: vec![match_id.clone()],
+        ..Default::default()
+    };
+    req.debtor_assignments.insert(
+        match_id,
+        DebtorAssignment::Person("Selin Demir".to_string()),
+    );
+
+    let (_, axum::Json(done)) = sitepulse_backend::handlers::confirm_reconciliation(
+        axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        axum::Json(req),
+    )
+    .await
+    .unwrap();
+    assert_eq!(done.confirmed_count, 1);
+
+    let inner = state.inner.read().await;
+    assert_eq!(inner.payment_receipts.len(), 1);
+    let receipt = &inner.payment_receipts[0];
+    assert_eq!(receipt.payer_name, "Selin Demir");
+    assert_eq!(receipt.payer_role, DebtorType::Tenant);
+    assert_eq!(receipt.payer_person_id, Some(102));
+    assert_eq!(receipt.allocated_principal, d("800.00"));
+    assert_eq!(receipt.allocated_advance, Decimal::ZERO);
+
+    let by = |id: &str| {
+        inner
+            .dues
+            .iter()
+            .find(|x| x.id == id)
+            .unwrap()
+            .paid_principal
+    };
+    assert_eq!(by("selin-oct"), d("800.00"));
+    assert_eq!(by("mert-nov"), Decimal::ZERO);
+    assert_eq!(by("owner-sept"), Decimal::ZERO);
 }

@@ -278,6 +278,21 @@ impl std::fmt::Display for DebtorType {
 
 impl_sql_for_enum!(DebtorType);
 
+/// Manager assignment for a held transfer: either by debtor role or by specific person.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DebtorAssignment {
+    Role(DebtorType),
+    PersonId(i64),
+    Person(String),
+}
+
+impl From<DebtorType> for DebtorAssignment {
+    fn from(role: DebtorType) -> Self {
+        DebtorAssignment::Role(role)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ExpenseType {
@@ -1942,7 +1957,7 @@ pub struct SkippedStatementEntry {
     pub content: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConfirmReconciliationRequest {
     pub site_id: String,
     pub match_ids: Vec<String>,
@@ -1958,9 +1973,9 @@ pub struct ConfirmReconciliationRequest {
     #[serde(default)]
     pub owner_capital_match_ids: Vec<String>,
     /// Debtor chosen by the manager for a transfer held for several open debtors
-    /// (match id to `OWNER` or `TENANT`).
+    /// (match id to `OWNER`, `TENANT`, or a specific person name/id).
     #[serde(default)]
-    pub debtor_assignments: std::collections::HashMap<String, DebtorType>,
+    pub debtor_assignments: std::collections::HashMap<String, DebtorAssignment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

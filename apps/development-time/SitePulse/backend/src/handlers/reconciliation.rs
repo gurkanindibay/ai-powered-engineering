@@ -277,8 +277,16 @@ pub async fn confirm_reconciliation(
             let assigned = payload
                 .debtor_assignments
                 .get(match_id)
-                .copied()
-                .or_else(|| assignment.as_ref().map(|(_, role)| *role));
+                .cloned()
+                .or_else(|| {
+                    assignment
+                        .as_ref()
+                        .map(|(_, role)| crate::models::DebtorAssignment::Role(*role))
+                })
+                .or_else(|| {
+                    m.assigned_debtor_role
+                        .map(crate::models::DebtorAssignment::Role)
+                });
             if assigned.is_none()
                 && queued.is_some_and(|q| {
                     q.status == ReconciliationStatus::Unmatched
@@ -293,12 +301,12 @@ pub async fn confirm_reconciliation(
                     ),
                 ));
             }
-            let (resolved_role, resolved_name) =
-                resolve_payer(&inner, &unit, m.transaction.sender_name.as_deref());
-            let (payer_role, payer_name) = match assigned {
-                Some(role) => (role, resolved_name),
-                None => (resolved_role, resolved_name),
-            };
+            let (payer_role, payer_name) = resolve_payer_with_assignment(
+                &inner,
+                &unit,
+                m.transaction.sender_name.as_deref(),
+                assigned.as_ref(),
+            );
             // A due id is only trusted when it names a real due of the matched unit;
             // client-built rows may carry placeholders, which fall back to oldest-first.
             let matched_due_id = m.matched_due_id.clone().filter(|due_id| {
@@ -1792,36 +1800,206 @@ pub(crate) fn resolve_payer(
     unit: &crate::models::IndependentUnit,
     sender_name: Option<&str>,
 ) -> (DebtorType, String) {
+    resolve_payer_with_assignment(inner, unit, sender_name, None)
+}
+
+pub(crate) fn resolve_payer_with_assignment(
+    inner: &crate::state::AppStateInner,
+    unit: &crate::models::IndependentUnit,
+    sender_name: Option<&str>,
+    assignment: Option<&crate::models::DebtorAssignment>,
+) -> (DebtorType, String) {
     let name_of = |uid: &Option<String>| {
         uid.as_ref()
             .and_then(|id| inner.users.iter().find(|u| &u.id == id))
             .map(|u| u.full_name.clone())
+            .or_else(|| {
+                uid.as_ref()
+                    .and_then(|id| id.strip_prefix("person-"))
+                    .and_then(|pid| pid.parse::<i64>().ok())
+                    .and_then(|pid| inner.users.iter().find(|u| u.person_id == Some(pid)))
+                    .map(|u| u.full_name.clone())
+            })
     };
-    let tenant_name = name_of(&unit.tenant_user_id).or_else(|| {
-        inner.unit_occupancies.get(&unit.id).and_then(|occ| {
+    let occupancies = inner.unit_occupancies.get(&unit.id);
+    let tenant_name = name_of(&unit.tenant_user_id)
+        .or_else(|| {
+            occupancies.and_then(|occ| {
+                occ.iter()
+                    .find(|h| h.is_active && h.role == DebtorType::Tenant)
+                    .map(|h| h.person_name.clone())
+            })
+        })
+        .or_else(|| {
+            occupancies.and_then(|occ| {
+                occ.iter()
+                    .filter(|h| h.role == DebtorType::Tenant)
+                    .find(|h| {
+                        inner.dues.iter().any(|d| {
+                            crate::auth::same_id(&d.unit_id, &unit.id)
+                                && d.debtor_type == DebtorType::Tenant
+                                && d.liable_person_id == Some(h.person_id)
+                                && crate::services::finance_common::is_open(d)
+                        })
+                    })
+                    .or_else(|| {
+                        occ.iter()
+                            .filter(|h| h.role == DebtorType::Tenant)
+                            .max_by_key(|h| &h.start_date)
+                    })
+                    .map(|h| h.person_name.clone())
+            })
+        });
+    let owner_name = name_of(&unit.owner_user_id).or_else(|| {
+        occupancies.and_then(|occ| {
             occ.iter()
-                .find(|h| h.is_active && h.role == DebtorType::Tenant)
+                .find(|h| h.is_active && h.role == DebtorType::Owner)
                 .map(|h| h.person_name.clone())
         })
     });
     let sender = sender_name.map(str::trim).filter(|s| !s.is_empty());
-    if let (Some(sender), Some(ref tenant)) = (sender, &tenant_name) {
-        let (a, b) = (
-            crate::services::dues_ledger::fold_turkish(sender),
-            crate::services::dues_ledger::fold_turkish(tenant),
-        );
-        if a.contains(&b) || b.contains(&a) {
-            return (DebtorType::Tenant, sender.to_string());
+
+    let match_tenant = |sender_str: &str| -> Option<String> {
+        let folded_s = crate::services::dues_ledger::fold_turkish(sender_str);
+        if let Some(ref t) = tenant_name {
+            let folded_t = crate::services::dues_ledger::fold_turkish(t);
+            if folded_s.contains(&folded_t) || folded_t.contains(&folded_s) {
+                return Some(sender_str.to_string());
+            }
+        }
+        if let Some(occ) = occupancies {
+            for h in occ.iter().filter(|h| h.role == DebtorType::Tenant) {
+                let folded_h = crate::services::dues_ledger::fold_turkish(&h.person_name);
+                if folded_s.contains(&folded_h) || folded_h.contains(&folded_s) {
+                    return Some(sender_str.to_string());
+                }
+            }
+        }
+        None
+    };
+
+    let match_owner = |sender_str: &str| -> Option<String> {
+        let folded_s = crate::services::dues_ledger::fold_turkish(sender_str);
+        if let Some(ref o) = owner_name {
+            let folded_o = crate::services::dues_ledger::fold_turkish(o);
+            if folded_s.contains(&folded_o) || folded_o.contains(&folded_s) {
+                return Some(sender_str.to_string());
+            }
+        }
+        if let Some(occ) = occupancies {
+            for h in occ.iter().filter(|h| h.role == DebtorType::Owner) {
+                let folded_h = crate::services::dues_ledger::fold_turkish(&h.person_name);
+                if folded_s.contains(&folded_h) || folded_h.contains(&folded_s) {
+                    return Some(sender_str.to_string());
+                }
+            }
+        }
+        None
+    };
+
+    if let Some(assign) = assignment {
+        match assign {
+            crate::models::DebtorAssignment::PersonId(pid) => {
+                if let Some(occ) = occupancies {
+                    if let Some(h) = occ.iter().find(|h| h.person_id == *pid) {
+                        return (h.role, h.person_name.clone());
+                    }
+                }
+                if let Some(u) = inner.users.iter().find(|u| u.person_id == Some(*pid)) {
+                    let role = if unit.owner_user_id.as_ref().is_some_and(|id| id == &u.id) {
+                        DebtorType::Owner
+                    } else {
+                        DebtorType::Tenant
+                    };
+                    return (role, u.full_name.clone());
+                }
+            }
+            crate::models::DebtorAssignment::Person(name_str) => {
+                let trimmed = name_str.trim();
+                if let Ok(pid) = trimmed.parse::<i64>() {
+                    if let Some(occ) = occupancies {
+                        if let Some(h) = occ.iter().find(|h| h.person_id == pid) {
+                            return (h.role, h.person_name.clone());
+                        }
+                    }
+                    if let Some(u) = inner.users.iter().find(|u| u.person_id == Some(pid)) {
+                        let role = if unit.owner_user_id.as_ref().is_some_and(|id| id == &u.id) {
+                            DebtorType::Owner
+                        } else {
+                            DebtorType::Tenant
+                        };
+                        return (role, u.full_name.clone());
+                    }
+                }
+                let folded = crate::services::dues_ledger::fold_turkish(trimmed);
+                if folded == "owner" || folded == "kat maliki" {
+                    let name = sender
+                        .and_then(match_owner)
+                        .or_else(|| owner_name.clone())
+                        .unwrap_or_else(|| "Bilinmeyen Kat Maliki".to_string());
+                    return (DebtorType::Owner, name);
+                } else if folded == "tenant" || folded == "kiraci" {
+                    let name = sender
+                        .and_then(match_tenant)
+                        .or_else(|| tenant_name.clone())
+                        .unwrap_or_else(|| "Bilinmeyen Kiracı".to_string());
+                    return (DebtorType::Tenant, name);
+                }
+
+                if let Some(occ) = occupancies {
+                    if let Some(h) = occ.iter().find(|h| {
+                        let fh = crate::services::dues_ledger::fold_turkish(&h.person_name);
+                        fh == folded || fh.contains(&folded) || folded.contains(&fh)
+                    }) {
+                        return (h.role, h.person_name.clone());
+                    }
+                }
+                if let Some(u) = inner.users.iter().find(|u| {
+                    let fu = crate::services::dues_ledger::fold_turkish(&u.full_name);
+                    fu == folded || fu.contains(&folded) || folded.contains(&fu)
+                }) {
+                    let role = if unit.owner_user_id.as_ref().is_some_and(|id| id == &u.id) {
+                        DebtorType::Owner
+                    } else {
+                        DebtorType::Tenant
+                    };
+                    return (role, u.full_name.clone());
+                }
+                if owner_name.as_ref().is_some_and(|o| {
+                    let fo = crate::services::dues_ledger::fold_turkish(o);
+                    fo == folded || fo.contains(&folded) || folded.contains(&fo)
+                }) {
+                    return (DebtorType::Owner, trimmed.to_string());
+                }
+                return (DebtorType::Tenant, trimmed.to_string());
+            }
+            crate::models::DebtorAssignment::Role(role) => match role {
+                DebtorType::Tenant => {
+                    let name = sender
+                        .and_then(match_tenant)
+                        .or(tenant_name)
+                        .or_else(|| sender.map(str::to_string))
+                        .unwrap_or_else(|| "Bilinmeyen Kiracı".to_string());
+                    return (DebtorType::Tenant, name);
+                }
+                DebtorType::Owner => {
+                    let name = sender
+                        .and_then(match_owner)
+                        .or(owner_name)
+                        .or_else(|| sender.map(str::to_string))
+                        .unwrap_or_else(|| "Bilinmeyen Kat Maliki".to_string());
+                    return (DebtorType::Owner, name);
+                }
+            },
         }
     }
-    let owner_name = name_of(&unit.owner_user_id);
-    if let (Some(sender), Some(ref owner)) = (sender, &owner_name) {
-        let (a, b) = (
-            crate::services::dues_ledger::fold_turkish(sender),
-            crate::services::dues_ledger::fold_turkish(owner),
-        );
-        if a.contains(&b) || b.contains(&a) {
-            return (DebtorType::Owner, sender.to_string());
+
+    if let Some(s) = sender {
+        if let Some(name) = match_tenant(s) {
+            return (DebtorType::Tenant, name);
+        }
+        if let Some(name) = match_owner(s) {
+            return (DebtorType::Owner, name);
         }
     }
 
@@ -1831,9 +2009,9 @@ pub(crate) fn resolve_payer(
         let single_role = open_debtors[0];
         let name = sender
             .map(str::to_string)
-            .or_else(|| match single_role {
+            .or(match single_role {
                 DebtorType::Tenant => tenant_name,
-                DebtorType::Owner => name_of(&unit.owner_user_id),
+                DebtorType::Owner => owner_name,
             })
             .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
         return (single_role, name);
@@ -1841,7 +2019,7 @@ pub(crate) fn resolve_payer(
 
     let name = sender
         .map(str::to_string)
-        .or_else(|| name_of(&unit.owner_user_id))
+        .or(owner_name)
         .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
     (DebtorType::Owner, name)
 }
