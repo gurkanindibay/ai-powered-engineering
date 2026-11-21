@@ -1,33 +1,33 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T12:59:30Z",
- "run_id": "20261121T125929Z-2158de4",
- "commit": "2158de4f37313b6e5ff6232dd6db5942d0bc8eb9",
+ "generated_at": "2026-11-21T14:06:11Z",
+ "run_id": "20261121T140610Z-2cc8f75",
+ "commit": "2cc8f75bc8715c5c742812d10e5a29af28d66b7e",
  "task": "master",
- "status": "DEFECT",
+ "status": "PASS",
  "junit": {
   "tests": 193,
   "failures": 0,
   "errors": 0,
-  "skipped": 2,
-  "passed": 191,
-  "seconds": 2426.9,
+  "skipped": 1,
+  "passed": 192,
+  "seconds": 2394.4,
   "files": 8,
   "unparseable": []
  },
  "totals": {
   "stories": 116,
   "stories_with_scenarios": 116,
-  "stories_passing": 32,
+  "stories_passing": 33,
   "scenarios": 465,
   "automated": 362,
-  "passing": 158,
-  "failing": 2,
+  "passing": 160,
+  "failing": 0,
   "no_result": 202,
   "planned": 103,
   "epics": 13,
   "epics_verified": 2,
-  "epics_failing": 1
+  "epics_failing": 0
  },
  "epics": [
   {
@@ -203,14 +203,14 @@
    "title": "Site Admin Journeys",
    "stories": 16,
    "stories_with_scenarios": 16,
-   "stories_passing": 0,
+   "stories_passing": 1,
    "scenarios": 151,
    "automated": 59,
-   "passing": 44,
-   "failing": 2,
+   "passing": 46,
+   "failing": 0,
    "no_result": 13,
    "planned": 92,
-   "health": "failing"
+   "health": "in_progress"
   }
  ],
  "scenarios": {
@@ -2879,7 +2879,7 @@
    "story": "STORY-13-13"
   },
   "SC-13-13-02": {
-   "state": "failing",
+   "state": "passing",
    "name": "Accrue four periods and verify mixed payment histories",
    "epic": "EPIC-13",
    "story": "STORY-13-13"
@@ -2999,7 +2999,7 @@
    "story": "STORY-13-26"
   },
   "SC-13-26-02": {
-   "state": "failing",
+   "state": "passing",
    "name": "Two sites remain identifiable from onboarding through final reconciliation",
    "epic": "EPIC-13",
    "story": "STORY-13-26"
@@ -3901,5 +3901,5 @@
    ]
   }
  ],
- "href": "reports/44906027395-1/"
+ "href": "reports/44910570230-1/"
 }
