@@ -35,8 +35,6 @@ class MultiSiteJourney:
     manager_b: Session
     manager_a_password: str
     manager_b_password: str
-    expected_posted_cash_a: Decimal = Decimal("90658.50")
-    expected_posted_cash_b: Decimal = Decimal("189538.75")
     units_a: dict[str, str] = field(default_factory=dict)  # "A-01" -> unit_id
     units_b: dict[str, str] = field(default_factory=dict)  # "B1-01" -> unit_id, "B2-01" -> unit_id
     people: dict[str, str] = field(default_factory=dict)   # "Ada Kaya" -> person_id
