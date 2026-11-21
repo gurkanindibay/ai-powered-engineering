@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T14:58:58Z",
- "run_id": "20261121T145857Z-cd712e6",
- "commit": "cd712e68f87e94382d607df24cc3e018a09eee47",
+ "generated_at": "2026-11-21T15:24:10Z",
+ "run_id": "20261121T152409Z-69b8a42",
+ "commit": "69b8a42af8f9047e4496590ecb85422a79258d67",
  "task": "master",
  "status": "DEFECT",
  "junit": {
-  "tests": 214,
+  "tests": 238,
   "failures": 0,
   "errors": 0,
   "skipped": 6,
-  "passed": 208,
-  "seconds": 2612.6,
+  "passed": 232,
+  "seconds": 2808.5,
   "files": 8,
   "unparseable": []
  },
@@ -20,11 +20,11 @@
   "stories_with_scenarios": 116,
   "stories_passing": 33,
   "scenarios": 465,
-  "automated": 386,
-  "passing": 175,
+  "automated": 395,
+  "passing": 184,
   "failing": 5,
   "no_result": 206,
-  "planned": 79,
+  "planned": 70,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 1
@@ -205,11 +205,11 @@
    "stories_with_scenarios": 16,
    "stories_passing": 1,
    "scenarios": 151,
-   "automated": 83,
-   "passing": 61,
+   "automated": 92,
+   "passing": 70,
    "failing": 5,
    "no_result": 17,
-   "planned": 68,
+   "planned": 59,
    "health": "failing"
   }
  ],
@@ -2285,7 +2285,7 @@
    "story": "STORY-13-03"
   },
   "SC-13-03-20": {
-   "state": "planned",
+   "state": "passing",
    "name": "A re-split share keeps an effective due date and a late fee that follow its creation",
    "epic": "EPIC-13",
    "story": "STORY-13-03"
@@ -2321,7 +2321,7 @@
    "story": "STORY-13-03"
   },
   "SC-13-03-10": {
-   "state": "planned",
+   "state": "passing",
    "name": "One person who owns one unit and rents another is billed in each role",
    "epic": "EPIC-13",
    "story": "STORY-13-03"
@@ -2333,7 +2333,7 @@
    "story": "STORY-13-03"
   },
   "SC-13-03-12": {
-   "state": "planned",
+   "state": "passing",
    "name": "Owner moves in after the tenant leaves and takes the operational dues back",
    "epic": "EPIC-13",
    "story": "STORY-13-03"
@@ -2363,7 +2363,7 @@
    "story": "STORY-13-03"
   },
   "SC-13-03-17": {
-   "state": "planned",
+   "state": "passing",
    "name": "A share whose responsibility starts after the period due date is not late before it existed",
    "epic": "EPIC-13",
    "story": "STORY-13-03"
@@ -2435,7 +2435,7 @@
    "story": "STORY-13-04"
   },
   "SC-13-04-10": {
-   "state": "planned",
+   "state": "passing",
    "name": "The grace boundary decides whether a late fee is charged",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
@@ -2555,13 +2555,13 @@
    "story": "STORY-13-05"
   },
   "SC-13-05-14": {
-   "state": "planned",
+   "state": "passing",
    "name": "The month boundary uses Istanbul time, not UTC",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
   },
   "SC-13-05-15": {
-   "state": "planned",
+   "state": "passing",
    "name": "A late fee never makes a settled liability reopen",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
@@ -2705,7 +2705,7 @@
    "story": "STORY-13-09"
   },
   "SC-13-09-03": {
-   "state": "planned",
+   "state": "passing",
    "name": "A backdated payment recalculates fees using its value date",
    "epic": "EPIC-13",
    "story": "STORY-13-09"
@@ -2795,7 +2795,7 @@
    "story": "STORY-13-10"
   },
   "SC-13-11-01": {
-   "state": "planned",
+   "state": "passing",
    "name": "A liability moves through PENDING, OVERDUE, PAID and CANCELLED",
    "epic": "EPIC-13",
    "story": "STORY-13-11"
@@ -3180,7 +3180,7 @@
    "stories": 116,
    "stories_with_scenarios": 116,
    "scenarios": 465,
-   "automated": 386
+   "automated": 395
   }
  ],
  "recent_changes": [
@@ -3190,7 +3190,7 @@
    "title": "Site Admin Journeys",
    "new_stories": 4,
    "new_scenarios": 22,
-   "newly_automated": 42,
+   "newly_automated": 51,
    "items": 4,
    "samples": [
     "STORY-13-13: Zero to multi-site financial journey",
@@ -3901,5 +3901,5 @@
    ]
   }
  ],
- "href": "reports/44914406370-1/"
+ "href": "reports/44916022441-1/"
 }
