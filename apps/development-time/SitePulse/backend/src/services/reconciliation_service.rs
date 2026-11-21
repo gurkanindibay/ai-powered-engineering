@@ -312,6 +312,8 @@ impl ReconciliationService {
             status,
             status_code: status.as_str().to_string(),
             notes,
+            assigned_unit_id: None,
+            assigned_debtor_role: None,
         }
     }
 

@@ -28,11 +28,6 @@ from support.journey_gui import (
 
 EMPTY_STATE = re.compile(r"Henüz|bulunamadı|bulunmuyor", re.IGNORECASE)
 
-BUG_EMPTY_STATES = (
-    "BUG: on a site with no data the units list and the people directory show no empty-state message "
-    "and no next action (the dues pages say 'Henüz Aidat Dönemi Yok'); see #283"
-)
-
 
 def _units_page_lines(page) -> list[str]:
     Shell(page).nav("residents")
@@ -43,6 +38,108 @@ def _units_page_lines(page) -> list[str]:
 
 def _count(lines: list[str], wanted: str) -> int:
     return sum(1 for line in lines if line == wanted)
+
+
+F1_UNIT_PLAN = (
+    (1, "A-01", "VACANT", "Flat", Decimal("1500.00")),
+    (2, "A-02", "VACANT", "Flat", Decimal("1500.00")),
+    (3, "A-03", "VACANT", "Flat", Decimal("1500.00")),
+    (4, "A-04", "VACANT", "Flat", Decimal("1500.00")),
+    (5, "A-05", "VACANT", "Flat", Decimal("1500.00")),
+    (6, "A-06", "VACANT", "Large flat", Decimal("2250.00")),
+    (7, "A-07", "VACANT", "Flat", Decimal("1500.00")),
+)
+
+F1_TARIFFS = {"Flat": Decimal("1500.00"), "Large flat": Decimal("2250.00")}
+
+# F2 reference plan: owner and tenant per unit, and the unit's occupancy state.
+F2_UNIT_PLAN = (
+    (1, "Ayşe Kaya", "", "OWNER_OCCUPIED"),
+    (2, "Ahmet Yılmaz", "Selin Demir", "TENANT_OCCUPIED"),
+    (3, "Burak Şahin", "", "VACANT"),
+    (4, "Ahmet Yılmaz", "", "OWNER_OCCUPIED"),
+    (5, "Can Öztürk", "Deniz Arslan", "TENANT_OCCUPIED"),
+    (6, "Elif Aydın", "", "OWNER_OCCUPIED"),
+    (7, "", "", "VACANT"),
+)
+
+F2_NAMES = ("Ayşe Kaya", "Ahmet Yılmaz", "Selin Demir", "Burak Şahin", "Can Öztürk", "Deniz Arslan", "Elif Aydın")
+
+
+def _site_unit_ids(stack, site: int) -> list[str]:
+    ids = stack.sql(f"SELECT id FROM units WHERE site_id = {site} ORDER BY unit_number;").splitlines()
+    assert len(ids) == 7, ids
+    return ids
+
+
+def _assert_site_equals_f1(stack, site: int) -> None:
+    """Compare the site with the F1 reference plan built by `_create_structure`."""
+    assert stack.sql(
+        f"SELECT block_name || '|' || total_floors FROM blocks WHERE site_id = {site};"
+    ) == "A Blok|7"
+
+    rows = stack.sql(
+        "SELECT u.unit_number || '|' || b.block_name || '|' || u.occupancy_status || '|' || "
+        "COALESCE(h.type_name, '') || '|' || COALESCE(h.dues_amount::text, '0') "
+        "FROM units u JOIN blocks b ON b.id = u.block_id "
+        "LEFT JOIN house_types h ON h.id = u.house_type_id "
+        f"WHERE u.site_id = {site} ORDER BY u.unit_number;"
+    ).splitlines()
+    parsed = []
+    for line in rows:
+        unit_no, block_name, status, type_name, amount = line.split("|")
+        # The unit label is derived (the units table stores no label column).
+        label = f"{block_name.replace(' Blok', '').strip()}-{int(unit_no):02d}"
+        parsed.append((int(unit_no), label, status, type_name, Decimal(amount)))
+    assert tuple(parsed) == F1_UNIT_PLAN, rows
+
+    tariffs = {
+        name: Decimal(amount)
+        for name, amount in (
+            line.split("|")
+            for line in stack.sql(
+                f"SELECT type_name || '|' || dues_amount::text FROM house_types WHERE site_id = {site};"
+            ).splitlines()
+        )
+    }
+    assert tariffs == F1_TARIFFS, tariffs
+
+    assert stack.sql(f"SELECT COUNT(*) FROM persons WHERE site_id = {site};") == "1", (
+        "F1 has no people beyond the manager"
+    )
+    assert stack.sql(
+        "SELECT COUNT(*) FROM units WHERE "
+        f"site_id = {site} AND (owner_person_id IS NOT NULL OR tenant_person_id IS NOT NULL);"
+    ) == "0", "F1 units are unassigned"
+    assert stack.sql(
+        "SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+        f"WHERE u.site_id = {site};"
+    ) == "0"
+    assert stack.sql(f"SELECT COUNT(*) FROM dues_periods WHERE site_id = {site};") == "0"
+
+
+def _assert_site_equals_f2(stack, site: int) -> None:
+    """Compare owners, tenants and occupancy with the F2 reference plan."""
+    rows = stack.sql(
+        "SELECT u.unit_number || '|' || COALESCE(o.full_name, '') || '|' || "
+        "COALESCE(t.full_name, '') || '|' || u.occupancy_status "
+        "FROM units u LEFT JOIN persons o ON o.id = u.owner_person_id "
+        "LEFT JOIN persons t ON t.id = u.tenant_person_id "
+        f"WHERE u.site_id = {site} ORDER BY u.unit_number;"
+    ).splitlines()
+    assert rows == ["|".join(str(part) for part in row) for row in F2_UNIT_PLAN], rows
+
+    people = stack.sql(
+        f"SELECT full_name FROM persons WHERE site_id = {site} ORDER BY full_name;"
+    ).splitlines()
+    for name in F2_NAMES:
+        assert name in people, f"{name} is missing from the site's people"
+    assert len(people) == 8, f"expected the manager and seven people: {people}"
+    assert stack.sql(
+        "SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+        f"WHERE u.site_id = {site};"
+    ) == "0"
+    assert stack.sql(f"SELECT COUNT(*) FROM dues_periods WHERE site_id = {site};") == "0"
 
 
 def _aging_rows(page) -> dict[str, tuple[str, Decimal]]:
@@ -62,7 +159,6 @@ def _aging_rows(page) -> dict[str, tuple[str, Decimal]]:
 @pytest.mark.role_manager
 @pytest.mark.covers("SC-13-01-01")
 @pytest.mark.gui_id("GUI-13-05")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=BUG_EMPTY_STATES)
 def test_f0_every_page_shows_an_empty_state(request, api, actors, stack, page, login_page):
     with journey_site(request, api, actors, stack, "F0") as fixture:
         sign_in_manager(page, login_page, fixture)
@@ -203,13 +299,86 @@ def test_f3_accruing_the_same_period_again_is_blocked(request, api, actors, stac
 @pytest.mark.role_manager
 @pytest.mark.covers("SC-13-01-12")
 @pytest.mark.gui_id("GUI-13-10")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG: the manager screens cannot add a block or units; see #285")
 def test_f0_site_grows_to_f2_through_the_screens(request, api, actors, stack, page, login_page):
+    """Grow an empty site to the F1 and F2 reference states through the manager's screens.
+
+    The block/units screen assigns one house type per batch, so the seventh unit
+    (the reference plan's single "Large flat") is created in its own batch; the
+    last batch reuses "Flat" at the same amount instead of repricing it.
+    """
     with journey_site(request, api, actors, stack, "F0") as fixture:
         sign_in_manager(page, login_page, fixture)
-        Shell(page).nav("residents")
-        by_id(page, "add_resident_btn").wait_for(timeout=15_000)
-        assert by_id(page, "btn_add_block").count() == 1, "no screen adds a block with its units"
+        site = int(fixture.site_id)
+        residents = ResidentsTab(page).open()
+        assert residents.unit_card_ids() == []
+
+        # F0 -> F1: block "A Blok" with seven units and the reference tariffs.
+        residents.start_add_block().fill(
+            "A Blok", start_unit=1, unit_count=5, total_floors=7, house_type="Flat", monthly_dues="1.500,00",
+        ).save()
+        residents.start_add_block().fill(
+            "A Blok", start_unit=6, unit_count=1, total_floors=7,
+            house_type="Large flat", monthly_dues="2.250,00",
+        ).save()
+        residents.start_add_block().fill(
+            "A Blok", start_unit=7, unit_count=1, total_floors=7, house_type="Flat", monthly_dues="1.500,00",
+        ).save()
+
+        _assert_site_equals_f1(stack, site)
+        lines = _units_page_lines(page)
+        assert "Boş Daire (7)" in lines and "Tümü (7)" in lines
+        assert [f"A Blok {n}" for n in range(1, 8)] == [line for line in lines if re.fullmatch(r"A Blok \d+", line)]
+        assert _count(lines, "Sakin kaydı yok") == 7
+        assert _count(lines, "Sorumlu: Boş Daire") == 7
+
+        # F1 -> F2: the reference owners and tenants, through the same screens.
+        residents = ResidentsTab(page).open()
+        residents.start_add().fill("1", "Ayşe Kaya", "ayse@a13.e2e.test", "05321110001").save()
+        residents.start_add().fill("2", "Ahmet Yılmaz", "ahmet@a13.e2e.test", "05321110002").save()
+        residents.start_add().fill(
+            "3", "Burak Şahin", "burak@a13.e2e.test", "05321110004", occupancy="Boş Daire",
+        ).save()
+        residents.start_add().fill(
+            "4", "Ahmet Yılmaz", "ahmet@a13.e2e.test", "05321110002", reuse_existing=True,
+        ).save()
+        residents.start_add().fill("5", "Can Öztürk", "can@a13.e2e.test", "05321110006").save()
+        residents.start_add().fill(
+            "6", "Elif Aydın", "elif@a13.e2e.test", "05321110007", house_type="Large flat",
+        ).save()
+
+        unit_ids = _site_unit_ids(stack, site)
+        Occupancy(page).move_in(unit_ids[1], "Selin Demir", "selin@a13.e2e.test", "05321110003")
+        Occupancy(page).move_in(unit_ids[4], "Deniz Arslan", "deniz@a13.e2e.test", "05321110005")
+
+        _assert_site_equals_f2(stack, site)
+        lines = _units_page_lines(page)
+        assert "Kiracılı (2)" in lines, lines
+        assert "Malik Mukim (3)" in lines, lines
+        assert "Boş Daire (2)" in lines, lines
+        # The directory names the occupant; a tenant-occupied unit shows the tenant
+        # rather than the owner, and a vacant unit keeps its owner on the workspace
+        # card, so unit 3 (owner only) reads "Sakin kaydı yok".
+        for name in ("Ayşe Kaya", "Ahmet Yılmaz", "Selin Demir", "Deniz Arslan", "Elif Aydın"):
+            assert name in lines, f"{name} missing from the units page"
+        assert _count(lines, "Sakin kaydı yok") == 2
+
+        # Every unit workspace agrees with the directory on its owner and occupant.
+        for unit_no, unit_id in enumerate(unit_ids, start=1):
+            _, owner, tenant, _ = F2_UNIT_PLAN[unit_no - 1]
+            UnitWorkspace(page).open(unit_id)
+            identity = id_text(page, "workspace_identity")
+            UnitWorkspace(page).close()
+            for name in (owner, tenant):
+                if name:
+                    assert name in identity, f"unit {unit_no} workspace misses {name}: {identity}"
+            for other in F2_NAMES:
+                if other not in (owner, tenant):
+                    assert other not in identity, f"unit {unit_no} workspace shows {other}: {identity}"
+
+        open_people_directory(page)
+        people = page_text(page)
+        for name in F2_NAMES:
+            assert name in people, f"{name} missing from the people directory"
 
 
 @pytest.mark.smoke

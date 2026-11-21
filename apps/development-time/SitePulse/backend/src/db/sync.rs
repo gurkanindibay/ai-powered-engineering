@@ -957,7 +957,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 13. Load Reconciliation Queue
     {
-        let rows = client.query("SELECT match_id, transaction_id, txn_date, amount, currency, description, sender_name, sender_iban, reference_no, matched_unit_id, matched_block, matched_unit_number, matched_resident_name, confidence_score, matched_due_id, outstanding_balance, amount_matches_balance, status, notes, site_id FROM reconciliation_queue ORDER BY txn_date ASC",
+        let rows = client.query("SELECT match_id, transaction_id, txn_date, amount, currency, description, sender_name, sender_iban, reference_no, matched_unit_id, matched_block, matched_unit_number, matched_resident_name, confidence_score, matched_due_id, outstanding_balance, amount_matches_balance, status, notes, site_id, assigned_unit_id, assigned_debtor_role FROM reconciliation_queue ORDER BY txn_date ASC",
             &[],).await?;
         for row in rows {
             let match_id: String = row.get(0);
@@ -980,6 +980,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let status_str: String = row.get(17);
             let notes: Option<String> = row.get(18);
             let site_id_num: Option<i64> = row.get(19);
+            let assigned_unit_id: Option<i64> = row.get(20);
+            let assigned_debtor_role: Option<String> = row.get(21);
             // A row without a site belongs to no tenant (never to site 1).
             let site_id = site_id_num.map(|s| s.to_string()).unwrap_or_default();
 
@@ -1010,6 +1012,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 status,
                 status_code,
                 notes,
+                assigned_unit_id: assigned_unit_id.map(|v| v.to_string()),
+                assigned_debtor_role: assigned_debtor_role
+                    .map(|role| DebtorType::from_str_loose(&role)),
             };
 
             if let Some(pos) = state

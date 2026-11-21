@@ -8,7 +8,8 @@ Feature: Cross-platform Flutter login and registration experience
     When they tap the Google sign-in button
     Then the Google authentication flow starts
 
-  @SC-06-05-02 @pending @layer:flutter @linked
+  # Pending: real Google sign-in cannot run in CI; kept pending by decision until a Google identity provider stub (fake token verifier) exists.
+  @SC-06-05-02 @pending @layer:flutter
   Scenario: Google sign-in completes and the dashboard shows the Google profile
     Given the user is on the SitePulse login screen
     When they tap "Google ile Giriş Yap"

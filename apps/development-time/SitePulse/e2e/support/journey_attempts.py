@@ -500,6 +500,14 @@ def _build_f5(stack: E2EStack, site_id: str | int, unit_ids: tuple[str, ...]) ->
         f"INSERT INTO receipt_counters (site_id, receipt_type, last_sequence) VALUES ({site}, 'COLLECTION', 9) ON CONFLICT (site_id, receipt_type) DO UPDATE SET last_sequence = EXCLUDED.last_sequence;"
     )
 
+    # A product accrual records the titled owner as jointly liable for every tenant charge (KMK m.22); the
+    # direct inserts above bypass it, so state the same fact for the seeded tenant charges.
+    statements.append(
+        "INSERT INTO dues_liability_joint_owners (site_id, due_id, owner_person_id, tenant_person_id, liable_from, liable_through) "
+        f"SELECT {site}, d.id, u.owner_person_id, d.liable_person_id, date_trunc('month', d.due_date)::date, "
+        "(date_trunc('month', d.due_date) + interval '1 month - 1 day')::date "
+        f"FROM dues_liabilities d JOIN units u ON u.id = d.unit_id WHERE u.site_id = {site} AND d.debtor_type = 'TENANT';"
+    )
     statements.append("COMMIT;")
     stack.sql(" ".join(statements))
 

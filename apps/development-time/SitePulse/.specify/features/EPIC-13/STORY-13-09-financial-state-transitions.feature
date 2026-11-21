@@ -11,8 +11,7 @@ Feature: Financial transitions that cross periods or ledgers
     And September 1675.00 and October 1600.00 remain open
     And the ledger invariants hold
 
-  # Pending: the current backend test does not exercise this partial amount and its exact later-fee balance through the journey fixture.
-  @SC-13-09-02 @J-16 @depth:2 @layer:backend @core @role_manager @pending
+  @SC-13-09-02 @J-16 @depth:2 @layer:backend @core @role_manager @linked
   Scenario: A partial payment reduces the principal used for later fees
     Given a single 1500.00 liability was due on "2026-11-10" with no grace days
     When the manager records a payment of 515.00 on "2026-11-16"
@@ -46,16 +45,14 @@ Feature: Financial transitions that cross periods or ledgers
     Then the period is OPEN and the audit records both actors and the reason
     And the pre-existing September liabilities and payments are present exactly once
 
-  # Pending: the current tests do not prove concurrent duplicate webhook deliveries create only one credit.
-  @SC-13-09-06 @J-16 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-09-06 @J-16 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario: Concurrent deliveries of the same bank event are credited once
     Given the site is in state F5
     When two deliveries of the same bank transaction ID and amount 1675.00 race for "A-3"
     Then one payment and one receipt exist and allocations total 1675.00
     And "A-3" has zero debt and zero advance
 
-  # Pending: the end-to-end journey does not yet cover approving an unmatched item exactly once.
-  @SC-13-09-07 @J-16 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-09-07 @J-16 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: An unmatched statement item can be approved exactly once
     Given an imported 1675.00 bank statement item for the site has no match in state F5
     Then the reconciliation queue shows one unmatched item and "A-3" still owes 1675.00
@@ -74,8 +71,7 @@ Feature: Financial transitions that cross periods or ledgers
     Then the owner's capital debt is 600.00 and the tenant's operational debt is still 0.00
     And the receipt identifies both the payer and the capital debtor
 
-  # Pending: the existing aging tests do not cover every day-boundary example in this outline.
-  @SC-13-09-09 @J-16 @depth:1 @layer:backend @edge @role_manager @pending
+  @SC-13-09-09 @J-16 @depth:1 @layer:backend @edge @role_manager @linked
   Scenario Outline: The aging bucket changes at each day boundary
     Given a unit has one unpaid liability with principal 1500.00 and grace days 0
     When the admin aging report and the resident statement are read <days> local calendar days after the due date

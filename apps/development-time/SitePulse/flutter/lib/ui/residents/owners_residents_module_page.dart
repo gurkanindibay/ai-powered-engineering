@@ -8,6 +8,7 @@ import '../../domain/models/unit_state.dart';
 import '../../domain/models/person_ref.dart';
 import '../components/app_fullscreen_page.dart';
 import '../components/step_up_prompt.dart';
+import 'block_units_create_page.dart';
 import '../../domain/models/household_relationship.dart';
 import 'household_relationship_items.dart';
 import '../../domain/validation/person_validators.dart';
@@ -184,6 +185,12 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
           subtitle: isPhone ? null : '${widget.controller.userSession.siteName} • Yönetim ve Operasyon Portalı',
           icon: const Icon(Icons.people_alt, color: AppColors.accentCyan),
           actions: [
+            testId('module_add_block_btn', IconButton(
+              onPressed: () => showBlockUnitsCreatePage(context, widget.controller),
+              icon: const Icon(Icons.apartment, size: 18, color: AppColors.accentCyan),
+              tooltip: 'Blok ve Daire Ekle',
+            )),
+            const SizedBox(width: AppSpacing.sm),
             testId('module_people_directory_btn', OutlinedButton.icon(
               key: const Key('module_people_directory_btn'),
               onPressed: () => AppFullscreenPage.push<void>(

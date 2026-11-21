@@ -1902,6 +1902,13 @@ pub struct ReconciliationMatch {
     pub status: ReconciliationStatus,
     pub status_code: String,
     pub notes: Option<String>,
+    /// Unit a manager assigned an otherwise unmatched item to. It is only
+    /// consulted by confirm-reconciliation while `matched_unit_id` is `None`.
+    #[serde(default)]
+    pub assigned_unit_id: Option<String>,
+    /// Debtor role chosen together with `assigned_unit_id`.
+    #[serde(default)]
+    pub assigned_debtor_role: Option<DebtorType>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1968,6 +1975,16 @@ pub struct ConfirmReconciliationResponse {
     pub notification_summary: Option<String>,
     #[serde(default)]
     pub remembered_ibans_count: usize,
+}
+
+/// Manager decision for a statement item that no automatic rule could match:
+/// the unit it belongs to and which debtor paid.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssignReconciliationMatchRequest {
+    pub site_id: String,
+    pub unit_id: String,
+    /// `OWNER` or `TENANT`; any other value is rejected during deserialization.
+    pub debtor_role: DebtorType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

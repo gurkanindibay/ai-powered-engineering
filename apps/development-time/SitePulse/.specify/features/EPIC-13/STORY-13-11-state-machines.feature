@@ -57,20 +57,19 @@ Feature: Every status of the billing state machines is reached and left correctl
 
   # ---------------------------------------------------------------- period
 
-  # Pending: the backend journey does not yet exercise DRAFT, OPEN and CLOSED through the complete command matrix with audit-state checks.
-  @SC-13-11-04 @J-18 @depth:1 @state:F2 @layer:backend @core @role_manager @pending
+  @SC-13-11-04 @J-18 @depth:1 @state:F2 @layer:backend @core @role_manager @linked
   Scenario Outline: Each period status allows only its own commands
     Given the site is in state F2
     And period "Ekim 2026" is <status>
     When the manager tries to <command> period "Ekim 2026"
     Then the result is <result>
-    And on refusal the period, its liabilities and the audit log are unchanged
+    And on refusal or duplicate the period, its liabilities and the audit log are unchanged
 
     Examples:
       | status | command      | result                                  |
       | DRAFT  | accrue       | accepted, status OPEN, 6 liabilities    |
       | DRAFT  | close        | refused                                 |
-      | OPEN   | accrue again | refused as a duplicate                  |
+      | OPEN   | accrue again | answered as already accrued             |
       | OPEN   | close        | accepted, status CLOSED with a snapshot |
       | CLOSED | accrue       | refused because the period is closed    |
       | CLOSED | close        | refused                                 |

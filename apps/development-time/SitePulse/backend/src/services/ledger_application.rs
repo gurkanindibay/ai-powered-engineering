@@ -92,6 +92,8 @@ pub fn record_offset_match(
                 amount, period
             )
         }),
+        assigned_unit_id: None,
+        assigned_debtor_role: None,
     });
 }
 

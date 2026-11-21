@@ -46,6 +46,8 @@ async fn test_cross_tenant_reconciliation_confirmation_blocked() {
             status: ReconciliationStatus::PendingApproval,
             status_code: "ONAY_BEKLIYOR".to_string(),
             notes: None,
+            assigned_unit_id: None,
+            assigned_debtor_role: None,
         });
     }
 

@@ -354,6 +354,8 @@ fn request_body_for_route(path: &str) -> Option<serde_json::Value> {
         "UpdatePersonRequest"
     } else if path == "/api/v1/bank/statements/parse" {
         "BankStatementParseRequest"
+    } else if path == "/api/v1/bank/statements/reconciliation-queue/{match_id}/assign" {
+        "AssignReconciliationMatchRequest"
     } else if path == "/api/v1/payments/record" || path == "/api/v1/payments/record-manual" {
         "RecordPaymentRequest"
     } else if path == "/api/v1/capital-projects" {
@@ -402,6 +404,8 @@ fn success_schema_for_route(path: &str) -> Option<&'static str> {
         Some("VirtualIbanAllocation")
     } else if path == "/api/v1/bank/statements/parse" {
         Some("BankStatementParseResponse")
+    } else if path == "/api/v1/bank/statements/reconciliation-queue/{match_id}/assign" {
+        Some("ReconciliationMatch")
     } else if path.starts_with("/api/v1/payments/receipts/") && !path.ends_with("/pdf") {
         Some("PaymentReceipt")
     } else if path == "/api/v1/payments/debt-aging" {
@@ -817,6 +821,47 @@ fn component_schemas() -> serde_json::Value {
                         }
                     }
                 }
+            }
+        },
+        "AssignReconciliationMatchRequest": {
+            "type": "object",
+            "required": ["site_id", "unit_id", "debtor_role"],
+            "properties": {
+                "site_id": { "type": "string", "description": "Site that owns the statement item." },
+                "unit_id": { "type": "string", "description": "Unit the item is assigned to; must belong to site_id." },
+                "debtor_role": {
+                    "type": "string",
+                    "enum": ["OWNER", "TENANT"],
+                    "description": "Which debtor of the unit paid the transfer."
+                }
+            }
+        },
+        "ReconciliationMatch": {
+            "type": "object",
+            "required": ["match_id", "site_id", "transaction", "status", "status_code"],
+            "properties": {
+                "match_id": { "type": "string" },
+                "site_id": { "type": "string" },
+                "transaction": {
+                    "type": "object",
+                    "properties": {
+                        "transaction_id": { "type": "string" },
+                        "date": { "type": "string", "format": "date" },
+                        "amount": { "type": "string" },
+                        "currency": { "type": "string" },
+                        "description": { "type": "string" },
+                        "sender_name": { "type": "string" },
+                        "sender_iban": { "type": "string" },
+                        "reference_no": { "type": "string" }
+                    }
+                },
+                "matched_unit_id": { "type": "string", "description": "Unit found by an automatic matching rule." },
+                "matched_due_id": { "type": "string" },
+                "status": { "type": "string", "enum": ["PENDING_APPROVAL", "APPROVED", "UNMATCHED", "REJECTED", "ALREADY_PROCESSED"] },
+                "status_code": { "type": "string" },
+                "notes": { "type": "string" },
+                "assigned_unit_id": { "type": "string", "description": "Unit a manager assigned an unmatched item to." },
+                "assigned_debtor_role": { "type": "string", "enum": ["OWNER", "TENANT"] }
             }
         },
         "RecordPaymentRequest": {

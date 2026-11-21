@@ -158,7 +158,7 @@ class _SpDirectoryScaffoldState<T> extends State<SpDirectoryScaffold<T>>
                       ? const CircularProgressIndicator(
                           semanticsLabel: 'Yükleniyor',
                         )
-                      : widget.emptyState,
+                      : SingleChildScrollView(child: widget.emptyState),
                 )
               : ListView.builder(
                   key: PageStorageKey<String>('${widget.restorationId}-rows'),

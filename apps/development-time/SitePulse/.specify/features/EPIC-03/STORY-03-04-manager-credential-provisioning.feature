@@ -14,6 +14,7 @@ Feature: Automated site manager account creation and credential provisioning
     Given a site manager signs in with the issued temporary password
     Then the forced password change screen is shown and the cockpit is not reachable
 
+  # Pending: no SMS provider integration exists; stub-or-keep-pending decision is tracked by #273.
   @SC-03-04-03 @layer:gui @pending
   Scenario: SMS credential alert is dispatched to the manager's mobile number
     When a new site is registered with admin phone "0532 444 55 66"
