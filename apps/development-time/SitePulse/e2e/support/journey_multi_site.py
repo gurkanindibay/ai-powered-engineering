@@ -142,21 +142,31 @@ def build_multi_site_journey(
     for unit_id in (*units_a.values(), *units_b.values()):
         manifest.record("unit_ids", unit_id)
 
+    contact_sequence = 0
+
+    def next_phone() -> str:
+        nonlocal contact_sequence
+        contact_sequence += 1
+        return f"+90 532 {100 + contact_sequence:03d} 01 01"
+
     def register(manager: Session, site_id: str, block: str, number: int, name: str, key: str,
                  *, resident: bool = True, tenant: str | None = None,
                  household: tuple[str, str] | None = None) -> None:
         email = f"{attempt[:8]}.{key}@journey.e2e.test".lower()
+        owner_phone = next_phone()
         tenant_data = None if tenant is None else {
             "full_name": tenant,
             "email": f"{attempt[:8]}.{key}.tenant@journey.e2e.test".lower(),
+            "phone": next_phone(),
         }
         members = [] if household is None else [{
             "full_name": household[0],
             "relationship": household[1],
             "email": f"{attempt[:8]}.{key}.household@journey.e2e.test".lower(),
+            "phone": next_phone(),
         }]
         api.register_home_owner(
-            manager, block, number, name, email,
+            manager, block, number, name, email, phone=owner_phone,
             is_resident=resident,
             tenant=tenant_data,
             household_members=members,
