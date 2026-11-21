@@ -478,7 +478,7 @@ void main() {
               {
                 'id': '2',
                 'site_id': '42',
-                'type_name': '2+1',
+                'type_name': 'Flat',
                 'dues_amount': '1400.00',
                 'description': '2 Oda 1 Salon',
               },
@@ -511,7 +511,7 @@ void main() {
           blockName: 'A Blok',
           startUnit: 1,
           unitCount: 7,
-          houseType: '2+1',
+          houseType: 'flat',
           monthlyDues: Decimal.parse('1400.00'),
           siteId: '42',
         );
@@ -528,7 +528,9 @@ void main() {
               call.method == 'POST' &&
               call.url.path == '/api/v1/site-admin/units',
         );
-        expect(jsonDecode(units.body)['house_type'], '2+1');
+        // The reused type keeps its registered spelling, which is what the
+        // unit's house_type_id must point at.
+        expect(jsonDecode(units.body)['house_type'], 'Flat');
         expect(
           controller.houseTypes.single.duesAmount,
           Decimal.parse('1400.00'),

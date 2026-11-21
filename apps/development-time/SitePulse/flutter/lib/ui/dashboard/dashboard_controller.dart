@@ -767,6 +767,10 @@ class DashboardController extends ChangeNotifier {
       }
     }
     final createsTariff = monthlyDues != null && existingTariff == null;
+    // Reused types are sent by their registered spelling, so a manager typing
+    // "flat" stores the same "Flat" the unit's house_type_id points at.
+    final resolvedHouseType = existingTariff?.typeName ??
+        (trimmedHouseType.isEmpty ? null : trimmedHouseType);
 
     if (isTestMode) {
       _addBlockWithUnitsLocally(
@@ -774,7 +778,7 @@ class DashboardController extends ChangeNotifier {
         blockName: trimmedName,
         startUnit: startUnit,
         unitCount: unitCount,
-        houseType: trimmedHouseType.isEmpty ? null : trimmedHouseType,
+        houseType: resolvedHouseType,
         monthlyDues: monthlyDues,
         createTariff: createsTariff,
       );
@@ -814,7 +818,7 @@ class DashboardController extends ChangeNotifier {
           'block_name': trimmedName,
           'start_unit': startUnit,
           'end_unit': startUnit + unitCount - 1,
-          if (trimmedHouseType.isNotEmpty) 'house_type': trimmedHouseType,
+          if (resolvedHouseType != null) 'house_type': resolvedHouseType,
         }),
       ).timeout(const Duration(seconds: 15));
       ApiClient.decode(unitsResponse);
