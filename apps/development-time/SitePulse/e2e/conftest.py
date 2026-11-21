@@ -25,6 +25,7 @@ sys.path.insert(0, str(E2E))
 
 from support import stack as st  # noqa: E402
 from support.api import Api, Builders  # noqa: E402
+from support.journey_attempts import reclaim_stale_attempts  # noqa: E402
 from pages import LoginPage  # noqa: E402
 
 ARTIFACTS = E2E / ".artifacts"
@@ -58,6 +59,7 @@ def stack():
     s = st.E2EStack(ARTIFACTS / "logs")
     try:
         s.start()
+        reclaim_stale_attempts(s, ARTIFACTS / "journeys")
     except st.SetupError as exc:
         pytest.exit(f"E2E stack setup failed: {exc}", returncode=3)
     yield s
