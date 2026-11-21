@@ -385,6 +385,7 @@ def test_resident_cannot_read_another_unit_financial_records(request, api, actor
 
 
 @pytest.mark.covers("SC-13-10-06")
+@pytest.mark.covers("SC-09-02-03")
 @pytest.mark.core
 @pytest.mark.role_resident
 def test_tenant_statement_excludes_owner_private_transactions(request, api, actors, stack):
@@ -402,15 +403,15 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
         selin_person_id = stack.sql(f"SELECT id FROM persons WHERE site_id = {site_a.site_id} AND email = '{selin_email}';")
         ahmet_person_id = stack.sql(f"SELECT id FROM persons WHERE site_id = {site_a.site_id} AND email = '{ahmet_email}';")
 
-        # Tenant owes 1500 operational principal; owner has 1000 capital liability
+        # Tenant owes 1500 operational principal; owner has 1000 capital liability (both 36 days overdue in site timezone)
         stack.sql(
             "BEGIN; "
             f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, "
             f"principal_amount, due_date, status) VALUES "
-            f"({unit_2}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {selin_person_id}, 1500.00, DATE '2026-10-15', 'PENDING'); "
+            f"({unit_2}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {selin_person_id}, 1500.00, (now() AT TIME ZONE 'Europe/Istanbul')::date - 36, 'PENDING'); "
             f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, "
             f"principal_amount, due_date, status) VALUES "
-            f"({unit_2}, 'Ekim 2026', 'OWNER', 'CAPITAL_DUES', {ahmet_person_id}, 1000.00, DATE '2026-10-15', 'PENDING'); "
+            f"({unit_2}, 'Ekim 2026', 'OWNER', 'CAPITAL_DUES', {ahmet_person_id}, 1000.00, (now() AT TIME ZONE 'Europe/Istanbul')::date - 36, 'PENDING'); "
             "COMMIT;"
         )
 
@@ -429,24 +430,34 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
 
         # Tenant's operational debt and own receipt are visible
         open_items = [item for d in stmt.get("debtors", []) for item in d.get("open_items", [])]
-        operational = [item for item in open_items if item.get("expense_type") == "OPERATIONAL_DUES"]
-        # The 1500.00 principal is reduced by every receipt line allocated to that due. An owner
-        # may pay any liability of the unit, so the owner's receipt also lands on the tenant's
-        # due (940.00 here); read the allocations instead of assuming only the tenant paid.
+        # Debtor isolation: The owner's undesignated payment of 1000.00 settles only the
+        # owner's capital due and never touches the tenant's operational due (#238).
+        assert not any(line.get("expense_type") == "OPERATIONAL_DUES" for line in owner_rcpt["allocation_breakdown"])
+        assert any(line.get("expense_type") == "CAPITAL_DUES" for line in owner_rcpt["allocation_breakdown"])
+        assert sum(
+            Decimal(str(line["principal_paid"])) + Decimal(str(line["penalty_paid"]))
+            for line in owner_rcpt["allocation_breakdown"]
+        ) == Decimal("1000.00")
+        assert sum(
+            Decimal(str(line["principal_paid"])) for line in owner_rcpt["allocation_breakdown"]
+        ) == Decimal("940.00")
+
+        assert Decimal(str(tenant_rcpt["total_amount"])) == Decimal("500.00")
+        assert Decimal(str(tenant_rcpt["allocated_penalty"])) == Decimal("90.00")
+        assert Decimal(str(tenant_rcpt["allocated_principal"])) == Decimal("410.00")
         paid_on_operational = sum(
             (
                 Decimal(str(line["principal_paid"]))
-                for rcpt in (tenant_rcpt, owner_rcpt)
-                for line in rcpt["allocation_breakdown"]
+                for line in tenant_rcpt["allocation_breakdown"]
                 if line["expense_type"] == "OPERATIONAL_DUES"
             ),
             Decimal("0.00"),
         )
-        assert paid_on_operational >= Decimal(str(tenant_rcpt["allocated_principal"]))
-        expected_principal = Decimal("1500.00") - paid_on_operational
+        assert paid_on_operational == Decimal("410.00")
+        operational = [item for item in open_items if item.get("expense_type") == "OPERATIONAL_DUES"]
         assert sum(
             (Decimal(str(item.get("principal_outstanding", "0"))) for item in operational), Decimal("0.00")
-        ) == expected_principal, stmt
+        ) == Decimal("1090.00"), stmt
         rcpt_numbers = [r.get("receipt_number") for r in stmt.get("receipts", [])]
         assert tenant_rcpt.get("receipt_number") in rcpt_numbers
 

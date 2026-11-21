@@ -276,6 +276,7 @@ The plan is pending, so nothing below is changed yet. Each item has its own issu
 | [STORY-13-10-tenant-data-isolation.feature](../../.specify/features/EPIC-13/STORY-13-10-tenant-data-isolation.feature) | J-17: cross-site reads, exports and mutations, private tenant statements and receipts, former occupants and session races |
 | [STORY-13-11-state-machines.feature](../../.specify/features/EPIC-13/STORY-13-11-state-machines.feature) | J-18: every liability, period, reconciliation and unit occupancy status: entry, allowed commands and refused commands |
 | [STORY-13-12-multi-depth-chains.feature](../../.specify/features/EPIC-13/STORY-13-12-multi-depth-chains.feature) | J-19: depth 3 to 5 chains that combine sale, departure, back-dating, catch-up and capital rules with a checkpoint per stage |
+| [STORY-13-14-liability-through-sales-vacancies.feature](../../.specify/features/EPIC-13/STORY-13-14-liability-through-sales-vacancies.feature) | Issue #249: debtor and period after sales, vacancies and move-ins on two sites over four periods, receipts by liable person (defect #255) and site cash |
 
 ## 10. Coverage map
 

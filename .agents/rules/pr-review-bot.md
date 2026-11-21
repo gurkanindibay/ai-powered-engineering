@@ -33,7 +33,7 @@ If `whoami` fails because the key or `.env` is missing, stop and tell the user. 
 
 ## Review workflow
 
-1. **Claim the PR** before reviewing (rule 10): add `in progress` plus the claim label, and skip PRs already claimed by someone else.
+1. **Don't take over the author's claim.** The `in progress` and `claim:` labels on a PR belong to its author (rule 10); a reviewer reviews claimed PRs without relabelling them.
 2. **Read with any identity.** Reading the diff and CI with your normal `gh` login is fine. Only writes have to go through the bot.
 3. **Write the review body** to a file and note the head SHA you reviewed (`gh pr view <n> --json headRefOid`).
 4. **Post it as the bot**, pinned to that SHA. The tool refuses (exit 1) when the head has moved since, in which case you re-review the new head:
@@ -50,6 +50,6 @@ If `whoami` fails because the key or `.env` is missing, stop and tell the user. 
 
 ## Limits
 
-- **The bot reviews, it does not merge.** Authors merge their own PRs once approved. An agent merges only when the user explicitly asks for that PR.
+- **The bot reviews, it does not merge.** Authors merge their own PRs once approved, following [pr-author-followup.md](pr-author-followup.md). The review loop (every 30 minutes, re-review on new heads) is in [pr-reviewer-polling.md](pr-reviewer-polling.md).
 - **Writes only.** The app has `pull_requests: write` and `contents: read`. It can't push code, so fixes stay with the author.
 - **Tokens:** installation tokens last one hour. The tool caches them in `~/.cache/review-bot/` (mode 600). Never paste a token into a PR, an issue, a commit or a log.

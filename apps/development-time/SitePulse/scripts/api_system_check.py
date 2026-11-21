@@ -423,8 +423,8 @@ def check_sequences(ctx: Context) -> Tuple[bool, str]:
         ctx.manager = login(ctx.backend, "mehmet.demir@begonya.com", "mehmet123")
     status, _ = pay(ctx)
     inserted = ctx.psql.run(ctx.backend.db_name,
-                            f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status) "
-                            f"VALUES ({ctx.unit_id}, 'Restart Check ' || clock_timestamp()::text, 1, CURRENT_DATE, 'PENDING') RETURNING id;")
+                            f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type) "
+                            f"VALUES ({ctx.unit_id}, 'Restart Check ' || clock_timestamp()::text, 1, CURRENT_DATE, 'PENDING', 'OWNER') RETURNING id;")
     return status == 201 and inserted.isdigit(), f"payment after restart {status}, new dues id {inserted}"
 
 
@@ -1449,8 +1449,8 @@ def seed(ctx: Context) -> None:
         INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
         SELECT s.id, p.id, 'other.manager@syscheck.test', '{manager2}', 'SITE_MANAGER', FALSE
         FROM sites s, persons p WHERE s.slug = 'syscheck-2' AND p.email = 'other.manager@syscheck.test';
-        INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status)
-        VALUES ({ctx.unit_id}, 'System Check Dues', 100.00, CURRENT_DATE, 'PENDING');
+        INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type)
+        VALUES ({ctx.unit_id}, 'System Check Dues', 70.00, CURRENT_DATE, 'PENDING', 'OWNER');
     """)
     ctx.site_id = ctx.psql.run(db, "SELECT id FROM sites WHERE slug='begonya-sitesi' AND deleted_at IS NULL LIMIT 1;")
     ctx.accrual_check_period_key = ctx.psql.run(db, "SELECT to_char(CURRENT_DATE - interval '1 month', 'YYYY-MM');")

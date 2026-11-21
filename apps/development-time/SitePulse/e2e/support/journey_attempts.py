@@ -77,6 +77,7 @@ class JourneyManifest:
     unit_ids: list[str] = field(default_factory=list)
     person_ids: list[str] = field(default_factory=list)
     user_ids: list[str] = field(default_factory=list)
+    steps: list[dict] = field(default_factory=list)
     teardown_completed: bool = False
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -96,6 +97,14 @@ class JourneyManifest:
             bucket.append(value)
             self.save()
 
+    def record_step(self, name: str, details: dict | None = None) -> None:
+        self.steps.append({
+            "step": name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "details": details or {},
+        })
+        self.save()
+
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         data = {
@@ -107,6 +116,7 @@ class JourneyManifest:
             "unit_ids": self.unit_ids,
             "person_ids": self.person_ids,
             "user_ids": self.user_ids,
+            "steps": self.steps,
             "teardown_completed": self.teardown_completed,
         }
         temporary = self.path.with_suffix(self.path.suffix + ".tmp")
@@ -120,6 +130,7 @@ class JourneyManifest:
             run_id=data["run_id"], shard_id=data["shard_id"], attempt_id=data["attempt_id"], path=path,
             site_ids=list(data["site_ids"]), unit_ids=list(data["unit_ids"]),
             person_ids=list(data["person_ids"]), user_ids=list(data["user_ids"]),
+            steps=list(data.get("steps", [])),
             teardown_completed=bool(data["teardown_completed"]), created_at=data["created_at"],
         )
         return manifest

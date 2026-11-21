@@ -52,13 +52,17 @@ pub fn refresh(d: &mut DuesLiability) {
     }
 }
 
-/// Whether a payer in `payer_role` may settle this liability. Owners may pay
-/// anything for their unit; a tenant may only pay tenant liabilities (capital
-/// dues are owner-only under KMK and the V12 `chk_dues_capital_owner_only` rule).
+/// Whether a payer in `payer_role` may settle this liability.
+///
+/// An owner settles only owner liabilities (`debtor_type == OWNER`). Settling
+/// tenant joint liability requires explicit opt-in (`settles_tenant_joint_liability`).
+/// A tenant settles only tenant, non-capital liabilities (capital dues are owner-only
+/// under KMK and the V12 `chk_dues_capital_owner_only` rule); settling owner
+/// capital dues requires explicit rent-offset opt-in (`settles_owner_capital_dues`).
 pub fn payer_may_settle(d: &DuesLiability, payer_role: &str) -> bool {
     let role = DebtorType::from_str_loose(payer_role);
     if role == DebtorType::Owner {
-        return true;
+        return d.debtor_type == DebtorType::Owner;
     }
     d.debtor_type == DebtorType::Tenant && d.expense_type != ExpenseType::CapitalDues
 }
@@ -374,8 +378,9 @@ mod tests {
         }
     }
 
+    // covers: SC-09-02-03
     #[test]
-    fn tenant_cannot_settle_owner_capital_dues() {
+    fn debtor_isolation_prevents_cross_role_settlement_without_opt_in() {
         let dues = vec![
             due("cap", "500.00", "0.00", 1, DEBTOR_OWNER, EXPENSE_CAPITAL),
             due(
@@ -388,7 +393,7 @@ mod tests {
             ),
         ];
         assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_TENANT), vec![1]);
-        assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_OWNER), vec![0, 1]);
+        assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_OWNER), vec![0]);
     }
 
     // covers: SC-09-02-02
@@ -552,5 +557,81 @@ mod tests {
             ..Default::default()
         };
         assert!(designated_dues(&dues, &candidates, Some(&des), None).is_empty());
+    }
+
+    #[test]
+    fn overpaid_principal_is_never_negative_outstanding() {
+        let mut over = due(
+            "a",
+            "100.00",
+            "0.00",
+            15,
+            DEBTOR_TENANT,
+            EXPENSE_OPERATIONAL,
+        );
+        over.paid_principal = d("150.00");
+        assert_eq!(outstanding_principal(&over), Decimal::ZERO);
+        assert_eq!(outstanding(&over), Decimal::ZERO);
+    }
+
+    #[test]
+    fn a_tenant_may_not_settle_capital_dues_but_may_settle_tenant_operational_dues() {
+        let capital_owner = due("a", "100.00", "0.00", 15, DEBTOR_OWNER, EXPENSE_CAPITAL);
+        let operational_tenant = due(
+            "b",
+            "100.00",
+            "0.00",
+            15,
+            DEBTOR_TENANT,
+            EXPENSE_OPERATIONAL,
+        );
+        let operational_owner = due("c", "100.00", "0.00", 15, DEBTOR_OWNER, EXPENSE_OPERATIONAL);
+        assert!(!payer_may_settle(&capital_owner, DEBTOR_TENANT));
+        assert!(payer_may_settle(&capital_owner, DEBTOR_OWNER));
+        assert!(payer_may_settle(&operational_tenant, DEBTOR_TENANT));
+        assert!(!payer_may_settle(&operational_owner, DEBTOR_TENANT));
+        assert!(!payer_may_settle(&operational_tenant, DEBTOR_OWNER));
+    }
+
+    #[test]
+    fn a_negative_settlement_changes_nothing() {
+        let mut dues = due(
+            "a",
+            "100.00",
+            "10.00",
+            15,
+            DEBTOR_TENANT,
+            EXPENSE_OPERATIONAL,
+        );
+        dues.paid_principal = d("40.00");
+        dues.paid_penalty = d("4.00");
+        let s = settle(&mut dues, d("-100.00"));
+        assert_eq!(s.principal, Decimal::ZERO);
+        assert_eq!(s.penalty, Decimal::ZERO);
+        assert_eq!(dues.paid_principal, d("40.00"));
+        assert_eq!(dues.paid_penalty, d("4.00"));
+    }
+
+    #[test]
+    fn reversal_on_the_due_date_is_pending_and_the_day_after_is_overdue() {
+        let mut dues = due(
+            "a",
+            "100.00",
+            "0.00",
+            15,
+            DEBTOR_TENANT,
+            EXPENSE_OPERATIONAL,
+        );
+        dues.paid_principal = d("100.00");
+        let due_day = NaiveDate::from_ymd_opt(2026, 9, 15).unwrap();
+        unsettle(&mut dues, d("100.00"), Decimal::ZERO, due_day);
+        assert_eq!(dues.status, DebtStatus::Pending);
+        unsettle(
+            &mut dues,
+            Decimal::ZERO,
+            Decimal::ZERO,
+            due_day.succ_opt().unwrap(),
+        );
+        assert_eq!(dues.status, DebtStatus::Overdue);
     }
 }
