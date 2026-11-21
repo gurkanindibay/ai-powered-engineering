@@ -405,7 +405,7 @@ pub async fn accrue_monthly_dues(
                     .iter()
                     .filter(|h| h.role == DebtorType::Tenant && h.is_active && h.person_id > 0)
                     .map(|h| h.person_id)
-                    .last()
+                    .next_back()
             } else {
                 None
             };
