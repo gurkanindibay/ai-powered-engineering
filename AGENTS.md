@@ -56,7 +56,11 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - Locate before reading: `graphify query`/`explain`, `rg -l`, or `grep -n ... | head -30`; then read only the needed range (`sed -n 'A,Bp'`, Read with offset/limit). Never `cat` whole large files, `ls -R`, or unbounded `find`.
    - Run gates in compact form: `run_tests.py --summary` (or `--json --summary`); pipe other build/test output through `tail -40` or a failure filter.
    - Browser checks: prefer `get_page_text`/`read_page`; screenshots only when visual layout matters, with `scale` ≤ 0.5.
-   - One task per session; `/compact` or start fresh once context passes ~200K tokens. Use Sonnet for routine edits, test runs and exploration; reserve Opus for design-heavy work.
+   - One task per session; `/compact` or start fresh once context passes ~200K tokens.
+   - Pick the model by task type (set it explicitly when delegating to subagents):
+     - **Opus** for planning only: architecture, decomposing issues into tasks, fix plans.
+     - **Sonnet** for development and test design, including design-heavy implementation (e.g. backend Rust changes) and test runs.
+     - **Haiku** for very simple tasks with little design: cleanup, claim/label chores, mechanical edits, status checks.
    - The `.claude/settings.json` hook (`scripts/token_guard.py`) denies known-wasteful calls and warns on oversized output; follow its suggestion rather than working around it.
 
 10. **Issue Selection & Concurrent Agent Work**:
