@@ -359,7 +359,9 @@ impl SiteAdminService {
             .house_type
             .clone()
             .or_else(|| Some("2+1".to_string()));
-        let custom_tariff_override = request.monthly_dues;
+        let custom_tariff_override = request
+            .monthly_dues
+            .filter(|d| *d > rust_decimal::Decimal::ZERO);
         let mut resolved_dues = request.monthly_dues;
 
         // Resolve monthly dues from house_type tariff
@@ -1812,10 +1814,15 @@ impl SiteAdminService {
                             .map_err(|e| e.to_string())?;
                     }
                     if let Some(dues) = req.monthly_dues {
+                        let override_val = if dues > rust_decimal::Decimal::ZERO {
+                            Some(dues)
+                        } else {
+                            None
+                        };
                         client
                             .execute(
                                 "UPDATE units SET monthly_tariff_override = $1 WHERE id = $2",
-                                &[&dues, &u_id],
+                                &[&override_val, &u_id],
                             )
                             .await
                             .map_err(|e| e.to_string())?;
@@ -1930,7 +1937,11 @@ impl SiteAdminService {
                 inner.units[uidx].house_type = Some(ht.clone());
             }
             if let Some(dues) = req.monthly_dues {
-                inner.units[uidx].monthly_tariff_override = Some(dues);
+                inner.units[uidx].monthly_tariff_override = if dues > rust_decimal::Decimal::ZERO {
+                    Some(dues)
+                } else {
+                    None
+                };
                 let unit_id = inner.units[uidx].id.clone();
                 for d in inner
                     .dues
