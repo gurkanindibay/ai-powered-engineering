@@ -20,6 +20,10 @@ Event sources (``--source``):
 Whatever the source, a slow safety recheck (``--recheck``) runs too, so a lost
 event delays a review but never loses it.
 
+Right after a push GitHub briefly reports no checks for the new head. Such a
+head is held for ``--ci-grace`` seconds (default 300) and counts as ready only if
+no check shows up by then (a PR that really runs no CI).
+
 A ready PR that you have already handled for this head (for example one you
 left with a COMMENT because CI is red) can be ignored with ``--seen N@SHA``;
 the watcher then wakes only when that PR gets a new head.
@@ -98,18 +102,41 @@ class QueueCheck:
         return self._ready
 
 
+def settle(found: list[Entry], first_seen: dict[tuple[int, str], float], now: float,
+           ci_grace: float) -> tuple[list[Entry], float | None]:
+    """Hold heads that report no checks yet: right after a push GitHub has not registered
+    the CI runs, so `ci == "none"` would look ready. Such a head counts as ready only once
+    it has shown no checks for `ci_grace` seconds (a PR that really runs no CI).
+    Returns the ready entries and the time the next held head becomes due, if any."""
+    ready, next_due = [], None
+    for e in found:
+        if e.get("ci") != "none":
+            ready.append(e)
+            continue
+        key = (e["number"], e["head"][:12])
+        due = first_seen.setdefault(key, now) + ci_grace
+        if now >= due:
+            ready.append(e)
+        else:
+            next_due = due if next_due is None else min(next_due, due)
+    return ready, next_due
+
+
 def watch(check: Callable[[bool], list[Entry]], trigger: Trigger, seen: set[tuple[int, str]],
           recheck: float, timeout: float | None, debounce: float = 0.0,
           clock: Callable[[], float] = time.monotonic,
-          sleep: Callable[[float], None] = time.sleep) -> list[Entry] | None:
+          sleep: Callable[[float], None] = time.sleep, ci_grace: float = 0.0) -> list[Entry] | None:
     """Return the first non-empty list of unseen ready PRs, or None when `timeout` passes."""
     deadline = None if timeout is None else clock() + timeout
+    first_seen: dict[tuple[int, str], float] = {}
     force = True
     while True:
-        found = unseen(check(force), seen)
+        found, next_due = settle(unseen(check(force), seen), first_seen, clock(), ci_grace)
         if found:
             return found
         remaining = recheck if deadline is None else min(recheck, deadline - clock())
+        if next_due is not None:
+            remaining = min(remaining, max(next_due - clock(), 0.001))
         if remaining <= 0:
             return None
         got_event = trigger(remaining)
@@ -236,6 +263,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--interval", type=float, default=60.0, help="poll interval in seconds (default 60)")
     p.add_argument("--recheck", type=float, default=900.0, help="safety recheck in seconds (default 900)")
     p.add_argument("--debounce", type=float, default=5.0, help="seconds to let an event burst settle (default 5)")
+    p.add_argument("--ci-grace", type=float, default=300.0,
+                   help="seconds a head may show no CI checks before it counts as ready (default 300)")
     p.add_argument("--timeout", type=float, help="give up after this many seconds (exit 3)")
     p.add_argument("--seen", action="append", default=[], metavar="N@SHA", help="ignore PR N while its head is SHA (repeatable)")
     p.add_argument("--repo", help="owner/name (default: the current repository)")
@@ -243,8 +272,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--skip-author", action="append", default=[], metavar="LOGIN", help="skip PRs by this author (repeatable)")
     p.add_argument("--limit", type=int, default=100, help="max open PRs to inspect")
     args = p.parse_args(argv)
-    if args.interval <= 0 or args.recheck <= 0 or args.debounce < 0:
-        p.error("--interval and --recheck must be positive, --debounce not negative")
+    if args.interval <= 0 or args.recheck <= 0 or args.debounce < 0 or args.ci_grace < 0:
+        p.error("--interval and --recheck must be positive, --debounce and --ci-grace not negative")
     return args
 
 
@@ -275,7 +304,8 @@ def main(argv: list[str] | None = None, gh: Gh = queue_tool.run_gh) -> int:
             else:
                 note("gh webhook extension not installed; polling every %gs" % args.interval)
         note(f"watching via {source}")
-        found = watch(check, trigger, seen, args.recheck, args.timeout, args.debounce if source == "webhook" else 0.0)
+        found = watch(check, trigger, seen, args.recheck, args.timeout,
+                      args.debounce if source == "webhook" else 0.0, ci_grace=args.ci_grace)
     except (queue_tool.GhError, json.JSONDecodeError) as exc:
         note(f"error: {exc}")
         return EXIT_ERROR

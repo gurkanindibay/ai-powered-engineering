@@ -123,6 +123,57 @@ class WatchLoop(unittest.TestCase):
         self.assertEqual(clock.now, 2000)
 
 
+class CiGrace(unittest.TestCase):
+    """A head with no checks yet (just pushed) must not wake the reviewer before CI registers."""
+
+    def no_ci(self, number, head="aaa111bbb222"):
+        return {**entry(number, head), "ci": "none"}
+
+    def test_settle_holds_then_releases(self):
+        first_seen = {}
+        ready, due = w.settle([self.no_ci(5), entry(6)], first_seen, now=100, ci_grace=300)
+        self.assertEqual([e["number"] for e in ready], [6])
+        self.assertEqual(due, 400)
+        ready, due = w.settle([self.no_ci(5)], first_seen, now=399, ci_grace=300)
+        self.assertEqual((ready, due), ([], 400))
+        ready, due = w.settle([self.no_ci(5)], first_seen, now=400, ci_grace=300)
+        self.assertEqual(([e["number"] for e in ready], due), ([5], None))
+
+    def test_new_head_restarts_grace(self):
+        first_seen = {}
+        w.settle([self.no_ci(5, "old000000000")], first_seen, now=0, ci_grace=300)
+        ready, due = w.settle([self.no_ci(5, "new000000000")], first_seen, now=350, ci_grace=300)
+        self.assertEqual((ready, due), ([], 650))
+
+    def test_watch_waits_for_checks_to_register(self):
+        clock = FakeClock()
+        # Just pushed: no checks; then CI registers (pending, so not ready); then it finishes.
+        results = [[self.no_ci(7)], [], [entry(7)]]
+        waits = []
+
+        def trigger(timeout):
+            waits.append(timeout)
+            clock.sleep(10)
+            return True
+
+        found = w.watch(lambda f: results.pop(0), trigger, set(), 900, None,
+                        clock=clock, sleep=clock.sleep, ci_grace=300)
+        self.assertEqual([e["ci"] for e in found], ["passed"])
+        self.assertEqual(waits[0], 300)  # capped at the grace deadline, not the 900 s recheck
+
+    def test_watch_releases_pr_without_ci_after_grace(self):
+        clock = FakeClock()
+
+        def trigger(timeout):
+            clock.sleep(timeout)
+            return False
+
+        found = w.watch(lambda f: [self.no_ci(8)], trigger, set(), 900, None,
+                        clock=clock, sleep=clock.sleep, ci_grace=300)
+        self.assertEqual([e["number"] for e in found], [8])
+        self.assertEqual(clock.now, 300)
+
+
 class PollTrigger(unittest.TestCase):
     def test_interval_counts_as_event_unless_cut_by_timeout(self):
         clock = FakeClock()
