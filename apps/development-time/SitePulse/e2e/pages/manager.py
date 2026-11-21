@@ -83,6 +83,13 @@ class AddResidentForm:
     def save(self) -> None:
         """Save, then dismiss the 'Sakin Kaydedildi!' confirmation and close the module."""
         by_id(self.page, "module_save_new_resident_btn").click()
+        # An already existing unit (for example an empty one of a started site) asks to confirm first.
+        confirm = by_id(self.page, "btn_confirmation_confirm")
+        try:
+            confirm.wait_for(timeout=3_000)
+            confirm.click()
+        except Exception:  # noqa: BLE001 - no confirmation is asked for a new unit
+            pass
         close = by_id(self.page, "btn_close_resident_provisioned")
         close.wait_for(timeout=15_000)
         close.click()

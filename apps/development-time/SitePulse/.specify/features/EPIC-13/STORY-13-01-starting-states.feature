@@ -10,8 +10,7 @@ Feature: Site admin starting points F0 to F3
 
   # ---------------------------------------------------------------- F0 ZERO
 
-  # Pending: GUI screen verification
-  @SC-13-01-01 @J-01 @depth:1 @state:F0 @layer:gui @smoke @role_manager @pending
+  @SC-13-01-01 @J-01 @depth:1 @state:F0 @layer:gui @smoke @role_manager @linked
   Scenario: A site with no data shows empty states, not errors
     Given the site is in state F0
     When the manager opens each of: dashboard, collection tracking, dues ledger, units, people, payments, periods
@@ -36,31 +35,28 @@ Feature: Site admin starting points F0 to F3
 
   # ----------------------------------------------------- F1 NO_RESIDENTS
 
-  # Pending: GUI screen verification
-  @SC-13-01-04 @J-02 @depth:1 @state:F1 @layer:gui @core @role_manager @pending
+  @SC-13-01-04 @J-02 @depth:1 @state:F1 @layer:gui @core @role_manager @linked
   Scenario: Units with no people show as unassigned and cannot be billed to anyone
     Given the site is in state F1
     When the manager opens the units page
     Then 7 units are listed, A-1 to A-7, each showing "no owner" and "vacant"
-    And the people directory is empty
+    And the people directory lists no owners or residents, only the site manager's own account
     And the collection dashboard shows total outstanding 0.00
 
-  # Pending: GUI screen verification
-  @SC-13-01-05 @J-02 @depth:1 @state:F1 @layer:gui @core @role_manager @pending
+  @SC-13-01-05 @J-02 @depth:1 @state:F1 @layer:gui @core @role_manager @linked
   Scenario: The manager can add the first owner and tenant from an empty unit
     Given the site is in state F1
     When the manager assigns owner "Ayşe Kaya" to unit "A-1"
     And assigns owner "Ahmet Yılmaz" to unit "A-2"
     And moves tenant "Selin Demir" into unit "A-2"
     Then unit "A-1" shows owner "Ayşe Kaya" and unit "A-2" shows tenant "Selin Demir"
-    And the people directory lists 3 people
+    And the people directory lists the 3 new people besides the site manager's own account
     And no liability exists because no period was accrued
     And the ledger invariants hold
 
   # ------------------------------------------- F2 RESIDENTS_NO_PERIOD
 
-  # Pending: GUI screen verification
-  @SC-13-01-06 @J-03 @depth:2 @state:F2 @layer:gui @core @role_manager @pending
+  @SC-13-01-06 @J-03 @depth:2 @state:F2 @layer:gui @core @role_manager @linked
   Scenario: People without a billing period have no debt and a clear first action
     Given the site is in state F2
     When the manager opens the collection tracking page
@@ -119,8 +115,7 @@ Feature: Site admin starting points F0 to F3
     Then its late fee is 16.94, which is 1016.13 x 5% x 10 / 30
     And the ledger invariants hold
 
-  # Pending: GUI screen verification
-  @SC-13-01-11 @J-04 @depth:1 @state:F3 @layer:gui @edge @role_manager @pending
+  @SC-13-01-11 @J-04 @depth:1 @state:F3 @layer:gui @edge @role_manager @linked
   Scenario: Accruing the same period again after residents arrive is blocked, not doubled
     Given the site is in state F3
     And the owners and tenants of state F2 are added with start residing date "2026-11-01"
@@ -132,8 +127,7 @@ Feature: Site admin starting points F0 to F3
 
   # ------------------------------------------------- navigation across states
 
-  # Pending: GUI screen verification
-  @SC-13-01-12 @J-05 @depth:2 @state:F0 @layer:gui @core @role_manager @pending
+  @SC-13-01-12 @J-05 @depth:2 @state:F0 @layer:gui @core @role_manager @linked
   Scenario: Growing the site from F0 to F2 through the screens keeps every page consistent
     Given the site is in state F0
     When the manager adds block "A Blok" with 7 units and sets the tariffs
