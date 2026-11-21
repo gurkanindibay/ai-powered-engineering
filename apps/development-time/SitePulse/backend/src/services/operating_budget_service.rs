@@ -92,7 +92,7 @@ pub fn operational_dues_basis(
         })
         .ok_or_else(|| {
             format!(
-                "Unit {} has neither a per-unit tariff nor a house-type tariff",
+                "Unit {} has no per-unit tariff and no house-type tariff",
                 unit.id
             )
         })
