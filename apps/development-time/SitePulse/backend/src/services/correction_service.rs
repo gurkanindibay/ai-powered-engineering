@@ -374,6 +374,17 @@ impl CorrectionService {
             let inner = self.state.inner.read().await;
             site_today(&inner, &correction.site_id)
         };
+        let owner_id = self
+            .store
+            .read(|inner| {
+                inner
+                    .units
+                    .iter()
+                    .find(|u| crate::auth::same_id(&u.id, &due.unit_id))
+                    .and_then(|u| u.owner_user_id.as_deref())
+                    .and_then(|s| s.strip_prefix("person-").unwrap_or(s).parse::<i64>().ok())
+            })
+            .await;
         let replacements: Vec<DuesLiability> = if correction.kind == CORRECTION_SPLIT_REISSUE {
             correction
                 .replacement_shares
@@ -387,16 +398,32 @@ impl CorrectionService {
                     next.paid_principal = Decimal::ZERO;
                     next.paid_penalty = Decimal::ZERO;
                     next.status = DebtStatus::Pending;
-                    next.due_date = share
-                        .due_date
-                        .or(correction.new_due_date)
-                        .unwrap_or(due.due_date);
+                    let due_date = if due.debtor_type != share.debtor_type
+                        && share.debtor_type == DebtorType::Owner
+                        && share.due_date.is_none()
+                        && correction.new_due_date.is_none()
+                    {
+                        approved_on
+                    } else {
+                        share
+                            .due_date
+                            .or(correction.new_due_date)
+                            .unwrap_or(due.due_date)
+                    };
+                    next.due_date = due_date;
                     next.debtor_type = share.debtor_type;
                     next.penalty_accrued_through = None;
                     next.effective_due_date = Some(DuesLiability::effective_due_date_for(
                         next.due_date,
                         approved_on,
                     ));
+                    if share.debtor_type == DebtorType::Owner {
+                        next.liable_person_id = share.liable_person_id.or(owner_id);
+                    } else if share.debtor_type == DebtorType::Tenant {
+                        next.liable_person_id = share.liable_person_id.or(due.liable_person_id);
+                    } else {
+                        next.liable_person_id = share.liable_person_id;
+                    }
                     if share.debtor_type == due.debtor_type
                         && share.amount < due.principal_amount
                         && correction.new_due_date.is_none()
@@ -418,20 +445,29 @@ impl CorrectionService {
                 .as_deref()
                 .map(DebtorType::from_str_loose)
                 .unwrap_or(due.debtor_type);
+            let due_date = if due.debtor_type != debtor && correction.new_due_date.is_none() {
+                approved_on
+            } else {
+                correction.new_due_date.unwrap_or(due.due_date)
+            };
             let mut next = due.clone();
+            next.id.clear();
             next.principal_amount = correction.amount;
             next.total_amount = correction.amount;
             next.delay_penalty = Decimal::ZERO;
             next.paid_principal = Decimal::ZERO;
             next.paid_penalty = Decimal::ZERO;
             next.status = DebtStatus::Pending;
-            next.due_date = correction.new_due_date.unwrap_or(due.due_date);
+            next.due_date = due_date;
             next.debtor_type = debtor;
             next.penalty_accrued_through = None;
             next.effective_due_date = Some(DuesLiability::effective_due_date_for(
                 next.due_date,
                 approved_on,
             ));
+            if debtor == DebtorType::Owner {
+                next.liable_person_id = owner_id;
+            }
             vec![next]
         } else {
             Vec::new()
@@ -498,6 +534,11 @@ impl CorrectionService {
             // The re-issued liability keeps the original's legal basis (KMK 37).
             if let Some(basis) = inner.dues_budget_basis.get(&due.id).cloned() {
                 inner.dues_budget_basis.insert(next.id.clone(), basis);
+            }
+            if next.debtor_type == DebtorType::Tenant {
+                if let Some(joint) = inner.joint_liability_owners.get(&due.id).cloned() {
+                    inner.joint_liability_owners.insert(next.id.clone(), joint);
+                }
             }
             inner.dues.push(next.clone());
         }

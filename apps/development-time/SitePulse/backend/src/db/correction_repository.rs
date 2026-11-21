@@ -165,13 +165,34 @@ pub async fn apply_accrual_correction(
 
     let mut replacement_ids = Vec::with_capacity(write.replacements.len());
     for (index, r) in write.replacements.iter().enumerate() {
-        // A split between two persons of the same role names who owes each share.
-        let liable_person: Option<i64> = write
+        let explicit_share_person = write
             .correction
             .replacement_shares
             .get(index)
             .and_then(|share| share.liable_person_id);
-        let row = tx
+        let mut liable_person: Option<i64> = explicit_share_person;
+        if liable_person.is_none() {
+            if r.debtor_type == crate::models::DebtorType::Owner {
+                let row = tx
+                    .query_opt("SELECT owner_person_id FROM units WHERE id = $1", &[&unit])
+                    .await?;
+                liable_person = row.and_then(|row| row.get(0)).or(r.liable_person_id);
+            } else if r.debtor_type == crate::models::DebtorType::Tenant {
+                liable_person = r.liable_person_id;
+                if liable_person.is_none() {
+                    let row = tx
+                        .query_opt(
+                            "SELECT liable_person_id FROM dues_liabilities WHERE id = $1",
+                            &[&due],
+                        )
+                        .await?;
+                    liable_person = row.and_then(|row| row.get(0));
+                }
+            } else {
+                liable_person = r.liable_person_id;
+            }
+        }
+        let row = match tx
             .query_one(
                 r#"
                     INSERT INTO dues_liabilities
@@ -201,8 +222,38 @@ pub async fn apply_accrual_correction(
                     &liable_person,
                 ],
             )
-            .await?;
-        replacement_ids.push(row.get::<_, i64>(0));
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!(
+                    "INSERT INTO dues_liabilities failed: {}",
+                    crate::db::describe_db_error(&e)
+                );
+                return Err(Box::new(e));
+            }
+        };
+        let new_id: i64 = row.get(0);
+        if r.debtor_type == crate::models::DebtorType::Tenant {
+            if let Err(e) = tx
+                .execute(
+                    r#"
+                    INSERT INTO dues_liability_joint_owners
+                        (site_id, due_id, owner_person_id, tenant_person_id, liable_from, liable_through)
+                    SELECT site_id, $1, owner_person_id, tenant_person_id, liable_from, liable_through
+                    FROM dues_liability_joint_owners
+                    WHERE due_id = $2
+                    ON CONFLICT (due_id, owner_person_id, liable_from, liable_through) DO NOTHING
+                    "#,
+                    &[&new_id, &due],
+                )
+                .await
+            {
+                tracing::error!("INSERT INTO dues_liability_joint_owners failed: {}", crate::db::describe_db_error(&e));
+                return Err(Box::new(e));
+            }
+        }
+        replacement_ids.push(new_id);
     }
     if let Some(id) = replacement_ids.first() {
         // Stored as strings, like `AccrualCorrection::replacement_due_ids`, so a reload

@@ -176,8 +176,6 @@ impl OccupancyService {
         let unit_key = parse_unit_id(unit_id)
             .map(|id| id.to_string())
             .unwrap_or_else(|| unit_id.to_string());
-        let today = self.today(&caller.site_id).await;
-
         let candidate_periods = {
             let inner = self.state.inner.read().await;
             let enabled = inner
@@ -246,6 +244,23 @@ impl OccupancyService {
         let mut results = Vec::new();
         let correction_service = CorrectionService::new(&self.state);
         for (period, due, created_on, history) in candidate_periods {
+            let existing_pending = {
+                let inner = self.state.inner.read().await;
+                inner
+                    .finance
+                    .corrections
+                    .iter()
+                    .find(|c| {
+                        c.status == crate::models::REQUEST_PENDING
+                            && crate::auth::same_id(&c.due_id, &due.id)
+                    })
+                    .cloned()
+            };
+            if let Some(existing) = existing_pending {
+                results.push(existing);
+                continue;
+            }
+
             let shares = accrual_shares(
                 due.principal_amount,
                 period,
@@ -273,28 +288,57 @@ impl OccupancyService {
                         .collect(),
                     reason: format!("Occupancy changed during open period {}", period.key()),
                 };
-                if let Ok(c) = correction_service.request(caller, request).await {
-                    results.push(c);
+                match correction_service.request(caller, request).await {
+                    Ok(c) => results.push(c),
+                    Err(e) => {
+                        let inner = self.state.inner.read().await;
+                        if let Some(existing) = inner
+                            .finance
+                            .corrections
+                            .iter()
+                            .find(|c| {
+                                c.status == crate::models::REQUEST_PENDING
+                                    && crate::auth::same_id(&c.due_id, &due.id)
+                            })
+                            .cloned()
+                        {
+                            results.push(existing);
+                        } else {
+                            return Err(e);
+                        }
+                    }
                 }
             } else if shares.len() == 1 {
                 let (target_debtor, target_amount) = shares[0];
                 if due.debtor_type != target_debtor || due.principal_amount != target_amount {
-                    let new_due_date = if due.debtor_type != target_debtor {
-                        Some(today)
-                    } else {
-                        None
-                    };
                     let request = crate::models::RequestCorrectionRequest {
                         due_id: due.id.clone(),
                         kind: crate::models::CORRECTION_REISSUE.to_string(),
                         amount: Some(target_amount),
-                        due_date: new_due_date,
+                        due_date: None,
                         debtor_type: Some(target_debtor.as_str().to_string()),
                         replacement_shares: Vec::new(),
                         reason: format!("Occupancy changed during open period {}", period.key()),
                     };
-                    if let Ok(c) = correction_service.request(caller, request).await {
-                        results.push(c);
+                    match correction_service.request(caller, request).await {
+                        Ok(c) => results.push(c),
+                        Err(e) => {
+                            let inner = self.state.inner.read().await;
+                            if let Some(existing) = inner
+                                .finance
+                                .corrections
+                                .iter()
+                                .find(|c| {
+                                    c.status == crate::models::REQUEST_PENDING
+                                        && crate::auth::same_id(&c.due_id, &due.id)
+                                })
+                                .cloned()
+                            {
+                                results.push(existing);
+                            } else {
+                                return Err(e);
+                            }
+                        }
                     }
                 }
             }

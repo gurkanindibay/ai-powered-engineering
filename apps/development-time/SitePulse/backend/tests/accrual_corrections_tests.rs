@@ -439,6 +439,12 @@ async fn when_tenant_leaves_without_notice_then_split_and_later_accrual_correcti
                 created_at: Utc::now(),
             }],
         );
+        let unit_obj = inner
+            .units
+            .iter_mut()
+            .find(|u| u.id == UNIT)
+            .expect("unit in fixture");
+        unit_obj.owner_user_id = Some("person-42".to_string());
     }
 
     let corrections = OccupancyService::new(state.clone())
@@ -465,6 +471,26 @@ async fn when_tenant_leaves_without_notice_then_split_and_later_accrual_correcti
     let replacement = due_of(&state, &approved_dec.replacement_due_id.unwrap()).await;
     assert_eq!(replacement.debtor_type, DebtorType::Owner);
     assert_eq!(replacement.principal_amount, d("1500.00"));
+    assert_eq!(replacement.liable_person_id, Some(42));
+    assert_eq!(replacement.due_date, today());
+    assert_eq!(replacement.effective_due_date, Some(today()));
+
+    let approved_nov = correction_service
+        .decide(&second_manager(), nov_corr.id, approve())
+        .await
+        .unwrap();
+    assert_eq!(approved_nov.status, REQUEST_APPROVED);
+    let mut nov_dues = Vec::new();
+    for id in approved_nov.replacement_due_ids {
+        nov_dues.push(due_of(&state, &id).await);
+    }
+    let owner_nov = nov_dues
+        .iter()
+        .find(|d| d.debtor_type == DebtorType::Owner)
+        .unwrap();
+    assert_eq!(owner_nov.liable_person_id, Some(42));
+    assert_eq!(owner_nov.due_date, today());
+    assert_eq!(owner_nov.effective_due_date, Some(today()));
 }
 
 // covers: SC-07-11-03
