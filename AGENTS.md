@@ -57,9 +57,9 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - Run gates in compact form: `run_tests.py --summary` (or `--json --summary`); pipe other build/test output through `tail -40` or a failure filter.
    - Browser checks: prefer `get_page_text`/`read_page`; screenshots only when visual layout matters, with `scale` ≤ 0.5.
    - One task per session. Use `/compact` or start fresh once context passes ~200K tokens.
-   - Choose an available, eligible model from the Antigravity, Claude, or Codex subscriptions according to the task. Honor explicit model requests.
+   - Choose an available, eligible model from the Antigravity, Claude, or Codex subscriptions according to the task. Set the model explicitly when delegating to a subagent. Honor explicit model requests.
      - **Antigravity**: Use Gemini 3.8 Flash for routine edits, test runs, and exploration when it is available in Antigravity.
-     - **Claude**: Use Sonnet for routine edits, test runs, and exploration. Reserve Opus for design-heavy work.
+     - **Claude**: Reserve Opus for planning, including architecture, issue decomposition, and fix plans. Use Sonnet for development and test design, including complex implementation and test runs. Use Haiku for simple chores such as cleanup, claim and label updates, mechanical edits, and status checks.
      - **Codex**: Use GPT-6.2 Sol for routine implementation, debugging, and verification. Use GPT-6.2 Astra for design-heavy work and complex implementation or debugging.
      - **DeepSeek**: Use an eligible DeepSeek model as the last fallback when the subscription-backed options cannot meet the task's needs. DeepSeek is billed by usage.
    - Use the lowest reasoning effort that fits the task and is exposed by the selected model and harness. Honor explicit effort requests.
