@@ -107,10 +107,10 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - Compact your context before every wake-up, carrying only the handoff state (PR, issue, branch, worktree, claim id, last handled SHA).
    - Stop and ask the user if the PR is closed unmerged or the same blocking note survives two fixes. Full procedure: [.agents/rules/pr-author-followup.md](file:///.agents/rules/pr-author-followup.md).
 
-16. **PR Reviewer Polling Loop (All Agents)**:
-   - The reviewer agent acts as `local-reviewer-agent` (rule 14) and checks for PRs to review **every 30 minutes** with `python3 scripts/pr_review_queue.py`. A PR is ready when it is not a draft, its CI has finished, and the bot has no final verdict on the current head (never reviewed, new commits since the last review, or only a `COMMENT`); the tool skips unchanged PRs, drafts and its own PRs.
+16. **PR Reviewer Watch Loop (All Agents)**:
+   - The reviewer agent acts as `local-reviewer-agent` (rule 14) and is **event-driven, not on a timer**: it runs `python3 scripts/pr_review_watch.py` in the background (or with its harness's monitor tool), which blocks on GitHub webhook events (`gh webhook forward`) or, without the extension, a quiet `gh` poll, and exits only when a PR is ready for review. Do not use a model-driven timer or a 30-minute cron. `python3 scripts/pr_review_queue.py` is the one-shot check of the same queue. A PR is ready when it is not a draft, its CI has finished, and the bot has no final verdict on the current head (never reviewed, new commits since the last review, or only a `COMMENT`); the tool skips unchanged PRs, drafts and its own PRs.
    - Reviews go on the PR. Blocking problems get `REQUEST_CHANGES`. If the changes are OK, post a real GitHub `APPROVE` (with any minor notes listed); only if GitHub refuses the formal approval, post a comment starting with `APPROVED`. Do not approve while CI is red or pending.
-   - Compact your context before every 30-minute cycle; per-PR state comes from the bot's review history, not memory.
+   - Compact your context before acting on every wake-up; per-PR state comes from the bot's review history, not memory. After each wake-up, restart the watcher (with `--seen N@SHA` for any ready PR you deliberately left without a verdict).
    - The reviewer never merges or pushes. Full procedure: [.agents/rules/pr-reviewer-polling.md](file:///.agents/rules/pr-reviewer-polling.md).
 
 ## Durable engineering harness

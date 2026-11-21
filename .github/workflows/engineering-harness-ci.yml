@@ -2,6 +2,10 @@ name: Engineering harness
 on:
   pull_request:
     paths:
+      - 'scripts/pr_review_queue.py'
+      - 'scripts/pr_review_watch.py'
+      - 'tests/pr_review_queue/**'
+      - 'tests/pr_review_watch/**'
       - 'scripts/engineering_harness/**'
       - 'scripts/development_harness.py'
       - 'scripts/team_orchestrator.py'
@@ -15,6 +19,10 @@ on:
   push:
     branches: [master]
     paths:
+      - 'scripts/pr_review_queue.py'
+      - 'scripts/pr_review_watch.py'
+      - 'tests/pr_review_queue/**'
+      - 'tests/pr_review_watch/**'
       - 'scripts/engineering_harness/**'
       - 'scripts/development_harness.py'
       - 'scripts/team_orchestrator.py'
@@ -46,5 +54,9 @@ jobs:
         run: python3 -m unittest discover -s tests/issue_claim -v
       - name: Review bot tests
         run: python3 -m unittest discover -s tests/review_bot -v
+      - name: Review queue and watcher tests
+        run: |
+          python3 -m unittest discover -s tests/pr_review_queue -v
+          python3 -m unittest discover -s tests/pr_review_watch -v
       - name: Existing SitePulse harness regression tests
         run: python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests
