@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T10:18:04Z",
- "run_id": "20261121T101804Z-a6ff38c",
- "commit": "a6ff38c572a7b628b473efcdc45a8f39a8a00bcd",
+ "generated_at": "2026-11-21T12:59:30Z",
+ "run_id": "20261121T125929Z-2158de4",
+ "commit": "2158de4f37313b6e5ff6232dd6db5942d0bc8eb9",
  "task": "master",
  "status": "DEFECT",
  "junit": {
   "tests": 193,
   "failures": 0,
   "errors": 0,
-  "skipped": 7,
-  "passed": 186,
-  "seconds": 2504.5,
+  "skipped": 2,
+  "passed": 191,
+  "seconds": 2426.9,
   "files": 8,
   "unparseable": []
  },
@@ -21,8 +21,8 @@
   "stories_passing": 32,
   "scenarios": 465,
   "automated": 362,
-  "passing": 156,
-  "failing": 4,
+  "passing": 158,
+  "failing": 2,
   "no_result": 202,
   "planned": 103,
   "epics": 13,
@@ -206,8 +206,8 @@
    "stories_passing": 0,
    "scenarios": 151,
    "automated": 59,
-   "passing": 42,
-   "failing": 4,
+   "passing": 44,
+   "failing": 2,
    "no_result": 13,
    "planned": 92,
    "health": "failing"
@@ -2933,13 +2933,13 @@
    "story": "STORY-13-14"
   },
   "SC-13-14-08": {
-   "state": "failing",
+   "state": "passing",
    "name": "A successor's receipt settles only the successor's own charges",
    "epic": "EPIC-13",
    "story": "STORY-13-14"
   },
   "SC-13-14-09": {
-   "state": "failing",
+   "state": "passing",
    "name": "The final open debt stays with each former and current debtor",
    "epic": "EPIC-13",
    "story": "STORY-13-14"
@@ -3901,5 +3901,5 @@
    ]
   }
  ],
- "href": "reports/44892666881-1/"
+ "href": "reports/44906027395-1/"
 }
