@@ -54,8 +54,7 @@ Feature: Financial transitions that cross periods or ledgers
     Then one payment and one receipt exist and allocations total 1675.00
     And "A-3" has zero debt and zero advance
 
-  # Pending: the end-to-end journey does not yet cover approving an unmatched item exactly once.
-  @SC-13-09-07 @J-16 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-09-07 @J-16 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: An unmatched statement item can be approved exactly once
     Given an imported 1675.00 bank statement item for the site has no match in state F5
     Then the reconciliation queue shows one unmatched item and "A-3" still owes 1675.00

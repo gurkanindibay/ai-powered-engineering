@@ -4,7 +4,7 @@ use rust_decimal::Decimal;
 use tracing::info;
 
 use super::base::{parse_id_to_i64, require_id, DbResult};
-use crate::models::{BankTransactionItem, ReconciliationMatch, ReconciliationStatus};
+use crate::models::{BankTransactionItem, DebtorType, ReconciliationMatch, ReconciliationStatus};
 pub async fn save_reconciliation_match_for_site(
     pool: &Pool,
     m: &ReconciliationMatch,
@@ -16,6 +16,8 @@ pub async fn save_reconciliation_match_for_site(
     let confidence_i32 = m.confidence_score as i32;
     let matched_unit_num = m.matched_unit_id.as_deref().and_then(parse_id_to_i64);
     let matched_due_num = m.matched_due_id.as_deref().and_then(parse_id_to_i64);
+    let assigned_unit_num = m.assigned_unit_id.as_deref().and_then(parse_id_to_i64);
+    let assigned_debtor = m.assigned_debtor_role.map(|role| role.as_str());
     let site_id_num = require_id("entity", site_id)?;
     client
         .execute(
@@ -25,9 +27,9 @@ pub async fn save_reconciliation_match_for_site(
                 sender_name, sender_iban, reference_no, matched_unit_id, matched_block,
                 matched_unit_number, matched_resident_name, confidence_score, matched_due_id,
                 outstanding_balance, amount_matches_balance, status, notes,
-                site_id, site_bank_account_id, created_at
+                site_id, site_bank_account_id, assigned_unit_id, assigned_debtor_role, created_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, CURRENT_TIMESTAMP)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, CURRENT_TIMESTAMP)
             ON CONFLICT (match_id) DO UPDATE SET
                 status = EXCLUDED.status,
                 notes = EXCLUDED.notes
@@ -54,11 +56,45 @@ pub async fn save_reconciliation_match_for_site(
                 &m.notes,
                 &site_id_num,
                 &bank_account_id,
+                &assigned_unit_num,
+                &assigned_debtor,
             ],
         )
         .await?;
     info!("Saved reconciliation match {} to PostgreSQL", m.match_id);
     Ok(())
+}
+
+/// Records the manager's unit and debtor choice for a statement item that had
+/// no automatic unit match. Returns `false` when the item is not in this site,
+/// so the caller can answer 404 instead of pretending the assignment was kept.
+pub async fn save_reconciliation_assignment(
+    pool: &Pool,
+    match_id: &str,
+    site_id: &str,
+    unit_id: &str,
+    debtor_role: DebtorType,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let site_id_num = require_id("entity", site_id)?;
+    let unit_id_num = require_id("unit", unit_id)?;
+    let updated = client
+        .execute(
+            "UPDATE reconciliation_queue \
+             SET assigned_unit_id = $3, assigned_debtor_role = $4 \
+             WHERE match_id = $1 AND site_id = $2",
+            &[&match_id, &site_id_num, &unit_id_num, &debtor_role.as_str()],
+        )
+        .await?;
+    if updated > 0 {
+        info!(
+            "Saved reconciliation assignment for match {} to unit {} ({})",
+            match_id,
+            unit_id,
+            debtor_role.as_str()
+        );
+    }
+    Ok(updated > 0)
 }
 
 pub async fn save_reconciliation_match(
@@ -114,7 +150,8 @@ pub async fn fetch_reconciliation_queue_from_db(
                 "SELECT match_id, transaction_id, txn_date, amount, currency, description, \
                  sender_name, sender_iban, reference_no, matched_unit_id, matched_block, \
                  matched_unit_number, matched_resident_name, confidence_score, matched_due_id, \
-                 outstanding_balance, amount_matches_balance, status, notes, site_id \
+                 outstanding_balance, amount_matches_balance, status, notes, site_id, \
+                 assigned_unit_id, assigned_debtor_role \
                  FROM reconciliation_queue WHERE site_id = $1 ORDER BY txn_date ASC",
                 &[&site_num],
             )
@@ -125,7 +162,8 @@ pub async fn fetch_reconciliation_queue_from_db(
                 "SELECT match_id, transaction_id, txn_date, amount, currency, description, \
                  sender_name, sender_iban, reference_no, matched_unit_id, matched_block, \
                  matched_unit_number, matched_resident_name, confidence_score, matched_due_id, \
-                 outstanding_balance, amount_matches_balance, status, notes, site_id \
+                 outstanding_balance, amount_matches_balance, status, notes, site_id, \
+                 assigned_unit_id, assigned_debtor_role \
                  FROM reconciliation_queue ORDER BY txn_date ASC",
                 &[],
             )
@@ -154,6 +192,8 @@ pub async fn fetch_reconciliation_queue_from_db(
         let status_str: String = row.get(17);
         let notes: Option<String> = row.get(18);
         let site_id_num: Option<i64> = row.get(19);
+        let assigned_unit_id: Option<i64> = row.get(20);
+        let assigned_debtor_role: Option<String> = row.get(21);
         // A row without a site belongs to no tenant (never to site 1).
         let s_id = site_id_num.map(|s| s.to_string()).unwrap_or_default();
 
@@ -184,6 +224,9 @@ pub async fn fetch_reconciliation_queue_from_db(
             status,
             status_code,
             notes,
+            assigned_unit_id: assigned_unit_id.map(|v| v.to_string()),
+            assigned_debtor_role: assigned_debtor_role
+                .map(|role| DebtorType::from_str_loose(&role)),
         });
     }
     Ok(list)

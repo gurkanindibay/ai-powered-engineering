@@ -644,3 +644,59 @@ async fn responsible_contact_persists_without_changing_owner_or_tenant() {
     ));
     t.drop_db().await;
 }
+
+/// Issue 296: the manager's unit/debtor choice is written on the queue row, is
+/// tenant-scoped, and comes back when the queue is reloaded (a restart).
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn reconciliation_assignment_is_persisted_for_its_site_only() {
+    let t = TestDb::create("recon_assignment").await;
+    let site = t.site_id("begonya-sitesi").await;
+    let other_site = t.site_id("kardelen-rezidans").await;
+    let unit = t.unit_of(site).await;
+    t.exec(&format!(
+        "INSERT INTO reconciliation_queue (match_id, transaction_id, txn_date, amount, description, status, site_id) \
+         VALUES ('MATCH-ASSIGN-1', 'TX-ASSIGN-1', CURRENT_DATE, 1675.00, 'FAST TRANSFERI', 'UNMATCHED', {site})"
+    ))
+    .await;
+
+    let site_text = site.to_string();
+    let unit_text = unit.to_string();
+    let saved = sitepulse_backend::db::save_reconciliation_assignment(
+        &t.pool,
+        "MATCH-ASSIGN-1",
+        &site_text,
+        &unit_text,
+        sitepulse_backend::models::DebtorType::Owner,
+    )
+    .await
+    .expect("the assignment is stored");
+    assert!(saved, "the queue row belongs to the site");
+
+    // A second site can never write the same row.
+    let refused = sitepulse_backend::db::save_reconciliation_assignment(
+        &t.pool,
+        "MATCH-ASSIGN-1",
+        &other_site.to_string(),
+        &unit_text,
+        sitepulse_backend::models::DebtorType::Tenant,
+    )
+    .await
+    .expect("the scoped update runs");
+    assert!(!refused, "a foreign site updates no row");
+
+    let queue =
+        sitepulse_backend::db::fetch_reconciliation_queue_from_db(&t.pool, Some(&site_text))
+            .await
+            .expect("the queue reloads");
+    let item = queue
+        .iter()
+        .find(|m| m.match_id == "MATCH-ASSIGN-1")
+        .expect("the row survives a reload");
+    assert_eq!(item.assigned_unit_id.as_deref(), Some(unit_text.as_str()));
+    assert_eq!(
+        item.assigned_debtor_role,
+        Some(sitepulse_backend::models::DebtorType::Owner)
+    );
+    t.drop_db().await;
+}

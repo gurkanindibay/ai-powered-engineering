@@ -236,11 +236,20 @@ pub async fn confirm_reconciliation(
             else {
                 continue;
             };
-            let Some(unit) = m
+            // A manager assignment only stands in for a missing automatic unit
+            // match; an item that already matched a unit keeps that unit.
+            let assignment = if m.matched_unit_id.is_none() {
+                m.assigned_unit_id.clone().zip(m.assigned_debtor_role)
+            } else {
+                None
+            };
+            let unit_id = m
                 .matched_unit_id
-                .as_ref()
-                .and_then(|uid| inner.units.iter().find(|u| &u.id == uid))
-                .cloned()
+                .clone()
+                .or_else(|| assignment.as_ref().map(|(unit_id, _)| unit_id.clone()));
+            let Some(unit) = unit_id
+                .as_deref()
+                .and_then(|uid| inner.units.iter().find(|u| u.id == uid).cloned())
             else {
                 continue;
             };
@@ -265,7 +274,11 @@ pub async fn confirm_reconciliation(
                     format!("Match {} is already approved", match_id),
                 ));
             }
-            let assigned = payload.debtor_assignments.get(match_id).copied();
+            let assigned = payload
+                .debtor_assignments
+                .get(match_id)
+                .copied()
+                .or_else(|| assignment.as_ref().map(|(_, role)| *role));
             if assigned.is_none()
                 && queued.is_some_and(|q| {
                     q.status == ReconciliationStatus::Unmatched
@@ -494,6 +507,114 @@ pub async fn confirm_reconciliation(
             remembered_ibans_count: remembered.len(),
         }),
     ))
+}
+
+/// Assigns an unmatched statement item to a unit and the debtor who paid it.
+///
+/// The choice is stored beside the automatic match (never in `matched_unit_id`),
+/// so confirm-reconciliation can settle an item no rule matched and the decision
+/// survives a restart with the rest of the queue row. Assigning the same pair
+/// again is a no-op, and a manager may move an unapproved item to another unit.
+pub async fn assign_reconciliation_match(
+    Path(match_id): Path<String>,
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Json(mut payload): Json<AssignReconciliationMatchRequest>,
+) -> Result<Json<ReconciliationMatch>, (StatusCode, String)> {
+    scope.pin(&mut payload.site_id)?;
+
+    // Phase 1 (state lock): tenant boundary, approval state and the target unit.
+    let unit = {
+        let inner = state.inner.read().await;
+        let Some(queued) = inner
+            .reconciliation_queue
+            .iter()
+            .find(|m| m.match_id == match_id)
+        else {
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("Match {} not found", match_id),
+            ));
+        };
+        if !queued.site_id.is_empty() && !crate::auth::same_id(&queued.site_id, &payload.site_id) {
+            return Err((
+                StatusCode::FORBIDDEN,
+                format!(
+                    "Match {} belongs to site {}, not {}",
+                    match_id, queued.site_id, payload.site_id
+                ),
+            ));
+        }
+        if matches!(
+            queued.status,
+            ReconciliationStatus::Approved | ReconciliationStatus::AlreadyProcessed
+        ) {
+            return Err((
+                StatusCode::CONFLICT,
+                format!("Match {} is already approved", match_id),
+            ));
+        }
+        let Some(unit) = inner
+            .units
+            .iter()
+            .find(|u| u.id == payload.unit_id && u.site_id == payload.site_id)
+            .cloned()
+        else {
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("Unit '{}' not found in this site.", payload.unit_id),
+            ));
+        };
+        unit
+    };
+
+    // Phase 2: the database row first, without the global lock; the update is
+    // scoped to the match's site, so a foreign match can never be written.
+    if let Some(p) = state.db_pool() {
+        let saved = crate::db::save_reconciliation_assignment(
+            p,
+            &match_id,
+            &payload.site_id,
+            &unit.id,
+            payload.debtor_role,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                crate::error::sanitized("Database write failed", &e),
+            )
+        })?;
+        if !saved {
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("Match {} not found in this site", match_id),
+            ));
+        }
+    }
+
+    // Phase 3 (state lock): the read model follows the stored assignment.
+    let mut inner = state.inner.write().await;
+    let Some(assigned) = inner
+        .reconciliation_queue
+        .iter_mut()
+        .find(|m| m.match_id == match_id)
+    else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("Match {} not found", match_id),
+        ));
+    };
+    if assigned.status == ReconciliationStatus::Approved {
+        // Another request settled the item while this one was persisting.
+        return Err((
+            StatusCode::CONFLICT,
+            format!("Match {} is already approved", match_id),
+        ));
+    }
+    assigned.assigned_unit_id = Some(unit.id);
+    assigned.assigned_debtor_role = Some(payload.debtor_role);
+    Ok(Json(assigned.clone()))
 }
 
 pub async fn remember_sender_iban(
@@ -1283,6 +1404,8 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
                 status: ReconciliationStatus::Unmatched,
                 status_code: ReconciliationStatus::Unmatched.as_str().to_string(),
                 notes: Some("Açıklama boş veya daire tespit edilemedi. Yönetici manuel eşleştirmesi bekliyor.".to_string()),
+                assigned_unit_id: None,
+                assigned_debtor_role: None,
             };
             // The transaction id is already claimed, so the unmatched transfer must be
             // durable: it waits in the reconciliation queue for manual matching.
@@ -1367,6 +1490,8 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             status: ReconciliationStatus::Unmatched,
             status_code: ReconciliationStatus::Unmatched.as_str().to_string(),
             notes: Some(SEVERAL_OPEN_DEBTORS_REASON.to_string()),
+            assigned_unit_id: None,
+            assigned_debtor_role: None,
         };
         drop(inner);
         if let Some(p) = state.db_pool() {
@@ -1441,6 +1566,8 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             status: ReconciliationStatus::PendingApproval,
             status_code: ReconciliationStatus::PendingApproval.as_str().to_string(),
             notes: Some("Açıklamada demirbaş niyeti var. Malik borcuna işlem için yöneticinin açık onayı bekleniyor.".to_string()),
+            assigned_unit_id: None,
+            assigned_debtor_role: None,
         };
         drop(inner);
         if let Some(ref pool) = state.pool {
@@ -1598,6 +1725,8 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
         status: ReconciliationStatus::Approved,
         status_code: ReconciliationStatus::Approved.as_str().to_string(),
         notes: Some(notes),
+        assigned_unit_id: None,
+        assigned_debtor_role: None,
     });
 
     Ok((
