@@ -12,8 +12,7 @@ Feature: Every status of the billing state machines is reached and left correctl
 
   # ------------------------------------------------------------- liability
 
-  # Pending: the F4/F5 historical fixture and controllable fixture-date timeline are not available in the journey harness.
-  @SC-13-11-01 @J-18 @depth:1 @layer:backend @core @role_manager @pending
+  @SC-13-11-01 @J-18 @depth:1 @layer:backend @core @role_manager @linked
   Scenario Outline: A liability moves through PENDING, OVERDUE, PAID and CANCELLED
     Given a unit has a single 1500.00 liability due "2026-11-10" with grace days <grace>
     When <event>

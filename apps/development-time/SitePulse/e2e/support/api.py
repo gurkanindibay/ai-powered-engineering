@@ -51,6 +51,10 @@ class E2EClock:
             "action": "advance_to", "date": self._date_text(value),
         })
 
+    def set_instant(self, value: str) -> dict:
+        """Set an exact instant (RFC 3339, e.g. `2026-11-30T20:30:00Z`), for boundaries inside a UTC day."""
+        return self.api.call("POST", "/__e2e/clock", body={"action": "set_instant", "at": value})
+
     def tick(self) -> dict:
         return self.api.call("POST", "/__e2e/clock", body={"action": "tick"})
 
@@ -63,6 +67,7 @@ class Api:
     def __init__(self, base: str | None = None):
         self.base = base or api_base()
         self.clock = E2EClock(self)
+        self.network_events: list[dict[str, str | int]] = []
 
     def call(self, method: str, path: str, token: str | None = None, body: object | None = None) -> object:
         data = json.dumps(body).encode() if body is not None else (b"{}" if method in ("POST", "PUT") else None)
@@ -73,7 +78,9 @@ class Api:
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 raw = resp.read().decode()
+                self.network_events.append({"method": method, "route": path.split("?", 1)[0], "status": resp.status})
         except urllib.error.HTTPError as exc:
+            self.network_events.append({"method": method, "route": path.split("?", 1)[0], "status": exc.code})
             raise ApiError(f"{method} {path} -> {exc.code}: {exc.read().decode()[:300]}") from None
         return json.loads(raw) if raw else None
 

@@ -144,8 +144,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # -------------------------------------------------------------------- time
 
-  # Pending: the scheduler lacks a journey-controlled clock tick across both Istanbul/UTC boundary instants.
-  @SC-13-05-14 @J-12 @depth:2 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-14 @J-12 @depth:2 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario: The month boundary uses Istanbul time, not UTC
     Given the site is in state F5
     And the accrual scheduler is due to open December on the first local day and catch-up is disabled
@@ -154,8 +153,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     When it is ticked at "2026-12-01 00:30" Europe/Istanbul, still November 30 UTC
     Then it accrues December exactly once and leaves November principal unchanged
 
-  # Pending: the journey harness lacks the fixed 30-day clock advance and settled-liability balance assertion.
-  @SC-13-05-15 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-15 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario: A late fee never makes a settled liability reopen
     Given the site is in state F5
     And unit "A-3" paid its "Eylül 2026" debt in full today

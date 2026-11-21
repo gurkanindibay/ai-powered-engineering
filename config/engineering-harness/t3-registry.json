@@ -20,9 +20,7 @@
         "effort": [
           "low",
           "medium",
-          "high",
-          "xhigh",
-          "max"
+          "high"
         ]
       },
       "tier_options": {
@@ -57,9 +55,7 @@
         "effort": [
           "low",
           "medium",
-          "high",
-          "xhigh",
-          "max"
+          "high"
         ]
       },
       "tier_options": {
@@ -70,7 +66,7 @@
           "effort": "high"
         },
         "high": {
-          "effort": "xhigh"
+          "effort": "high"
         }
       },
       "input_per_million": "3",
@@ -99,9 +95,7 @@
         "effort": [
           "low",
           "medium",
-          "high",
-          "xhigh",
-          "max"
+          "high"
         ]
       },
       "tier_options": {
@@ -109,7 +103,7 @@
           "effort": "high"
         },
         "critical": {
-          "effort": "xhigh"
+          "effort": "high"
         }
       },
       "input_per_million": "5",
@@ -136,9 +130,7 @@
         "reasoningEffort": [
           "low",
           "medium",
-          "high",
-          "xhigh",
-          "max"
+          "high"
         ]
       },
       "tier_options": {
@@ -149,7 +141,7 @@
           "reasoningEffort": "high"
         },
         "critical": {
-          "reasoningEffort": "xhigh"
+          "reasoningEffort": "high"
         }
       },
       "input_per_million": "5",

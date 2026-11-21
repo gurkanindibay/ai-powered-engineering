@@ -83,7 +83,13 @@ class AddResidentForm:
     def save(self) -> None:
         """Save, then dismiss the 'Sakin Kaydedildi!' confirmation and close the module."""
         by_id(self.page, "module_save_new_resident_btn").click()
+        # An already existing unit (for example an empty one of a started site) asks to confirm first;
+        # wait for whichever comes first instead of a fixed pause.
+        confirm = by_id(self.page, "btn_confirmation_confirm")
         close = by_id(self.page, "btn_close_resident_provisioned")
+        confirm.or_(close).first.wait_for(timeout=15_000)
+        if confirm.count() > 0:
+            confirm.click()
         close.wait_for(timeout=15_000)
         close.click()
         close.wait_for(state="detached", timeout=10_000)

@@ -209,7 +209,7 @@ Each journey is one test that follows a single user from the first sign-in with 
 ### Excluded (no GUI surface)
 EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered by `run_tests.py` gates, `schema_integrity_check.py`, `api_system_check.py` and `harness/tests`.
 | — | 13-03 | — | — | — | **Excluded:** The automated scenarios of story 13-03 are backend journeys; its two GUI scenarios (SC-13-03-03, SC-13-03-19) stay `@pending` in the feature file until they are automated. | | |
-| — | 13-01 | — | — | — | **Excluded:** Starting state reference fixtures F0 to F3, covered by journey tests and `run_tests.py` gates. | | |
+| — | 13-01 | — | — | — | **Partial:** Starting state reference fixtures F0 to F3 are covered by journey tests and `run_tests.py` gates; their screens are GUI-13-05 … GUI-13-10. | | |
 | — | 13-02, 13-04, 13-07 | — | — | — | **Excluded:** Backend-only journey contract for accruals, payments and teardown, covered by test_journey_accruals_payments.py and test_journey_fixtures.py. | | |
 | — | 13-07 | — | — | — | **Excluded:** Backend-only journey fixture, invariant and teardown contract, covered by journey tests and `run_tests.py` gates. | | |
 | — | 13-01, 13-12 | — | — | — | **Excluded:** Backend-only late-fee rule for supplementary charges, covered by `backend/tests/supplementary_charge_tests.rs`. | | |
@@ -219,6 +219,15 @@ EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered b
 | — | 13-10 | — | — | — | **Partial:** Backend isolation automated; GUI isolation scenario (SC-13-10-08) is pending separate GUI issue. | | |
 | — | 13-06, 13-08 | — | — | — | **Partial:** Lifecycle chain (13-06) and manager session states (13-08) specified in .specify/features/EPIC-13; GUI automation pending. | | |
 | GUI-13-04 | 13-26 | Manager | P0 | zero-site to April final | Onboard two sites, create 88 units through manager commands, run four periods, then inspect both managers' unit statements, unit counts and site cash (`SC-13-26-02`). | Site A and Site B journey builders; unit workspace, account statement and payment stream | ✅ |
+| GUI-13-05 | 13-01 | Manager | P1 | F0 | Open dashboard, collection, cash, units and people pages of an empty site → zero dashboard, empty-state message on every page (`SC-13-01-01`, strict xfail #283) | `cockpit_*`, `segment_tab_*`, `people_search_input` | ✅ |
+| GUI-13-06 | 13-01 | Manager | P1 | F1 | Open units and people pages of a site with units but no people → 7 unassigned units, no owners or residents (`SC-13-01-04`) | `add_resident_btn`, `people_search_input` | ✅ |
+| GUI-13-07 | 13-01 | Manager | P1 | F1 | Register two owners and a tenant on empty units → units and directory show them, no liability exists (`SC-13-01-05`, strict xfail #286) | `module_new_resident_*`, `module_confirm_move_in_btn` | ✅ |
+| GUI-13-08 | 13-01 | Manager, home owner | P1 | F2 | People without a period → collection page offers the first accrual, owner dashboard balance 0.00 (`SC-13-01-06`) | `btn_open_accrual_dialog`, `hero_balance_amount` | ✅ |
+| GUI-13-09 | 13-01 | Manager | P1 | F3 | Accrue the same period again after residents exist → duplicate blocked, no liability (`SC-13-01-11`) | `btn_open_accrual_dialog`, `snackbar_accrual_result` | ✅ |
+| GUI-13-10 | 13-01 | Manager | P1 | F0 | Grow the site from F0 to F2 through the screens (`SC-13-01-12`, strict xfail #285: no block or unit screen) | `btn_add_block` | ✅ |
+| GUI-13-11 | 13-02 | Manager | P0 | F4 | Single accrual period → total 8800.00, five overdue debtors with their amounts (`SC-13-02-01`) | `cockpit_*`, `aging_*` | ✅ |
+| GUI-13-12 | 13-02 | Resident | P1 | F4 | Tenant dashboard equals the admin unit statement (`SC-13-02-02`, strict xfail #284) | `hero_balance_amount`, `statement_total_tenant` | ✅ |
+| GUI-13-13 | 13-02 | Manager | P0 | F5 | Multiple periods → per-unit balances and site total, advance of A-6 (`SC-13-02-04`) | `aging_*`, `workspace_action_statement_*` | ✅ |
 
 ## 4. API data builders (`e2e/support/api.py`), confirmed against `backend/src/app.rs`
 Each builder calls real backend endpoints (no direct SQL writes), returns the ids it created, and runs after a reset.
