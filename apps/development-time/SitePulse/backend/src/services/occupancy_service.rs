@@ -431,24 +431,38 @@ impl OccupancyService {
             None => None,
         };
         tx.commit().await?;
-        if let Some(closed_item) = closed.as_ref() {
+        {
             let mut inner = self.state.inner.write().await;
             let history = inner.unit_occupancies.entry(unit.to_string()).or_default();
-            if let Some(existing) = history.iter_mut().find(|item| item.id == closed_item.id) {
-                *existing = closed_item.clone();
-            } else {
-                history.push(closed_item.clone());
+            if let Some(closed_item) = closed.as_ref() {
+                if let Some(existing) = history.iter_mut().find(|item| item.id == closed_item.id) {
+                    *existing = closed_item.clone();
+                } else {
+                    history.push(closed_item.clone());
+                }
             }
             if let Some(opened_item) = opened.as_ref() {
                 if !history.iter().any(|item| item.id == opened_item.id) {
                     history.push(opened_item.clone());
                 }
             }
-        } else if let Some(opened_item) = opened.as_ref() {
-            let mut inner = self.state.inner.write().await;
-            let history = inner.unit_occupancies.entry(unit.to_string()).or_default();
-            if !history.iter().any(|item| item.id == opened_item.id) {
-                history.push(opened_item.clone());
+            if let Some(unit_obj) = inner
+                .units
+                .iter_mut()
+                .find(|u| crate::auth::same_id(&u.id, &unit.to_string()))
+            {
+                match outcome.plan.to.occupancy {
+                    crate::domain::unit_state::Occupancy::Vacant
+                    | crate::domain::unit_state::Occupancy::OwnerOccupied => {
+                        unit_obj.tenant_user_id = None;
+                    }
+                    crate::domain::unit_state::Occupancy::TenantOccupied => {
+                        if let Some(opened_item) = opened.as_ref() {
+                            unit_obj.tenant_user_id =
+                                Some(format!("person-{}", opened_item.person_id));
+                        }
+                    }
+                }
             }
         }
         tracing::info!(

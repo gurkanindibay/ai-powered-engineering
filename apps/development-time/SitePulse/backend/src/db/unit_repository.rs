@@ -398,7 +398,7 @@ pub struct TitleTransfer<'a> {
 pub async fn transfer_unit_ownership_db(
     pool: &Pool,
     transfer: &TitleTransfer<'_>,
-) -> Result<Option<Decimal>, crate::db::occupancy_repository::OccupancyError> {
+) -> Result<(Option<Decimal>, i64), crate::db::occupancy_repository::OccupancyError> {
     use crate::db::occupancy_repository::{self as occupancy, OccupancyError, TransitionInput};
     use crate::domain::unit_state::{self, Command, SessionRole};
 
@@ -517,7 +517,7 @@ pub async fn transfer_unit_ownership_db(
         to = %outcome.plan.to.label(),
         "Transferred unit ownership in PostgreSQL"
     );
-    Ok(outcome.closed.map(|c| c.exit_balance))
+    Ok((outcome.closed.map(|c| c.exit_balance), buyer))
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
