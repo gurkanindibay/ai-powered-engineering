@@ -184,7 +184,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 3. Load Units
     {
-        let rows = client.query("SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type, (created_at AT TIME ZONE 'UTC')::date FROM units WHERE deleted_at IS NULL",
+        let rows = client.query("SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type, (created_at AT TIME ZONE 'UTC')::date, monthly_tariff_override FROM units WHERE deleted_at IS NULL",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -198,6 +198,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let virtual_iban: Option<String> = row.get(8);
             let house_type: Option<String> = row.get(9);
             let created_on: Option<NaiveDate> = row.get(10);
+            let monthly_tariff_override: Option<Decimal> = row.get(11);
 
             let block_label = if block_id == 1 { "blok-A" } else { "blok-B" };
             let resolved_viban = virtual_iban.or_else(|| {
@@ -221,6 +222,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 tenant_user_id: tenant_person_id.map(|p| format!("person-{}", p)),
                 virtual_iban: resolved_viban,
                 house_type,
+                monthly_tariff_override,
                 created_on,
             };
 

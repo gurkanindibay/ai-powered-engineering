@@ -906,6 +906,10 @@ pub struct IndependentUnit {
     pub virtual_iban: Option<String>,
     #[serde(default)]
     pub house_type: Option<String>,
+    /// Monthly dues the manager typed for this unit. It wins over the
+    /// house-type tariff; `None` means the house-type tariff applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monthly_tariff_override: Option<Decimal>,
     /// Calendar date the unit was created, used to exclude pre-existing periods.
     #[serde(default)]
     pub created_on: Option<NaiveDate>,

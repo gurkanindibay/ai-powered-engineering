@@ -413,6 +413,7 @@ impl AppStateInner {
                 tenant_user_id: None,
                 virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
+                monthly_tariff_override: None,
                 created_on: None,
             });
         }
@@ -716,6 +717,7 @@ impl AppStateInner {
                 tenant_user_id: None,
                 virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
+                monthly_tariff_override: None,
                 created_on: None,
             });
         }

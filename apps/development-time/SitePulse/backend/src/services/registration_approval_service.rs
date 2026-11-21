@@ -380,6 +380,7 @@ impl RegistrationApprovalService {
                 tenant_user_id: if req.is_resident { Some(id) } else { None },
                 virtual_iban: None,
                 house_type: None,
+                monthly_tariff_override: None,
                 created_on: Some(Utc::now().date_naive()),
             });
         }
