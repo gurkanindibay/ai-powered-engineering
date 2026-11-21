@@ -344,10 +344,11 @@ pub async fn insert_accrued_due(
             .query(
                 r#"
                 SELECT person_id, GREATEST(start_date, $2::date),
-                       LEAST(COALESCE(end_date, $3::date), $3::date)
+                       LEAST(COALESCE(end_date - 1, $3::date), $3::date)
                 FROM unit_ownerships
                 WHERE unit_id = $1 AND start_date <= $3
                   AND COALESCE(end_date, 'infinity'::date) >= $2
+                  AND GREATEST(start_date, $2::date) <= LEAST(COALESCE(end_date - 1, $3::date), $3::date)
                 ORDER BY start_date, person_id
                 "#,
                 &[&unit, &start, &end],
@@ -629,11 +630,12 @@ pub async fn commit_accrual_batch(
                     .query(
                         r#"
                         SELECT person_id, GREATEST(start_date, $2::date),
-                               LEAST(COALESCE(end_date, $3::date), $3::date),
+                               LEAST(COALESCE(end_date - 1, $3::date), $3::date),
                                (SELECT tenant_person_id FROM units WHERE id = $1)
                         FROM unit_ownerships
                         WHERE unit_id = $1 AND start_date <= $3
                           AND COALESCE(end_date, 'infinity'::date) >= $2
+                          AND GREATEST(start_date, $2::date) <= LEAST(COALESCE(end_date - 1, $3::date), $3::date)
                         ORDER BY start_date, person_id
                         "#,
                         &[&unit, &period_start, &period_end],
