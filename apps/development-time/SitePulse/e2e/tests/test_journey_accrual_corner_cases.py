@@ -15,14 +15,12 @@ compare a full financial and household snapshot before and after.
 from __future__ import annotations
 
 import json
-import urllib.error
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
 import pytest
 
-from support.api import ApiError
+from support.api import ApiError, raw_call
 from support.journey_attempts import ledger_invariants
 from support.journey_snapshots import (
     financial_snapshot,
@@ -35,18 +33,6 @@ D = Decimal
 ZERO_SITE = "0|0|0|0|0|0|0:0:0:0:0|0|0|0"  # no payment, advance, liability or period rows yet
 
 
-def raw_call(api, method: str, path: str, token: str, body: object | None = None) -> tuple[int, str]:
-    data = json.dumps(body).encode() if body is not None else (b"{}" if method in ("POST", "PUT") else None)
-    request = urllib.request.Request(api.base + path, data=data, method=method)
-    request.add_header("Content-Type", "application/json")
-    request.add_header("Authorization", f"Bearer {token}")
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return response.status, response.read().decode()
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read().decode()
-
-
 AMOUNT_BUG = "BUG #287: accrue-period accepts a non-positive amount and accrues from the tariffs"
 
 
@@ -57,9 +43,9 @@ AMOUNT_BUG = "BUG #287: accrue-period accepts a non-positive amount and accrues 
     "period, amount, due, reason",
     [
         pytest.param("Ekim 2026", "0.00", "2026-10-10", "amount must be positive",
-                     marks=pytest.mark.xfail(strict=True, reason=AMOUNT_BUG), id="zero-amount"),
+                     marks=pytest.mark.xfail(strict=True, raises=pytest.fail.Exception, reason=AMOUNT_BUG), id="zero-amount"),
         pytest.param("Ekim 2026", "-1500.00", "2026-10-10", "amount must be positive",
-                     marks=pytest.mark.xfail(strict=True, reason=AMOUNT_BUG), id="negative-amount"),
+                     marks=pytest.mark.xfail(strict=True, raises=pytest.fail.Exception, reason=AMOUNT_BUG), id="negative-amount"),
         pytest.param("Ekim 2026", "1500.00", "2026-02-30", "due_date", id="invalid-date"),
         pytest.param("Ekim 2025", "1500.00", "2026-10-10", "outside period", id="date-outside-period"),
     ],
@@ -175,7 +161,7 @@ def test_move_out_with_an_advance_needs_a_second_approver(request, api, actors, 
             f"WHERE s.unit_id = {int(a2)};"
         )
         assert disbursements == ("1" if kind == "PAYOUT" else "0")
-        assert site  # the settlement belongs to this attempt's site only
+        assert stack.sql(f"SELECT site_id FROM advance_exit_settlements WHERE id = '{created['id']}';") == str(site)
 
 
 @pytest.mark.covers("SC-13-05-08")

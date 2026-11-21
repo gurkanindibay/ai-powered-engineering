@@ -12,8 +12,8 @@ from decimal import Decimal
 
 import pytest
 
+from support.api import raw_call
 from support.journey_snapshots import financial_snapshot, journey_site
-from test_journey_accrual_corner_cases import raw_call
 
 D = Decimal
 PERIOD, DUE = "Ekim 2026", "2026-10-10"
@@ -80,6 +80,7 @@ def test_each_period_status_allows_only_its_own_commands(request, api, actors, s
             code, body = accrue()
             assert code == 200 and '"already_accrued":true' in body.replace(" ", "")  # a duplicate creates nothing
             assert financial_snapshot(stack, site) == before
+            assert _audit_count(stack, site) == audit_before
         elif command == "reopen":
             code, body = raw_call(
                 api, "POST", f"/api/v1/dues/periods/{period_id}/reopen", token,

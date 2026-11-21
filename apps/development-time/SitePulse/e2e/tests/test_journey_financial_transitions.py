@@ -3,11 +3,11 @@
 Covers:
 - SC-13-09-02: A partial payment reduces the principal used for later fees
 - SC-13-09-06: Concurrent deliveries of the same bank event are credited once
-- SC-13-09-07: An unmatched statement item can be approved exactly once (strict xfail, see #288)
+- SC-13-09-07: An unmatched statement item can be approved exactly once (strict xfail, see #296)
 - SC-13-09-09: The aging bucket changes at each day boundary
 
-Expected values come from the fee schedule of the journey plan (0.5 per mille a day on the open
-principal, 2.50 a day on 1500.00), never from the response under test.
+Expected values come from the fee schedule of the journey plan (1/600 a day on the open
+principal, 2.50 a day on 1500.00, 5.00 over 3 days on 1000.00), never from the response under test.
 """
 from __future__ import annotations
 
@@ -18,7 +18,14 @@ from decimal import Decimal
 import pytest
 
 from support.journey_attempts import JourneyClock, ledger_invariants, make_viban
-from support.journey_snapshots import financial_snapshot, journey_site, money, open_items, unit_position
+from support.journey_snapshots import (
+    financial_snapshot,
+    journey_site,
+    money,
+    open_items,
+    reconciliation_queue_count,
+    unit_position,
+)
 
 D = Decimal
 ZERO = D("0.00")
@@ -95,14 +102,17 @@ def _import_unmatched_item(api, fixture) -> dict:
 def test_unmatched_statement_item_is_queued_and_changes_no_balance(request, api, actors, stack):
     with journey_site(request, api, actors, stack, "F5") as (fixture, _):
         a3 = fixture.unit_ids[2]
+        queue_before = reconciliation_queue_count(stack, fixture.site_id)
         before = financial_snapshot(stack, fixture.site_id).split("|")
         item = _import_unmatched_item(api, fixture)
         assert item["status"] == "UNMATCHED"
         assert money(item["transaction"]["amount"]) == D("1675.00")
         assert unit_position(api, fixture.manager, fixture.site_id, a3) == (D("1675.00"), ZERO)  # A-3 still owes
+        queue_after = reconciliation_queue_count(stack, fixture.site_id)
+        assert queue_after == queue_before + 1
         after = financial_snapshot(stack, fixture.site_id).split("|")
-        before[8] = str(int(before[8]) + 1)  # only the queue gained the item
-        assert after == before
+        assert after[:8] == before[:8]
+        assert after[9:] == before[9:]
 
 
 @pytest.mark.covers("SC-13-09-07")
@@ -111,7 +121,7 @@ def test_unmatched_statement_item_is_queued_and_changes_no_balance(request, api,
 @pytest.mark.xfail(
     strict=True,
     raises=AssertionError,
-    reason="BUG #288: no API assigns an unmatched statement item to a unit; confirm-reconciliation confirms 0 items",
+    reason="BUG #296: no API assigns an unmatched statement item to a unit; confirm-reconciliation confirms 0 items",
 )
 def test_unmatched_statement_item_can_be_assigned_and_approved_exactly_once(request, api, actors, stack):
     with journey_site(request, api, actors, stack, "F5") as (fixture, _):
@@ -158,13 +168,15 @@ def test_aging_bucket_changes_at_each_day_boundary(
         clock.advance_to((datetime.date(2026, 11, 10) + datetime.timedelta(days=days)).isoformat())
 
         report = api.debt_aging_report(fixture.manager, fixture.site_id)
-        bracket = next(b for b in report["brackets"] if str(b["unit_id"]) == str(a5) and b["debtor_type"] == "TENANT")
+        bracket = next((b for b in report["brackets"] if str(b["unit_id"]) == str(a5) and b["debtor_type"] == "TENANT"), None)
+        assert bracket is not None, f"Unit {a5} tenant bracket not found in aging report"
         for name in ADMIN_BUCKETS:
             assert money(bracket[name]) == (D("1500.00") if name == admin_bucket else ZERO), name
         assert money(bracket["accrued_delay_penalty"]) == D(fee)
 
         statement = api.resident_statement(fixture.manager, a5)
-        debtor = next(d for d in statement["debtors"] if d["debtor_type"] == "TENANT")
+        debtor = next((d for d in statement["debtors"] if d["debtor_type"] == "TENANT"), None)
+        assert debtor is not None, f"Unit {a5} tenant debtor not found in resident statement"
         for name in STATEMENT_BUCKETS:
             assert money(debtor[name]) == (D("1500.00") if name == statement_bucket else ZERO), name
         assert money(debtor["penalty_outstanding"]) == D(fee)

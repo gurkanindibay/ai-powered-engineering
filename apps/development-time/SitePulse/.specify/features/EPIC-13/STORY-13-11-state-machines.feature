@@ -64,13 +64,13 @@ Feature: Every status of the billing state machines is reached and left correctl
     And period "Ekim 2026" is <status>
     When the manager tries to <command> period "Ekim 2026"
     Then the result is <result>
-    And on refusal the period, its liabilities and the audit log are unchanged
+    And on refusal or duplicate the period, its liabilities and the audit log are unchanged
 
     Examples:
       | status | command      | result                                  |
       | DRAFT  | accrue       | accepted, status OPEN, 6 liabilities    |
       | DRAFT  | close        | refused                                 |
-      | OPEN   | accrue again | refused as a duplicate                  |
+      | OPEN   | accrue again | answered as already accrued             |
       | OPEN   | close        | accepted, status CLOSED with a snapshot |
       | CLOSED | accrue       | refused because the period is closed    |
       | CLOSED | close        | refused                                 |

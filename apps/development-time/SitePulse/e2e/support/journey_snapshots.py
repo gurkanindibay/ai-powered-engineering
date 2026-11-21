@@ -76,6 +76,12 @@ def financial_snapshot(stack: E2EStack, site_id: str) -> str:
     )
 
 
+def reconciliation_queue_count(stack: E2EStack, site_id: str) -> int:
+    """The number of bank statement items awaiting reconciliation for this site."""
+    return int(stack.sql(f"SELECT COUNT(*) FROM reconciliation_queue WHERE site_id = {int(site_id)};"))
+
+
+
 def unit_position(api: Api, manager: Session, site_id: str, unit_id: str) -> tuple[Decimal, Decimal]:
     """The unit's (debt, advance) summed over the debtors of its resident statement."""
     debtors = api.resident_statement(manager, unit_id)["debtors"]
