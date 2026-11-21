@@ -1,28 +1,28 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T10:08:19Z",
- "run_id": "20261121T100819Z-8404019",
- "commit": "840401937d13834e005cfc1ea878904ffe2123e3",
+ "generated_at": "2026-11-21T10:18:04Z",
+ "run_id": "20261121T101804Z-a6ff38c",
+ "commit": "a6ff38c572a7b628b473efcdc45a8f39a8a00bcd",
  "task": "master",
  "status": "DEFECT",
  "junit": {
-  "tests": 192,
+  "tests": 193,
   "failures": 0,
   "errors": 0,
   "skipped": 7,
-  "passed": 185,
-  "seconds": 2376.9,
+  "passed": 186,
+  "seconds": 2504.5,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 115,
-  "stories_with_scenarios": 115,
+  "stories": 116,
+  "stories_with_scenarios": 116,
   "stories_passing": 32,
-  "scenarios": 463,
-  "automated": 360,
-  "passing": 155,
-  "failing": 3,
+  "scenarios": 465,
+  "automated": 362,
+  "passing": 156,
+  "failing": 4,
   "no_result": 202,
   "planned": 103,
   "epics": 13,
@@ -201,13 +201,13 @@
   {
    "id": "EPIC-13",
    "title": "Site Admin Journeys",
-   "stories": 15,
-   "stories_with_scenarios": 15,
+   "stories": 16,
+   "stories_with_scenarios": 16,
    "stories_passing": 0,
-   "scenarios": 149,
-   "automated": 57,
-   "passing": 41,
-   "failing": 3,
+   "scenarios": 151,
+   "automated": 59,
+   "passing": 42,
+   "failing": 4,
    "no_result": 13,
    "planned": 92,
    "health": "failing"
@@ -2991,6 +2991,18 @@
    "name": "The manager statements match the eleven open rows and the site totals on 2027-04-10",
    "epic": "EPIC-13",
    "story": "STORY-13-25"
+  },
+  "SC-13-26-01": {
+   "state": "passing",
+   "name": "The onboarding attempt starts with no residential sites",
+   "epic": "EPIC-13",
+   "story": "STORY-13-26"
+  },
+  "SC-13-26-02": {
+   "state": "failing",
+   "name": "Two sites remain identifiable from onboarding through final reconciliation",
+   "epic": "EPIC-13",
+   "story": "STORY-13-26"
   }
  },
  "catalogue_history": [
@@ -3165,10 +3177,10 @@
   {
    "date": "2026-11-21",
    "epics": 13,
-   "stories": 115,
-   "stories_with_scenarios": 115,
-   "scenarios": 463,
-   "automated": 360
+   "stories": 116,
+   "stories_with_scenarios": 116,
+   "scenarios": 465,
+   "automated": 362
   }
  ],
  "recent_changes": [
@@ -3176,14 +3188,15 @@
    "date": "2026-11-21",
    "epic": "EPIC-13",
    "title": "Site Admin Journeys",
-   "new_stories": 3,
-   "new_scenarios": 20,
-   "newly_automated": 16,
-   "items": 3,
+   "new_stories": 4,
+   "new_scenarios": 22,
+   "newly_automated": 18,
+   "items": 4,
    "samples": [
     "STORY-13-13: Zero to multi-site financial journey",
     "STORY-13-14: Liability follows titles, vacancies and move-ins",
-    "STORY-13-25: Reconcile homeowner debt and operating cash by site"
+    "STORY-13-25: Reconcile homeowner debt and operating cash by site",
+    "STORY-13-26: Two-site journey from onboarding to reconciliation"
    ]
   },
   {
@@ -3888,5 +3901,5 @@
    ]
   }
  ],
- "href": "reports/44892277595-1/"
+ "href": "reports/44892666881-1/"
 }
