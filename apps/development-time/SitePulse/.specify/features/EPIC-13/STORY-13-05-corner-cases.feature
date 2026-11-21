@@ -68,7 +68,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ------------------------------------------------------------- occupancy
 
-  @SC-13-05-06 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager
+  @SC-13-05-06 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario: Moving out with debt keeps the debt and the history
     Given the site is in state F5
     And the clock has advanced to "2026-12-01" before any December accrual
@@ -200,7 +200,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     And the owner does not see the tenant's own receipts or contact details
     And the ledger invariants hold
 
-  @SC-13-05-18 @J-12 @depth:1 @state:F6 @layer:backend @core @role_manager
+  @SC-13-05-18 @J-12 @depth:1 @state:F6 @layer:backend @core @role_manager @linked
   Scenario: A tenant who left without notice is moved out at the real date and the owner takes over
     Given the site is in state F6
     And the clock has advanced to "2026-12-05" after "Aralık 2026" was accrued to "Mert Kılıç"

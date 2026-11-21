@@ -222,7 +222,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | 2026-11-18 | 2026-11-18 | 650.00  | 2026-11-18 | 1.08  |
       | 2026-11-05 | 2026-11-18 | 1300.00 | 2026-11-18 | 2.17  |
 
-  @SC-13-03-18 @J-10 @depth:1 @state:F5 @layer:backend @core @role_manager
+  @SC-13-03-18 @J-10 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   # Backend coverage: backend/tests/db_accrual_atomic_tests.rs (atomic accrual keeps debtor shares singular and repeat-safe).
   Scenario: A sale of a tenant-occupied unit with the same tenant is not split
     Given the site is in state F5
