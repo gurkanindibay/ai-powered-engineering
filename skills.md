@@ -372,6 +372,18 @@ python3 scripts/issue_claim.py release 123 --harness claude --session <id> --pr 
 python3 -m unittest discover -s tests/issue_claim
 ```
 
+## 5c-3b. PR Review Queue (`pr_review_queue.py`)
+
+- **Executable Script:** [scripts/pr_review_queue.py](file:///scripts/pr_review_queue.py)
+- **Purpose:** Tells the reviewer agent which open PRs need a review now (AGENTS.md rule 16): not a draft, CI finished, and no final bot verdict on the current head. Reasons: `new`, `new_head` (commits after the last review), `unfinished` (last bot review is a `COMMENT`). PRs still running CI are listed as `waiting_ci`. The bot's review history is the state.
+
+```bash
+python3 scripts/pr_review_queue.py             # ready PRs
+python3 scripts/pr_review_queue.py --json      # ready / waiting_ci / skipped with reasons
+python3 scripts/pr_review_queue.py --all --skip-author my-login
+python3 -m unittest discover -s tests/pr_review_queue
+```
+
 ## 5c-4. PR Review Bot (`review_bot.py`)
 
 - **Executable Script:** [scripts/review_bot.py](file:///scripts/review_bot.py)
