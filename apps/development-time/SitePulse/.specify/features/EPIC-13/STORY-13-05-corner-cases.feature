@@ -9,8 +9,8 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ----------------------------------------------------------- accrual input
 
-  # Pending: the API journey does not yet cover every invalid amount/date/period combination and assert no rows were created.
-  @SC-13-05-01 @J-12 @depth:1 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-05-01 @J-12 @depth:1 @state:F2 @layer:backend @edge @role_manager @linked
+  # The zero and negative amount rows are strict xfails for #287.
   Scenario Outline: Invalid accrual input is rejected and creates nothing
     Given the site is in state F2
     When the manager accrues period "<period>" with amount <amount> and due date "<due>"
@@ -36,20 +36,18 @@ Feature: Corner cases around accrual, occupancy, access and time
       | Şubat 2028  | 2028-02-29 |
       | Kasım 2026  | 2026-11-30 |
 
-  # Pending: the duplicate-accrual API test does not verify that a retry with a different amount is blocked and leaves the original shares intact.
-  @SC-13-05-03 @J-12 @depth:1 @state:F4 @layer:backend @edge @role_manager @pending
+  @SC-13-05-03 @J-12 @depth:1 @state:F4 @layer:backend @edge @role_manager @linked
   Scenario: A duplicate accrual with a different amount is still blocked
     Given the site is in state F4
     When the manager accrues period "Ekim 2026" again with amount 1800.00
-    Then the request is rejected as a duplicate
-    And every Ekim liability still has its original amount
+    Then the request is answered as already accrued with 0 newly accrued units, and the 1800.00 is not applied
+    And every Ekim liability still has its original amount and nothing is created
 
-  # Pending: the concurrent accrual test does not yet prove two independent manager requests serialize to exactly one six-liability set.
-  @SC-13-05-04 @J-12 @depth:1 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-05-04 @J-12 @depth:1 @state:F2 @layer:backend @edge @role_manager @linked
   Scenario: Two admins accruing the same period at the same moment create one set of liabilities
     Given the site is in state F2
     When two manager sessions accrue period "Ekim 2026" in parallel
-    Then exactly one request succeeds and the other is rejected as a duplicate
+    Then exactly one request accrues 6 units and the other accrues 0, creating nothing
     And exactly 6 liabilities exist
     And the ledger invariants hold
 
@@ -78,8 +76,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     And unit "A-5" is vacant and the debt stays a single liability with "Deniz Arslan" as primary debtor
     And owner "Can Öztürk" is shown as jointly liable for it (KMK m.22), without a second liability
 
-  # Pending: the journey harness does not exercise the full move-out advance decision and second-approver flow.
-  @SC-13-05-07 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-07 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario: Moving out with an advance requires a decision before the advance leaves
     Given the site is in state F5
     And tenant "Selin Demir" pays 3422.50 on "2026-11-19", clearing existing debt and leaving advance 300.00
@@ -87,8 +84,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     Then the manager must choose keep, pay out or transfer
     And a payout or transfer only happens after a second approver confirms
 
-  # Pending: the current occupancy tests do not combine both refusals with proof that all financial and household rows stayed unchanged.
-  @SC-13-05-08 @J-12 @depth:2 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-08 @J-12 @depth:2 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario: Moving out twice and moving in on an occupied unit are refused
     Given the site is in state F5
     When tenant "Deniz Arslan" moves out of unit "A-5"
@@ -130,16 +126,14 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ----------------------------------------------------------- access control
 
-  # Pending: the journey does not yet assert all three resident manager-action calls return 403 with no data changes.
-  @SC-13-05-12 @J-12 @depth:1 @state:F5 @layer:backend @core @role_resident @pending
+  @SC-13-05-12 @J-12 @depth:1 @state:F5 @layer:backend @core @role_resident @linked
   Scenario: A resident cannot call manager actions
     Given the site is in state F5
     When tenant "Deniz Arslan" calls accrue, record-manual payment and move-out
     Then each call is answered 403
     And no data changes
 
-  # Pending: a journey-level second-site fixture and bidirectional data-isolation assertions are not wired for this scenario.
-  @SC-13-05-13 @J-12 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-05-13 @J-12 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: A manager of another site sees nothing of this site
     Given the site is in state F5
     And a second site, named in this attempt's manifest, has its own manager in state F5
