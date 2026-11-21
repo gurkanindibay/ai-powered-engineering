@@ -50,7 +50,7 @@ async fn accrue(
         Json(AccrueDuesPeriodRequest {
             site_id: SITE.to_string(),
             period: period.to_string(),
-            amount: Decimal::ZERO,
+            amount: None,
             due_date: due,
         }),
     )
@@ -159,4 +159,52 @@ async fn when_a_unit_has_no_tariff_then_it_is_listed_as_skipped_with_the_reason(
         resp.skipped_units
     );
     assert!(resp.message.contains("1 daire atlandı"), "{}", resp.message);
+}
+
+// covers: SC-13-05-01
+#[tokio::test]
+async fn when_accrual_amount_is_zero_or_negative_then_it_is_rejected_and_creates_nothing() {
+    let state = site_with_two_units().await;
+    for invalid_amount in [Decimal::ZERO, d("-1500.00"), d("-0.01")] {
+        let res = sitepulse_backend::handlers::accrue_monthly_dues(
+            State(state.clone()),
+            sitepulse_backend::tenancy::TenantScope::platform(),
+            Json(AccrueDuesPeriodRequest {
+                site_id: SITE.to_string(),
+                period: "2026-10".to_string(),
+                amount: Some(invalid_amount),
+                due_date: day(2026, 10, 15),
+            }),
+        )
+        .await;
+        let (status, reason) = res.expect_err("non-positive amount must be rejected");
+        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+        assert!(reason.contains("amount must be positive"), "got: {reason}");
+    }
+    let inner = state.inner.read().await;
+    assert_eq!(inner.dues.len(), 0);
+    assert_eq!(inner.dues_periods.len(), 0);
+}
+
+// covers: SC-13-05-01
+#[tokio::test]
+async fn when_accrual_amount_is_omitted_or_none_then_it_accrues_from_tariffs() {
+    let state = site_with_two_units().await;
+    let res = sitepulse_backend::handlers::accrue_monthly_dues(
+        State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        Json(AccrueDuesPeriodRequest {
+            site_id: SITE.to_string(),
+            period: "2026-10".to_string(),
+            amount: None,
+            due_date: day(2026, 10, 15),
+        }),
+    )
+    .await;
+    let (status, Json(resp)) = res.expect("omitted amount should succeed using tariffs");
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(resp.newly_accrued_units_count, 2);
+    let inner = state.inner.read().await;
+    assert_eq!(inner.dues.len(), 2);
+    assert_eq!(inner.dues_periods.len(), 1);
 }

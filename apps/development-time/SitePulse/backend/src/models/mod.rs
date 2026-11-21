@@ -769,11 +769,11 @@ impl DuesLiability {
 pub struct AccrueDuesPeriodRequest {
     pub site_id: String,
     pub period: String,
-    /// A typed amount for every unit. Omitted or zero (the normal case): each
-    /// unit is charged its share of the operating budget in force, else its
-    /// house-type tariff.
+    /// A typed amount for every unit. Omitted or null: each unit is charged
+    /// its share of the operating budget in force, else its house-type tariff.
+    /// If provided, it must be positive (> 0); non-positive amounts are rejected.
     #[serde(default)]
-    pub amount: Decimal,
+    pub amount: Option<Decimal>,
     pub due_date: NaiveDate,
 }
 

@@ -106,7 +106,7 @@ async fn manual_accrue(state: &AppState) {
         site_id: SITE.to_string(),
         period: "2026-10".to_string(),
         due_date: date("2026-10-15"),
-        amount: Decimal::ZERO,
+        amount: None,
     };
     let (status, _) = sitepulse_backend::handlers::accrue_monthly_dues(
         axum::extract::State(state.clone()),
@@ -182,7 +182,7 @@ async fn when_manual_accrual_runs_then_it_uses_the_same_occupancy_shares_as_the_
         site_id: SITE.to_string(),
         period: "2026-10".to_string(),
         due_date: date("2026-10-15"),
-        amount: Decimal::ZERO,
+        amount: None,
     };
     let (status, _) = sitepulse_backend::handlers::accrue_monthly_dues(
         axum::extract::State(state.clone()),

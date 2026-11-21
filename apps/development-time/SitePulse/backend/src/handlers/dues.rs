@@ -141,6 +141,14 @@ pub async fn accrue_monthly_dues(
             ),
         ));
     }
+    if let Some(amt) = payload.amount {
+        if amt <= Decimal::ZERO {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "amount must be positive".to_string(),
+            ));
+        }
+    }
     let period_key = billing_period.key();
     let period_label = billing_period.label();
 
@@ -185,7 +193,7 @@ pub async fn accrue_monthly_dues(
         let in_force = budgets::budget_in_force(&inner, &payload.site_id, payload.due_date)
             .map(|b| (b.id.clone(), b.fiscal_year));
         let required = budgets::site_requires_budget(&inner, &payload.site_id);
-        if payload.amount > Decimal::ZERO {
+        if payload.amount.is_some() {
             if let Some((id, year)) = &in_force {
                 return Err((
                     StatusCode::CONFLICT,
@@ -221,9 +229,9 @@ pub async fn accrue_monthly_dues(
         )> = Vec::new();
         let mut skipped: Vec<String> = Vec::new();
         for unit in &units_in_site {
-            let basis = if payload.amount > Decimal::ZERO {
+            let basis = if let Some(typed_amount) = payload.amount {
                 Ok(budgets::DuesBasis {
-                    amount: payload.amount,
+                    amount: typed_amount,
                     operating_budget_id: None,
                 })
             } else {

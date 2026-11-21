@@ -1859,7 +1859,7 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
         // The canonical month of the due date (STORY-07-08).
         period: sitepulse_backend::domain::billing_period::BillingPeriod::of_date(not_yet_due)
             .key(),
-        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        amount: Some(Decimal::from_str_exact("1400.00").unwrap()),
         // Not yet due by the real clock, so the offset is exactly the principal.
         due_date: not_yet_due,
     };
@@ -1933,7 +1933,7 @@ async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() 
     let accrue_req = AccrueDuesPeriodRequest {
         site_id: "site-1".to_string(),
         period: "Kasım 2026".to_string(),
-        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        amount: Some(Decimal::from_str_exact("1400.00").unwrap()),
         due_date: NaiveDate::from_ymd_opt(2026, 11, 15).unwrap(),
     };
 

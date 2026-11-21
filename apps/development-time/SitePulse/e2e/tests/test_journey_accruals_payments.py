@@ -273,7 +273,7 @@ def test_overpayment_becomes_advance_offsetting_next_accrual(request, api, actor
         assert Decimal(str(debtor["total_outstanding"])) == Decimal("0.00")
         assert Decimal(str(debtor["advance_balance"])) == Decimal("202.50")
 
-        api.accrue_period(fixture.manager, "Aralık 2026", Decimal("0.00"), "2026-12-10")
+        api.accrue_period(fixture.manager, "Aralık 2026", None, "2026-12-10")
 
         stmt2 = api.resident_statement(fixture.manager, u5)
         debtor2 = next(d for d in stmt2["debtors"] if d["debtor_type"] == "TENANT")
