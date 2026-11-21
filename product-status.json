@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T05:36:55Z",
- "run_id": "20261121T053654Z-71a1a50",
- "commit": "71a1a50a2d6f20ea8bd0df85561ea41a077de0f2",
+ "generated_at": "2026-11-21T05:58:10Z",
+ "run_id": "20261121T055810Z-876b08d",
+ "commit": "876b08d5500a93ff4993bd80b16cf628e5cd3798",
  "task": "master",
  "status": "DEFECT",
  "junit": {
-  "tests": 191,
+  "tests": 192,
   "failures": 0,
   "errors": 0,
   "skipped": 7,
-  "passed": 184,
-  "seconds": 2318.9,
+  "passed": 185,
+  "seconds": 2301.1,
   "files": 8,
   "unparseable": []
  },
@@ -20,11 +20,11 @@
   "stories_with_scenarios": 115,
   "stories_passing": 32,
   "scenarios": 462,
-  "automated": 358,
-  "passing": 153,
+  "automated": 359,
+  "passing": 154,
   "failing": 3,
   "no_result": 202,
-  "planned": 104,
+  "planned": 103,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 1
@@ -205,11 +205,11 @@
    "stories_with_scenarios": 15,
    "stories_passing": 0,
    "scenarios": 149,
-   "automated": 56,
-   "passing": 40,
+   "automated": 57,
+   "passing": 41,
    "failing": 3,
    "no_result": 13,
-   "planned": 93,
+   "planned": 92,
    "health": "failing"
   }
  ],
@@ -2867,7 +2867,7 @@
    "story": "STORY-13-12"
   },
   "SC-13-13-01": {
-   "state": "planned",
+   "state": "passing",
    "name": "Onboard two sites and create all eighty-eight units from zero",
    "epic": "EPIC-13",
    "story": "STORY-13-13"
@@ -3162,7 +3162,7 @@
    "stories": 115,
    "stories_with_scenarios": 115,
    "scenarios": 462,
-   "automated": 358
+   "automated": 359
   }
  ],
  "recent_changes": [
@@ -3172,7 +3172,7 @@
    "title": "Site Admin Journeys",
    "new_stories": 3,
    "new_scenarios": 20,
-   "newly_automated": 15,
+   "newly_automated": 16,
    "items": 3,
    "samples": [
     "STORY-13-13: Zero to multi-site financial journey",
@@ -3870,5 +3870,5 @@
    ]
   }
  ],
- "href": "reports/44870628950-1/"
+ "href": "reports/44872342428-1/"
 }
