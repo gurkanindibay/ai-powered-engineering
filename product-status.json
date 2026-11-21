@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T14:30:39Z",
- "run_id": "20261121T143039Z-340b59e",
- "commit": "340b59ebacf4a90cff9313f830aa9bf59f882f7d",
+ "generated_at": "2026-11-21T14:58:58Z",
+ "run_id": "20261121T145857Z-cd712e6",
+ "commit": "cd712e68f87e94382d607df24cc3e018a09eee47",
  "task": "master",
- "status": "PASS",
+ "status": "DEFECT",
  "junit": {
-  "tests": 196,
+  "tests": 214,
   "failures": 0,
   "errors": 0,
-  "skipped": 1,
-  "passed": 195,
-  "seconds": 2549.9,
+  "skipped": 6,
+  "passed": 208,
+  "seconds": 2612.6,
   "files": 8,
   "unparseable": []
  },
@@ -20,14 +20,14 @@
   "stories_with_scenarios": 116,
   "stories_passing": 33,
   "scenarios": 465,
-  "automated": 369,
-  "passing": 163,
-  "failing": 0,
+  "automated": 386,
+  "passing": 175,
+  "failing": 5,
   "no_result": 206,
-  "planned": 96,
+  "planned": 79,
   "epics": 13,
   "epics_verified": 2,
-  "epics_failing": 0
+  "epics_failing": 1
  },
  "epics": [
   {
@@ -205,12 +205,12 @@
    "stories_with_scenarios": 16,
    "stories_passing": 1,
    "scenarios": 151,
-   "automated": 66,
-   "passing": 49,
-   "failing": 0,
+   "automated": 83,
+   "passing": 61,
+   "failing": 5,
    "no_result": 17,
-   "planned": 85,
-   "health": "in_progress"
+   "planned": 68,
+   "health": "failing"
   }
  ],
  "scenarios": {
@@ -2105,7 +2105,7 @@
    "story": "STORY-13-01"
   },
   "SC-13-01-01": {
-   "state": "planned",
+   "state": "failing",
    "name": "A site with no data shows empty states, not errors",
    "epic": "EPIC-13",
    "story": "STORY-13-01"
@@ -2123,19 +2123,19 @@
    "story": "STORY-13-01"
   },
   "SC-13-01-04": {
-   "state": "planned",
+   "state": "passing",
    "name": "Units with no people show as unassigned and cannot be billed to anyone",
    "epic": "EPIC-13",
    "story": "STORY-13-01"
   },
   "SC-13-01-05": {
-   "state": "planned",
+   "state": "failing",
    "name": "The manager can add the first owner and tenant from an empty unit",
    "epic": "EPIC-13",
    "story": "STORY-13-01"
   },
   "SC-13-01-06": {
-   "state": "planned",
+   "state": "passing",
    "name": "People without a billing period have no debt and a clear first action",
    "epic": "EPIC-13",
    "story": "STORY-13-01"
@@ -2171,13 +2171,13 @@
    "story": "STORY-13-01"
   },
   "SC-13-01-11": {
-   "state": "planned",
+   "state": "passing",
    "name": "Accruing the same period again after residents arrive is blocked, not doubled",
    "epic": "EPIC-13",
    "story": "STORY-13-01"
   },
   "SC-13-01-12": {
-   "state": "planned",
+   "state": "failing",
    "name": "Growing the site from F0 to F2 through the screens keeps every page consistent",
    "epic": "EPIC-13",
    "story": "STORY-13-01"
@@ -2189,13 +2189,13 @@
    "story": "STORY-13-01"
   },
   "SC-13-02-01": {
-   "state": "planned",
+   "state": "passing",
    "name": "Residents with a single accrual period show one debt each on every screen",
    "epic": "EPIC-13",
    "story": "STORY-13-02"
   },
   "SC-13-02-02": {
-   "state": "planned",
+   "state": "failing",
    "name": "The resident sees exactly what the admin sees for the same unit",
    "epic": "EPIC-13",
    "story": "STORY-13-02"
@@ -2207,7 +2207,7 @@
    "story": "STORY-13-02"
   },
   "SC-13-02-04": {
-   "state": "planned",
+   "state": "passing",
    "name": "Multiple periods with mixed debts add up per unit and per site",
    "epic": "EPIC-13",
    "story": "STORY-13-02"
@@ -2417,19 +2417,19 @@
    "story": "STORY-13-04"
   },
   "SC-13-04-07": {
-   "state": "planned",
+   "state": "passing",
    "name": "The same bank transaction sent twice is applied once",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
   },
   "SC-13-04-08": {
-   "state": "planned",
+   "state": "passing",
    "name": "Two transfers for one unit at the same moment are both applied",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
   },
   "SC-13-04-09": {
-   "state": "planned",
+   "state": "passing",
    "name": "A transfer matched to another site is applied only there",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
@@ -2441,13 +2441,13 @@
    "story": "STORY-13-04"
   },
   "SC-13-04-11": {
-   "state": "planned",
+   "state": "passing",
    "name": "A correction after a partial payment moves the paid amount to the advance",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
   },
   "SC-13-04-12": {
-   "state": "planned",
+   "state": "passing",
    "name": "The requester of a correction cannot approve it",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
@@ -2459,19 +2459,19 @@
    "story": "STORY-13-04"
   },
   "SC-13-04-14": {
-   "state": "planned",
+   "state": "passing",
    "name": "A payment reversal restores the debt it settled and the fee it stopped",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
   },
   "SC-13-04-15": {
-   "state": "planned",
+   "state": "failing",
    "name": "A unit-level transfer on a unit with several debtors waits for the manager",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
   },
   "SC-13-04-16": {
-   "state": "planned",
+   "state": "passing",
    "name": "A payment for a unit with no debt becomes the payer's advance",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
@@ -3180,7 +3180,7 @@
    "stories": 116,
    "stories_with_scenarios": 116,
    "scenarios": 465,
-   "automated": 369
+   "automated": 386
   }
  ],
  "recent_changes": [
@@ -3190,7 +3190,7 @@
    "title": "Site Admin Journeys",
    "new_stories": 4,
    "new_scenarios": 22,
-   "newly_automated": 25,
+   "newly_automated": 42,
    "items": 4,
    "samples": [
     "STORY-13-13: Zero to multi-site financial journey",
@@ -3901,5 +3901,5 @@
    ]
   }
  ],
- "href": "reports/44913134332-1/"
+ "href": "reports/44914406370-1/"
 }
