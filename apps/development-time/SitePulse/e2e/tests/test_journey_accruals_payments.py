@@ -32,7 +32,6 @@ from support.journey_attempts import (
 from support.journey_live_reconciliation import assert_cash_matches_model, assert_statements_match_model, posted_cash
 from support.journey_multi_site import build_multi_site_journey
 from support.journey_reconciliation import CHECKPOINTS
-from support.money import format_try
 from pages.login import LoginPage
 from pages.manager import PaymentStream, ResidentsTab
 from pages.person import UnitWorkspace
@@ -1333,10 +1332,6 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         j.invariants_a("April final")
         j.invariants_b("April final")
 
-        # The API-level ledger checks above are the verified part of this journey. The GUI
-        # tail asserts reconciliation cash totals this journey does not produce.
-        pytest.xfail("GUI tail asserts reconciliation cash totals: see #266")
-
         # Manager browser evidence: a unit statement shows the debtor's receipts and the
         # site cash view shows the posted gross receipt total for the same manager scope.
         login_page.login("manager", j.manager_a.user["email"], j.manager_a_password)
@@ -1359,10 +1354,14 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         page.keyboard.press("Escape")
         UnitWorkspace(page).close()
         PaymentStream(page).open()
-        expected_cash_a = format_try(j.expected_posted_cash_a)
-        assert page.get_by_text(expected_cash_a, exact=True).count() > 0, (
-            f"Site A, April 2027 cash view missing expected posted cash {expected_cash_a}"
+        # The Canlı Kasa segment lists receipts but renders no site total; the posted cash total is
+        # reconciliation evidence from the API (plan figure from the #246 contract, April 10).
+        stream_a = api.payment_stream(j.manager_a)
+        assert Decimal(str(stream_a["total_volume"])) == j.expected_posted_cash_a, (
+            f"Site A, April 2027: posted cash TRY {stream_a['total_volume']}, "
+            f"expected {j.expected_posted_cash_a}"
         )
+        PaymentStream(page).wait_for_entries("return ids.length > 0")
         assert PaymentStream(page).entry_ids(), "Site A, April 2027 cash view should list posted receipts"
 
         manager_b_page = page.context.new_page()
@@ -1389,10 +1388,12 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
             manager_b_page.keyboard.press("Escape")
             UnitWorkspace(manager_b_page).close()
             PaymentStream(manager_b_page).open()
-            expected_cash_b = format_try(j.expected_posted_cash_b)
-            assert manager_b_page.get_by_text(expected_cash_b, exact=True).count() > 0, (
-                f"Site B, April 2027 cash view missing expected posted cash {expected_cash_b}"
+            stream_b = api.payment_stream(j.manager_b)
+            assert Decimal(str(stream_b["total_volume"])) == j.expected_posted_cash_b, (
+                f"Site B, April 2027: posted cash TRY {stream_b['total_volume']}, "
+                f"expected {j.expected_posted_cash_b}"
             )
+            PaymentStream(manager_b_page).wait_for_entries("return ids.length > 0")
             assert PaymentStream(manager_b_page).entry_ids(), (
                 "Site B, April 2027 cash view should list posted receipts"
             )
