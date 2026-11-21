@@ -188,3 +188,15 @@ As a site manager, I need an end-to-end interconnected lifecycle journey that wa
 - Checkpoint 7: Replacing tenants and transferring unit titles preserves historical liabilities and attaches debt strictly to responsible parties.
 - Checkpoint 8: Server restarts verify state persistence, tenant isolation, and absence of cross-site leakage.
 
+### STORY-13-13: Zero to multi-site financial journey
+
+As a residential site operator, I can onboard multiple residential sites from zero, create all units and residents, accrue multiple periods with fixed tariffs and zero grace days, and track payment histories across mixed settlements, designated later payments, occupancy departures, title transfers, and vacancies.
+
+#### Acceptance criteria
+
+- Two residential sites (Site A with 24 units, Site B with 64 units across two blocks) are onboarded from an empty state with zero initial liabilities.
+- Accruals across January through April 2027 charge 24 units at TRY 1,000.00 in Site A (TRY 24,000.00/month) and 64 units at TRY 750.00 in Site B (TRY 48,000.00/month) on the first of each month under zero grace days.
+- Monthly receipts on the 10th allocate payments fee-first and oldest-principal-first within the applicable debtor's charges, or settle designated later periods while leaving intervening unpaid months with their own late fees.
+- Units with consecutive unpaid periods (A-03, B2-01) maintain the paid → unpaid → unpaid → paid history after designated later payments.
+- Checkpoint balances preserve debtor scoping across transitions, with intermediate histories clearly distinguishing paid, partial, and unpaid charges before and after designated later settlements (occupancy isolation is specified in STORY-13-14; cash reconciliation in STORY-13-25).
+
