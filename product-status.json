@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T16:53:27Z",
- "run_id": "20261121T165326Z-4c004e0",
- "commit": "4c004e072b170e22c20cbbb995735d21c3082d41",
+ "generated_at": "2026-11-21T17:25:19Z",
+ "run_id": "20261121T172518Z-e3ae755",
+ "commit": "e3ae75559235da27f541b8b7fdad02efa5cd9d21",
  "task": "master",
  "status": "DEFECT",
  "junit": {
   "tests": 272,
   "failures": 0,
   "errors": 0,
-  "skipped": 7,
-  "passed": 265,
-  "seconds": 2808.2,
+  "skipped": 6,
+  "passed": 266,
+  "seconds": 2828.1,
   "files": 8,
   "unparseable": []
  },
@@ -21,8 +21,8 @@
   "stories_passing": 33,
   "scenarios": 465,
   "automated": 415,
-  "passing": 200,
-  "failing": 6,
+  "passing": 201,
+  "failing": 5,
   "no_result": 209,
   "planned": 50,
   "epics": 13,
@@ -206,8 +206,8 @@
    "stories_passing": 1,
    "scenarios": 151,
    "automated": 109,
-   "passing": 86,
-   "failing": 6,
+   "passing": 87,
+   "failing": 5,
    "no_result": 17,
    "planned": 42,
    "health": "failing"
@@ -2729,7 +2729,7 @@
    "story": "STORY-13-09"
   },
   "SC-13-09-07": {
-   "state": "failing",
+   "state": "passing",
    "name": "An unmatched statement item can be approved exactly once",
    "epic": "EPIC-13",
    "story": "STORY-13-09"
@@ -3926,5 +3926,5 @@
    ]
   }
  ],
- "href": "reports/44926215713-1/"
+ "href": "reports/44929007604-1/"
 }
