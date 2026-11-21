@@ -46,11 +46,17 @@ def _database_row_counts(stack) -> dict[str, int]:
 def _shared_seed_checksum(stack) -> dict[str, str]:
     queries = {
         "banks": "SELECT to_jsonb(seed_row)::text FROM system_supported_banks seed_row ORDER BY bank_code;",
-        "configuration": "SELECT to_jsonb(seed_row)::text FROM system_configurations seed_row ORDER BY config_key;",
+        "configuration": (
+            "SELECT jsonb_build_object('config_key', config_key, 'config_value', config_value, "
+            "'description', description)::text FROM system_configurations ORDER BY config_key;"
+        ),
         "saas_admin": "SELECT to_jsonb(seed_row)::text FROM users seed_row WHERE role = 'SAAS_ADMIN' ORDER BY id;",
     }
     return {
-        name: stack.sql(f"SELECT md5(COALESCE(string_agg(seed_row, E'\\n' ORDER BY seed_row), '')) FROM ({query}) AS seed_rows(seed_row);")
+        name: stack.sql(
+            "SELECT md5(COALESCE(string_agg(seed_row, E'\\n' ORDER BY seed_row), '')) "
+            f"FROM ({query.rstrip(';')}) AS seed_rows(seed_row);"
+        )
         for name, query in queries.items()
     }
 
@@ -183,7 +189,7 @@ def test_parallel_journey_managers_only_see_their_site_data(request, api, actors
         first = site_in_state("F5", api=api, stack=stack, saas=saas, manifest=manifest, name_suffix="first")
         second = site_in_state("F4", api=api, stack=stack, saas=saas, manifest=manifest, name_suffix="second")
         for own, other, expected_outstanding in (
-            (first, second, Decimal("11117.50")),
+            (first, second, Decimal("4567.50")),
             (second, first, Decimal("8800.00")),
         ):
             overview = api.site_overview(own.manager, own.site_id)

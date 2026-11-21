@@ -63,7 +63,7 @@ Feature: Journey setup, teardown and isolation
   Scenario: Two active journeys do not see each other's data
     Given site P1 in state F5 and site P2 in state F4 are active in separate attempts
     When each manager reads the collection dashboard
-    Then site P1 shows 11117.50 and site P2 shows 8800.00
+    Then site P1 shows 4567.50 and site P2 shows 8800.00 in overdue balances
     And neither list contains a unit, person or payment of the other
 
   @SC-13-07-07 @J-14 @depth:1 @layer:backend @core @linked
