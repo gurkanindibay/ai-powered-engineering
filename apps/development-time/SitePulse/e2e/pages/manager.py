@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 
 from playwright.sync_api import Page, expect
 
@@ -62,6 +63,57 @@ class ResidentsTab:
         by_id(self.page, "add_resident_btn").click()
         return AddResidentForm(self.page).wait()
 
+    def start_add_block(self) -> "AddBlockForm":
+        """Open the block & units form (#285); the manager builds the site structure first."""
+        by_id(self.page, "btn_add_block").click()
+        return AddBlockForm(self.page).wait()
+
+
+class AddBlockForm:
+    """'Blok ve Daireleri Ekle': creates a block with its units and an optional tariff (#285)."""
+
+    def __init__(self, page: Page):
+        self.page = page
+
+    def wait(self) -> "AddBlockForm":
+        by_id(self.page, "block_form_name").wait_for(timeout=10_000)
+        return self
+
+    def fill(
+        self,
+        block_name: str,
+        *,
+        start_unit: int = 1,
+        unit_count: int = 7,
+        total_floors: int | None = None,
+        house_type: str | None = None,
+        monthly_dues: str | None = None,
+    ) -> "AddBlockForm":
+        fill(self.page, "block_form_name", block_name)
+        fill(self.page, "block_form_start_unit", str(start_unit))
+        fill(self.page, "block_form_unit_count", str(unit_count))
+        if total_floors is not None:
+            fill(self.page, "block_form_total_floors", str(total_floors))
+        if house_type is not None:
+            fill(self.page, "block_form_house_type", house_type)
+        if monthly_dues is not None:
+            fill(self.page, "block_form_monthly_dues", monthly_dues)
+        return self
+
+    def save(self) -> None:
+        """Submit; waits for the form to close, or reports the refused-create reason."""
+        by_id(self.page, "btn_save_block_units").click()
+        error = by_id(self.page, "block_form_error")
+        form = by_id(self.page, "block_form_name")
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if error.count() > 0:
+                raise AssertionError(f"block create refused: {text_of(error)}")
+            if form.count() == 0:
+                return
+            self.page.wait_for_timeout(100)
+        raise AssertionError("block create did not finish")
+
 
 class AddResidentForm:
     """The module's 'Yeni Daire / Sakin Tanımla' page; the owner is a person card (REQ-042)."""
@@ -74,11 +126,34 @@ class AddResidentForm:
         return self
 
     def fill(self, unit_no: str, full_name: str, email: str, phone: str,
-             reuse_existing: bool = False) -> "AddResidentForm":
+             reuse_existing: bool = False, house_type: str | None = None,
+             occupancy: str | None = None) -> "AddResidentForm":
         fill(self.page, "module_new_resident_unit", unit_no)
         PersonPicker(self.page, "module_new_resident_name").create(
             full_name, phone=phone, email=email, reuse_existing=reuse_existing)
+        if occupancy is not None:
+            self._set_occupancy(occupancy)
+        if house_type is not None:
+            self._set_house_type(house_type)
         return self
+
+    def _set_occupancy(self, label: str) -> None:
+        """Choose 'Malik Oturuyor', 'Daire Kirada' or 'Boş Daire' on the registration page."""
+        selector = by_id(self.page, "module_occupancy_status_selector")
+        selector.wait_for(timeout=10_000)
+        selector.get_by_text(label, exact=True).click()
+        self.page.wait_for_timeout(150)
+
+    def _set_house_type(self, type_name: str) -> None:
+        """Choose the unit's existing tariff from the registration page's house type menu."""
+        dropdown = by_id(self.page, "module_new_resident_house_type")
+        dropdown.wait_for(timeout=10_000)
+        dropdown.click()
+        # Flutter exposes the menu items as role=menuitem with the tariff in their accessible name.
+        option = self.page.get_by_role("menuitem", name=re.compile(rf"^{re.escape(type_name)} \(")).last
+        option.wait_for(timeout=5_000)
+        option.click()
+        self.page.wait_for_timeout(150)
 
     def save(self) -> None:
         """Save, then dismiss the 'Sakin Kaydedildi!' confirmation and close the module."""

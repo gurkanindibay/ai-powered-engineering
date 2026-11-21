@@ -20,6 +20,7 @@ import '../components/unit_matching_criteria_card.dart';
 import '../components/virtual_iban_card.dart';
 import '../components/house_types_modal.dart';
 import '../residents/owners_residents_module_page.dart';
+import '../residents/block_units_create_page.dart';
 import '../residents/resident_household_member_page.dart';
 import '../residents/unit_directory_row.dart';
 import '../theme/app_theme.dart';
@@ -737,6 +738,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
+            testId(
+              'btn_add_block',
+              OutlinedButton.icon(
+                key: const Key('btn_add_block'),
+                onPressed: _openAddBlock,
+                icon: const Icon(Icons.apartment, size: 15),
+                label: const Text('Blok & Daire Ekle'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.accentCyan,
+                  side: const BorderSide(color: AppColors.accentCyan),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  minimumSize: const Size(0, 30),
+                ),
+              ),
+            ),
             OutlinedButton.icon(
               onPressed: _showManageHouseTypesDialog,
               icon: const Icon(Icons.home_work_outlined, size: 15),
@@ -899,6 +916,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (_) => OwnersResidentsModulePage(controller: widget.controller, openAddResident: true),
     );
+  }
+
+  /// Opens the block & units form; the manager builds site structure before
+  /// registering anyone in it (#285).
+  void _openAddBlock() {
+    unawaited(showBlockUnitsCreatePage(context, widget.controller));
   }
 
   Widget _buildOccupancyFilterChip(String label, String code) {
