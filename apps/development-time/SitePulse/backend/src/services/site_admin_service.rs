@@ -1,12 +1,12 @@
-use chrono::{Datelike, Utc};
+use chrono::Utc;
 use regex::Regex;
 use std::sync::LazyLock;
 
 use rust_decimal::Decimal;
 
 use crate::models::{
-    AuthProvider, DebtStatus, DebtorType, DuesLiability, ExpenseType, HomeOwnerResponse,
-    IndependentUnit, OccupancyStatus, RegisterHomeOwnerRequest, Role, UnitMemberDto, User,
+    AuthProvider, DebtStatus, DebtorType, HomeOwnerResponse, IndependentUnit, OccupancyStatus,
+    RegisterHomeOwnerRequest, Role, UnitMemberDto, User,
 };
 use crate::services::account_activation_service::{
     self as activation, AccountActivationService, ActivationPurpose, IssuedToken,
@@ -849,37 +849,6 @@ impl SiteAdminService {
                 }
             }
 
-            // Insert due liability if dues > 0 and NOT co-resident
-            if !is_resident_only && monthly_dues > Decimal::ZERO {
-                let now = Utc::now();
-                let month_name = match now.month() {
-                    1 => "Ocak",
-                    2 => "Şubat",
-                    3 => "Mart",
-                    4 => "Nisan",
-                    5 => "Mayıs",
-                    6 => "Haziran",
-                    7 => "Temmuz",
-                    8 => "Ağustos",
-                    9 => "Eylül",
-                    10 => "Ekim",
-                    11 => "Kasım",
-                    12 => "Aralık",
-                    _ => "Ocak",
-                };
-                let period = format!("{} {}", month_name, now.year());
-                let due_date = now.date_naive() + chrono::Days::new(15);
-                client
-                    .execute(
-                        r#"
-                        INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, delay_penalty, paid_amount)
-                        VALUES ($1, $2, $3, $4, 'PENDING', 0.00, 0.00)
-                        ON CONFLICT DO NOTHING
-                        "#,
-                        &[&unit_numeric_id, &period, &monthly_dues, &due_date],
-                    )
-                    .await.map_err(|e| e.to_string())?;
-            }
             client
                 .commit()
                 .await
@@ -1190,62 +1159,6 @@ impl SiteAdminService {
             inner
                 .unit_occupancies
                 .insert(format!("d-{}", request.unit_no), cloned);
-        }
-
-        // Also add due liability in memory if > 0 and NOT a co-resident
-        if !is_resident_only && monthly_dues > Decimal::ZERO {
-            let period = inner
-                .dues
-                .first()
-                .map(|d| d.period.clone())
-                .unwrap_or_else(|| {
-                    let now = Utc::now();
-                    let month_name = match now.month() {
-                        1 => "Ocak",
-                        2 => "Şubat",
-                        3 => "Mart",
-                        4 => "Nisan",
-                        5 => "Mayıs",
-                        6 => "Haziran",
-                        7 => "Temmuz",
-                        8 => "Ağustos",
-                        9 => "Eylül",
-                        10 => "Ekim",
-                        11 => "Kasım",
-                        12 => "Aralık",
-                        _ => "Ocak",
-                    };
-                    format!("{} {}", month_name, now.year())
-                });
-
-            let max_d = inner
-                .dues
-                .iter()
-                .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
-                .max()
-                .unwrap_or(0);
-            inner.dues.push(DuesLiability {
-                id: (max_d + 1).to_string(),
-                unit_id: unit_id.clone(),
-                period,
-                principal_amount: monthly_dues,
-                delay_penalty: Decimal::ZERO,
-                total_amount: monthly_dues,
-                due_date: Utc::now().date_naive() + chrono::Days::new(15),
-                status: DebtStatus::Pending,
-                paid_principal: Decimal::ZERO,
-                paid_penalty: Decimal::ZERO,
-                debtor_type: if is_tenant {
-                    DebtorType::Tenant
-                } else {
-                    DebtorType::Owner
-                },
-                expense_type: ExpenseType::OperationalDues,
-                penalty_accrued_through: None,
-                grace_days: 0,
-                effective_due_date: None,
-                liable_person_id: Some(if is_tenant { 202 } else { person_numeric_id }),
-            });
         }
 
         let household = if is_resident_only {
@@ -3527,4 +3440,52 @@ async fn prefill_person_refs(
         request.tenant_phone = phone;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn when_registering_home_owner_then_does_not_create_due_liability() {
+        let state = AppState::new_with_test_fixtures();
+        let service = SiteAdminService::new(state.clone());
+
+        let req = RegisterHomeOwnerRequest {
+            block: "A".to_string(),
+            unit_no: 99,
+            floor: 1,
+            owner: None,
+            tenant: None,
+            members: Vec::new(),
+            owner_full_name: "Yeni Malik".to_string(),
+            email: "yeni.malik.286@sitepulse.test".to_string(),
+            phone: "+90 555 123 4567".to_string(),
+            tenant_full_name: None,
+            tenant_email: None,
+            tenant_phone: None,
+            land_share: Some("24/24".to_string()),
+            monthly_dues: Some(Decimal::new(1500, 0)),
+            house_type: Some("2+1".to_string()),
+            is_resident: true,
+            role: Some("OWNER".to_string()),
+        };
+
+        let response = service
+            .register_home_owner("site-1", req)
+            .await
+            .expect("registration should succeed");
+
+        let inner = state.inner.read().await;
+        let created_dues: Vec<_> = inner
+            .dues
+            .iter()
+            .filter(|d| d.unit_id == response.unit_id)
+            .collect();
+
+        assert!(
+            created_dues.is_empty(),
+            "registering an owner must not generate dues liabilities (issue #286)"
+        );
+    }
 }

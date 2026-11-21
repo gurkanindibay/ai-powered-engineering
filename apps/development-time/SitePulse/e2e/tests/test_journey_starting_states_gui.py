@@ -114,9 +114,6 @@ def test_f1_units_without_people_show_as_unassigned(request, api, actors, stack,
 @pytest.mark.role_manager
 @pytest.mark.covers("SC-13-01-05")
 @pytest.mark.gui_id("GUI-13-07")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=(
-    "BUG: registering the first owner of an empty unit creates a 1500.00 liability although no period "
-    "was accrued; see #286"))
 def test_f1_manager_adds_first_owners_and_tenant(request, api, actors, stack, page, login_page):
     with journey_site(request, api, actors, stack, "F1") as fixture:
         sign_in_manager(page, login_page, fixture)
