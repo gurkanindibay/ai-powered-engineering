@@ -552,11 +552,17 @@ pub async fn commit_accrual_batch(
     let period_id: Option<i64> = Some(match existing {
         Some(row) => {
             let id: i64 = row.get(0);
-            tx.execute(
-                "UPDATE dues_periods SET status='OPEN' WHERE id=$1 AND site_id=$2",
-                &[&id, &site],
-            )
-            .await?;
+            let status: String = row.get(1);
+            // A duplicate accrual must stay a true no-op: rewriting an already OPEN
+            // period would fire the audit_domain_change trigger and log an event for
+            // a request that changed nothing.
+            if status != "OPEN" {
+                tx.execute(
+                    "UPDATE dues_periods SET status='OPEN' WHERE id=$1 AND site_id=$2",
+                    &[&id, &site],
+                )
+                .await?;
+            }
             id
         }
         None => tx

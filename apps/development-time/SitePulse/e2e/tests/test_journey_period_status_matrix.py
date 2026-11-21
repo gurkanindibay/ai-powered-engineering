@@ -27,6 +27,18 @@ def _audit_count(stack, site: str) -> str:
     return stack.sql(f"SELECT COUNT(*) FROM audit_events WHERE site_id = {int(site)};")
 
 
+def _audit_mark(stack, site: str) -> str:
+    return stack.sql(f"SELECT COALESCE(MAX(event_id), 0) FROM audit_events WHERE site_id = {int(site)};")
+
+
+def _new_audit_rows(stack, site: str, mark: str) -> str:
+    return stack.sql(
+        "SELECT COALESCE(string_agg(action || ' on ' || resource_type || ' #' || "
+        f"COALESCE(resource_id, '?'), ', '), 'none') FROM audit_events "
+        f"WHERE site_id = {int(site)} AND event_id > {int(mark)};"
+    )
+
+
 def _liabilities(stack, site: str) -> str:
     return stack.sql(
         f"SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id WHERE u.site_id = {int(site)};"
@@ -59,6 +71,7 @@ def test_each_period_status_allows_only_its_own_commands(request, api, actors, s
             assert raw_call(api, "POST", f"/api/v1/dues/periods/{period_id}/close", token, {"site_id": site})[0] == 200
         assert _status(stack, site) == status
         before, audit_before = financial_snapshot(stack, site), _audit_count(stack, site)
+        audit_mark = _audit_mark(stack, site)
 
         def accrue() -> tuple[int, str]:
             body = {"site_id": site, "period": PERIOD, "due_date": DUE}
@@ -80,7 +93,7 @@ def test_each_period_status_allows_only_its_own_commands(request, api, actors, s
             code, body = accrue()
             assert code == 200 and '"already_accrued":true' in body.replace(" ", "")  # a duplicate creates nothing
             assert financial_snapshot(stack, site) == before
-            assert _audit_count(stack, site) == audit_before
+            assert _audit_count(stack, site) == audit_before, _new_audit_rows(stack, site, audit_mark)
         elif command == "reopen":
             code, body = raw_call(
                 api, "POST", f"/api/v1/dues/periods/{period_id}/reopen", token,
@@ -96,4 +109,4 @@ def test_each_period_status_allows_only_its_own_commands(request, api, actors, s
             assert code == 409
             assert _status(stack, site) == status
             assert financial_snapshot(stack, site) == before
-            assert _audit_count(stack, site) == audit_before
+            assert _audit_count(stack, site) == audit_before, _new_audit_rows(stack, site, audit_mark)
