@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T16:12:32Z",
- "run_id": "20261121T161231Z-9c86eaf",
- "commit": "9c86eaf0fc3845b8f0358be4daea2b09b31b35e2",
+ "generated_at": "2026-11-21T16:53:27Z",
+ "run_id": "20261121T165326Z-4c004e0",
+ "commit": "4c004e072b170e22c20cbbb995735d21c3082d41",
  "task": "master",
  "status": "DEFECT",
  "junit": {
-  "tests": 242,
+  "tests": 272,
   "failures": 0,
   "errors": 0,
-  "skipped": 6,
-  "passed": 236,
-  "seconds": 2821.8,
+  "skipped": 7,
+  "passed": 265,
+  "seconds": 2808.2,
   "files": 8,
   "unparseable": []
  },
@@ -20,11 +20,11 @@
   "stories_with_scenarios": 116,
   "stories_passing": 33,
   "scenarios": 465,
-  "automated": 403,
-  "passing": 189,
-  "failing": 5,
+  "automated": 415,
+  "passing": 200,
+  "failing": 6,
   "no_result": 209,
-  "planned": 62,
+  "planned": 50,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 1
@@ -205,11 +205,11 @@
    "stories_with_scenarios": 16,
    "stories_passing": 1,
    "scenarios": 151,
-   "automated": 97,
-   "passing": 75,
-   "failing": 5,
+   "automated": 109,
+   "passing": 86,
+   "failing": 6,
    "no_result": 17,
-   "planned": 54,
+   "planned": 42,
    "health": "failing"
   }
  ],
@@ -2477,7 +2477,7 @@
    "story": "STORY-13-04"
   },
   "SC-13-05-01": {
-   "state": "planned",
+   "state": "passing",
    "name": "Invalid accrual input is rejected and creates nothing",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
@@ -2489,13 +2489,13 @@
    "story": "STORY-13-05"
   },
   "SC-13-05-03": {
-   "state": "planned",
+   "state": "passing",
    "name": "A duplicate accrual with a different amount is still blocked",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
   },
   "SC-13-05-04": {
-   "state": "planned",
+   "state": "passing",
    "name": "Two admins accruing the same period at the same moment create one set of liabilities",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
@@ -2513,13 +2513,13 @@
    "story": "STORY-13-05"
   },
   "SC-13-05-07": {
-   "state": "planned",
+   "state": "passing",
    "name": "Moving out with an advance requires a decision before the advance leaves",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
   },
   "SC-13-05-08": {
-   "state": "planned",
+   "state": "passing",
    "name": "Moving out twice and moving in on an occupied unit are refused",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
@@ -2543,13 +2543,13 @@
    "story": "STORY-13-05"
   },
   "SC-13-05-12": {
-   "state": "planned",
+   "state": "passing",
    "name": "A resident cannot call manager actions",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
   },
   "SC-13-05-13": {
-   "state": "planned",
+   "state": "passing",
    "name": "A manager of another site sees nothing of this site",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
@@ -2699,7 +2699,7 @@
    "story": "STORY-13-09"
   },
   "SC-13-09-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "A partial payment reduces the principal used for later fees",
    "epic": "EPIC-13",
    "story": "STORY-13-09"
@@ -2723,13 +2723,13 @@
    "story": "STORY-13-09"
   },
   "SC-13-09-06": {
-   "state": "planned",
+   "state": "passing",
    "name": "Concurrent deliveries of the same bank event are credited once",
    "epic": "EPIC-13",
    "story": "STORY-13-09"
   },
   "SC-13-09-07": {
-   "state": "planned",
+   "state": "failing",
    "name": "An unmatched statement item can be approved exactly once",
    "epic": "EPIC-13",
    "story": "STORY-13-09"
@@ -2741,7 +2741,7 @@
    "story": "STORY-13-09"
   },
   "SC-13-09-09": {
-   "state": "planned",
+   "state": "passing",
    "name": "The aging bucket changes at each day boundary",
    "epic": "EPIC-13",
    "story": "STORY-13-09"
@@ -2813,7 +2813,7 @@
    "story": "STORY-13-11"
   },
   "SC-13-11-04": {
-   "state": "planned",
+   "state": "passing",
    "name": "Each period status allows only its own commands",
    "epic": "EPIC-13",
    "story": "STORY-13-11"
@@ -3180,7 +3180,7 @@
    "stories": 116,
    "stories_with_scenarios": 116,
    "scenarios": 465,
-   "automated": 403
+   "automated": 415
   }
  ],
  "recent_changes": [
@@ -3190,7 +3190,7 @@
    "title": "Site Admin Journeys",
    "new_stories": 4,
    "new_scenarios": 22,
-   "newly_automated": 56,
+   "newly_automated": 68,
    "items": 4,
    "samples": [
     "STORY-13-13: Zero to multi-site financial journey",
@@ -3926,5 +3926,5 @@
    ]
   }
  ],
- "href": "reports/44922507757-1/"
+ "href": "reports/44926215713-1/"
 }
