@@ -17,3 +17,10 @@ Feature: Dual-ledger FIFO payment allocation and KMK interest settlement
     Given a property owner has an unpaid operational due and an unpaid capital due
     When the owner's payment covers the operational due and part of the capital due
     Then the operational due is paid first and the remainder is applied to the capital due
+
+  @SC-09-02-03 @layer:gui @core @edge @role_manager @linked
+  Scenario: Owner payment never settles tenant operational dues without joint-liability opt-in
+    Given a unit has an unpaid tenant operational due and an unpaid owner capital due
+    When the property owner makes an undesignated payment
+    Then the owner capital due is settled and the tenant operational due is untouched
+

@@ -52,13 +52,17 @@ pub fn refresh(d: &mut DuesLiability) {
     }
 }
 
-/// Whether a payer in `payer_role` may settle this liability. Owners may pay
-/// anything for their unit; a tenant may only pay tenant liabilities (capital
-/// dues are owner-only under KMK and the V12 `chk_dues_capital_owner_only` rule).
+/// Whether a payer in `payer_role` may settle this liability.
+///
+/// An owner settles only owner liabilities (`debtor_type == OWNER`). Settling
+/// tenant joint liability requires explicit opt-in (`settles_tenant_joint_liability`).
+/// A tenant settles only tenant, non-capital liabilities (capital dues are owner-only
+/// under KMK and the V12 `chk_dues_capital_owner_only` rule); settling owner
+/// capital dues requires explicit rent-offset opt-in (`settles_owner_capital_dues`).
 pub fn payer_may_settle(d: &DuesLiability, payer_role: &str) -> bool {
     let role = DebtorType::from_str_loose(payer_role);
     if role == DebtorType::Owner {
-        return true;
+        return d.debtor_type == DebtorType::Owner;
     }
     d.debtor_type == DebtorType::Tenant && d.expense_type != ExpenseType::CapitalDues
 }
@@ -374,8 +378,9 @@ mod tests {
         }
     }
 
+    // covers: SC-09-02-03
     #[test]
-    fn tenant_cannot_settle_owner_capital_dues() {
+    fn debtor_isolation_prevents_cross_role_settlement_without_opt_in() {
         let dues = vec![
             due("cap", "500.00", "0.00", 1, DEBTOR_OWNER, EXPENSE_CAPITAL),
             due(
@@ -388,7 +393,7 @@ mod tests {
             ),
         ];
         assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_TENANT), vec![1]);
-        assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_OWNER), vec![0, 1]);
+        assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_OWNER), vec![0]);
     }
 
     // covers: SC-09-02-02
@@ -571,7 +576,7 @@ mod tests {
 
     #[test]
     fn a_tenant_may_not_settle_capital_dues_but_may_settle_tenant_operational_dues() {
-        let capital_tenant = due("a", "100.00", "0.00", 15, DEBTOR_TENANT, EXPENSE_CAPITAL);
+        let capital_owner = due("a", "100.00", "0.00", 15, DEBTOR_OWNER, EXPENSE_CAPITAL);
         let operational_tenant = due(
             "b",
             "100.00",
@@ -581,10 +586,11 @@ mod tests {
             EXPENSE_OPERATIONAL,
         );
         let operational_owner = due("c", "100.00", "0.00", 15, DEBTOR_OWNER, EXPENSE_OPERATIONAL);
-        assert!(!payer_may_settle(&capital_tenant, DEBTOR_TENANT));
-        assert!(payer_may_settle(&capital_tenant, DEBTOR_OWNER));
+        assert!(!payer_may_settle(&capital_owner, DEBTOR_TENANT));
+        assert!(payer_may_settle(&capital_owner, DEBTOR_OWNER));
         assert!(payer_may_settle(&operational_tenant, DEBTOR_TENANT));
         assert!(!payer_may_settle(&operational_owner, DEBTOR_TENANT));
+        assert!(!payer_may_settle(&operational_tenant, DEBTOR_OWNER));
     }
 
     #[test]

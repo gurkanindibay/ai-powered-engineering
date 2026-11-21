@@ -24,8 +24,8 @@
       "payer_role": "OWNER",
       "payment": "300.00",
       "dues": [
-        {"id": "late", "principal": "100.00", "penalty": "5.00", "due_date": "2026-09-20", "debtor_type": "TENANT", "expense_type": "OPERATIONAL_DUES"},
-        {"id": "early", "principal": "100.00", "penalty": "10.00", "due_date": "2026-09-10", "debtor_type": "TENANT", "expense_type": "OPERATIONAL_DUES"}
+        {"id": "late", "principal": "100.00", "penalty": "5.00", "due_date": "2026-09-20", "debtor_type": "OWNER", "expense_type": "OPERATIONAL_DUES"},
+        {"id": "early", "principal": "100.00", "penalty": "10.00", "due_date": "2026-09-10", "debtor_type": "OWNER", "expense_type": "OPERATIONAL_DUES"}
       ],
       "expected_lines": [
         {"due_id": "early", "principal": "100.00", "penalty": "10.00"},
@@ -45,6 +45,18 @@
       "expected_lines": [{"due_id": "operational", "principal": "300.00", "penalty": "0.00"}],
       "expected_advance": "700.00",
       "expected_outstanding": {"capital": "800.00", "operational": "0.00"}
+    },
+    {
+      "name": "owner payment never settles tenant operational dues without opt-in",
+      "payer_role": "OWNER",
+      "payment": "1000.00",
+      "dues": [
+        {"id": "capital", "principal": "800.00", "penalty": "0.00", "due_date": "2026-08-01", "debtor_type": "OWNER", "expense_type": "CAPITAL_DUES"},
+        {"id": "operational", "principal": "300.00", "penalty": "0.00", "due_date": "2026-09-01", "debtor_type": "TENANT", "expense_type": "OPERATIONAL_DUES"}
+      ],
+      "expected_lines": [{"due_id": "capital", "principal": "800.00", "penalty": "0.00"}],
+      "expected_advance": "200.00",
+      "expected_outstanding": {"capital": "0.00", "operational": "300.00"}
     }
   ]
 }

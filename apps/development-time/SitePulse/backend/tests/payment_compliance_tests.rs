@@ -76,7 +76,7 @@ async fn webhook(
         virtual_iban: VIRTUAL_IBAN.to_string(),
         amount: d(amount),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: None,
         description: Some(description.to_string()),
         signature: None,
@@ -165,8 +165,8 @@ fn manual(amount: &str) -> RecordManualPaymentRequest {
         site_id: Some("site-1".to_string()),
         unit_id: UNIT.to_string(),
         amount: d(amount),
-        payer_name: "Ahmet Yılmaz".to_string(),
-        payer_role: DebtorType::Owner,
+        payer_name: "Zeynep Kaya".to_string(),
+        payer_role: DebtorType::Tenant,
         payment_channel: PaymentChannel::ManualCash,
         ..Default::default()
     }
@@ -382,7 +382,7 @@ async fn when_a_statement_line_is_confirmed_twice_then_it_is_settled_once() {
             amount: d("2000.00"),
             currency: "TRY".to_string(),
             description: "A BLOK D:14 EYLUL 2026 AIDAT".to_string(),
-            sender_name: Some("Ahmet Yılmaz".to_string()),
+            sender_name: Some("Zeynep Kaya".to_string()),
             sender_iban: None,
             reference_no: None,
         },
@@ -454,7 +454,7 @@ async fn when_match_all_settles_a_pending_payment_then_no_duplicate_ledger_row_i
             unit_id: UNIT.to_string(),
             block_id: "A".to_string(),
             unit_number: 14,
-            homeowner_name: Some("Ahmet Yılmaz".to_string()),
+            homeowner_name: Some("Zeynep Kaya".to_string()),
             amount: d("1400.00"),
             payment_method: PaymentChannel::BankTransfer,
             reference_code: Some("REF-77".to_string()),
@@ -567,4 +567,200 @@ async fn when_debt_aging_is_computed_then_it_uses_outstanding_amounts_and_the_li
         "capital dues belong to the owner"
     );
     assert_eq!(report.total_current, d("3600.00"));
+}
+
+/// Regression test for #238 / P1: on a tenanted unit with only tenant debt,
+/// an incoming bank transfer with an unmatched sender follows the debt and
+/// settles the tenant liability instead of crediting owner advance.
+#[tokio::test]
+async fn when_unmatched_sender_pays_tenanted_unit_with_only_tenant_debt_then_it_settles_tenant_debt(
+) {
+    let state = state_with(vec![liability(
+        "tenant-due-1",
+        "Ekim 2026",
+        "1400.00",
+        today() + Days::new(10),
+        "TENANT",
+        "OPERATIONAL_DUES",
+    )])
+    .await;
+
+    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", WEBHOOK_SECRET);
+    let req = BankIncomingWebhookRequest {
+        transaction_id: "UNMATCHED-SENDER-TXN-1".to_string(),
+        virtual_iban: VIRTUAL_IBAN.to_string(),
+        amount: d("1400.00"),
+        currency: Some("TRY".to_string()),
+        sender_name: Some("Ali Kaya - Kiracı Yakını".to_string()),
+        sender_iban: None,
+        description: Some("Ekim 2026 aidatı".to_string()),
+        signature: None,
+    };
+    let body = serde_json::to_vec(&req).unwrap();
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        sitepulse_backend::handlers::BANK_WEBHOOK_SIGNATURE_HEADER,
+        sitepulse_backend::auth::sign_webhook_body(WEBHOOK_SECRET, &body)
+            .parse()
+            .unwrap(),
+    );
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        headers,
+        axum::body::Bytes::from(body),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.status, "CLEARED");
+    assert_eq!(res.cleared_amount, d("1400.00"));
+    assert_eq!(res.remaining_debt, Decimal::ZERO);
+    assert_eq!(res.advance_payment, Decimal::ZERO);
+
+    let inner = state.inner.read().await;
+    let due = inner.dues.iter().find(|d| d.id == "tenant-due-1").unwrap();
+    assert_eq!(due.status, DebtStatus::Paid);
+    assert_eq!(due.paid_principal, d("1400.00"));
+    assert_eq!(inner.advance_total(UNIT), Decimal::ZERO);
+}
+
+/// Regression test for #238 / P1: on a tenanted unit with only tenant debt,
+/// confirming a bank statement line with an unmatched sender follows the debt
+/// and settles the tenant liability.
+#[tokio::test]
+async fn when_unmatched_sender_statement_line_confirmed_on_tenanted_unit_with_only_tenant_debt_then_it_settles_tenant_debt(
+) {
+    let state = state_with(vec![liability(
+        "tenant-due-stmt-1",
+        "Ekim 2026",
+        "1400.00",
+        today() + Days::new(10),
+        "TENANT",
+        "OPERATIONAL_DUES",
+    )])
+    .await;
+
+    let item = ReconciliationMatch {
+        match_id: "MATCH-UNMATCHED-1".to_string(),
+        site_id: "site-1".to_string(),
+        transaction: BankTransactionItem {
+            transaction_id: "STMT-UNMATCHED-1".to_string(),
+            date: today(),
+            amount: d("1400.00"),
+            currency: "TRY".to_string(),
+            description: "A BLOK D:14 AIDAT ODEMESI".to_string(),
+            sender_name: Some("Ali Kaya - Kiracı Yakını".to_string()),
+            sender_iban: None,
+            reference_no: None,
+        },
+        matched_unit_id: Some(UNIT.to_string()),
+        matched_block: Some("A".to_string()),
+        matched_unit_number: Some(14),
+        matched_resident_name: None,
+        confidence_score: 90,
+        matched_due_id: None,
+        outstanding_balance: None,
+        amount_matches_balance: true,
+        status: ReconciliationStatus::PendingApproval,
+        status_code: ReconciliationStatus::PendingApproval.as_str().to_string(),
+        notes: None,
+    };
+    state.inner.write().await.reconciliation_queue.push(item);
+
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::confirm_reconciliation(
+        axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        axum::Json(ConfirmReconciliationRequest {
+            site_id: "site-1".to_string(),
+            match_ids: vec!["MATCH-UNMATCHED-1".to_string()],
+            matches: vec![],
+            optional_message: None,
+            remember_sender_iban: None,
+            owner_capital_match_ids: Vec::new(),
+            debtor_assignments: Default::default(),
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.confirmed_count, 1);
+
+    let inner = state.inner.read().await;
+    let due = inner
+        .dues
+        .iter()
+        .find(|d| d.id == "tenant-due-stmt-1")
+        .unwrap();
+    assert_eq!(due.status, DebtStatus::Paid);
+    assert_eq!(due.paid_principal, d("1400.00"));
+    assert_eq!(inner.advance_total(UNIT), Decimal::ZERO);
+}
+
+/// Regression test for #238 / P1: when the owner is positively identified and
+/// only tenant debt is open on the unit, debtor isolation ensures the tenant's debt
+/// remains untouched and the payment goes entirely to the owner's advance balance.
+#[tokio::test]
+async fn when_identified_owner_pays_tenanted_unit_with_only_tenant_debt_then_tenant_debt_is_untouched_and_advances_to_owner(
+) {
+    let state = state_with(vec![liability(
+        "tenant-due-isolated-1",
+        "Ekim 2026",
+        "1400.00",
+        today() + Days::new(10),
+        "TENANT",
+        "OPERATIONAL_DUES",
+    )])
+    .await;
+
+    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", WEBHOOK_SECRET);
+    let req = BankIncomingWebhookRequest {
+        transaction_id: "OWNER-IDENTIFIED-TXN-1".to_string(),
+        virtual_iban: VIRTUAL_IBAN.to_string(),
+        amount: d("1000.00"),
+        currency: Some("TRY".to_string()),
+        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_iban: None,
+        description: Some("Ekim 2026 aidatı".to_string()),
+        signature: None,
+    };
+    let body = serde_json::to_vec(&req).unwrap();
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        sitepulse_backend::handlers::BANK_WEBHOOK_SIGNATURE_HEADER,
+        sitepulse_backend::auth::sign_webhook_body(WEBHOOK_SECRET, &body)
+            .parse()
+            .unwrap(),
+    );
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        headers,
+        axum::body::Bytes::from(body),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.status, "CLEARED");
+    assert_eq!(res.cleared_amount, Decimal::ZERO);
+    assert_eq!(res.remaining_debt, d("1400.00"));
+    assert_eq!(res.advance_payment, d("1000.00"));
+
+    let inner = state.inner.read().await;
+    let due = inner
+        .dues
+        .iter()
+        .find(|d| d.id == "tenant-due-isolated-1")
+        .unwrap();
+    assert_eq!(due.status, DebtStatus::Pending);
+    assert_eq!(due.paid_principal, Decimal::ZERO);
+    assert_eq!(due.paid_penalty, Decimal::ZERO);
+    assert_eq!(inner.advance_total(UNIT), d("1000.00"));
+
+    let receipts = &inner.payment_receipts;
+    assert_eq!(receipts.len(), 1);
+    assert_eq!(receipts[0].payer_role, DebtorType::Owner);
+    assert_eq!(receipts[0].allocated_principal, Decimal::ZERO);
+    assert_eq!(receipts[0].allocated_advance, d("1000.00"));
 }

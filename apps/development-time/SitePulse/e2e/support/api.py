@@ -335,14 +335,21 @@ class Builders:
         self.stack = stack
 
     def overdue_dues(self, unit_number: int = 14, principal: Decimal = Decimal("1400.00"),
-                     days_overdue: int = 10, period: str = "Eylül 2026") -> dict:
+                     days_overdue: int = 10, period: str = "Eylül 2026",
+                     debtor_type: str | None = None) -> dict:
         """SQL arrange: a PENDING operational dues liability whose due date is in the past."""
         unit_id = self.stack.sql(f"SELECT id FROM units WHERE unit_number = {int(unit_number)} LIMIT 1;")
         if not unit_id:
             raise ApiError(f"unit {unit_number} not found in seed")
+        if not debtor_type:
+            tenant = self.stack.sql(f"SELECT tenant_person_id FROM units WHERE id = {int(unit_id)};").strip()
+            debtor_type = "TENANT" if tenant else "OWNER"
+        person_col = "tenant_person_id" if debtor_type == "TENANT" else "owner_person_id"
+        person_id = self.stack.sql(f"SELECT {person_col} FROM units WHERE id = {int(unit_id)};").strip()
+        person_sql = f"{int(person_id)}" if person_id else "NULL"
         liability_id = self.stack.sql(
-            "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status) "
-            f"VALUES ({int(unit_id)}, '{period}', {principal}, CURRENT_DATE - {int(days_overdue)}, 'PENDING') "
+            "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, liable_person_id) "
+            f"VALUES ({int(unit_id)}, '{period}', {principal}, CURRENT_DATE - {int(days_overdue)}, 'PENDING', '{debtor_type}', {person_sql}) "
             "RETURNING id;").splitlines()[0]
         self.stack.restart_backend()
         return {"unit_id": unit_id, "liability_id": liability_id, "principal": principal}

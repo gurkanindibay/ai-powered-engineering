@@ -1655,7 +1655,7 @@ async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_ge
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: Decimal::from_str_exact("1400.00").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000012345678".to_string()),
         description: Some("Eylül 2026 Aidatı FAST Ödemesi".to_string()),
         signature: Some("HMAC_SHA256_VALID_SIG".to_string()),
@@ -1704,7 +1704,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: Decimal::from_str_exact("1400.00").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000012345678".to_string()),
         description: Some("Eylül 2026 Aidatı".to_string()),
         signature: Some("HMAC_VALID".to_string()),
@@ -1728,7 +1728,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: Decimal::from_str_exact("1460.67").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000012345678".to_string()),
         description: Some("Ekim 2026 Avans Aidatı".to_string()),
         signature: Some("HMAC_VALID".to_string()),
@@ -1754,7 +1754,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: Decimal::from_str_exact("500.00").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000012345678".to_string()),
         description: Some("Ekstra Avans".to_string()),
         signature: Some("HMAC_VALID".to_string()),
@@ -1815,6 +1815,12 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
 ) {
     let state = AppState::new();
     fixture_dues_not_yet_due(&state).await;
+    {
+        let mut inner = state.inner.write().await;
+        if let Some(d) = inner.dues.iter_mut().find(|d| d.id == "b-101") {
+            d.debtor_type = DebtorType::Owner;
+        }
+    }
 
     // 1. Payment of ₺2860.67 clears September due (₺1400.00) and leaves ₺1460.67 surplus in advance
     let webhook_req = BankIncomingWebhookRequest {
@@ -2027,7 +2033,7 @@ async fn when_homeowner_records_payment_with_existing_debt_then_clears_debt() {
         payment_method: PaymentMethod::CreditCard,
         reference_code: Some("CC-TEST-001".to_string()),
         note: Some("Eylül aidat kart ödemesi".to_string()),
-        homeowner_name: Some("Ahmet Yılmaz".to_string()),
+        homeowner_name: Some("Zeynep Kaya".to_string()),
     };
 
     let (status, axum::Json(res)) = sitepulse_backend::handlers::record_homeowner_payment(
@@ -2128,7 +2134,7 @@ async fn when_homeowner_records_payment_exceeding_debt_then_clears_debt_and_cred
         payment_method: PaymentMethod::CreditCard,
         reference_code: Some("CC-SURPLUS-001".to_string()),
         note: Some("Aidat + avans ödemesi".to_string()),
-        homeowner_name: Some("Ahmet Yılmaz".to_string()),
+        homeowner_name: Some("Zeynep Kaya".to_string()),
     };
 
     let (status, axum::Json(res)) = sitepulse_backend::handlers::record_homeowner_payment(
@@ -2195,7 +2201,7 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
                 unit_id: "d-14".to_string(),
                 block_id: "A".to_string(),
                 unit_number: 14,
-                homeowner_name: Some("Ahmet Yılmaz".to_string()),
+                homeowner_name: Some("Zeynep Kaya".to_string()),
                 amount: Decimal::from_str_exact("1400.00").unwrap(),
                 payment_method: PaymentMethod::BankTransfer,
                 reference_code: Some("REF-1".to_string()),
@@ -2271,8 +2277,8 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
         date: NaiveDate::from_ymd_opt(2026, 9, 20).unwrap(),
         amount: Decimal::from_str_exact("2000.00").unwrap(),
         currency: "TRY".to_string(),
-        description: "HAVALE - AHMET YILMAZ A BLOK D:14 FAZLA ODEME".to_string(),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        description: "HAVALE - ZEYNEP KAYA A BLOK D:14 FAZLA ODEME".to_string(),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: None,
         reference_no: None,
     };
@@ -2291,7 +2297,7 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
     assert_eq!(matches.len(), 1);
     let m = &matches[0];
     assert_eq!(m.matched_unit_id.as_deref(), Some("d-14"));
-    assert_eq!(m.confidence_score, 90);
+    assert_eq!(m.confidence_score, 80);
     assert_eq!(
         m.status,
         sitepulse_backend::models::ReconciliationStatus::PendingApproval
@@ -2516,7 +2522,7 @@ async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_cle
         virtual_iban: "TR410020504213991067000014".to_string(),
         amount: rust_decimal::Decimal::from_str_exact("2000.00").unwrap(),
         currency: Some("TRY".to_string()),
-        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_name: Some("Zeynep Kaya".to_string()),
         sender_iban: Some("TR120006200000000000000001".to_string()),
         description: Some("Aidat".to_string()),
         signature: None,
@@ -4352,7 +4358,7 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
             status: DebtStatus::Overdue,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: DebtorType::Tenant,
+            debtor_type: DebtorType::Owner,
             expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
             grace_days: 0,
