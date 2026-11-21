@@ -69,7 +69,7 @@ The workspace centers on **SitePulse**, a residential site platform built using 
      - `git fetch origin master`
      - `git worktree add -b <branch> <worktree-path> origin/master`
      - Never start a new task in a worktree left over from earlier work, and never stack unrelated work on another task's branch or PR.
-   - **After the task's PR is green (see rule 12), you MUST remove your worktree.** Cleanup is part of the task, not optional, and this rule is the permission to do it:
+   - **After the task's PR is merged (rule 15; or closed, or green with no further follow-up expected), you MUST remove your worktree.** Cleanup is part of the task, not optional, and this rule is the permission to do it:
      - "Green" means every PR check passed, or no check ran for the PR (for example, a docs-only change that no workflow triggers on). It does not mean "checks still pending".
      - "Your worktree" is the worktree your task's work was done in, whether you created it or your host (Claude Code app, IDE, harness) created it for your session. Never remove a worktree used by another agent or task.
      - Before removing, verify that every change is committed, the branch is pushed (`git status` is clean and the branch has no unpushed commits), and the PR exists.
@@ -85,7 +85,7 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - **If any check fails**, the task is still yours: read the failing log (`gh run view <run-id> --log-failed | tail -80`), fix the cause in the same worktree and branch, run the relevant local suite (rule 3), push, and wait for the checks again. Repeat until every check passes.
    - Never report a task as complete, and never remove its worktree, while a check is failing or still running. Do not skip, disable, or weaken tests or workflows to make a check pass.
    - If a failure is unrelated to your change (for example, also failing on `master`, or an infrastructure outage), do not paper over it: report it with the failing check name and log excerpt, and leave the task open for the user to decide.
-   - Once every check passes (or no check ran for the PR), the task is complete and you must remove your own worktree as described in rule 11.
+   - Once every check passes (or no check ran for the PR), continue with the follow-up loop in rule 15: poll for review, fix notes, merge once approved. The worktree is removed (rule 11) as part of that cleanup after the merge; a PR that is green but not yet merged keeps its worktree so review fixes can be made.
 
 13. **Test Runs and the Test Report (All Agents)**:
    - Applies to every agent, for every task that changes SitePulse behaviour (backend, Flutter, e2e, or `.specify/features`). Docs-only tasks are exempt. Full procedure: [.agents/rules/test-execution-records.md](file:///.agents/rules/test-execution-records.md).
@@ -98,7 +98,18 @@ The workspace centers on **SitePulse**, a residential site platform built using 
 14. **PR Reviews Through the Review Bot (All Agents)**:
    - When you review a pull request, post the review (approve, request changes, comment) as the review bot GitHub App `local-reviewer-agent`, using `python3 scripts/review_bot.py review <pr> --event APPROVE|REQUEST_CHANGES|COMMENT --body-file <file> --commit <reviewed-head-sha>`. Never post reviews as the repository owner's personal account (`gurkanindibay`).
    - The app's ids and key path come from the untracked `.env` (`REVIEW_BOT_*`). Never commit them or the key. If `python3 scripts/review_bot.py whoami` fails, stop and tell the user rather than falling back to the personal account.
-   - The bot approves or requests changes; it does not merge. Authors merge their own PRs. Follow [.agents/rules/pr-review-bot.md](file:///.agents/rules/pr-review-bot.md).
+   - The bot approves or requests changes; it does not merge. Authors merge their own PRs (rule 15). Follow [.agents/rules/pr-review-bot.md](file:///.agents/rules/pr-review-bot.md).
+
+15. **PR Author Follow-up Loop (All Agents)**:
+   - Opening a PR (rule 12) does not end the task. After the PR is open and green, poll it **every 30 minutes**: if the reviewer left notes, fix them in the same worktree and branch, run the suite, push, wait for CI, and keep polling.
+   - **Approved** means a GitHub approval on the PR (`reviewDecision` `APPROVED` or an `APPROVED` review from the reviewer) or a reviewer comment starting with `APPROVED`. Once approved and every check is green, **merge your own PR** (`gh pr merge <pr> --squash --delete-branch`). If it is approved with minor notes, fix them, wait for CI to go green, then merge without waiting for another approval.
+   - After the merge: close the linked issue, release the claim labels, remove the worktree (rule 11), delete the local and remote branches, and `git worktree prune`. Never merge with a failing or pending check, never use `--admin`, never merge a PR that is not yours.
+   - Stop and ask the user if the PR is closed unmerged or the same blocking note survives two fixes. Full procedure: [.agents/rules/pr-author-followup.md](file:///.agents/rules/pr-author-followup.md).
+
+16. **PR Reviewer Polling Loop (All Agents)**:
+   - The reviewer agent acts as `local-reviewer-agent` (rule 14) and checks for open PRs **every 30 minutes**. It reviews a PR with no bot review yet, and re-reviews a PR whose head changed since the bot's last review; it skips unchanged PRs, drafts and its own PRs.
+   - Reviews go on the PR. Blocking problems get `REQUEST_CHANGES`. If the changes are OK, post a real GitHub `APPROVE` (with any minor notes listed); only if GitHub refuses the formal approval, post a comment starting with `APPROVED`. Do not approve while CI is red or pending.
+   - The reviewer never merges or pushes. Full procedure: [.agents/rules/pr-reviewer-polling.md](file:///.agents/rules/pr-reviewer-polling.md).
 
 ## Durable engineering harness
 
