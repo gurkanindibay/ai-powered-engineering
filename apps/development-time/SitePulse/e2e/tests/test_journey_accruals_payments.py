@@ -850,12 +850,16 @@ def test_multi_site_journey_accruals_through_march_first(request, api, actors, s
 
 
 @pytest.mark.covers("SC-13-13-02")
+@pytest.mark.covers("SC-13-26-02")
+@pytest.mark.gui_id("GUI-13-04")
 @pytest.mark.smoke
 @pytest.mark.core
 @pytest.mark.role_manager
-def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, stack):
+def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, stack, page, login_page):
     """Accrue four periods and verify mixed payment histories across two sites (Issue #248)."""
+    stack.reset_empty()
     saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    assert api.saas_sites(saas) == [], "integrated journey must start with an empty residential site list"
     manifest = JourneyManifest.create(
         E2E / ".artifacts" / "journeys",
         run_id=request.node.nodeid,
@@ -1318,6 +1322,52 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         # Final ledger invariants
         j.invariants_a("April final")
         j.invariants_b("April final")
+
+        # Manager browser evidence: a unit statement shows the debtor's receipts and the
+        # site cash view shows the posted gross receipt total for the same manager scope.
+        from support.flutter import by_id
+        from pages.manager import PaymentStream, ResidentsTab
+        from pages.person import UnitWorkspace
+        from pages.login import LoginPage
+
+        login_page.login("manager", j.manager_a.user["email"], j.manager_a_password)
+        ResidentsTab(page).open()
+        assert set(ResidentsTab(page).unit_card_ids()) == set(j.units_a.values())
+        unit_id_a = j.unit_a("A-03")
+        UnitWorkspace(page).open(unit_id_a).action(unit_id_a, "statement")
+        by_id(page, "statement_debtor_owner").wait_for(timeout=15_000)
+        statement_a = api.resident_statement(j.manager_a, unit_id_a)
+        receipt_a = next(r for r in statement_a["receipts"] if Decimal(str(r["total_amount"])) == Decimal("1000.00"))
+        by_id(page, f"statement_receipt_{receipt_a['receipt_number']}").wait_for(timeout=15_000)
+        page.keyboard.press("Escape")
+        UnitWorkspace(page).close()
+        PaymentStream(page).open()
+        by_id(page, "tab_payment_stream").wait_for(timeout=15_000)
+        assert page.get_by_text("₺90.658,50", exact=True).count() > 0
+        assert PaymentStream(page).entry_ids(), "Site A manager cash view should list posted receipts"
+
+        manager_b_page = page.context.new_page()
+        try:
+            LoginPage(manager_b_page, login_page.base_url).open().login(
+                "manager", j.manager_b.user["email"], j.manager_b_password,
+            )
+            ResidentsTab(manager_b_page).open()
+            assert set(ResidentsTab(manager_b_page).unit_card_ids()) == set(j.units_b.values())
+            unit_id_b = j.unit_b("B2-01")
+            UnitWorkspace(manager_b_page).open(unit_id_b).action(unit_id_b, "statement")
+            by_id(manager_b_page, "statement_debtor_tenant").wait_for(timeout=15_000)
+            statement_b = api.resident_statement(j.manager_b, unit_id_b)
+            receipt_b = next(
+                r for r in statement_b["receipts"] if Decimal(str(r["total_amount"])) == Decimal("750.00")
+            )
+            by_id(manager_b_page, f"statement_receipt_{receipt_b['receipt_number']}").wait_for(timeout=15_000)
+            manager_b_page.keyboard.press("Escape")
+            UnitWorkspace(manager_b_page).close()
+            PaymentStream(manager_b_page).open()
+            assert manager_b_page.get_by_text("₺189.538,75", exact=True).count() > 0
+            assert PaymentStream(manager_b_page).entry_ids(), "Site B manager cash view should list posted receipts"
+        finally:
+            manager_b_page.close()
 
     finally:
         teardown_sites(stack, manifest, restart=False)

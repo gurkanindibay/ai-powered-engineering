@@ -10,11 +10,11 @@ Feature: Stateful zero-to-multi-site financial journey
     Then the site list is empty
     And no shared development or production data has been reset
 
-  # The integrated journey is automated after the onboarding and lifecycle builders from #247 and #248 land.
-  @SC-13-26-02 @J-14 @depth:1 @layer:gui @core @pending
+  @SC-13-26-02 @J-14 @depth:1 @layer:gui @core @linked
   Scenario: Two sites remain identifiable from onboarding through final reconciliation
-    Given an empty site list and the approved two-site financial journey
-    When the manager creates all 88 units, registers their owners and occupants, and applies the four-period lifecycle
-    Then every onboarding, occupancy, payment, statement and site-cash checkpoint uses the same returned site and unit IDs
-    And the manager's browser evidence agrees with the independently calculated site balances
+    Given an isolated E2E database with an empty residential site list
+    When the manager onboards both sites, creates all 88 units through manager commands, and applies the four-period lifecycle
+    Then every occupancy and payment checkpoint uses the IDs returned during onboarding
+    And the unit statement and site-scoped cash view show the final manager evidence
+    And the final site balances reconcile to the independent fixture totals
 
