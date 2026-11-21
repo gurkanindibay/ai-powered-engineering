@@ -338,25 +338,29 @@ def test_transfer_on_unit_with_several_debtors_is_held_for_the_manager(request, 
 @pytest.mark.role_manager
 @pytest.mark.xfail(
     strict=True,
-    reason="BUG #278: approving a held multi-debtor transfer for the tenant credits the whole amount as an advance",
+    reason="BUG #278 and #255: the API assigns a held item only by debtor role (OWNER/TENANT), not to a person, "
+    "and approving it for the tenant credits the whole amount as an advance instead of settling Mert Kılıç's share",
 )
-def test_approved_held_transfer_settles_the_assigned_debtor(request, api, actors, stack):
+def test_approved_held_transfer_settles_only_the_assigned_person(request, api, actors, stack):
     with _multi_debtor_unit(request, api, actors, stack) as (j, a2):
-        owner_before = _debtor_items(api, j, a2, "OWNER")
-        tenant_before = _debtor_items(api, j, a2, "TENANT")
-        oldest_fee = tenant_before[0][2]
         item = _hold_transfer(api, stack, j, a2)
-
-        # The API assigns a held item by debtor role: the tenant ledger settles FIFO, fee first.
+        # The closest the API offers to "assign to Mert Kılıç" is the TENANT role (he is the current tenant).
         api.call(
             "POST", "/api/v1/bank/statements/confirm-reconciliation", j.manager.token,
             body={"site_id": j.site_id, "match_ids": [item["match_id"]],
                   "debtor_assignments": {item["match_id"]: "TENANT"}},
         )
-        assert _debtor_items(api, j, a2, "TENANT") == [
-            ("Ekim 2026", D("1016.13") - (D("800.00") - oldest_fee), D("0.00")),
-            tenant_before[1],
-        ]
-        assert _debtor_items(api, j, a2, "OWNER") == owner_before  # the other shares are unchanged
-        assert stack.sql(f"SELECT COUNT(*) FROM payment_receipts WHERE site_id = {int(j.site_id)};") == "1"
+
+        def paid(person: str, period: str) -> Decimal:
+            return D(stack.sql(
+                "SELECT COALESCE(SUM(d.paid_amount), 0) FROM dues_liabilities d JOIN persons p ON p.id = d.liable_person_id "
+                f"WHERE d.unit_id = {int(a2)} AND p.full_name = '{person}' AND d.period = '{period}';"
+            ))
+
+        # 800.00 clears Mert's Kasım fee and principal; Selin's Ekim share and Ahmet's shares stay untouched.
+        assert paid("Mert Kılıç", "Kasım 2026") == D("800.00")
+        assert paid("Selin Demir", "Ekim 2026") == D("0.00")
+        assert paid("Ahmet Yılmaz", "Eylül 2026") == D("0.00")
+        assert paid("Ahmet Yılmaz", "Ekim 2026") == D("0.00")
+        assert stack.sql(f"SELECT COALESCE(SUM(allocated_advance), 0) FROM payment_receipts WHERE site_id = {int(j.site_id)};") == "0.00"
         j.invariants("SC-13-04-15-approved")

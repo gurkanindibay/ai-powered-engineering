@@ -144,15 +144,15 @@ Feature: Paying, allocation and advance across periods
     And the ledger invariants hold
 
   @SC-13-04-15 @J-11 @depth:2 @state:F6 @layer:backend @core @role_manager @linked
-  # Backend coverage: backend/tests/bank_multi_debtor_tests.rs (SC-07-03-03). The settlement step is a strict xfail until #278 is fixed.
+  # Backend coverage: backend/tests/bank_multi_debtor_tests.rs (SC-07-03-03). The settlement step is a strict xfail until #278 (and #255, person-level allocation) are fixed.
   Scenario: A unit-level transfer on a unit with several debtors waits for the manager
     Given the site is in state F6
-    And unit "A-2" has an owner share for "Ahmet Yılmaz" and tenant shares for "Selin Demir" (Ekim) and "Mert Kılıç" (Kasım)
+    And unit "A-2" has open shares for "Ahmet Yılmaz", "Selin Demir" and "Mert Kılıç"
     When the bank webhook sends 800.00 to the virtual IBAN of unit "A-2" with no payer identity
     Then the transfer is stored as UNMATCHED in the reconciliation queue with the reason "several open debtors"
     And no share of any debtor is reduced and no receipt exists
-    When the manager assigns the item to the tenant debtor role and approves it
-    Then the tenant ledger is settled oldest first, fee before principal, and the owner share is unchanged
+    When the manager assigns the item to "Mert Kılıç" and approves it
+    Then the "Kasım 2026" share of "Mert Kılıç" is settled and the other shares are unchanged
     And the ledger invariants hold
 
   @SC-13-04-16 @J-11 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
