@@ -13,10 +13,10 @@ from support import FakeBackend, capabilities, policy, repository
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def catalog(*, disable_codex=False, drop_haiku=False):
+def catalog(*, disable_codex=False, drop_haiku=False, codex_efforts=("low", "medium", "high")):
     claude = [{"id": m, "options": [{"id": "effort", "values": ["low", "medium", "high", "xhigh", "max"]}]}
               for m in ("claude-opus-5-5", "claude-sonnet-5-5") + (() if drop_haiku else ("claude-haiku-5-5",))]
-    codex = [{"id": "gpt-6.1-sol", "options": [{"id": "reasoningEffort", "values": ["low", "medium", "high"]}]}]
+    codex = [{"id": "gpt-6.1-sol", "options": [{"id": "reasoningEffort", "values": list(codex_efforts)}]}]
     return {"providers": [
         {"providerInstanceId": "claudeAgent", "canRunChildTask": True, "models": claude},
         {"providerInstanceId": "codex", "canRunChildTask": not disable_codex, "models": codex},
@@ -46,7 +46,7 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(chosen["low"]["model"], "claude-haiku-5-5")
         self.assertEqual(chosen["medium"]["model"], "claude-sonnet-5-5")
         self.assertEqual(chosen["critical"]["model"], "claude-opus-5-5")
-        self.assertEqual(chosen["critical"]["selected_options"], {"effort": "xhigh"})
+        self.assertEqual(chosen["critical"]["selected_options"], {"effort": "high"})
 
     def test_unavailable_providers_models_and_options_are_dropped(self):
         live = t3.capabilities_from_catalog(self.registry, catalog(disable_codex=True, drop_haiku=True))
@@ -54,10 +54,10 @@ class RegistryTests(unittest.TestCase):
         self.assertNotIn("claude-haiku-5-5", models)
         self.assertNotIn("gpt-6.1-sol", models)
         self.assertEqual(route(live, "developer", "low")["model"], "claude-sonnet-5-5")
-        # Catalog offers no xhigh for codex, so its high/critical defaults are withdrawn.
-        codex = t3.capabilities_from_catalog(self.registry, catalog())
+        # Without high effort, Codex is only eligible for the medium tier.
+        codex = t3.capabilities_from_catalog(self.registry, catalog(codex_efforts=("low", "medium")))
         sol = next(t for t in codex["targets"] if t["model"] == "gpt-6.1-sol")
-        self.assertEqual(sol["tiers"], ["medium", "high"])
+        self.assertEqual(sol["tiers"], ["medium"])
 
     def test_explicit_preference_is_not_substituted(self):
         live = t3.capabilities_from_catalog(self.registry, catalog(disable_codex=True))
