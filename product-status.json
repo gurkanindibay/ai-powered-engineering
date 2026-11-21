@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-21T06:37:17Z",
- "run_id": "20261121T063717Z-7e0ae21",
- "commit": "7e0ae2182b528a488e72481311bd2a54f83b3cd2",
+ "generated_at": "2026-11-21T06:52:15Z",
+ "run_id": "20261121T065215Z-c53bf75",
+ "commit": "c53bf751df9635aa98c3d3387382646d50fdfb50",
  "task": "master",
  "status": "DEFECT",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 7,
   "passed": 185,
-  "seconds": 2389.2,
+  "seconds": 2323.1,
   "files": 8,
   "unparseable": []
  },
@@ -19,9 +19,9 @@
   "stories": 115,
   "stories_with_scenarios": 115,
   "stories_passing": 32,
-  "scenarios": 462,
-  "automated": 359,
-  "passing": 154,
+  "scenarios": 463,
+  "automated": 360,
+  "passing": 155,
   "failing": 3,
   "no_result": 202,
   "planned": 103,
@@ -148,9 +148,9 @@
    "stories": 7,
    "stories_with_scenarios": 7,
    "stories_passing": 2,
-   "scenarios": 24,
-   "automated": 24,
-   "passing": 9,
+   "scenarios": 25,
+   "automated": 25,
+   "passing": 10,
    "failing": 0,
    "no_result": 15,
    "planned": 0,
@@ -1435,6 +1435,12 @@
   "SC-09-02-02": {
    "state": "no_result",
    "name": "Owner payment settles capital dues after operational dues",
+   "epic": "EPIC-09",
+   "story": "STORY-09-02"
+  },
+  "SC-09-02-03": {
+   "state": "passing",
+   "name": "Owner payment never settles tenant operational dues without joint-liability opt-in",
    "epic": "EPIC-09",
    "story": "STORY-09-02"
   },
@@ -3161,8 +3167,8 @@
    "epics": 13,
    "stories": 115,
    "stories_with_scenarios": 115,
-   "scenarios": 462,
-   "automated": 359
+   "scenarios": 463,
+   "automated": 360
   }
  ],
  "recent_changes": [
@@ -3178,6 +3184,18 @@
     "STORY-13-13: Zero to multi-site financial journey",
     "STORY-13-14: Liability follows titles, vacancies and move-ins",
     "STORY-13-25: Reconcile homeowner debt and operating cash by site"
+   ]
+  },
+  {
+   "date": "2026-11-21",
+   "epic": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "new_stories": 0,
+   "new_scenarios": 1,
+   "newly_automated": 1,
+   "items": 1,
+   "samples": [
+    "SC-09-02-03: Owner payment never settles tenant operational dues without joint-liability opt-in"
    ]
   },
   {
@@ -3870,5 +3888,5 @@
    ]
   }
  ],
- "href": "reports/44875796250-1/"
+ "href": "reports/44876824215-1/"
 }
