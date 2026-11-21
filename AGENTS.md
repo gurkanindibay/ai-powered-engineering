@@ -62,6 +62,13 @@ The workspace centers on **SitePulse**, a residential site platform built using 
      - **Claude**: Use Sonnet for routine edits, test runs, and exploration. Reserve Opus for design-heavy work.
      - **Codex**: Use GPT-6.2 Sol for routine implementation, debugging, and verification. Use GPT-6.2 Astra for design-heavy work and complex implementation or debugging.
      - **DeepSeek**: Use an eligible DeepSeek model as the last fallback when the subscription-backed options cannot meet the task's needs. DeepSeek is billed by usage.
+   - Use the lowest reasoning effort that fits the task and is exposed by the selected model and harness. Honor explicit effort requests.
+     - **Low** for targeted lookups, mechanical edits, and running known checks.
+     - **Medium** by default for routine implementation, debugging, and review.
+     - **High** for architecture, cross-component changes, and bugs with several plausible causes.
+     - **Extra high (`xhigh`)** for critical work involving financial correctness, concurrency, or irreversible data changes, or when high effort leaves a material question unresolved.
+     - **`max` or `ultra`** for exceptional cases where additional reasoning could resolve a consequential uncertainty and the selected model supports the setting.
+   - For Antigravity and DeepSeek, use the thinking controls available for the selected model. If the harness offers only a toggle, use the default for routine work and enable deeper thinking when the task calls for high effort. Durable harness runs use the configured tier-to-effort mapping.
    - The `.claude/settings.json` hook (`scripts/token_guard.py`) denies known-wasteful calls and warns on oversized output; follow its suggestion rather than working around it.
 
 10. **Issue Selection & Concurrent Agent Work**:
