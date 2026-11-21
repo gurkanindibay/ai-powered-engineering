@@ -280,8 +280,9 @@ pub fn open_dues_for(
 /// Filters candidates so that non-designated liabilities must belong to the paying person.
 ///
 /// A receipt from a person settles only that person's liabilities (plus explicit designation).
-/// When `due.liable_person_id` and `payer_person_id` are both known, candidate liabilities
-/// must match the payer unless explicitly designated.
+/// When both ids are known they must match. A charge with a known debtor is excluded
+/// (fail closed) when the payer is unknown, unless explicitly designated. Charges with no
+/// recorded debtor are left to the role filter (backfill pending).
 pub fn filter_candidates_by_payer(
     dues: &[DuesLiability],
     candidates: &[usize],
@@ -295,7 +296,13 @@ pub fn filter_candidates_by_payer(
             designated.contains(&i)
                 || match (dues[i].liable_person_id, payer_person_id) {
                     (Some(due_pid), Some(payer_pid)) => due_pid == payer_pid,
-                    _ => true,
+                    // Fail closed: a charge with a known debtor never absorbs a payer
+                    // we cannot identify.
+                    (Some(_), None) => false,
+                    // Unattributed charges (legacy rows and accrual paths that do not
+                    // record a debtor yet, e.g. heat shares) stay payable by the role
+                    // filter alone until they are backfilled.
+                    (None, _) => true,
                 }
         })
         .collect()
@@ -454,6 +461,52 @@ mod tests {
         // Explicit designation allows settling predecessor's charge.
         let designated_candidates = filter_candidates_by_payer(&dues, &candidates, &[0], Some(102));
         assert_eq!(designated_candidates, vec![0, 1]);
+    }
+
+    // covers: SC-13-14-08
+    #[test]
+    fn payer_filter_fails_closed_when_only_one_side_is_known() {
+        let mut known = due(
+            "known",
+            "1000.00",
+            "0.00",
+            1,
+            DEBTOR_OWNER,
+            EXPENSE_OPERATIONAL,
+        );
+        known.liable_person_id = Some(101);
+        let unknown = due(
+            "legacy",
+            "1000.00",
+            "0.00",
+            2,
+            DEBTOR_OWNER,
+            EXPENSE_OPERATIONAL,
+        );
+        let dues = vec![known, unknown];
+        let candidates = vec![0, 1];
+
+        // (Some, None): known debtor, unidentified payer.
+        let known_only = vec![dues[0].clone()];
+        assert!(filter_candidates_by_payer(&known_only, &[0], &[], None).is_empty());
+        // (None, Some): unattributed legacy charge stays payable (role filter decides).
+        assert_eq!(
+            filter_candidates_by_payer(&dues, &candidates, &[], Some(101)),
+            vec![0, 1]
+        );
+        // (Some, Some) mismatch is excluded.
+        assert!(filter_candidates_by_payer(&dues, &[0], &[], Some(999)).is_empty());
+        // Designation still overrides.
+        assert_eq!(
+            filter_candidates_by_payer(&dues, &[0], &[0], Some(999)),
+            vec![0]
+        );
+        // (None, None): nothing known, the role filter alone decides.
+        let only_legacy = vec![dues[1].clone()];
+        assert_eq!(
+            filter_candidates_by_payer(&only_legacy, &[0], &[], None),
+            vec![0]
+        );
     }
 
     // covers: SC-09-02-02

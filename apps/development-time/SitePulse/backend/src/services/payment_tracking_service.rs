@@ -641,34 +641,25 @@ impl PaymentTrackingService {
             {
                 tenant_person_id
             } else {
+                // Scope the lookup to this unit's occupancy history and fail closed
+                // (None) when there is no match or more than one distinct person.
                 let inner = self.state.inner.read().await;
-                let from_occupancies = inner.unit_occupancies.get(&unit.id).and_then(|history| {
-                    history
-                        .iter()
-                        .find(|item| {
-                            crate::domain::fold_turkish(item.person_name.trim()) == folded_payer
-                        })
-                        .map(|item| item.person_id)
-                });
-                let from_users = from_occupancies.or_else(|| {
-                    inner
-                        .users
-                        .iter()
-                        .find(|u| crate::domain::fold_turkish(u.full_name.trim()) == folded_payer)
-                        .and_then(|u| {
-                            u.person_id.or_else(|| {
-                                u.id.strip_prefix("person-")
-                                    .and_then(|s| s.parse::<i64>().ok())
-                            })
-                        })
-                });
-                from_users.or_else(|| {
-                    if payer_role == DebtorType::Owner {
-                        owner_person_id
-                    } else {
-                        tenant_person_id
-                    }
-                })
+                let mut matches = inner
+                    .unit_occupancies
+                    .get(&unit.id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|item| {
+                        crate::domain::fold_turkish(item.person_name.trim()) == folded_payer
+                    })
+                    .map(|item| item.person_id)
+                    .collect::<Vec<_>>();
+                matches.sort_unstable();
+                matches.dedup();
+                match matches.as_slice() {
+                    [only] => Some(*only),
+                    _ => None,
+                }
             }
         };
 
