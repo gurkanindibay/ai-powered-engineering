@@ -389,3 +389,185 @@ async fn when_held_transfer_approved_by_person_name_then_settles_that_person() {
     assert_eq!(by("mert-nov"), Decimal::ZERO);
     assert_eq!(by("owner-sept"), Decimal::ZERO);
 }
+
+#[tokio::test]
+async fn when_unit_has_duplicate_tenant_names_then_assigning_by_person_id_settles_the_intended_person(
+) {
+    let state = state_with(vec![
+        due("owner-sept", DebtorType::Owner),
+        DuesLiability {
+            liable_person_id: Some(102),
+            ..due("mert-former-oct", DebtorType::Tenant)
+        },
+        DuesLiability {
+            liable_person_id: Some(103),
+            ..due("mert-current-nov", DebtorType::Tenant)
+        },
+    ])
+    .await;
+    {
+        let mut inner = state.inner.write().await;
+        inner.unit_occupancies.insert(
+            UNIT.to_string(),
+            vec![
+                OccupancyHistoryItem {
+                    id: 2,
+                    unit_id: 14,
+                    person_id: 102,
+                    person_name: "Mert Kılıç".to_string(),
+                    person_phone: None,
+                    person_email: None,
+                    role: DebtorType::Tenant,
+                    start_date: "2026-10-01".to_string(),
+                    end_date: Some("2026-10-31".to_string()),
+                    is_active: false,
+                    exit_balance: Decimal::ZERO,
+                    notes: None,
+                    created_at: chrono::Utc::now(),
+                },
+                OccupancyHistoryItem {
+                    id: 3,
+                    unit_id: 14,
+                    person_id: 103,
+                    person_name: "Mert Kılıç".to_string(),
+                    person_phone: None,
+                    person_email: None,
+                    role: DebtorType::Tenant,
+                    start_date: "2026-11-01".to_string(),
+                    end_date: None,
+                    is_active: true,
+                    exit_balance: Decimal::ZERO,
+                    notes: None,
+                    created_at: chrono::Utc::now(),
+                },
+            ],
+        );
+    }
+
+    send(&state, webhook("TX-MD-278-DUP", None)).await;
+    let match_id = state.inner.read().await.reconciliation_queue[0]
+        .match_id
+        .clone();
+
+    // Assigning by ambiguous name fails because two distinct people share the same name on this unit
+    let mut ambiguous_req = ConfirmReconciliationRequest {
+        site_id: "site-1".to_string(),
+        match_ids: vec![match_id.clone()],
+        ..Default::default()
+    };
+    ambiguous_req.debtor_assignments.insert(
+        match_id.clone(),
+        DebtorAssignment::Person("Mert Kılıç".to_string()),
+    );
+    let amb_err = sitepulse_backend::handlers::confirm_reconciliation(
+        axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        axum::Json(ambiguous_req),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(amb_err.0, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(amb_err.1.contains("ambiguous"));
+    assert!(state.inner.read().await.payment_receipts.is_empty());
+
+    // Assigning explicitly by PersonId(102) resolves to the former tenant without ambiguity
+    let mut pid_req = ConfirmReconciliationRequest {
+        site_id: "site-1".to_string(),
+        match_ids: vec![match_id.clone()],
+        ..Default::default()
+    };
+    pid_req
+        .debtor_assignments
+        .insert(match_id, DebtorAssignment::PersonId(102));
+
+    let (_, axum::Json(done)) = sitepulse_backend::handlers::confirm_reconciliation(
+        axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        axum::Json(pid_req),
+    )
+    .await
+    .unwrap();
+    assert_eq!(done.confirmed_count, 1);
+
+    let inner = state.inner.read().await;
+    assert_eq!(inner.payment_receipts.len(), 1);
+    let receipt = &inner.payment_receipts[0];
+    assert_eq!(receipt.payer_name, "Mert Kılıç");
+    assert_eq!(receipt.payer_role, DebtorType::Tenant);
+    assert_eq!(receipt.payer_person_id, Some(102));
+    assert_eq!(receipt.allocated_principal, d("800.00"));
+    assert_eq!(receipt.allocated_advance, Decimal::ZERO);
+
+    let by = |id: &str| {
+        inner
+            .dues
+            .iter()
+            .find(|x| x.id == id)
+            .unwrap()
+            .paid_principal
+    };
+    assert_eq!(by("mert-former-oct"), d("800.00"));
+    assert_eq!(by("mert-current-nov"), Decimal::ZERO);
+    assert_eq!(by("owner-sept"), Decimal::ZERO);
+}
+
+#[tokio::test]
+async fn when_debtor_assignment_is_invalid_or_unknown_then_rejected_and_match_remains_unmatched() {
+    let state = state_with(vec![
+        due("owner-sept", DebtorType::Owner),
+        due("tenant-nov", DebtorType::Tenant),
+    ])
+    .await;
+
+    send(&state, webhook("TX-MD-278-INV", None)).await;
+    let match_id = state.inner.read().await.reconciliation_queue[0]
+        .match_id
+        .clone();
+
+    // 1) Unknown person ID
+    let mut req1 = ConfirmReconciliationRequest {
+        site_id: "site-1".to_string(),
+        match_ids: vec![match_id.clone()],
+        ..Default::default()
+    };
+    req1.debtor_assignments
+        .insert(match_id.clone(), DebtorAssignment::PersonId(9999));
+    let err1 = sitepulse_backend::handlers::confirm_reconciliation(
+        axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        axum::Json(req1),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err1.0, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(err1.1.contains("not valid for unit"));
+
+    // 2) Unknown person name
+    let mut req2 = ConfirmReconciliationRequest {
+        site_id: "site-1".to_string(),
+        match_ids: vec![match_id.clone()],
+        ..Default::default()
+    };
+    req2.debtor_assignments.insert(
+        match_id.clone(),
+        DebtorAssignment::Person("Bilinmeyen Biri".to_string()),
+    );
+    let err2 = sitepulse_backend::handlers::confirm_reconciliation(
+        axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        axum::Json(req2),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err2.0, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(err2.1.contains("not valid for unit"));
+
+    // Queue item remains UNMATCHED and no receipts were created
+    let inner = state.inner.read().await;
+    assert_eq!(inner.payment_receipts.len(), 0);
+    assert_eq!(inner.reconciliation_queue.len(), 1);
+    assert_eq!(
+        inner.reconciliation_queue[0].status,
+        ReconciliationStatus::Unmatched
+    );
+}

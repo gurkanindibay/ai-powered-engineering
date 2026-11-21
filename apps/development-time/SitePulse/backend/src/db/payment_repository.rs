@@ -414,6 +414,7 @@ pub async fn tx_insert_receipt(
             )
             SELECT $1, $2, $3, $4, $5, $6::text, $7, $8::text, $9, $10, $11, $12, $13, $14, $15::text::jsonb, $16, $17, $18, $19,
                    CASE WHEN $20::text = 'REVERSAL' THEN $23::bigint
+                        WHEN $23::bigint IS NOT NULL THEN $23::bigint
                         ELSE (SELECT p.person_id FROM sp_unit_party_at($2, $6::text, ($19::timestamptz)::date) p) END,
                    CASE WHEN $20::text = 'REVERSAL' THEN $24::bigint
                         WHEN $8::text = 'OWNER'
