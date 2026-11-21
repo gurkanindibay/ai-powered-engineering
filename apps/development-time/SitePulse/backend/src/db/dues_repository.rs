@@ -556,7 +556,7 @@ pub async fn commit_accrual_batch(
             // A duplicate accrual must stay a true no-op: rewriting an already OPEN
             // period would fire the audit_domain_change trigger and log an event for
             // a request that changed nothing.
-            if status != "OPEN" {
+            if status != "OPEN" && status != "ACTIVE" {
                 tx.execute(
                     "UPDATE dues_periods SET status='OPEN' WHERE id=$1 AND site_id=$2",
                     &[&id, &site],
@@ -565,23 +565,48 @@ pub async fn commit_accrual_batch(
             }
             id
         }
-        None => tx
-            .query_one(
-                r#"
+        None => {
+            // The period may exist without a period_key (a legacy seed or a period
+            // created before the canonical key). Open it only when it is still a
+            // draft; an already open row is left untouched so a duplicate accrual
+            // does not write and fire the audit trigger.
+            let opened = tx
+                .query_opt(
+                    r#"
             INSERT INTO dues_periods (site_id, period_name, period_key, due_date, status)
             VALUES ($1, $2, $3, $4, 'OPEN')
             ON CONFLICT (site_id, period_name) DO UPDATE SET period_key = EXCLUDED.period_key, status = 'OPEN'
+            WHERE dues_periods.status = 'DRAFT'
             RETURNING id
             "#,
-                &[
-                    &site,
-                    &batch.period_label,
-                    &batch.period_key,
-                    &batch.due_date,
-                ],
-            )
-            .await?
-            .get(0),
+                    &[
+                        &site,
+                        &batch.period_label,
+                        &batch.period_key,
+                        &batch.due_date,
+                    ],
+                )
+                .await?;
+            match opened {
+                Some(row) => row.get(0),
+                None => {
+                    let row = tx
+                        .query_one(
+                            "SELECT id, status FROM dues_periods WHERE site_id = $1 AND period_name = $2",
+                            &[&site, &batch.period_label],
+                        )
+                        .await?;
+                    let status: String = row.get(1);
+                    if status == "CLOSED" {
+                        return Err(std::io::Error::other(
+                            "cannot accrue into a closed billing period",
+                        )
+                        .into());
+                    }
+                    row.get(0)
+                }
+            }
+        }
     });
     let mut due_ids = Vec::with_capacity(batch.dues.len());
     let mut liable_person_ids = Vec::with_capacity(batch.dues.len());

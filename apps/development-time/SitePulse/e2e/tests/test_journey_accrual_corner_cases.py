@@ -23,8 +23,11 @@ import pytest
 from support.api import ApiError, raw_call
 from support.journey_attempts import ledger_invariants
 from support.journey_snapshots import (
+    audit_event_count,
+    audit_mark,
     financial_snapshot,
     journey_site,
+    new_audit_rows,
     second_manager,
     unit_position,
 )
@@ -66,6 +69,8 @@ def test_invalid_accrual_input_is_rejected_and_creates_nothing(
 def test_duplicate_accrual_with_a_different_amount_changes_nothing(request, api, actors, stack):
     with journey_site(request, api, actors, stack, "F4") as (fixture, _):
         before = financial_snapshot(stack, fixture.site_id)
+        audit_before = audit_event_count(stack, fixture.site_id)
+        audit_before_id = audit_mark(stack, fixture.site_id)
         shares = f"SELECT principal_amount FROM dues_liabilities d JOIN units u ON u.id = d.unit_id " \
                  f"WHERE u.site_id = {int(fixture.site_id)} AND d.period = 'Ekim 2026' ORDER BY d.id;"
         original = stack.sql(shares)
@@ -78,6 +83,9 @@ def test_duplicate_accrual_with_a_different_amount_changes_nothing(request, api,
 
         assert stack.sql(shares) == original  # the 1800.00 was not applied to any liability
         assert financial_snapshot(stack, fixture.site_id) == before
+        assert audit_event_count(stack, fixture.site_id) == audit_before, new_audit_rows(
+            stack, fixture.site_id, audit_before_id
+        )
 
 
 @pytest.mark.covers("SC-13-05-04")

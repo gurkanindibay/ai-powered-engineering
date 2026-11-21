@@ -81,6 +81,25 @@ def reconciliation_queue_count(stack: E2EStack, site_id: str) -> int:
     return int(stack.sql(f"SELECT COUNT(*) FROM reconciliation_queue WHERE site_id = {int(site_id)};"))
 
 
+def audit_event_count(stack: E2EStack, site_id: str) -> str:
+    """The number of audit rows for a site; a refusal or duplicate must not add one."""
+    return stack.sql(f"SELECT COUNT(*) FROM audit_events WHERE site_id = {int(site_id)};")
+
+
+def audit_mark(stack: E2EStack, site_id: str) -> str:
+    """The current newest audit event id, so rows written later can be listed by name."""
+    return stack.sql(f"SELECT COALESCE(MAX(event_id), 0) FROM audit_events WHERE site_id = {int(site_id)};")
+
+
+def new_audit_rows(stack: E2EStack, site_id: str, mark: str) -> str:
+    """The audit rows written after `mark`, named for an assertion failure message."""
+    return stack.sql(
+        "SELECT COALESCE(string_agg(action || ' on ' || resource_type || ' #' || "
+        f"COALESCE(resource_id, '?'), ', '), 'none') FROM audit_events "
+        f"WHERE site_id = {int(site_id)} AND event_id > {int(mark)};"
+    )
+
+
 def unit_position(api: Api, manager: Session, site_id: str, unit_id: str) -> tuple[Decimal, Decimal]:
     """The unit's (debt, advance) summed over the debtors of its resident statement."""
     debtors = api.resident_statement(manager, unit_id)["debtors"]
