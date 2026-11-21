@@ -221,6 +221,15 @@ class _PeopleDirectoryPageState extends State<PeopleDirectoryPage>
     if (imported == true && mounted) _reload();
   }
 
+  bool get _hasNoResidentsOrOwners {
+    if (_items.isEmpty) return true;
+    return _items.every((p) =>
+        p.ownedUnits == 0 &&
+        p.occupiedUnits == 0 &&
+        p.role != 'HOME_OWNER' &&
+        p.role != 'HOME_RESIDENT');
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppFullscreenPage(
@@ -261,11 +270,53 @@ class _PeopleDirectoryPageState extends State<PeopleDirectoryPage>
         onPageChanged: _loadPage,
         resultLabel: 'kişi',
         emptyState: _error == null
-            ? const SpGuidanceCard(
-                icon: Icons.person_search_outlined,
-                title: 'Kişi bulunamadı',
-                message: 'Aramayı veya filtreleri değiştirin.',
-              )
+            ? (_search.value.text.isNotEmpty || _role.value != null || _login.value != null
+                ? testId(
+                    'people_search_empty_state',
+                    SpGuidanceCard(
+                      key: const Key('people_search_empty_state'),
+                      icon: Icons.person_search_outlined,
+                      title: 'Kişi bulunamadı',
+                      message: 'Aramayı veya filtreleri değiştirin.',
+                      action: testId(
+                        'people_directory_reset_btn',
+                        TextButton(
+                          key: const Key('people_directory_reset_btn'),
+                          onPressed: () {
+                            _search.value.clear();
+                            _role.value = null;
+                            _login.value = null;
+                            _reload();
+                          },
+                          child: const Text('Filtreleri sıfırla'),
+                        ),
+                      ),
+                    ),
+                    label: 'Kişi bulunamadı',
+                  )
+                : testId(
+                    'people_empty_state',
+                    SpGuidanceCard(
+                      key: const Key('people_empty_state'),
+                      icon: Icons.people_outline,
+                      title: 'Henüz kayıtlı kat maliki veya sakin bulunmuyor',
+                      message: 'Bu sitede henüz kayıtlı kat maliki veya sakin bulunmuyor. Kişileri CSV dosyasından içe aktarabilirsiniz.',
+                      action: testId(
+                        'people_empty_import_btn',
+                        ElevatedButton.icon(
+                          key: const Key('people_empty_import_btn'),
+                          onPressed: _openImport,
+                          icon: const Icon(Icons.upload_file_outlined, size: 16),
+                          label: const Text('Kişileri İçe Aktar'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryFill,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    label: 'Henüz kayıtlı kat maliki veya sakin bulunmuyor',
+                  ))
             : SpGuidanceCard(
                 icon: Icons.cloud_off_outlined,
                 title: 'Liste yüklenemedi',
@@ -328,6 +379,39 @@ class _PeopleDirectoryPageState extends State<PeopleDirectoryPage>
                 title: 'Liste yüklenemedi',
                 message: _error!,
                 tone: SpTone.danger,
+              ),
+            if (_hasNoResidentsOrOwners &&
+                _search.value.text.isEmpty &&
+                _role.value == null &&
+                _login.value == null &&
+                _error == null &&
+                !_loading &&
+                _items.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.md),
+                child: testId(
+                  'people_guidance_card',
+                  SpGuidanceCard(
+                    key: const Key('people_guidance_card'),
+                    icon: Icons.people_outline,
+                    title: 'Henüz kayıtlı kat maliki veya sakin bulunmuyor',
+                    message: 'Bu sitede henüz kayıtlı kat maliki veya sakin bulunmuyor. Kişileri CSV dosyasından içe aktararak başlayabilirsiniz.',
+                    action: testId(
+                      'people_guidance_import_btn',
+                      ElevatedButton.icon(
+                        key: const Key('people_guidance_import_btn'),
+                        onPressed: _openImport,
+                        icon: const Icon(Icons.upload_file_outlined, size: 16),
+                        label: const Text('Kişileri İçe Aktar'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryFill,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  label: 'Henüz kayıtlı kat maliki veya sakin bulunmuyor',
+                ),
               ),
           ],
         ),

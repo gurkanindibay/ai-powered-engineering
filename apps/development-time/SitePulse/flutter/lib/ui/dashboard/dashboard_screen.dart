@@ -861,33 +861,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (isLoading)
           const SpSkeletonList()
         else if (filtered.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(24),
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: AppColors.surface(context),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border(context)),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.person_off_outlined, size: 40, color: AppColors.textSecondary(context)),
-                const SizedBox(height: 8),
-                Text(
-                  _homeOwnerSearchQuery.isNotEmpty ? 'Aramaya Uygun Sakin Bulunamadı' : 'Kayıtlı Kat Maliki veya Sakin Yok',
-                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _homeOwnerSearchQuery.isNotEmpty
-                      ? 'Farklı bir arama terimi deneyebilir veya filtreyi temizleyebilirsiniz.'
-                      : '"Yeni Sakin Ekle" butonu ile daireye sakin ekleyebilirsiniz.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                ),
-              ],
-            ),
-          )
+          homeOwners.isEmpty
+              ? testId(
+                  'units_empty_state',
+                  SpGuidanceCard(
+                    key: const Key('units_empty_state'),
+                    icon: Icons.home_work_outlined,
+                    title: 'Henüz daire veya sakin bulunmuyor',
+                    message: 'Site dizinini başlatmak için ilk sakin veya daireyi ekleyin.',
+                    prominent: true,
+                    action: testId(
+                      'empty_state_add_resident_btn',
+                      ElevatedButton.icon(
+                        key: const Key('empty_state_add_resident_btn'),
+                        onPressed: _openAddResident,
+                        icon: const Icon(Icons.person_add_outlined, size: 16),
+                        label: const Text('Yeni Sakin Ekle'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryFill,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  label: 'Henüz daire veya sakin bulunmuyor',
+                )
+              : testId(
+                  'units_filtered_empty_state',
+                  SpGuidanceCard(
+                    key: const Key('units_filtered_empty_state'),
+                    icon: Icons.person_search_outlined,
+                    title: 'Aramaya uygun sakin bulunamadı',
+                    message: 'Farklı bir arama terimi deneyebilir veya filtreyi temizleyebilirsiniz.',
+                    action: testId(
+                      'empty_state_reset_filters_btn',
+                      TextButton(
+                        key: const Key('empty_state_reset_filters_btn'),
+                        onPressed: () {
+                          setState(() {
+                            _homeOwnerSearchQuery = '';
+                            _homeOwnerBlockFilter = allBlocksFilter;
+                            _homeOwnerOccupancyFilter = OccupancyFilter.all;
+                          });
+                        },
+                        child: const Text('Filtreleri sıfırla'),
+                      ),
+                    ),
+                  ),
+                  label: 'Aramaya uygun sakin bulunamadı',
+                )
         else
           ...filtered.map((ho) => UnitDirectoryRow(
                 unit: ho,
