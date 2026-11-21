@@ -900,14 +900,14 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                         color: AppColors.textSecondary(context),
                       ),
                     ),
-                    Text(
+                    testId('payment_stream_total_volume', Text(
                       formatTry(totalVol),
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: AppColors.successText(context),
                       ),
-                    ),
+                    )),
                   ],
                 ),
               ),

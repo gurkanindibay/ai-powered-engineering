@@ -18,10 +18,9 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from support.api import ApiError
-from support.flutter import by_id
+from support.flutter import by_id, text_of
 from support.journey_attempts import (
     JourneyManifest,
     ledger_invariants,
@@ -31,7 +30,7 @@ from support.journey_attempts import (
     teardown_with_evidence,
 )
 from support.journey_multi_site import build_multi_site_journey
-from support.money import format_try
+from support.money import format_try, last_amount
 from pages.login import LoginPage
 from pages.manager import PaymentStream, ResidentsTab
 from pages.person import UnitWorkspace
@@ -1344,10 +1343,11 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         UnitWorkspace(page).close()
         PaymentStream(page).open()
         expected_cash_a = format_try(_posted_cash(api, j.manager_a))
-        try:
-            page.get_by_text(expected_cash_a, exact=True).first.wait_for(timeout=15_000)
-        except PlaywrightTimeoutError:
-            raise AssertionError(f"Site A, April 2027 cash view missing expected posted cash {expected_cash_a}")
+        total_a = by_id(page, "payment_stream_total_volume")
+        total_a.wait_for(timeout=15_000)
+        assert last_amount(text_of(total_a)) == _posted_cash(api, j.manager_a), (
+            f"Site A, April 2027 cash view missing expected posted cash {expected_cash_a}"
+        )
         assert PaymentStream(page).entry_ids(), "Site A, April 2027 cash view should list posted receipts"
 
         manager_b_page = page.context.new_page()
@@ -1375,10 +1375,11 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
             UnitWorkspace(manager_b_page).close()
             PaymentStream(manager_b_page).open()
             expected_cash_b = format_try(_posted_cash(api, j.manager_b))
-            try:
-                manager_b_page.get_by_text(expected_cash_b, exact=True).first.wait_for(timeout=15_000)
-            except PlaywrightTimeoutError:
-                raise AssertionError(f"Site B, April 2027 cash view missing expected posted cash {expected_cash_b}")
+            total_b = by_id(manager_b_page, "payment_stream_total_volume")
+            total_b.wait_for(timeout=15_000)
+            assert last_amount(text_of(total_b)) == _posted_cash(api, j.manager_b), (
+                f"Site B, April 2027 cash view missing expected posted cash {expected_cash_b}"
+            )
             assert PaymentStream(manager_b_page).entry_ids(), (
                 "Site B, April 2027 cash view should list posted receipts"
             )
