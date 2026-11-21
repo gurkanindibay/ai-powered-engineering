@@ -1,30 +1,30 @@
 {
  "schema": 1,
- "generated_at": "2026-11-20T22:30:46Z",
- "run_id": "20261120T223045Z-554c471",
- "commit": "554c471464c69b0b0c74e97a8c490b6d2289dbc4",
+ "generated_at": "2026-11-21T05:36:55Z",
+ "run_id": "20261121T053654Z-71a1a50",
+ "commit": "71a1a50a2d6f20ea8bd0df85561ea41a077de0f2",
  "task": "master",
  "status": "DEFECT",
  "junit": {
-  "tests": 188,
+  "tests": 191,
   "failures": 0,
   "errors": 0,
-  "skipped": 6,
-  "passed": 182,
-  "seconds": 2508.8,
+  "skipped": 7,
+  "passed": 184,
+  "seconds": 2318.9,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 114,
-  "stories_with_scenarios": 114,
+  "stories": 115,
+  "stories_with_scenarios": 115,
   "stories_passing": 32,
-  "scenarios": 459,
-  "automated": 357,
+  "scenarios": 462,
+  "automated": 358,
   "passing": 153,
-  "failing": 2,
+  "failing": 3,
   "no_result": 202,
-  "planned": 102,
+  "planned": 104,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 1
@@ -201,15 +201,15 @@
   {
    "id": "EPIC-13",
    "title": "Site Admin Journeys",
-   "stories": 14,
-   "stories_with_scenarios": 14,
+   "stories": 15,
+   "stories_with_scenarios": 15,
    "stories_passing": 0,
-   "scenarios": 146,
-   "automated": 55,
+   "scenarios": 149,
+   "automated": 56,
    "passing": 40,
-   "failing": 2,
+   "failing": 3,
    "no_result": 13,
-   "planned": 91,
+   "planned": 93,
    "health": "failing"
   }
  ],
@@ -2866,6 +2866,24 @@
    "epic": "EPIC-13",
    "story": "STORY-13-12"
   },
+  "SC-13-13-01": {
+   "state": "planned",
+   "name": "Onboard two sites and create all eighty-eight units from zero",
+   "epic": "EPIC-13",
+   "story": "STORY-13-13"
+  },
+  "SC-13-13-02": {
+   "state": "failing",
+   "name": "Accrue four periods and verify mixed payment histories",
+   "epic": "EPIC-13",
+   "story": "STORY-13-13"
+  },
+  "SC-13-13-05": {
+   "state": "planned",
+   "name": "Manager screens display consistent statements and collection summaries",
+   "epic": "EPIC-13",
+   "story": "STORY-13-13"
+  },
   "SC-13-14-01": {
    "state": "passing",
    "name": "Titles and occupancies change on their effective dates",
@@ -3141,10 +3159,10 @@
   {
    "date": "2026-11-21",
    "epics": 13,
-   "stories": 114,
-   "stories_with_scenarios": 114,
-   "scenarios": 459,
-   "automated": 357
+   "stories": 115,
+   "stories_with_scenarios": 115,
+   "scenarios": 462,
+   "automated": 358
   }
  ],
  "recent_changes": [
@@ -3152,11 +3170,12 @@
    "date": "2026-11-21",
    "epic": "EPIC-13",
    "title": "Site Admin Journeys",
-   "new_stories": 2,
-   "new_scenarios": 17,
-   "newly_automated": 14,
-   "items": 2,
+   "new_stories": 3,
+   "new_scenarios": 20,
+   "newly_automated": 15,
+   "items": 3,
    "samples": [
+    "STORY-13-13: Zero to multi-site financial journey",
     "STORY-13-14: Liability follows titles, vacancies and move-ins",
     "STORY-13-25: Reconcile homeowner debt and operating cash by site"
    ]
@@ -3851,5 +3870,5 @@
    ]
   }
  ],
- "href": "reports/44827445026-1/"
+ "href": "reports/44870628950-1/"
 }
