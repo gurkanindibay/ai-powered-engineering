@@ -2866,6 +2866,26 @@ impl SiteAdminService {
         }
 
         let mut unit_numbers: Vec<i32> = if let Some(nums) = req.unit_numbers.clone() {
+            if nums.is_empty() {
+                return Err(crate::error::AppError::Validation(
+                    "unit_numbers list cannot be empty".to_string(),
+                    None,
+                ));
+            }
+            if nums.len() > 500 {
+                return Err(crate::error::AppError::Validation(
+                    "Cannot create more than 500 units at once".to_string(),
+                    None,
+                ));
+            }
+            for &n in &nums {
+                if n <= 0 {
+                    return Err(crate::error::AppError::Validation(
+                        format!("unit_number must be greater than 0, got {}", n),
+                        None,
+                    ));
+                }
+            }
             nums
         } else if let (Some(s), Some(e)) = (req.start_unit, req.end_unit) {
             if s <= 0 {
@@ -2921,9 +2941,16 @@ impl SiteAdminService {
         if let crate::db::Storage::Postgres(ref pool) = storage {
             let result_dtos = crate::db::create_units_in_db(pool, site_id, &req, &unit_numbers)
                 .await
-                .map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
+                .map_err(|e| {
+                    let err_msg = e.to_string();
+                    if err_msg.contains("already exist") {
+                        crate::error::AppError::Conflict(err_msg)
+                    } else {
+                        crate::error::AppError::Internal(err_msg)
+                    }
+                })?;
 
-            // Also keep in-memory cache in sync
+            // Also keep in-memory cache in sync without overwriting occupied units
             {
                 let mut inner = self.state.inner.write().await;
                 if let Some(first) = result_dtos.first() {
@@ -2955,9 +2982,7 @@ impl SiteAdminService {
                             house_type: req.house_type.clone(),
                             created_on: Some(chrono::Utc::now().date_naive()),
                         };
-                        if let Some(pos) = inner.units.iter().position(|u| u.id == dto.id) {
-                            inner.units[pos] = ind_unit;
-                        } else {
+                        if !inner.units.iter().any(|u| u.id == dto.id) {
                             inner.units.push(ind_unit);
                         }
                     }
@@ -2994,6 +3019,20 @@ impl SiteAdminService {
             (new_id, block_name_trimmed.to_string())
         };
 
+        // Check if any unit already exists in this block in memory
+        let existing_in_mem: Vec<i32> = inner
+            .units
+            .iter()
+            .filter(|u| u.block_id == blk_id && unit_numbers.contains(&u.unit_number))
+            .map(|u| u.unit_number)
+            .collect();
+        if !existing_in_mem.is_empty() {
+            return Err(crate::error::AppError::Conflict(format!(
+                "Units already exist in block {}: {:?}",
+                blk_name, existing_in_mem
+            )));
+        }
+
         let mut result_dtos = Vec::new();
         for unit_no in &unit_numbers {
             let floor = req.floor.unwrap_or_else(|| ((unit_no - 1) / 4) + 1);
@@ -3023,11 +3062,7 @@ impl SiteAdminService {
                 created_on: Some(chrono::Utc::now().date_naive()),
             };
 
-            if let Some(pos) = inner.units.iter().position(|u| u.id == unit_id) {
-                inner.units[pos] = ind_unit;
-            } else {
-                inner.units.push(ind_unit);
-            }
+            inner.units.push(ind_unit);
 
             result_dtos.push(crate::models::UnitDto {
                 id: unit_id,
@@ -3051,19 +3086,25 @@ impl SiteAdminService {
         &self,
         site_id: &str,
         block_id: Option<&str>,
-    ) -> Vec<crate::models::UnitDto> {
+    ) -> Result<Vec<crate::models::UnitDto>, crate::error::AppError> {
         let storage = crate::db::Storage::of(&self.state);
         if let crate::db::Storage::Postgres(ref pool) = storage {
-            if let Ok(db_units) =
-                crate::db::get_units_for_site_from_db(pool, site_id, block_id).await
-            {
-                return db_units;
+            match crate::db::get_units_for_site_from_db(pool, site_id, block_id).await {
+                Ok(db_units) => return Ok(db_units),
+                Err(e) => {
+                    tracing::error!(
+                        site_id = %site_id,
+                        error = %e,
+                        "Failed to load units from database"
+                    );
+                    return Err(crate::error::AppError::Internal(e.to_string()));
+                }
             }
         }
 
         let site_numeric = match crate::db::require_id("entity", site_id) {
             Ok(id) => id,
-            Err(_) => return Vec::new(),
+            Err(_) => return Ok(Vec::new()),
         };
 
         // In-memory fallback
@@ -3117,7 +3158,7 @@ impl SiteAdminService {
         if let Some(b_id) = block_id {
             list.retain(|u| u.block_id == b_id);
         }
-        list
+        Ok(list)
     }
 
     /// T4/T5 move-out through the guarded transition service (STORY-08-07).

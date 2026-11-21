@@ -501,10 +501,11 @@ pub async fn get_units(
     State(state): State<AppState>,
     scope: crate::tenancy::TenantScope,
     Query(q): Query<SiteIdParam>,
-) -> Result<Json<Vec<UnitDto>>, crate::tenancy::TenantDenied> {
+) -> Result<Json<Vec<UnitDto>>, AppError> {
     let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
-    Ok(Json(service.get_units_for_site(&site_id, None).await))
+    let units = service.get_units_for_site(&site_id, None).await?;
+    Ok(Json(units))
 }
 
 pub async fn create_units(

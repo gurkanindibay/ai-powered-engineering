@@ -704,6 +704,34 @@ pub async fn create_units_in_db(
     let block_id_str = block_numeric_id.to_string();
     let actual_block_name = db_block_name;
 
+    // Check if any unit already exists in this block (including soft-deleted units)
+    let existing_rows = tx
+        .query(
+            "SELECT unit_number FROM units WHERE block_id = $1 AND unit_number = ANY($2) ORDER BY unit_number",
+            &[&block_numeric_id, &unit_numbers],
+        )
+        .await?;
+    if !existing_rows.is_empty() {
+        let existing_nums: Vec<i32> = existing_rows.iter().map(|r| r.get(0)).collect();
+        return Err(format!(
+            "Units already exist in block {}: {:?}",
+            actual_block_name, existing_nums
+        )
+        .into());
+    }
+
+    // Resolve house_type_id if house_type matches a registered house_type for this site
+    let house_type_id_opt: Option<i64> = if let Some(ref ht_name) = req.house_type {
+        tx.query_opt(
+            "SELECT id FROM house_types WHERE site_id = $1 AND (type_name = $2 OR LOWER(type_name) = LOWER($2)) LIMIT 1",
+            &[&site_numeric, ht_name],
+        )
+        .await?
+        .map(|r| r.get(0))
+    } else {
+        None
+    };
+
     let mut result_dtos = Vec::new();
     for unit_no in unit_numbers {
         let floor = req.floor.unwrap_or_else(|| ((unit_no - 1) / 4) + 1);
@@ -720,11 +748,8 @@ pub async fn create_units_in_db(
         let unit_row = tx
             .query_one(
                 r#"
-                INSERT INTO units (block_id, site_id, unit_number, floor, land_share, occupancy_status, virtual_iban, house_type)
-                VALUES ($1, $2, $3, $4, $5, 'VACANT', $6, $7)
-                ON CONFLICT (block_id, unit_number) DO UPDATE SET
-                    deleted_at = NULL,
-                    virtual_iban = COALESCE(units.virtual_iban, EXCLUDED.virtual_iban)
+                INSERT INTO units (block_id, site_id, unit_number, floor, land_share, occupancy_status, virtual_iban, house_type, house_type_id)
+                VALUES ($1, $2, $3, $4, $5, 'VACANT', $6, $7, $8)
                 RETURNING id, owner_person_id, tenant_person_id, occupancy_status, virtual_iban
                 "#,
                 &[
@@ -735,6 +760,7 @@ pub async fn create_units_in_db(
                     &land_share,
                     &viban,
                     &req.house_type,
+                    &house_type_id_opt,
                 ],
             )
             .await?;

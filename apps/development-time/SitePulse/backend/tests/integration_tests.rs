@@ -4726,3 +4726,200 @@ fn payment_date_violation_is_deterministic_for_a_given_window() {
     assert!(v(now - chrono::Duration::days(29), now, 30).is_none());
     assert!(v(now + chrono::Duration::hours(1), now, 30).is_some());
 }
+
+#[tokio::test]
+async fn when_create_units_block_name_empty_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "  ".to_string(),
+        unit_number: Some(1),
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req).await.unwrap_err();
+    assert!(
+        err.to_string().contains("Block name cannot be empty"),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn when_create_units_unit_zero_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: Some(0),
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req).await.unwrap_err();
+    assert!(err.to_string().contains("greater than 0"), "{err}");
+}
+
+#[tokio::test]
+async fn when_create_units_start_greater_than_end_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: None,
+        start_unit: Some(10),
+        end_unit: Some(5),
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req).await.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("greater than or equal to start_unit"),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn when_create_units_exceeds_500_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: None,
+        start_unit: Some(1),
+        end_unit: Some(501),
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req).await.unwrap_err();
+    assert!(err.to_string().contains("more than 500"), "{err}");
+}
+
+#[tokio::test]
+async fn when_create_units_list_validation_then_rejected() {
+    let service = SiteAdminService::new(AppState::new());
+    // Empty list
+    let req_empty = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: None,
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: Some(vec![]),
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req_empty).await.unwrap_err();
+    assert!(err.to_string().contains("cannot be empty"), "{err}");
+
+    // Invalid unit number (0)
+    let req_zero = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: None,
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: Some(vec![1, 0, 3]),
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err2 = service.create_units("site-1", req_zero).await.unwrap_err();
+    assert!(err2.to_string().contains("greater than 0"), "{err2}");
+}
+
+#[tokio::test]
+async fn when_create_units_duplicate_then_conflict_returned() {
+    let service = SiteAdminService::new(AppState::new());
+    let req = CreateUnitsRequest {
+        block_name: "TestBlock".to_string(),
+        unit_number: None,
+        start_unit: Some(1),
+        end_unit: Some(5),
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let created = service.create_units("site-1", req).await.unwrap();
+    assert_eq!(created.len(), 5);
+
+    // Duplicate unit in same block
+    let req_dup = CreateUnitsRequest {
+        block_name: "TestBlock".to_string(),
+        unit_number: Some(3),
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = service.create_units("site-1", req_dup).await.unwrap_err();
+    match err {
+        sitepulse_backend::error::AppError::Conflict(msg) => {
+            assert!(msg.contains("already exist"), "{msg}");
+            assert!(msg.contains("3"), "{msg}");
+        }
+        other => panic!("expected AppError::Conflict, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn when_create_units_foreign_site_then_tenant_denied() {
+    let state = AppState::new();
+    let scope = sitepulse_backend::tenancy::TenantScope::site("site-1".to_string());
+    let query = sitepulse_backend::handlers::SiteIdParam {
+        site_id: Some("site-2".to_string()),
+    };
+    let req = CreateUnitsRequest {
+        block_name: "A".to_string(),
+        unit_number: Some(1),
+        start_unit: None,
+        end_unit: None,
+        unit_numbers: None,
+        floor: None,
+        land_share: None,
+        house_type: None,
+    };
+    let err = sitepulse_backend::handlers::create_units(
+        axum::extract::State(state),
+        scope,
+        axum::extract::Query(query),
+        axum::Json(req),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.to_string().contains("Site belongs to another tenant"),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn when_get_units_foreign_site_then_tenant_denied() {
+    let state = AppState::new();
+    let scope = sitepulse_backend::tenancy::TenantScope::site("site-1".to_string());
+    let query = sitepulse_backend::handlers::SiteIdParam {
+        site_id: Some("site-2".to_string()),
+    };
+    let err = sitepulse_backend::handlers::get_units(
+        axum::extract::State(state),
+        scope,
+        axum::extract::Query(query),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.to_string().contains("Site belongs to another tenant"),
+        "{err}"
+    );
+}
