@@ -514,6 +514,7 @@ async fn owner_owing(amount: &str) -> AppState {
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     });
     state
 }
@@ -599,6 +600,7 @@ async fn when_an_owner_card_payment_targets_a_joint_tenant_balance_then_only_tha
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
         inner.joint_liability_owners.insert(
             "tenant-card-due".to_string(),
@@ -789,6 +791,7 @@ async fn when_a_statement_is_built_then_items_are_aged_and_each_debtor_sees_only
             penalty_accrued_through: None,
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         };
         inner.dues.push(mk("o-current", "OWNER", 0, "100.00"));
         inner.dues.push(mk("o-45", "OWNER", 45, "200.00"));
@@ -910,6 +913,7 @@ async fn when_a_tenant_liability_has_an_owner_link_then_owner_sees_only_its_join
             penalty_accrued_through: Some(today),
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
         inner.joint_liability_owners.insert(
             "tenant-joint-due".to_string(),
@@ -993,6 +997,7 @@ async fn when_an_owner_pays_a_linked_tenant_liability_then_the_receipt_names_pay
             penalty_accrued_through: Some(today()),
             grace_days: 0,
             effective_due_date: None,
+            liable_person_id: None,
         });
         inner.joint_liability_owners.insert(
             "tenant-payable-due".to_string(),

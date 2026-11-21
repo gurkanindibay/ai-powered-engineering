@@ -234,6 +234,7 @@ async fn when_a_month_was_already_billed_then_nothing_is_posted_and_a_repeat_is_
         penalty_accrued_through: None,
         grace_days: 0,
         effective_due_date: None,
+        liable_person_id: None,
     });
     assert!(post(&state, "2026-10-11", "2026-11-19").await.is_empty());
 

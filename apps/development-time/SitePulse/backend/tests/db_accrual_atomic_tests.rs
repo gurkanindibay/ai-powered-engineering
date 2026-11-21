@@ -467,6 +467,7 @@ async fn a_first_accrual_batch_keeps_both_debtor_shares_and_blocks_a_rerun() {
                     penalty_accrued_through: None,
                     grace_days: 0,
                     effective_due_date: None,
+                    liable_person_id: None,
                 },
                 None,
             )

@@ -107,6 +107,30 @@ pub fn plan_supplementary_charges(
             continue;
         };
         let posting = posting_period(inner, site_id, month, current)?;
+        let liable_person_id = match debtor_type {
+            DebtorType::Tenant => unit.tenant_user_id.as_deref().and_then(|id| {
+                inner
+                    .users
+                    .iter()
+                    .find(|u| u.id == id)
+                    .and_then(|u| u.person_id)
+                    .or_else(|| {
+                        id.strip_prefix("person-")
+                            .and_then(|s| s.parse::<i64>().ok())
+                    })
+            }),
+            DebtorType::Owner => unit.owner_user_id.as_deref().and_then(|id| {
+                inner
+                    .users
+                    .iter()
+                    .find(|u| u.id == id)
+                    .and_then(|u| u.person_id)
+                    .or_else(|| {
+                        id.strip_prefix("person-")
+                            .and_then(|s| s.parse::<i64>().ok())
+                    })
+            }),
+        };
         planned.push(PlannedCharge {
             due: DuesLiability {
                 id: String::new(),
@@ -128,6 +152,7 @@ pub fn plan_supplementary_charges(
                     row.due_date,
                     today,
                 )),
+                liable_person_id,
             },
             source_period_key: month.key(),
         });

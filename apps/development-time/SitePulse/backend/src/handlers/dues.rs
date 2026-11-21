@@ -154,7 +154,15 @@ pub async fn accrue_monthly_dues(
         .map_or(0, |s| s.grace_days);
 
     // 1. Decide every unit's amount and basis under a read lock.
-    let (units_in_site, planned, skipped, budget_id, proration_enabled, accrued_on) = {
+    let (
+        units_in_site,
+        planned,
+        skipped,
+        budget_id,
+        proration_enabled,
+        accrued_on,
+        user_person_ids,
+    ) = {
         let inner = state.inner.read().await;
         crate::services::billing_period_service::ensure_open_for_accrual(
             &inner,
@@ -250,6 +258,11 @@ pub async fn accrue_monthly_dues(
             in_force.map(|(id, _)| id),
             proration_enabled,
             accrued_on,
+            inner
+                .users
+                .iter()
+                .map(|u| (u.id.clone(), u.person_id))
+                .collect::<std::collections::HashMap<_, _>>(),
         )
     };
     let total_units_in_site = units_in_site.len();
@@ -377,6 +390,26 @@ pub async fn accrue_monthly_dues(
             continue;
         }
         for (debtor_type, share_amount) in shares {
+            let uid = match debtor_type {
+                DebtorType::Tenant => unit.tenant_user_id.as_deref(),
+                DebtorType::Owner => unit.owner_user_id.as_deref(),
+            };
+            let liable_person_id = uid.and_then(|id| {
+                user_person_ids.get(id).copied().flatten().or_else(|| {
+                    id.strip_prefix("person-")
+                        .and_then(|s| s.parse::<i64>().ok())
+                })
+            });
+            let history_pid = if debtor_type == DebtorType::Tenant {
+                history
+                    .iter()
+                    .filter(|h| h.role == DebtorType::Tenant && h.is_active && h.person_id > 0)
+                    .map(|h| h.person_id)
+                    .next_back()
+            } else {
+                None
+            };
+            let liable_person_id = liable_person_id.or(history_pid);
             accrued.push((
                 DuesLiability {
                     id: String::new(),
@@ -397,6 +430,7 @@ pub async fn accrue_monthly_dues(
                         payload.due_date,
                         accrued_on,
                     )),
+                    liable_person_id,
                 },
                 basis.clone(),
             ));
@@ -432,9 +466,16 @@ pub async fn accrue_monthly_dues(
             period_db_id = committed.period_id.map(|id| id.to_string());
             joint_owners = committed.joint_owners;
             let mut kept = Vec::new();
-            for ((mut due, basis), id) in accrued.into_iter().zip(committed.due_ids) {
+            for (((mut due, basis), id), liable_pid) in accrued
+                .into_iter()
+                .zip(committed.due_ids)
+                .zip(committed.liable_person_ids)
+            {
                 if let Some(id) = id {
                     due.id = id.to_string();
+                    if liable_pid.is_some() {
+                        due.liable_person_id = liable_pid;
+                    }
                     kept.push((due, basis)); // else accrued concurrently
                 }
             }

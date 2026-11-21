@@ -6,6 +6,7 @@ or created through `SpPersonField` -> `showSpPersonPicker` -> `SpPersonForm`.
 from __future__ import annotations
 
 from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from support.flutter import by_id, by_id_prefix, fill
 
@@ -87,9 +88,13 @@ class UnitWorkspace:
     def back(self) -> None:
         """Return from the workspace to the directory it was opened from."""
         button = by_id(self.page, "workspace_return_btn")
-        if button.count() > 0:
-            button.click()
-            button.wait_for(state="detached", timeout=10_000)
+        try:
+            # The button can lag behind a just-closed overlay (statement, dialog).
+            button.wait_for(state="visible", timeout=5_000)
+        except PlaywrightTimeoutError:
+            return
+        button.click()
+        button.wait_for(state="detached", timeout=10_000)
 
     def close(self) -> None:
         """Leave the workspace and the module page, back to the residents tab."""

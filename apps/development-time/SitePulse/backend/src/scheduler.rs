@@ -284,6 +284,34 @@ pub async fn run_accrual_with_report(
                                 effective_due_date: Some(DuesLiability::effective_due_date_for(
                                     due_date, local,
                                 )),
+                                liable_person_id: match share_debtor {
+                                    DebtorType::Tenant => {
+                                        unit.tenant_user_id.as_deref().and_then(|id| {
+                                            inner
+                                                .users
+                                                .iter()
+                                                .find(|u| u.id == id)
+                                                .and_then(|u| u.person_id)
+                                                .or_else(|| {
+                                                    id.strip_prefix("person-")
+                                                        .and_then(|s| s.parse::<i64>().ok())
+                                                })
+                                        })
+                                    }
+                                    DebtorType::Owner => {
+                                        unit.owner_user_id.as_deref().and_then(|id| {
+                                            inner
+                                                .users
+                                                .iter()
+                                                .find(|u| u.id == id)
+                                                .and_then(|u| u.person_id)
+                                                .or_else(|| {
+                                                    id.strip_prefix("person-")
+                                                        .and_then(|s| s.parse::<i64>().ok())
+                                                })
+                                        })
+                                    }
+                                },
                             },
                             basis.operating_budget_id.clone(),
                         ));
@@ -326,9 +354,17 @@ pub async fn run_accrual_with_report(
                     period_db_id = committed.period_id.map(|id| id.to_string());
                     joint_owners = committed.joint_owners;
                     let mut kept = Vec::new();
-                    for ((mut due, basis), id) in batch.dues.drain(..).zip(committed.due_ids) {
+                    for (((mut due, basis), id), liable_pid) in batch
+                        .dues
+                        .drain(..)
+                        .zip(committed.due_ids)
+                        .zip(committed.liable_person_ids)
+                    {
                         if let Some(id) = id {
                             due.id = id.to_string();
+                            if liable_pid.is_some() {
+                                due.liable_person_id = liable_pid;
+                            }
                             kept.push((due, basis));
                         } // else: already accrued in DB
                     }
