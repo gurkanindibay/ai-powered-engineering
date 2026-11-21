@@ -13,25 +13,23 @@ Pair rule for authors: [pr-author-followup.md](pr-author-followup.md), which pol
 
 Every **30 minutes** (use your harness's scheduler, for example `ScheduleWakeup` with `delaySeconds=1800`, or a cron job), list the open PRs and review the ones that changed:
 
-```bash
-gh pr list --state open --json number,title,isDraft,headRefOid,author \
-  --jq '.[]|select(.isDraft|not)|[.number,.headRefOid[0:12],.author.login,.title]|@tsv'
-```
-
 **Compact before every iteration.** Before each cycle, compact your context (`/compact` in Claude Code, or your harness's equivalent; if none exists, continue in a fresh session). Nothing needs carrying over except the repo, the bot identity check and the schedule: the per-PR state is read from the bot's review history below. Drop diffs and review drafts from earlier cycles.
 
-For each non-draft PR, decide from the bot's own review history, which is the state (no local file to lose):
+Ask the queue tool which PRs need a review. It reads the bot's own review history as the state (no local file to lose), so one short call replaces the manual listing:
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/<n>/reviews --paginate \
-  --jq '[.[]|select(.user.login=="local-reviewer-agent[bot]")]|last|{state,commit_id}'
+python3 scripts/pr_review_queue.py            # ready PRs: number, reason, CI, head, title
+python3 scripts/pr_review_queue.py --json     # ready, waiting_ci and skipped, with reasons
+python3 scripts/pr_review_queue.py --all      # also show PRs waiting on CI and skipped ones
 ```
 
-- **No bot review yet**: review the PR.
-- **Bot reviewed a commit that is not the current head**: the author pushed since. Re-review, looking first at what changed since that commit (`git diff <reviewed-sha>..<head>`), then at the whole PR if the change is wide.
-- **Bot's last review on the current head is `COMMENT`** (for example it was waiting on CI): not final. Re-check CI this cycle and finish the review (approve or request changes) once CI has finished.
-- **Bot's last review on the current head is `APPROVED` or `CHANGES_REQUESTED`**: skip it, even if comments exist. If the author replied with a disagreement on the same head, answer it once with a comment, do not repeat the review.
-- **Draft PRs and PRs you authored**: skip.
+A PR is **ready** when it is not a draft, all its CI checks have finished (passed or failed), and the bot has no final verdict on the current head. The `reason` tells you where to start:
+
+- `new`: the bot never reviewed it (a new PR, or a draft just marked ready). Review the whole PR.
+- `new_head`: commits arrived after the bot's last review. Look first at what changed (`git diff <last_reviewed>..<head>`; the `--json` output has both SHAs), then at the whole PR if the change is wide.
+- `unfinished`: the bot's last review of this head is a `COMMENT` (or was dismissed), so no verdict exists yet. Finish it with `APPROVE` or `REQUEST_CHANGES`.
+
+PRs under `waiting_ci` need a review but CI is still running: leave them for the next cycle (or block on `gh pr checks <n> --watch` if you want that one now). `skipped` covers drafts, PRs you authored (`--skip-author <login>`) and heads the bot already gave a final verdict, even if comments exist; if the author replied with a disagreement on such a head, answer it once with a comment and do not repeat the review.
 
 When nothing changed anywhere, end the cycle silently with one line. Do not re-read diffs you already reviewed (AGENTS.md rule 9).
 

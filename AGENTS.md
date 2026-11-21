@@ -108,7 +108,7 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - Stop and ask the user if the PR is closed unmerged or the same blocking note survives two fixes. Full procedure: [.agents/rules/pr-author-followup.md](file:///.agents/rules/pr-author-followup.md).
 
 16. **PR Reviewer Polling Loop (All Agents)**:
-   - The reviewer agent acts as `local-reviewer-agent` (rule 14) and checks for open PRs **every 30 minutes**. It reviews a PR with no bot review yet, and re-reviews a PR whose head changed since the bot's last review; it skips unchanged PRs, drafts and its own PRs.
+   - The reviewer agent acts as `local-reviewer-agent` (rule 14) and checks for PRs to review **every 30 minutes** with `python3 scripts/pr_review_queue.py`. A PR is ready when it is not a draft, its CI has finished, and the bot has no final verdict on the current head (never reviewed, new commits since the last review, or only a `COMMENT`); the tool skips unchanged PRs, drafts and its own PRs.
    - Reviews go on the PR. Blocking problems get `REQUEST_CHANGES`. If the changes are OK, post a real GitHub `APPROVE` (with any minor notes listed); only if GitHub refuses the formal approval, post a comment starting with `APPROVED`. Do not approve while CI is red or pending.
    - Compact your context before every 30-minute cycle; per-PR state comes from the bot's review history, not memory.
    - The reviewer never merges or pushes. Full procedure: [.agents/rules/pr-reviewer-polling.md](file:///.agents/rules/pr-reviewer-polling.md).
