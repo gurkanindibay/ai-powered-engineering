@@ -408,3 +408,17 @@ class Builders:
             "RETURNING id;").splitlines()[0]
         self.stack.restart_backend()
         return unit_id
+
+
+def raw_call(api: Api, method: str, path: str, token: str, body: object | None = None) -> tuple[int, str]:
+    """Execute a raw HTTP request against the API without high-level error wrapping."""
+    data = json.dumps(body).encode() if body is not None else (b"{}" if method in ("POST", "PUT") else None)
+    request = urllib.request.Request(api.base + path, data=data, method=method)
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status, response.read().decode()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode()
+
