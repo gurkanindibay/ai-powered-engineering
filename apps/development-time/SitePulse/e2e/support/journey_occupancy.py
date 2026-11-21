@@ -133,6 +133,7 @@ def build_base(
     proration: bool = True, vacate_a2: bool = True,
 ) -> OccupancyJourney:
     """F2 plus a clock and the proration switch; A-2 is vacant when `vacate_a2` (F6 start)."""
+    manifest.bind_database(stack.db_name)
     fixture = site_in_state("F2", api=api, stack=stack, saas=saas, manifest=manifest)
     if vacate_a2:
         unit = int(fixture.unit_ids[1])

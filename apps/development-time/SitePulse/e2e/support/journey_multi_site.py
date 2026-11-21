@@ -97,6 +97,7 @@ def build_multi_site_journey(
     start_date: str = "2027-01-01",
 ) -> MultiSiteJourney:
     """Onboard Site A and Site B, create 88 units and registers all residents."""
+    manifest.bind_database(stack.db_name)
     clock = JourneyClock(api, start_date)
     attempt = _slug(manifest.attempt_id)
 

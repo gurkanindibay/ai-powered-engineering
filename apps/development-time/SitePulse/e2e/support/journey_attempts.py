@@ -3,16 +3,19 @@
 Journey attempts can share an E2E database. The manifest is written as resources
 are created, so teardown can be retried after a process or evidence-capture
 failure without truncating another attempt's data.
+Attempt locks use POSIX ``flock``; the E2E runner targets Linux and macOS.
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import re
 import uuid
+import warnings
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, TextIO
 
 from decimal import Decimal
 
@@ -80,13 +83,40 @@ class JourneyManifest:
     steps: list[dict] = field(default_factory=list)
     teardown_completed: bool = False
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    database_name: str | None = None
+    _lock_file: TextIO | None = field(default=None, repr=False, compare=False)
 
     @classmethod
     def create(cls, directory: Path, run_id: str, shard_id: str, attempt_id: str | None = None) -> "JourneyManifest":
         attempt = attempt_id or uuid.uuid4().hex
         manifest = cls(run_id, shard_id, attempt, directory / f"{_slug(run_id)}-{_slug(shard_id)}-{_slug(attempt)}.json")
+        manifest.path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = manifest.lock_path.open("a+", encoding="utf-8")
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            lock_file.close()
+            raise RuntimeError(f"Journey attempt is already active: {attempt}")
+        manifest._lock_file = lock_file
         manifest.save()
         return manifest
+
+    @property
+    def lock_path(self) -> Path:
+        return self.path.with_suffix(self.path.suffix + ".lock")
+
+    def bind_database(self, database_name: str) -> None:
+        if self.database_name and self.database_name != database_name:
+            raise ValueError("Journey manifest cannot move between databases")
+        self.database_name = database_name
+        self.save()
+
+    def release_lock(self) -> None:
+        if self._lock_file is not None:
+            fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_UN)
+            self._lock_file.close()
+            self._lock_file = None
+        # Keep the lock path: unlinking can split flock ownership across old and new inodes.
 
     def record(self, resource: str, resource_id: str | int) -> None:
         if resource not in {"site_ids", "unit_ids", "person_ids", "user_ids"}:
@@ -112,6 +142,7 @@ class JourneyManifest:
             "shard_id": self.shard_id,
             "attempt_id": self.attempt_id,
             "created_at": self.created_at,
+            "database_name": self.database_name,
             "site_ids": self.site_ids,
             "unit_ids": self.unit_ids,
             "person_ids": self.person_ids,
@@ -132,6 +163,7 @@ class JourneyManifest:
             person_ids=list(data["person_ids"]), user_ids=list(data["user_ids"]),
             steps=list(data.get("steps", [])),
             teardown_completed=bool(data["teardown_completed"]), created_at=data["created_at"],
+            database_name=data.get("database_name"),
         )
         return manifest
 
@@ -193,6 +225,7 @@ def site_in_state(
     """
     if state not in {f"F{number}" for number in range(8)}:
         raise ValueError(f"Unknown Site Admin reference state: {state!r}")
+    manifest.bind_database(stack.db_name)
     if state not in {"F0", "F1", "F2", "F3", "F4", "F5"}:
         raise JourneyFixturePending(f"{state} is pending the later journey fixture builders and #211 clock integration")
 
@@ -587,6 +620,72 @@ def teardown_sites(stack: E2EStack, manifest: JourneyManifest, *, restart: bool 
         Api().clock.clear()
     manifest.teardown_completed = True
     manifest.save()
+    manifest.release_lock()
+
+
+def site_scoped_row_counts(stack: E2EStack, site_id: str | int) -> dict[str, int]:
+    """Return row counts for every table covered by the site teardown manifest."""
+    site = _safe_id(site_id)
+    predicates_by_table: dict[str, list[str]] = {}
+    for target in _SITE_SCOPED_DELETES:
+        table, predicate = target.split(" WHERE ", maxsplit=1)
+        predicates_by_table.setdefault(table, []).append(predicate.format(site=site))
+    counts: dict[str, int] = {}
+    for table, predicates in predicates_by_table.items():
+        exists = stack.sql(f"SELECT to_regclass('public.{table}') IS NOT NULL;") == "t"
+        if exists:
+            counts[table] = int(stack.sql(
+                f"SELECT COUNT(*) FROM {table} WHERE {' OR '.join(f'({p})' for p in predicates)};"
+            ))
+        else:
+            counts[table] = 0
+    return counts
+
+
+def capture_failure_evidence(stack: E2EStack, api: Api, manifest: JourneyManifest) -> None:
+    """Persist a redacted site snapshot and route/status-only API evidence before cleanup."""
+    site_counts = {
+        site_id: site_scoped_row_counts(stack, site_id)
+        for site_id in manifest.site_ids
+    }
+    manifest.record_step("failure_evidence", {
+        "site_row_counts": site_counts,
+        "network": api.network_events[-100:],
+    })
+
+
+def reclaim_stale_attempts(stack: E2EStack, directory: Path) -> list[str]:
+    """Clean incomplete manifests for this database when their process lock is gone."""
+    reclaimed: list[str] = []
+    for path in sorted(directory.glob("*.json")):
+        try:
+            manifest = JourneyManifest.load(path)
+        except (OSError, ValueError, KeyError) as error:
+            warnings.warn(
+                f"Skipped unreadable journey manifest {path.name}: {type(error).__name__}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
+        if manifest.teardown_completed or manifest.database_name != stack.db_name:
+            continue
+        with manifest.lock_path.open("a+", encoding="utf-8") as lock_file:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue
+            try:
+                teardown_sites(stack, manifest)
+                reclaimed.append(manifest.attempt_id)
+            except Exception as error:
+                warnings.warn(
+                    f"Could not reclaim journey manifest {path.name}: {type(error).__name__}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    return reclaimed
 
 
 def teardown_with_evidence(
@@ -595,6 +694,7 @@ def teardown_with_evidence(
     *,
     failed: BaseException | None,
     capture_evidence: Callable[[], None],
+    restart: bool = True,
 ) -> None:
     """Capture failure evidence before cleanup and preserve both failures if capture also fails."""
     errors: list[BaseException] = []
@@ -604,7 +704,7 @@ def teardown_with_evidence(
     except BaseException as error:  # evidence failure must never skip cleanup
         errors.append(error)
     try:
-        teardown_sites(stack, manifest)
+        teardown_sites(stack, manifest, restart=restart)
     except BaseException as error:
         errors.append(error)
     if errors:
