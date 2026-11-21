@@ -218,6 +218,7 @@ EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered b
 | — | 13-13 | — | — | — | **Excluded:** Multi-site journey onboarding is covered by `e2e/tests/test_journey_onboarding_88_units.py` (issue #247) and four-period accruals/payments by `e2e/tests/test_journey_accruals_payments.py` (issue #248). | | |
 | — | 13-10 | — | — | — | **Partial:** Backend isolation automated; GUI isolation scenario (SC-13-10-08) is pending separate GUI issue. | | |
 | — | 13-06, 13-08 | — | — | — | **Partial:** Lifecycle chain (13-06) and manager session states (13-08) specified in .specify/features/EPIC-13; GUI automation pending. | | |
+| GUI-13-04 | 13-26 | Manager | P0 | zero-site to April final | Onboard two sites, create 88 units through manager commands, run four periods, then inspect both managers' unit statements, unit counts and site cash (`SC-13-26-02`). | Site A and Site B journey builders; unit workspace, account statement and payment stream | ✅ |
 
 ## 4. API data builders (`e2e/support/api.py`), confirmed against `backend/src/app.rs`
 Each builder calls real backend endpoints (no direct SQL writes), returns the ids it created, and runs after a reset.

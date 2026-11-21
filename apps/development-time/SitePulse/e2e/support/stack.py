@@ -160,6 +160,26 @@ class E2EStack:
         # change scenarios create their own accounts after this fixture reset.
         self.sql("UPDATE users SET must_change_password=false;")
 
+    def reset_empty(self) -> None:
+        """Prepare a genuinely empty site list in the throwaway E2E database.
+
+        This database is created and dropped by E2EStack, separate from the
+        developer database. Restore only system configuration and let backend
+        startup create the SaaS administrator; do not invoke a global reset API.
+        """
+        if not self.db_name.startswith("sitepulse_e2e_"):
+            raise RuntimeError(f"Refusing to empty a non-E2E database: {self.db_name}")
+        self.backend.stop()
+        tables = [t for t in self.sql(
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;").split("\n")
+            if t and t not in KEEP_TABLES]
+        if tables:
+            self.sql(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE;")
+        seed_dir = SITEPULSE / "backend" / "db" / "seed"
+        self.sql((seed_dir / "01-system-seed.sql").read_text(encoding="utf-8"))
+        self.backend.start()
+        self.sql("UPDATE users SET must_change_password=false;")
+
     def restart_backend(self) -> None:
         """Reload backend memory after an Arrange step wrote SQL directly."""
         self.backend.restart()

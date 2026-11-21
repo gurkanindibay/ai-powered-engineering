@@ -262,6 +262,7 @@ class Api:
                             is_resident: bool = True, tenant: dict | None = None,
                             household_members: list[dict] | None = None,
                             monthly_dues: Decimal = Decimal("0.00"),
+                            house_type: str | None = None,
                             floor: int | None = None,
                             site_id: str | None = None) -> dict:
         """Registers a resident/owner into a unit."""
@@ -278,6 +279,8 @@ class Api:
             "is_resident": is_resident,
             "monthly_dues": str(monthly_dues),
         }
+        if house_type is not None:
+            body["house_type"] = house_type
         if tenant:
             if "new" in tenant or "id" in tenant:
                 body["tenant"] = tenant
