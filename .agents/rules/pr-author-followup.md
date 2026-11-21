@@ -36,7 +36,7 @@ gh pr checks <pr>
 Then act on exactly one of these cases:
 
 1. **Nothing new** (no review or comment since your last push or last wake-up): do nothing and go back to watching.
-2. **Review notes to fix** (a `CHANGES_REQUESTED` review, or a comment or review body that lists problems): fix every note in your own worktree and branch, run the relevant local suite (rule 3), push, reply on the PR with what changed (one comment, citing the commit), wait for CI to go green (rule 12), then take a fresh baseline and go back to watching. The reviewer re-reviews the new head on its own schedule.
+2. **Review notes to fix** (a `CHANGES_REQUESTED` review, or a comment or review body that lists problems): fix every note in your own worktree and branch, run the relevant local suite (rule 3), push, reply on the PR with what changed (one comment, citing the commit), wait for CI to go green (rule 12), then take a fresh baseline and go back to watching. The reviewer's watcher wakes it for the new head once CI finishes.
    - If you disagree with a note, do not silently skip it: reply with the reasoning and let the reviewer decide.
 3. **Approved with no notes**: go to Merge.
 4. **Approved with minor notes**: fix the notes, push, wait for CI to go green, then Merge. Do not wait for a second approval of the fix commits.

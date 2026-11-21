@@ -1,9 +1,9 @@
 ---
-description: The reviewer agent acts as local-reviewer-agent, polls every 30 minutes for open PRs, re-reviews only changed heads, and approves formally when the changes are OK.
+description: The reviewer agent acts as local-reviewer-agent, watches for PR events (no timer) and wakes when a PR is ready, re-reviews only changed heads, and approves formally when the changes are OK.
 trigger: always_on
 ---
 
-# PR Reviewer Polling Loop (All Agents, including Antigravity)
+# PR Reviewer Watch Loop (All Agents, including Antigravity)
 
 Operationalizes AGENTS.md rule 16. Applies to an agent running as the reviewer. Builds on rule 14 and [pr-review-bot.md](pr-review-bot.md): every write goes through `python3 scripts/review_bot.py` as **`local-reviewer-agent[bot]`**, never as `gurkanindibay`. If `python3 scripts/review_bot.py whoami` fails, stop and tell the user.
 
@@ -11,9 +11,24 @@ Pair rule for authors: [pr-author-followup.md](pr-author-followup.md), which pol
 
 ## The loop
 
-Every **30 minutes** (use your harness's scheduler, for example `ScheduleWakeup` with `delaySeconds=1800`, or a cron job), list the open PRs and review the ones that changed:
+The reviewer is **event-driven, not on a timer**. Start the watcher as a background command (or with your harness's monitor tool, for example Claude Code's `Monitor` or a `run_in_background` Bash call) so you are notified when it exits:
 
-**Compact before every iteration.** Before each cycle, compact your context (`/compact` in Claude Code, or your harness's equivalent; if none exists, continue in a fresh session). Nothing needs carrying over except the repo, the bot identity check and the schedule: the per-PR state is read from the bot's review history below. Drop diffs and review drafts from earlier cycles.
+```bash
+python3 scripts/pr_review_watch.py --json                      # blocks; exits 0 with the ready PRs
+python3 scripts/pr_review_watch.py --json --seen 257@ab12cd34ef56:failed   # ignore a PR you left without a verdict on red CI, until its head or CI state changes
+```
+
+It waits on GitHub events and costs no model tokens while it waits:
+
+- **Webhook (preferred).** With the `cli/gh-webhook` extension installed (`gh extension install cli/gh-webhook`, needs admin on the repository), `gh webhook forward` relays `pull_request`, `pull_request_review`, `check_suite` and `workflow_run` events to a listener on 127.0.0.1. An event only triggers a recheck of the queue through the GitHub API; the payload is never trusted.
+- **Poll fallback.** Without the extension, or if the forwarder dies (for example another forwarder already holds the repository's hook), it checks with `gh` every `--interval` seconds (default 60) and runs the per-PR review lookups only when the open-PR list (heads, drafts, CI state) changed. That is still polling, but by a script, not by the model.
+- Right after a push GitHub briefly shows no checks for the new head; the watcher holds such a head for `--ci-grace` seconds (default 300) so it never wakes you before CI has even started. A PR that really runs no CI is released after the grace period.
+- A full refresh of the bot's review history runs on every webhook event and, whatever the source, every `--recheck` seconds (default 900) on its own deadline, so a lost event or a review-only change (for example a dismissed review) delays a review but never loses it.
+- `--repo owner/name` scopes the listener, the PR listing and the review history to one repository.
+
+Do not use a model-driven timer, `ScheduleWakeup`, a 30-minute cron or `/loop` for the reviewer. When the watcher exits, handle the wake-up below, then start it again. Pass `--seen N@SHA:<ci>` for each ready PR you deliberately left without a final verdict on that head, with `<ci>` taken from the wake-up you handled (usually `:failed`, when you are waiting on red CI). The suppression lasts while the head *and* its CI state are unchanged, so a same-commit rerun from red to green wakes you, even if the rerun is already pending when the watcher starts. A bare `N@SHA` also works: it binds to the first state the watcher sees, or to `absent` if the PR is not ready at that moment (for example a `COMMENT` saying you wait for CI to be fixed), otherwise the watcher wakes you again at once. Stop the watcher when you stop reviewing.
+
+**Compact before every wake-up.** Before acting on a wake-up, compact your context (`/compact` in Claude Code, or your harness's equivalent; if none exists, continue in a fresh session). Nothing needs carrying over except the repo, the bot identity check, the watcher command and its `--seen` list: the per-PR state is read from the bot's review history below. Drop diffs and review drafts from earlier wake-ups.
 
 Ask the queue tool which PRs need a review. It reads the bot's own review history as the state (no local file to lose), so one short call replaces the manual listing:
 
@@ -29,9 +44,9 @@ A PR is **ready** when it is not a draft, all its CI checks have finished (passe
 - `new_head`: commits arrived after the bot's last review. Look first at what changed (`git diff <last_reviewed>..<head>`; the `--json` output has both SHAs), then at the whole PR if the change is wide.
 - `unfinished`: the bot's last review of this head is a `COMMENT` (or was dismissed), so no verdict exists yet. Finish it with `APPROVE` or `REQUEST_CHANGES`.
 
-PRs under `waiting_ci` need a review but CI is still running: leave them for the next cycle (or block on `gh pr checks <n> --watch` if you want that one now). `skipped` covers drafts, PRs you authored (`--skip-author <login>`) and heads the bot already gave a final verdict, even if comments exist; if the author replied with a disagreement on such a head, answer it once with a comment and do not repeat the review.
+PRs under `waiting_ci` need a review but CI is still running: the watcher wakes you when their CI finishes (or block on `gh pr checks <n> --watch` if you want that one now). `skipped` covers drafts, PRs you authored (`--skip-author <login>`) and heads the bot already gave a final verdict, even if comments exist; if the author replied with a disagreement on such a head, answer it once with a comment and do not repeat the review.
 
-When nothing changed anywhere, end the cycle silently with one line. Do not re-read diffs you already reviewed (AGENTS.md rule 9).
+If a wake-up turns out to need nothing (the PR changed again meanwhile), restart the watcher with one line. Do not re-read diffs you already reviewed (AGENTS.md rule 9).
 
 ## Reviewing
 
@@ -51,7 +66,7 @@ When nothing changed anywhere, end the cycle silently with one line. Do not re-r
    ```
 
 5. **Approval is a real GitHub approval** whenever it is available. Only if GitHub refuses the formal review, fall back to a conversation comment that starts with `APPROVED` (`review_bot.py comment`), so the author's loop still recognises it.
-6. Do not approve while CI is failing or still running on the head. Post nothing (or at most one `COMMENT` saying you are waiting on CI; a `COMMENT` is never a final verdict, see the loop above) and look again next cycle.
+6. Do not approve while CI is failing or still running on the head. Post nothing (or at most one `COMMENT` saying you are waiting on CI; a `COMMENT` is never a final verdict, see the loop above) and restart the watcher; it wakes you when CI finishes or a new head arrives.
 
 ## Limits
 

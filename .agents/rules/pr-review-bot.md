@@ -50,6 +50,6 @@ If `whoami` fails because the key or `.env` is missing, stop and tell the user. 
 
 ## Limits
 
-- **The bot reviews, it does not merge.** Authors merge their own PRs once approved, following [pr-author-followup.md](pr-author-followup.md). The review loop (every 30 minutes, re-review on new heads) is in [pr-reviewer-polling.md](pr-reviewer-polling.md).
+- **The bot reviews, it does not merge.** Authors merge their own PRs once approved, following [pr-author-followup.md](pr-author-followup.md). The review loop (event-driven watcher, re-review on new heads) is in [pr-reviewer-polling.md](pr-reviewer-polling.md).
 - **Writes only.** The app has `pull_requests: write` and `contents: read`. It can't push code, so fixes stay with the author.
 - **Tokens:** installation tokens last one hour. The tool caches them in `~/.cache/review-bot/` (mode 600). Never paste a token into a PR, an issue, a commit or a log.
