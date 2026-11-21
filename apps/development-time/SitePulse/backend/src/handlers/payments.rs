@@ -142,6 +142,8 @@ pub async fn record_homeowner_payment(
         status: ReconciliationStatus::Approved,
         status_code: ReconciliationStatus::Approved.as_str().to_string(),
         notes: Some(message.clone()),
+        assigned_unit_id: None,
+        assigned_debtor_role: None,
     };
     // Persist without holding the global lock; memory follows on success.
     drop(inner);

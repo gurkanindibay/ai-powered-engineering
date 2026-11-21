@@ -115,28 +115,9 @@ def test_unmatched_statement_item_is_queued_and_changes_no_balance(request, api,
         assert after[9:] == before[9:]
 
 
-@pytest.mark.covers("SC-13-09-07")
-@pytest.mark.core
-@pytest.mark.role_manager
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="BUG #296: no API assigns an unmatched statement item to a unit; confirm-reconciliation confirms 0 items",
-)
-def test_unmatched_statement_item_can_be_assigned_and_approved_exactly_once(request, api, actors, stack):
-    with journey_site(request, api, actors, stack, "F5") as (fixture, _):
-        a3 = fixture.unit_ids[2]
-        item = _import_unmatched_item(api, fixture)
-        item["matched_unit_id"] = a3
-        body = {"site_id": fixture.site_id, "match_ids": [item["match_id"]], "matches": [item]}
-        api.call("POST", "/api/v1/bank/statements/confirm-reconciliation", fixture.manager.token, body=body)
-        try:
-            api.call("POST", "/api/v1/bank/statements/confirm-reconciliation", fixture.manager.token, body=body)
-        except Exception:
-            pass  # a refused retry is fine; the sets below prove it applied once
-        assert unit_position(api, fixture.manager, fixture.site_id, a3) == (ZERO, ZERO)
-        assert stack.sql(f"SELECT COUNT(*) FROM payment_receipts WHERE unit_id = {int(a3)} AND total_amount = 1675.00;") == "1"
-
+# The assignment half of SC-13-09-07 is covered by
+# test_journey_payment_corner_cases.py::test_unmatched_statement_item_is_assigned_and_approved_exactly_once,
+# which drives the assignment API; the former xfail duplicate (#296) was removed with that fix.
 
 AGING_ROWS = [
     (0, "current", "current", "0.00"),

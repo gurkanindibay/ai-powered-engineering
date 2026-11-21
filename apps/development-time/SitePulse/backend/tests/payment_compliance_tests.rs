@@ -398,6 +398,8 @@ async fn when_a_statement_line_is_confirmed_twice_then_it_is_settled_once() {
         status: ReconciliationStatus::PendingApproval,
         status_code: ReconciliationStatus::PendingApproval.as_str().to_string(),
         notes: None,
+        assigned_unit_id: None,
+        assigned_debtor_role: None,
     };
     state.inner.write().await.reconciliation_queue.push(item);
     for _ in 0..2 {
@@ -666,6 +668,8 @@ async fn when_unmatched_sender_statement_line_confirmed_on_tenanted_unit_with_on
         status: ReconciliationStatus::PendingApproval,
         status_code: ReconciliationStatus::PendingApproval.as_str().to_string(),
         notes: None,
+        assigned_unit_id: None,
+        assigned_debtor_role: None,
     };
     state.inner.write().await.reconciliation_queue.push(item);
 

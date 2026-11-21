@@ -9,6 +9,7 @@ Covers:
 - SC-13-04-14: A payment reversal restores the debt it settled and the fee it stopped
 - SC-13-04-15: A unit-level transfer on a unit with several debtors waits for the manager
 - SC-13-04-16: A payment for a unit with no debt becomes the payer's advance
+- SC-13-09-07: An unmatched statement item is assigned, then approved exactly once
 
 Expected values come from the F2/F5 fixture plan (docs/testing/journey-plan), never from the
 response under test. Money is Decimal only; refusals compare a full financial snapshot.
@@ -364,3 +365,83 @@ def test_approved_held_transfer_settles_only_the_assigned_person(request, api, a
         assert paid("Ahmet Yılmaz", "Ekim 2026") == D("0.00")
         assert stack.sql(f"SELECT COALESCE(SUM(allocated_advance), 0) FROM payment_receipts WHERE site_id = {int(j.site_id)};") == "0.00"
         j.invariants("SC-13-04-15-approved")
+
+
+def _statement_counts(stack, unit_id: str) -> tuple[int, int, Decimal]:
+    """Receipts, payment entries and allocated money of one unit."""
+    unit = int(unit_id)
+    row = stack.sql(
+        "SELECT (SELECT COUNT(*) FROM payment_receipts WHERE unit_id = {unit}) || '|' || "
+        "(SELECT COUNT(*) FROM payment_entries WHERE unit_id = {unit}) || '|' || "
+        "(SELECT COALESCE(SUM(a.principal_amount + a.penalty_amount), 0) FROM payment_allocations a "
+        "JOIN payment_entries e ON e.id = a.payment_entry_id WHERE e.unit_id = {unit});".format(unit=unit)
+    )
+    receipts, entries, allocated = row.split("|")
+    return int(receipts), int(entries), D(allocated)
+
+
+@pytest.mark.covers("SC-13-09-07")
+@pytest.mark.core
+@pytest.mark.role_manager
+def test_unmatched_statement_item_is_assigned_and_approved_exactly_once(request, api, actors, stack):
+    with journey_site(request, api, actors, stack, "F5") as (fixture, _):
+        a3 = fixture.unit_ids[2]
+        # F5: A-3 owes the September principal 1500.00 plus the 175.00 fee at the pinned date.
+        assert unit_position(api, fixture.manager, fixture.site_id, a3) == (D("1675.00"), D("0.00"))
+
+        # An imported statement line with an unknown sender and no unit narrative.
+        parsed = api.call(
+            "POST", "/api/v1/bank/statements/parse", fixture.manager.token,
+            body={
+                "site_id": fixture.site_id,
+                "content": "2026-11-19;TR120006200000000000001099;FAST TRANSFERI;1675.00",
+                "format": "CSV",
+            },
+        )
+        (item,) = [m for m in parsed["matches"] if m["status"] == "UNMATCHED"]
+        match_id = item["match_id"]
+        assert item["matched_unit_id"] is None
+
+        queue = api.call(
+            "GET", f"/api/v1/bank/statements/reconciliation-queue?site_id={fixture.site_id}", fixture.manager.token,
+        )
+        assert [m["match_id"] for m in queue if m["status"] == "UNMATCHED"] == [match_id]
+        assert unit_position(api, fixture.manager, fixture.site_id, a3) == (D("1675.00"), D("0.00"))
+        # A-3's earlier paid months stay untouched until the assignment is approved.
+        baseline = _statement_counts(stack, a3)
+
+        assigned = api.call(
+            "POST", f"/api/v1/bank/statements/reconciliation-queue/{match_id}/assign", fixture.manager.token,
+            body={"site_id": fixture.site_id, "unit_id": a3, "debtor_role": "OWNER"},
+        )
+        assert assigned["match_id"] == match_id
+        assert assigned["assigned_unit_id"] == a3
+        assert assigned["assigned_debtor_role"] == "OWNER"
+        # Assigning the same pair again is idempotent and settles nothing yet.
+        again = api.call(
+            "POST", f"/api/v1/bank/statements/reconciliation-queue/{match_id}/assign", fixture.manager.token,
+            body={"site_id": fixture.site_id, "unit_id": a3, "debtor_role": "OWNER"},
+        )
+        assert again["assigned_unit_id"] == a3
+        assert unit_position(api, fixture.manager, fixture.site_id, a3) == (D("1675.00"), D("0.00"))
+        assert _statement_counts(stack, a3) == baseline
+
+        confirmed = api.call(
+            "POST", "/api/v1/bank/statements/confirm-reconciliation", fixture.manager.token,
+            body={"site_id": fixture.site_id, "match_ids": [match_id]},
+        )
+        assert confirmed["confirmed_count"] == 1
+        assert unit_position(api, fixture.manager, fixture.site_id, a3) == (D("0.00"), D("0.00"))
+        settled = _statement_counts(stack, a3)
+        assert (settled[0], settled[1]) == (baseline[0] + 1, baseline[1] + 1)
+        assert settled[2] == baseline[2] + D("1675.00")
+
+        # A repeated approval returns the same single settlement, not a second one.
+        retry = api.call(
+            "POST", "/api/v1/bank/statements/confirm-reconciliation", fixture.manager.token,
+            body={"site_id": fixture.site_id, "match_ids": [match_id]},
+        )
+        assert retry["confirmed_count"] == 1
+        assert _statement_counts(stack, a3) == settled
+        assert unit_position(api, fixture.manager, fixture.site_id, a3) == (D("0.00"), D("0.00"))
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-09-07")
