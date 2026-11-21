@@ -129,7 +129,7 @@ def test_correction_after_partial_payment_moves_paid_amount_to_advance(request, 
     with journey_site(request, api, actors, stack, "F2") as (fixture, _):
         a5 = fixture.unit_ids[4]
         clock = JourneyClock(api, "2026-09-01")
-        api.accrue_period(fixture.manager, "Eylül 2026", D("0"), "2026-09-10")
+        api.accrue_period(fixture.manager, "Eylül 2026", None, "2026-09-10")
         clock.advance_to("2026-09-10")
         receipt = api.record_manual_payment(
             fixture.manager, a5, D("600.00"), "Deniz Arslan", payer_role="TENANT"

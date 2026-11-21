@@ -884,7 +884,7 @@ def check_billing_period_lifecycle_http(ctx: Context) -> Tuple[bool, str]:
         return False, f"period close {close_status} {close_body[:200]}"
     snapshot = json.loads(close_body)
     accrual_status = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.manager, body={
-        "site_id": ctx.site_id, "period": ctx.accrual_check_period_key, "amount": "0.00",
+        "site_id": ctx.site_id, "period": ctx.accrual_check_period_key,
         "due_date": time.strftime("%Y-%m-%d"),
     })[0]
     request_status, request_body = http("POST", f"{b}/api/v1/dues/periods/{period}/reopen", token=ctx.manager,
@@ -905,7 +905,7 @@ def check_billing_period_lifecycle_http(ctx: Context) -> Tuple[bool, str]:
     resident_decide = http("POST", f"{b}/api/v1/dues/period-reopen-requests/{reopen['id']}/decide",
                            token=ctx.write_denied_user, body={"approve": False})[0]
     resident_accrual = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.write_denied_user, body={
-        "site_id": ctx.site_id, "period": ctx.accrual_check_period_key, "amount": "0.00",
+        "site_id": ctx.site_id, "period": ctx.accrual_check_period_key,
         "due_date": time.strftime("%Y-%m-%d"),
     })[0]
     ok = (snapshot.get("period_key") == ctx.accrual_check_period_key and accrual_status == 409
@@ -991,7 +991,7 @@ def check_budget_accrual(ctx: Context) -> Tuple[bool, str]:
     # A period is the canonical month key (STORY-07-08), here the month of the due date.
     period = due[:7]
     acc_status, acc_body = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.manager, body={
-        "site_id": site, "period": period, "amount": "0", "due_date": due})
+        "site_id": site, "period": period, "due_date": due})
     typed = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.manager, body={
         "site_id": site, "period": period, "amount": "5.00", "due_date": due})[0]
     row = ctx.psql.run(db, (

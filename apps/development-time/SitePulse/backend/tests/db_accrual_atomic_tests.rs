@@ -180,7 +180,6 @@ impl Env {
             Some(json!({
                 "site_id": self.site.to_string(),
                 "period": period,
-                "amount": "0",
                 "due_date": due,
             })),
         )
@@ -399,7 +398,6 @@ async fn two_sites_accrue_in_a_row_each_with_its_own_period_row() {
                 Some(json!({
                     "site_id": site.to_string(),
                     "period": "2026-10",
-                    "amount": "0",
                     "due_date": "2026-10-15",
                 })),
             )
