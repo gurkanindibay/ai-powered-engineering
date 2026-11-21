@@ -13,7 +13,6 @@ from pathlib import Path
 import pytest
 
 from support.journey_attempts import JourneyManifest, teardown_sites
-from support.known_issues import DEPARTED_TENANT_KEEPS_LATER_ACCRUAL
 from support.journey_occupancy import (
     OccupancyJourney,
     build_base,
@@ -191,7 +190,6 @@ def test_sale_of_a_tenant_occupied_unit_with_the_same_tenant_is_not_split(journe
 
 
 @pytest.mark.covers("SC-13-05-18")
-@pytest.mark.xfail(strict=True, reason=DEPARTED_TENANT_KEEPS_LATER_ACCRUAL)
 @pytest.mark.core
 @pytest.mark.role_manager
 def test_tenant_left_without_notice_is_moved_out_at_the_real_date(journey_site):
