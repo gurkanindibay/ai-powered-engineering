@@ -203,13 +203,32 @@ def test_f3_accruing_the_same_period_again_is_blocked(request, api, actors, stac
 @pytest.mark.role_manager
 @pytest.mark.covers("SC-13-01-12")
 @pytest.mark.gui_id("GUI-13-10")
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG: the manager screens cannot add a block or units; see #285")
-def test_f0_site_grows_to_f2_through_the_screens(request, api, actors, stack, page, login_page):
+def test_f0_site_grows_to_f1_through_the_screens(request, api, actors, stack, page, login_page):
+    """The first half of SC-13-01-12: F0 grows to F1 through the new block & units screen.
+
+    F1 -> F2 (owners and tenants) is the same screen flow as GUI-13-07 and is not repeated here.
+    """
     with journey_site(request, api, actors, stack, "F0") as fixture:
         sign_in_manager(page, login_page, fixture)
-        Shell(page).nav("residents")
-        by_id(page, "add_resident_btn").wait_for(timeout=15_000)
-        assert by_id(page, "btn_add_block").count() == 1, "no screen adds a block with its units"
+        residents = ResidentsTab(page).open()
+        assert residents.unit_card_ids() == []
+        residents.start_add_block().fill(
+            "A Blok", start_unit=1, unit_count=7, total_floors=7, house_type="2+1", monthly_dues="1.500,00",
+        ).save()
+
+        lines = _units_page_lines(page)
+        assert "Tümü (7)" in lines, lines
+        assert [f"A Blok {n}" for n in range(1, 8)] == [line for line in lines if re.fullmatch(r"A Blok \d+", line)]
+        assert _count(lines, "Sakin kaydı yok") == 7
+        assert _count(lines, "Sorumlu: Boş Daire") == 7
+
+        site = int(fixture.site_id)
+        assert stack.sql(f"SELECT COUNT(*) FROM units WHERE site_id = {site};") == "7"
+        # The tariff entered on the same form is the tariff the seven units point at.
+        assert stack.sql(
+            "SELECT COUNT(*) FROM units u JOIN house_types h ON h.id = u.house_type_id "
+            f"WHERE u.site_id = {site} AND h.type_name = '2+1' AND h.dues_amount = 1500.00;"
+        ) == "7"
 
 
 @pytest.mark.smoke

@@ -224,7 +224,7 @@ EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered b
 | GUI-13-07 | 13-01 | Manager | P1 | F1 | Register two owners and a tenant on empty units → units and directory show them, no liability exists (`SC-13-01-05`, strict xfail #286) | `module_new_resident_*`, `module_confirm_move_in_btn` | ✅ |
 | GUI-13-08 | 13-01 | Manager, home owner | P1 | F2 | People without a period → collection page offers the first accrual, owner dashboard balance 0.00 (`SC-13-01-06`) | `btn_open_accrual_dialog`, `hero_balance_amount` | ✅ |
 | GUI-13-09 | 13-01 | Manager | P1 | F3 | Accrue the same period again after residents exist → duplicate blocked, no liability (`SC-13-01-11`) | `btn_open_accrual_dialog`, `snackbar_accrual_result` | ✅ |
-| GUI-13-10 | 13-01 | Manager | P1 | F0 | Grow the site from F0 to F2 through the screens (`SC-13-01-12`, strict xfail #285: no block or unit screen) | `btn_add_block` | ✅ |
+| GUI-13-10 | 13-01 | Manager | P1 | F0 | Grow the site from F0 to F1 through the new block & units screen (`SC-13-01-12` first half: add "A Blok" with 7 units and its tariff; the F1→F2 people step is the GUI-13-07 flow) | `btn_add_block`, `block_form_*`, `btn_save_block_units` | ✅ |
 | GUI-13-11 | 13-02 | Manager | P0 | F4 | Single accrual period → total 8800.00, five overdue debtors with their amounts (`SC-13-02-01`) | `cockpit_*`, `aging_*` | ✅ |
 | GUI-13-12 | 13-02 | Resident | P1 | F4 | Tenant dashboard equals the admin unit statement (`SC-13-02-02`, strict xfail #284) | `hero_balance_amount`, `statement_total_tenant` | ✅ |
 | GUI-13-13 | 13-02 | Manager | P0 | F5 | Multiple periods → per-unit balances and site total, advance of A-6 (`SC-13-02-04`) | `aging_*`, `workspace_action_statement_*` | ✅ |

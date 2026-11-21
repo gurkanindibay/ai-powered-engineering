@@ -684,6 +684,191 @@ class DashboardController extends ChangeNotifier {
     return true;
   }
 
+  /// Creates a block together with its units in one manager action (#285).
+  ///
+  /// Runs the two commands the backend exposes for site structure:
+  /// `POST /api/v1/site-admin/blocks` and `POST /api/v1/site-admin/units`, then
+  /// reloads the blocks and the unit directory so every screen shows the new
+  /// units. When [monthlyDues] is given the tariff is stored first through
+  /// `POST /api/v1/site-admin/house-types` (a unit can only point at a
+  /// registered house type), so [houseType] is then a real tariff.
+  ///
+  /// Returns `null` on success, or a Turkish message for the form to show. A
+  /// refused or unreachable call never pretends the structure was created.
+  Future<String?> createBlockWithUnits({
+    required String blockName,
+    required int startUnit,
+    required int unitCount,
+    int totalFloors = 10,
+    String? houseType,
+    Decimal? monthlyDues,
+    String? siteId,
+  }) async {
+    final trimmedName = blockName.trim();
+    final trimmedHouseType = houseType?.trim() ?? '';
+    if (trimmedName.isEmpty) {
+      return 'Blok adı girin.';
+    }
+    if (startUnit < 1) {
+      return 'Başlangıç daire numarası 1 veya daha büyük olmalıdır.';
+    }
+    if (unitCount < 1 || unitCount > 500) {
+      return 'Bir seferde 1 ile 500 arası daire eklenebilir.';
+    }
+    if (totalFloors < 1 || totalFloors > 100) {
+      return 'Kat sayısı 1 ile 100 arasında olmalıdır.';
+    }
+    if (monthlyDues != null) {
+      if (trimmedHouseType.isEmpty) {
+        return 'Aidat tanımlamak için konut tipi girin.';
+      }
+      if (monthlyDues <= Decimal.zero) {
+        return 'Aylık aidat sıfırdan büyük olmalıdır.';
+      }
+      if (monthlyDues.scale > 2) {
+        return 'Aylık aidat en fazla 2 kuruş hanesi içerebilir.';
+      }
+    }
+
+    final effectiveSiteId = siteId ??
+        _currentManagedSite?.id ??
+        (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+
+    if (isTestMode) {
+      _addBlockWithUnitsLocally(
+        siteId: effectiveSiteId,
+        blockName: trimmedName,
+        startUnit: startUnit,
+        unitCount: unitCount,
+        houseType: trimmedHouseType.isEmpty ? null : trimmedHouseType,
+        monthlyDues: monthlyDues,
+      );
+      notify();
+      return null;
+    }
+
+    final headers = {'Content-Type': 'application/json'};
+    try {
+      final blockResponse = await ApiClient.post(
+        Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/blocks?site_id=$effectiveSiteId'),
+        headers: headers,
+        body: json.encode({
+          'block_name': trimmedName,
+          'total_floors': totalFloors,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      ApiClient.decode(blockResponse);
+
+      if (monthlyDues != null) {
+        final tariffResponse = await ApiClient.post(
+          Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/house-types?site_id=$effectiveSiteId'),
+          headers: headers,
+          body: json.encode({
+            'type_name': trimmedHouseType,
+            'dues_amount': monthlyDues.toString(),
+            'description': 'Blok oluşturulurken tanımlandı',
+          }),
+        ).timeout(const Duration(seconds: 10));
+        ApiClient.decode(tariffResponse);
+      }
+
+      final unitsResponse = await ApiClient.post(
+        Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/units?site_id=$effectiveSiteId'),
+        headers: headers,
+        body: json.encode({
+          'block_name': trimmedName,
+          'start_unit': startUnit,
+          'end_unit': startUnit + unitCount - 1,
+          if (trimmedHouseType.isNotEmpty) 'house_type': trimmedHouseType,
+        }),
+      ).timeout(const Duration(seconds: 15));
+      ApiClient.decode(unitsResponse);
+    } on ApiException catch (e) {
+      AppLogger.warn(
+        'Block or unit create was refused',
+        tag: 'Residents',
+        context: {'status_code': e.statusCode, 'code': e.code},
+      );
+      // A failed unit call after a successful block call leaves the block in
+      // place; reload it so the directory reflects what really exists.
+      await _reloadStructure(effectiveSiteId, refreshTariffs: monthlyDues != null);
+      return e.statusCode >= 500
+          ? 'Blok veya daireler oluşturulamadı. Lütfen tekrar deneyin. (Referans: ${e.traceId ?? '-'})'
+          : AppStrings.localizedErrorMessage(e.code, fallback: e.message);
+    } catch (e) {
+      AppLogger.warn('Block or unit create did not reach the server: $e', tag: 'Residents');
+      await _reloadStructure(effectiveSiteId, refreshTariffs: monthlyDues != null);
+      return 'Sunucuya ulaşılamadı. Blok veya daireler oluşturulmadı; bağlantınızı kontrol edip tekrar deneyin.';
+    }
+
+    await _reloadStructure(effectiveSiteId, refreshTariffs: monthlyDues != null);
+    return null;
+  }
+
+  Future<void> _reloadStructure(String siteId, {required bool refreshTariffs}) async {
+    await fetchBlocks(siteId: siteId);
+    if (refreshTariffs) {
+      await fetchHouseTypes(siteId: siteId);
+    }
+    await fetchHomeOwners(siteId: siteId);
+  }
+
+  /// Offline simulation of the structure commands for widget tests.
+  void _addBlockWithUnitsLocally({
+    required String siteId,
+    required String blockName,
+    required int startUnit,
+    required int unitCount,
+    required String? houseType,
+    required Decimal? monthlyDues,
+  }) {
+    final existingBlockIdx = _blocks.indexWhere((b) => b.toLowerCase() == blockName.toLowerCase());
+    if (existingBlockIdx == -1) {
+      _blocks.add(blockName);
+    }
+    if (monthlyDues != null && houseType != null) {
+      final tariffIdx = _houseTypes.indexWhere((h) => h.typeName.toLowerCase() == houseType.toLowerCase());
+      final tariff = HouseTypeTariff(
+        id: tariffIdx != -1 ? _houseTypes[tariffIdx].id : '${_houseTypes.length + 1}',
+        siteId: siteId,
+        typeName: houseType,
+        duesAmount: monthlyDues,
+        description: 'Blok oluşturulurken tanımlandı',
+      );
+      if (tariffIdx != -1) {
+        _houseTypes[tariffIdx] = tariff;
+      } else {
+        _houseTypes.add(tariff);
+      }
+    }
+    final existingKeys = {
+      for (final unit in _homeOwners) '${unit.block.toLowerCase().trim()}-${unit.unitNo}',
+    };
+    for (var offset = 0; offset < unitCount; offset++) {
+      final unitNo = startUnit + offset;
+      if (!existingKeys.add('${blockName.toLowerCase()}-$unitNo')) {
+        continue;
+      }
+      _homeOwners.add(HomeOwnerItem(
+        unitId: 'local-${blockName.toLowerCase()}-$unitNo',
+        siteId: siteId,
+        block: blockName,
+        unitNo: unitNo,
+        floor: ((unitNo - 1) ~/ 4) + 1,
+        ownerFullName: '',
+        email: '',
+        phone: '',
+        landShare: '1',
+        monthlyDues: monthlyDues ?? Decimal.zero,
+        houseType: houseType,
+        isResident: false,
+        mustChangePassword: false,
+        createdAt: DateTime.now(),
+        occupancyStatus: 'VACANT',
+      ));
+    }
+  }
+
   String? _bankStatementError;
   String? get bankStatementError => _bankStatementError;
   void clearBankStatementError() {
