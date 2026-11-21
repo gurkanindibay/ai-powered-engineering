@@ -17,7 +17,6 @@ from support.journey_occupancy import (
     OccupancyJourney,
     build_base,
     build_f6,
-    liability_rows,
     second_manager,
     transition,
 )
@@ -65,6 +64,20 @@ def f6_site(request, api, actors, stack):
         teardown_sites(stack, manifest, restart=False)
 
 
+def rows_of(j: OccupancyJourney, unit_number: int, period: str = PERIOD) -> list[dict]:
+    """Non-cancelled operational liabilities of a unit and period, whoever the liable person is."""
+    raw = j.stack.sql(
+        "SELECT debtor_type || '|' || principal_amount || '|' || due_date || '|' || "
+        "COALESCE(effective_due_date::text, '') FROM dues_liabilities "
+        f"WHERE unit_id = {int(j.unit_id(unit_number))} AND expense_type = 'OPERATIONAL_DUES' "
+        f"AND period = '{period}' AND status <> 'CANCELLED' ORDER BY id;")
+    rows = []
+    for line in raw.splitlines():
+        debtor, principal, due, effective = line.split("|")
+        rows.append({"debtor": debtor, "principal": D(principal), "due": due, "effective_due": effective or due})
+    return rows
+
+
 def tenant_item(j: OccupancyJourney, unit_number: int, period: str = PERIOD) -> dict:
     """The tenant debtor's open statement item of a unit and period."""
     statement = j.api.resident_statement(j.manager, j.unit_id(unit_number))
@@ -104,7 +117,7 @@ def test_grace_boundary_decides_whether_a_late_fee_is_charged(clock_site, grace,
     j = clock_site(grace=grace)
     j.accrue(PERIOD, DUE)
     j.clock.set_date(paid_on)
-    j.api.record_manual_payment(j.manager, j.unit_id(1), D("1500.00"), "Ayşe Kaya", payment_date=f"{paid_on}T09:00:00Z")
+    j.api.record_manual_payment(j.manager, j.unit_id(1), D("1500.00"), "Ayşe Kaya", payment_date=f"{paid_on}T00:00:00Z")
     principal, penalty = outstanding(item(j, 1))
     assert principal == D(remaining)
     assert penalty == D("0.00")
@@ -125,10 +138,10 @@ def cleared_fee(j: OccupancyJourney, unit_number: int, period: str = PERIOD) -> 
 
 
 def status_of(entry: dict) -> str:
-    """PENDING until the due date has passed, then OVERDUE; a settled liability has no open item."""
+    """PENDING until a late fee starts to run, then OVERDUE; a settled liability has no open item."""
     if D(str(entry["principal_outstanding"])) == 0:
         return "PAID"
-    return "OVERDUE" if int(entry["days_overdue"]) > 0 else "PENDING"
+    return "OVERDUE" if D(str(entry["penalty_outstanding"])) > 0 else "PENDING"
 
 
 @pytest.mark.covers("SC-13-11-01")
@@ -153,7 +166,7 @@ def test_liability_moves_through_pending_overdue_paid_and_cancelled(clock_site, 
     j.clock.set_date(day)
     j.clock.tick()
     if kind == "pay":
-        j.api.record_manual_payment(j.manager, j.unit_id(1), D(args[0]), "Ayşe Kaya", payment_date=f"{day}T09:00:00Z")
+        j.api.record_manual_payment(j.manager, j.unit_id(1), D(args[0]), "Ayşe Kaya", payment_date=f"{day}T00:00:00Z")
     if kind == "cancel":
         due_id = j.api.resident_statement(j.manager, j.unit_id(1))["debtors"][0]["open_items"][0]["due_id"]
         j.api.call("POST", "/api/v1/accrual-corrections", j.manager.token,
@@ -183,7 +196,7 @@ def test_backdated_payment_recalculates_fees_using_its_value_date(clock_site):
     j.clock.set_date("2026-11-19")
     j.clock.tick()
     assert outstanding(item(j, 1)) == (D("1500.00"), D("22.50"))
-    j.api.record_manual_payment(j.manager, j.unit_id(1), D("1500.00"), "Ayşe Kaya", payment_date="2026-11-10T09:00:00Z")
+    j.api.record_manual_payment(j.manager, j.unit_id(1), D("1500.00"), "Ayşe Kaya", payment_date="2026-11-10T00:00:00Z")
     assert outstanding(item(j, 1)) == (D("0.00"), D("0.00"))
     adjustment = j.stack.sql(
         "SELECT kind || '|' || amount FROM ledger_adjustments a JOIN dues_liabilities d ON d.id = a.due_id "
@@ -201,7 +214,7 @@ def test_late_fee_never_reopens_a_settled_liability(clock_site):
     j = clock_site()
     j.accrue(PERIOD, DUE)
     j.clock.set_date("2026-11-10")
-    j.api.record_manual_payment(j.manager, j.unit_id(3), D("1500.00"), "Burak Şahin", payment_date="2026-11-10T09:00:00Z")
+    j.api.record_manual_payment(j.manager, j.unit_id(3), D("1500.00"), "Burak Şahin", payment_date="2026-11-10T00:00:00Z")
     assert outstanding(item(j, 3)) == (D("0.00"), D("0.00"))
     j.clock.advance_to("2026-12-10")
     j.clock.tick()
@@ -297,8 +310,10 @@ def test_share_starting_after_the_period_due_date_is_not_late_before_it_existed(
                        body={"approve": True, "note": "Split approved"})
     j.clock.set_date("2026-11-19")
     j.clock.tick()
-    tenant_row = next(r for r in liability_rows(j.stack, j.unit_id(3), PERIOD) if r["debtor"] == "TENANT")
-    assert tenant_row["principal"] == D(share)
+    rows = rows_of(j, 3)
+    tenant_row = next((r for r in rows if r["debtor"] == "TENANT"), None)
+    assert tenant_row is not None, rows
+    assert tenant_row["principal"] == D(share), rows
     assert tenant_row["effective_due"] == share_due
     assert D(str(tenant_item(j, 3)["penalty_outstanding"])) == D(fee)
     j.invariants("SC-13-03-17")
@@ -311,11 +326,13 @@ def test_resplit_share_keeps_an_effective_due_date_and_a_late_fee_that_follow_it
     j = f6_site()
     j.clock.set_date("2026-11-19")
     j.clock.tick()
-    rows = {r["name"]: r for r in liability_rows(j.stack, j.unit_id(3), PERIOD)}
-    oya, burak = rows["Oya Çelik"], rows["Burak Şahin"]
-    assert oya["effective_due"] == "2026-11-18"
-    assert burak["effective_due"] == "2026-11-15"
-    assert burak["principal"] == D("850.00")
+    rows = rows_of(j, 3)
+    by_role = {r["debtor"]: r for r in rows}
+    oya, burak = by_role.get("TENANT"), by_role.get("OWNER")
+    assert oya is not None and burak is not None, rows
+    assert oya["effective_due"] == "2026-11-18", rows
+    assert burak["effective_due"] == "2026-11-15", rows
+    assert burak["principal"] == D("850.00"), rows
     fees = {debtor["debtor_type"]: debtor for debtor in j.api.resident_statement(j.manager, j.unit_id(3))["debtors"]}
     assert D(str(tenant_item(j, 3)["penalty_outstanding"])) == D("1.08")
     owner_fee = sum(D(str(i["penalty_outstanding"])) for i in fees["OWNER"]["open_items"] if i["period"] == PERIOD)

@@ -860,6 +860,9 @@ impl PaymentTrackingService {
                 // first and lowered afterwards, so no row is ever inconsistent.
                 if let Some(re) = reevaluations.iter().find(|r| r.due.id == d.id) {
                     d.delay_penalty = re.original.delay_penalty;
+                    // Not settled until the reevaluation below lowers the penalty;
+                    // the status check constraint ties PAID to the stored penalty.
+                    d.status = DebtStatus::Overdue;
                 }
                 crate::db::tx_settle_due(
                     &tx,

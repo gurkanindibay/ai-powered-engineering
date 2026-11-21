@@ -158,6 +158,12 @@ class JourneyClock:
         self.current_date = target
         return result
 
+    def set_instant(self, value: str) -> dict:
+        """Set an exact RFC 3339 instant (for boundaries inside a UTC day); keeps the date in sync."""
+        result = self.api.clock.set_instant(value)
+        self.current_date = _parse_date(value[:10])
+        return result
+
     def tick(self) -> dict:
         return self.api.e2e_clock("tick")
 
