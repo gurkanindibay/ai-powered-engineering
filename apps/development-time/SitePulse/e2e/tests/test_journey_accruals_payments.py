@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from support.api import ApiError
+from support.flutter import by_id
 from support.journey_attempts import (
     JourneyManifest,
     ledger_invariants,
@@ -29,6 +30,10 @@ from support.journey_attempts import (
     teardown_with_evidence,
 )
 from support.journey_multi_site import build_multi_site_journey
+from support.money import format_try
+from pages.login import LoginPage
+from pages.manager import PaymentStream, ResidentsTab
+from pages.person import UnitWorkspace
 
 E2E = Path(__file__).resolve().parents[1]
 
@@ -1325,11 +1330,6 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
 
         # Manager browser evidence: a unit statement shows the debtor's receipts and the
         # site cash view shows the posted gross receipt total for the same manager scope.
-        from support.flutter import by_id
-        from pages.manager import PaymentStream, ResidentsTab
-        from pages.person import UnitWorkspace
-        from pages.login import LoginPage
-
         login_page.login("manager", j.manager_a.user["email"], j.manager_a_password)
         ResidentsTab(page).open()
         assert set(ResidentsTab(page).unit_card_ids()) == set(j.units_a.values())
@@ -1337,14 +1337,25 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         UnitWorkspace(page).open(unit_id_a).action(unit_id_a, "statement")
         by_id(page, "statement_debtor_owner").wait_for(timeout=15_000)
         statement_a = api.resident_statement(j.manager_a, unit_id_a)
-        receipt_a = next(r for r in statement_a["receipts"] if Decimal(str(r["total_amount"])) == Decimal("1000.00"))
+        expected_receipt_a = Decimal("1000.00")
+        receipt_a = next(
+            (r for r in statement_a["receipts"] if Decimal(str(r["total_amount"])) == expected_receipt_a),
+            None,
+        )
+        assert receipt_a is not None, (
+            f"Site A, April 2027, unit A-03 ({unit_id_a}), debtor Fay Çelik: "
+            f"expected receipt TRY {expected_receipt_a} in the unit statement"
+        )
         by_id(page, f"statement_receipt_{receipt_a['receipt_number']}").wait_for(timeout=15_000)
         page.keyboard.press("Escape")
         UnitWorkspace(page).close()
         PaymentStream(page).open()
         by_id(page, "tab_payment_stream").wait_for(timeout=15_000)
-        assert page.get_by_text("₺90.658,50", exact=True).count() > 0
-        assert PaymentStream(page).entry_ids(), "Site A manager cash view should list posted receipts"
+        expected_cash_a = format_try(j.expected_posted_cash_a)
+        assert page.get_by_text(expected_cash_a, exact=True).count() > 0, (
+            f"Site A, April 2027 cash view missing expected posted cash {expected_cash_a}"
+        )
+        assert PaymentStream(page).entry_ids(), "Site A, April 2027 cash view should list posted receipts"
 
         manager_b_page = page.context.new_page()
         try:
@@ -1357,15 +1368,26 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
             UnitWorkspace(manager_b_page).open(unit_id_b).action(unit_id_b, "statement")
             by_id(manager_b_page, "statement_debtor_tenant").wait_for(timeout=15_000)
             statement_b = api.resident_statement(j.manager_b, unit_id_b)
+            expected_receipt_b = Decimal("750.00")
             receipt_b = next(
-                r for r in statement_b["receipts"] if Decimal(str(r["total_amount"])) == Decimal("750.00")
+                (r for r in statement_b["receipts"] if Decimal(str(r["total_amount"])) == expected_receipt_b),
+                None,
+            )
+            assert receipt_b is not None, (
+                f"Site B, April 2027, unit B2-01 ({unit_id_b}), debtor Juno Yıldız: "
+                f"expected receipt TRY {expected_receipt_b} in the unit statement"
             )
             by_id(manager_b_page, f"statement_receipt_{receipt_b['receipt_number']}").wait_for(timeout=15_000)
             manager_b_page.keyboard.press("Escape")
             UnitWorkspace(manager_b_page).close()
             PaymentStream(manager_b_page).open()
-            assert manager_b_page.get_by_text("₺189.538,75", exact=True).count() > 0
-            assert PaymentStream(manager_b_page).entry_ids(), "Site B manager cash view should list posted receipts"
+            expected_cash_b = format_try(j.expected_posted_cash_b)
+            assert manager_b_page.get_by_text(expected_cash_b, exact=True).count() > 0, (
+                f"Site B, April 2027 cash view missing expected posted cash {expected_cash_b}"
+            )
+            assert PaymentStream(manager_b_page).entry_ids(), (
+                "Site B, April 2027 cash view should list posted receipts"
+            )
         finally:
             manager_b_page.close()
 

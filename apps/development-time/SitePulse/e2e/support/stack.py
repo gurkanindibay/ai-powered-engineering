@@ -167,6 +167,8 @@ class E2EStack:
         developer database. Restore only system configuration and let backend
         startup create the SaaS administrator; do not invoke a global reset API.
         """
+        if not self.db_name.startswith("sitepulse_e2e_"):
+            raise RuntimeError(f"Refusing to empty a non-E2E database: {self.db_name}")
         self.backend.stop()
         tables = [t for t in self.sql(
             "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;").split("\n")

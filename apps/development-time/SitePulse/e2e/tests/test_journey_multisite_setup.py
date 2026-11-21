@@ -11,7 +11,6 @@ def test_onboarding_attempt_starts_with_an_empty_site_list(stack, api, actors):
     """Use the disposable E2E database, retaining no shared demo-site fixtures."""
     stack.reset_empty()
 
-    assert stack.db_name.startswith("sitepulse_e2e_")
     assert stack.sql("SELECT COUNT(*) FROM sites WHERE deleted_at IS NULL;") == "0"
     assert stack.sql("SELECT COUNT(*) FROM sites WHERE slug IN ('begonya-sitesi', 'kardelen-rezidans');") == "0"
 
