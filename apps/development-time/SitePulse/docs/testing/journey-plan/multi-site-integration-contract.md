@@ -29,4 +29,14 @@ The April 10 expected posted cash is TRY 90,658.50 for Site A and TRY 189,538.75
 
 Issue #246 is ready to close when all linked component issues are complete, the integrated attempt above runs from a clean isolated setup in CI, and the cash/debt/manager-view assertions pass together. Passing component model tests or separately passing journey slices does not satisfy this gate.
 
-Issues [#247](https://github.com/gurkanindibay/ai-powered-engineering/issues/247), [#248](https://github.com/gurkanindibay/ai-powered-engineering/issues/248), [#249](https://github.com/gurkanindibay/ai-powered-engineering/issues/249), and [#250](https://github.com/gurkanindibay/ai-powered-engineering/issues/250) are merged into `master`. The final one-attempt composition and manager-browser assertions are implemented in [#251](https://github.com/gurkanindibay/ai-powered-engineering/issues/251) by [draft PR #257](https://github.com/gurkanindibay/ai-powered-engineering/pull/257). Its integrated CI run passed all checks, including all eight E2E shards and the test report: [run 44879118732](https://github.com/gurkanindibay/ai-powered-engineering/actions/runs/44879118732). Issue #246 remains open until its linked component issues and PRs are complete; do not report it complete while an issue, check, or review remains unresolved.
+The component slices are delivered by these PRs:
+
+| Issue | Delivered by |
+|---|---|
+| [#247](https://github.com/gurkanindibay/ai-powered-engineering/issues/247) | [PR #262](https://github.com/gurkanindibay/ai-powered-engineering/pull/262) (merged) |
+| [#248](https://github.com/gurkanindibay/ai-powered-engineering/issues/248) | [PR #259](https://github.com/gurkanindibay/ai-powered-engineering/pull/259) (merged) |
+| [#249](https://github.com/gurkanindibay/ai-powered-engineering/issues/249) | [PR #256](https://github.com/gurkanindibay/ai-powered-engineering/pull/256) (merged) |
+| [#250](https://github.com/gurkanindibay/ai-powered-engineering/issues/250) | [PR #254](https://github.com/gurkanindibay/ai-powered-engineering/pull/254) (merged) |
+| [#251](https://github.com/gurkanindibay/ai-powered-engineering/issues/251) | [PR #257](https://github.com/gurkanindibay/ai-powered-engineering/pull/257): the one-attempt composition and manager-browser assertions |
+
+This table records where each slice lives, not its live status; review, CI and merge state are tracked on those PRs and on [issue #246](https://github.com/gurkanindibay/ai-powered-engineering/issues/246). Issue #246 stays open until #251 is merged and the integrated attempt passes on `master`; do not report it complete while an issue, check, or review remains unresolved.

@@ -6,7 +6,7 @@ Prove that a SitePulse operator can onboard multiple residential sites from an e
 
 The test creates two sites through SaaS onboarding, then **creates all 88 units during the journey**: 24 in Site A and 64 in Site B. Once the units exist, each manager registers owners, tenants and household members attached to the person living in the unit. The managers accrue four periods and record a mix of full payments, partial payments and missed payments. At least one unit per site follows a paid, unpaid, unpaid, paid pattern that remains visible after April. After two periods, people move out, buyers take title, some homes remain empty, and other residents move in. By the final checkpoint, managers can explain every open balance by debtor, unit and period and reconcile each site's cash to its own posted receipts.
 
-This is a proposal for review. The [existing journey plan](README.md) defines F0 as a site with a manager already present. Its billing and occupancy scenarios are useful references. This journey starts one step earlier and carries the same two sites through onboarding, billing, occupancy changes and reconciliation.
+This is a proposal for review. The [existing journey plan](README.md) defines F0 as a site with a manager already present. Its billing and occupancy scenarios are useful references. This journey starts one step earlier and carries the same two sites through onboarding, billing, occupancy changes and reconciliation. The [integration contract](multi-site-integration-contract.md) describes how the component issues compose into one E2E attempt.
 
 ## Starting state and timeline
 
