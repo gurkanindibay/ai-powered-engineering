@@ -26,6 +26,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Sequence
 
+import ci_case_results
+
 TAIL_LINES = 40
 
 
@@ -36,12 +38,18 @@ class GateResult:
     diagnostics: List[str] = field(default_factory=list)
     command: str = ""
     duration_s: float = 0.0
+    exit_code: int | None = None
+    timed_out: bool = False
     # Full tool output, kept for parsing; not written to evidence files.
     output: str = field(default="", repr=False)
+    stdout: str = field(default="", repr=False)
+    stderr: str = field(default="", repr=False)
 
     def to_dict(self) -> Dict[str, object]:
         d = asdict(self)
         d.pop("output", None)
+        d.pop("stdout", None)
+        d.pop("stderr", None)
         return d
 
 
@@ -76,7 +84,9 @@ def run_command(name: str, spec: CommandSpec, root: Path) -> GateResult:
     if cache is not None and cache.is_file():
         try:
             hit = json.loads(cache.read_text())
-            return GateResult(name, True, [], command, float(hit.get("duration_s", 0.0)), hit.get("output", ""))
+            return GateResult(name, True, [], command, float(hit.get("duration_s", 0.0)),
+                              int(hit.get("exit_code", 0)), output=hit.get("output", ""),
+                              stdout=hit.get("stdout", ""), stderr=hit.get("stderr", ""))
         except (OSError, ValueError):
             pass
     if shutil.which(exe) is None:
@@ -91,19 +101,31 @@ def run_command(name: str, spec: CommandSpec, root: Path) -> GateResult:
             timeout=spec.timeout_s,
             env={**os.environ, "CARGO_TERM_COLOR": "never", "NO_COLOR": "1"},
         )
-    except subprocess.TimeoutExpired:
-        return GateResult(name, False, [f"Timed out after {spec.timeout_s}s"], command, time.monotonic() - started)
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        output = str(stdout) + str(stderr)
+        return GateResult(name, False, [f"Timed out after {spec.timeout_s}s"], command,
+                          time.monotonic() - started, output=output, timed_out=True,
+                          stdout=str(stdout), stderr=str(stderr))
     duration = time.monotonic() - started
     output = (proc.stdout or "") + (proc.stderr or "")
     if proc.returncode == 0:
         if cache is not None:
             try:
                 cache.parent.mkdir(parents=True, exist_ok=True)
-                cache.write_text(json.dumps({"duration_s": duration, "output": output}))
+                cache.write_text(json.dumps({"duration_s": duration, "exit_code": proc.returncode, "output": output,
+                                             "stdout": proc.stdout or "", "stderr": proc.stderr or ""}))
             except OSError:
                 pass
-        return GateResult(name, True, [], command, duration, output)
-    return GateResult(name, False, extract_diagnostics(output), command, duration, output)
+        return GateResult(name, True, [], command, duration, proc.returncode, output=output,
+                          stdout=proc.stdout or "", stderr=proc.stderr or "")
+    return GateResult(name, False, extract_diagnostics(output), command, duration,
+                      proc.returncode, output=output, stdout=proc.stdout or "", stderr=proc.stderr or "")
 
 
 def extract_diagnostics(output: str) -> List[str]:
@@ -157,13 +179,13 @@ GATES: Dict[str, List[CommandSpec]] = {
                                      "every_spec009_record_round_trips_through_postgresql", "--", "--exact"], "backend", 600)],
     # Errors are fatal; warnings/infos are reported by `flutter analyze` itself.
     "flutter-analyze": [CommandSpec(["flutter", "analyze", "--no-fatal-infos", "--no-fatal-warnings"], "flutter", 600)],
-    "flutter-test": [CommandSpec(["flutter", "test"], "flutter", 1200)],
+    "flutter-test": [CommandSpec(["flutter", "test", "--reporter=json"], "flutter", 1200)],
     # One fixture file, run against the Rust services and the Dart use case.
     "money-fixtures": [
         CommandSpec(["cargo", "test", "--locked", "--test", "financial_fixtures"], "backend"),
-        CommandSpec(["flutter", "test", "test/financial_fixture_test.dart"], "flutter", 600),
+        CommandSpec(["flutter", "test", "--reporter=json", "test/financial_fixture_test.dart"], "flutter", 600),
     ],
-    "harness-selftest": [CommandSpec(["python3", "-m", "unittest", "discover", "-s", "harness/tests"], ".", 300)],
+    "harness-selftest": [CommandSpec(["python3", "scripts/unittest_json_runner.py", "-s", "harness/tests"], ".", 300)],
     "schema-integrity": [CommandSpec(["python3", "scripts/schema_integrity_check.py", "--json"], ".", 600)],
     "persistence-lint": [CommandSpec(["python3", "scripts/memory_persistence_lint.py", "--json"], ".", 120)],
     "api-system": [CommandSpec(["python3", "scripts/api_system_check.py", "--json"], ".", 900)],
@@ -210,13 +232,71 @@ def run_gate(name: str, root: Path) -> GateResult:
     if name not in GATES:
         return GateResult(name, False, [f"Unknown gate '{name}'. Known gates: {', '.join(sorted(GATES))}"])
     results = [run_command(name, spec, root) for spec in GATES[name]]
-    return GateResult(
+    gate = GateResult(
         name,
         all(r.passed for r in results),
         [d for r in results for d in r.diagnostics],
         " && ".join(r.command for r in results),
         sum(r.duration_s for r in results),
+        next((r.exit_code for r in results if r.exit_code not in (None, 0)), 0 if all(r.passed for r in results) else None),
+        any(r.timed_out for r in results),
     )
+    _write_gate_artifacts(name, GATES[name], results, root)
+    return gate
+
+
+def _write_gate_artifacts(name: str, specs: Sequence[CommandSpec], results: Sequence[GateResult], root: Path) -> None:
+    """Persist raw command outcomes and adapted cases for CI without changing runner behavior."""
+    destination = os.environ.get("SITEPULSE_GATE_ARTIFACT_DIR")
+    if not destination:
+        return
+    out = Path(destination)
+    out.mkdir(parents=True, exist_ok=True)
+    for index, (spec, result) in enumerate(zip(specs, results), start=1):
+        argv = list(spec.argv)
+        cargo_index = argv.index("cargo") if "cargo" in argv else -1
+        cargo_argv = argv[cargo_index:] if cargo_index >= 0 else []
+        text = result.output
+        structured_output = result.stdout
+        cases: list[dict[str, object]] = []
+        native_runner: str | None = None
+        payload: dict[str, object] | None = None
+        if cargo_argv:
+            native_runner = "cargo"
+            suite = "money-fixtures" if "financial_fixtures" in cargo_argv else "rust-db-opt-in" if any(target in cargo_argv for target in ("accrual_corrections_tests", "finance_store_pg_tests")) else "rust-db-test" if "--ignored" in cargo_argv or "SITEPULSE_PG_TESTS=1" in argv else name
+            cases = ci_case_results.parse_cargo(text, suite)
+        elif argv and argv[0] == "flutter" and "test" in argv:
+            native_runner = "flutter"
+            suite = "money-fixtures" if "financial_fixture_test.dart" in argv else name
+            cases = ci_case_results.parse_flutter_json(structured_output, suite)
+        elif any("unittest_json_runner.py" in part for part in argv):
+            native_runner = "unittest"
+            result_file = Path(destination) / "unittest-case-results.json"
+            try:
+                result_payload = json.loads(result_file.read_text(encoding="utf-8"))
+                raw_cases = result_payload.get("cases", [])
+                cases = [dict(case) for case in raw_cases if isinstance(case, dict)]
+                payload = {"tests_run": result_payload.get("tests_run"),
+                           "adapter_test_count": result_payload.get("adapter_test_count")}
+            except (OSError, json.JSONDecodeError):
+                cases = ci_case_results.parse_unittest_verbose(text, name)
+        elif any("api_system_check.py" in part or "schema_integrity_check.py" in part for part in argv):
+            try:
+                payload = json.loads(structured_output)
+                cases = ci_case_results.parse_check_json(payload, "sitepulse-check", name)
+            except json.JSONDecodeError:
+                cases = []
+            native_runner = "sitepulse-check"
+        record = {"schema_version": 1, "gate": name, "command_index": index, "argv": argv,
+                  "cwd": spec.cwd, "exit_code": result.exit_code, "timed_out": result.timed_out,
+                  "passed": result.passed, "duration_s": round(result.duration_s, 3),
+                  "native_runner_totals": ({"total": payload.get("tests_run"), "complete": True}
+                                            if native_runner == "unittest" and payload else
+                                            ci_case_results.native_totals(text, native_runner, payload) if native_runner else None),
+                  "native_case_count": payload.get("adapter_test_count") if native_runner == "unittest" and payload else len(cases),
+                  "runner_errors": ci_case_results.flutter_reporter_errors(text) if native_runner == "flutter" else [],
+                  "adapter_case_count": len(cases), "cases": cases, "native_output": text}
+        (out / f"{name}-{index}.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

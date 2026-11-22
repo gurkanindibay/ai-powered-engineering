@@ -338,7 +338,8 @@ def record(report: List[Dict[str, object]], name: str, res, is_json: bool) -> No
     """Appends a gate result to the report and prints its status line."""
     status = "PASSED" if res.passed else "FAILED"
     limit = SUMMARY_DIAGNOSTIC_LINES if SUMMARY else 40
-    entry: Dict[str, object] = {"name": name, "status": status, "duration_s": round(res.duration_s, 1)}
+    entry: Dict[str, object] = {"name": name, "status": status, "duration_s": round(res.duration_s, 1),
+                               "exit_code": res.exit_code, "timed_out": res.timed_out}
     if not (SUMMARY and res.passed):
         entry["command"] = res.command
         entry["diagnostics"] = res.diagnostics[:limit] if SUMMARY else res.diagnostics

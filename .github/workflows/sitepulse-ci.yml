@@ -42,7 +42,27 @@ jobs:
         with:
           python-version: "3.12"
       - name: Python gates (harness self-test, lints, feature traceability)
+        env:
+          SITEPULSE_GATE_ARTIFACT_DIR: ${{ runner.temp }}/sitepulse-suite-lint/gates
         run: python3 scripts/run_tests.py --group lint
+      - name: Write lint suite manifest and run identity
+        if: always()
+        env:
+          JOB_RESULT: ${{ job.status }}
+        run: >-
+          python3 apps/development-time/SitePulse/scripts/ci_case_results.py --json --job lint
+          --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA"
+          --job-result "$JOB_RESULT"
+          --metadata-out "${{ runner.temp }}/sitepulse-suite-lint/producer.json"
+          --gate-manifest-out "${{ runner.temp }}/sitepulse-suite-lint/expected-gates.json"
+          > "${{ runner.temp }}/sitepulse-suite-lint/expected-suites.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sitepulse-suite-lint-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sitepulse-suite-lint/
+          if-no-files-found: warn
+          retention-days: 30
 
   rust:
     name: rust (build, clippy, tests, schema, API system)
@@ -74,7 +94,27 @@ jobs:
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Rust and database gates
+        env:
+          SITEPULSE_GATE_ARTIFACT_DIR: ${{ runner.temp }}/sitepulse-suite-rust/gates
         run: python3 scripts/run_tests.py --group rust
+      - name: Write rust suite manifest and run identity
+        if: always()
+        env:
+          JOB_RESULT: ${{ job.status }}
+        run: >-
+          python3 apps/development-time/SitePulse/scripts/ci_case_results.py --json --job rust
+          --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA"
+          --job-result "$JOB_RESULT"
+          --metadata-out "${{ runner.temp }}/sitepulse-suite-rust/producer.json"
+          --gate-manifest-out "${{ runner.temp }}/sitepulse-suite-rust/expected-gates.json"
+          > "${{ runner.temp }}/sitepulse-suite-rust/expected-suites.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sitepulse-suite-rust-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sitepulse-suite-rust/
+          if-no-files-found: warn
+          retention-days: 30
 
   flutter:
     name: flutter (analyze, tests, money fixtures)
@@ -101,7 +141,27 @@ jobs:
         with:
           python-version: "3.12"
       - name: Flutter gates
+        env:
+          SITEPULSE_GATE_ARTIFACT_DIR: ${{ runner.temp }}/sitepulse-suite-flutter/gates
         run: python3 scripts/run_tests.py --group flutter
+      - name: Write flutter suite manifest and run identity
+        if: always()
+        env:
+          JOB_RESULT: ${{ job.status }}
+        run: >-
+          python3 apps/development-time/SitePulse/scripts/ci_case_results.py --json --job flutter
+          --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA"
+          --job-result "$JOB_RESULT"
+          --metadata-out "${{ runner.temp }}/sitepulse-suite-flutter/producer.json"
+          --gate-manifest-out "${{ runner.temp }}/sitepulse-suite-flutter/expected-gates.json"
+          > "${{ runner.temp }}/sitepulse-suite-flutter/expected-suites.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sitepulse-suite-flutter-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sitepulse-suite-flutter/
+          if-no-files-found: warn
+          retention-days: 30
 
   # The browser suite runs as 8 duration-balanced shards on 8 runners at once
   # (scripts/e2e_shard.py, on the durations recorded in .specify/executions/runs).
@@ -160,12 +220,43 @@ jobs:
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Browser end-to-end suite
+        env:
+          SITEPULSE_GATE_ARTIFACT_DIR: ${{ runner.temp }}/sitepulse-suite-e2e/gates
         run: python3 scripts/run_tests.py --group e2e
+      - name: Write e2e gate manifest and run identity
+        if: always()
+        env:
+          JOB_RESULT: ${{ job.status }}
+        run: >-
+          python3 apps/development-time/SitePulse/scripts/ci_case_results.py --json --job e2e
+          --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA"
+          --job-result "$JOB_RESULT"
+          --metadata-out "${{ runner.temp }}/sitepulse-suite-e2e/producer.json"
+          --gate-manifest-out "${{ runner.temp }}/sitepulse-suite-e2e/expected-gates.json"
+          > "${{ runner.temp }}/sitepulse-suite-e2e/expected-suites.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sitepulse-suite-e2e-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sitepulse-suite-e2e/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Write shard collection metadata
+        if: always()
+        working-directory: apps/development-time/SitePulse
+        env:
+          JOB_RESULT: ${{ job.status }}
+        run: |
+          mkdir -p e2e/.artifacts
+          python3 scripts/ci_case_results.py --json \
+            --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA" \
+            --job-result "$JOB_RESULT" --shard-id "${{ matrix.shard }}/8" \
+            --shard-metadata-out e2e/.artifacts/collection.json > /dev/null
       # junit.xml, executions.jsonl, Playwright traces and stack logs; merged by the test-report job.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: e2e-shard-${{ matrix.shard }}
+          name: e2e-shard-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
           path: apps/development-time/SitePulse/e2e/.artifacts/
           # .artifacts is a dot directory: upload-artifact skips hidden paths unless told otherwise.
           include-hidden-files: true
@@ -178,7 +269,7 @@ jobs:
   # This replaces committing a recorded run with every task (gate test-run-recorded is off).
   test-report:
     if: always()
-    needs: e2e
+    needs: [lint, rust, flutter, e2e, verify]
     outputs:
       evidence_artifact: ${{ steps.evidence_metadata.outputs.artifact_name }}
       evidence_path: ${{ steps.evidence_metadata.outputs.evidence_path }}
@@ -192,19 +283,29 @@ jobs:
         with:
           python-version: "3.12"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
         with:
           pattern: e2e-shard-*
           path: ${{ runner.temp }}/shards
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          pattern: sitepulse-suite-*
+          path: ${{ runner.temp }}/suite-artifacts
       - name: Merge shard results into one report
         env:
           SITEPULSE_TASK: ${{ github.event_name == 'pull_request' && format('PR {0} ({1})', github.event.pull_request.number, github.head_ref) || github.ref_name }}
+          SITEPULSE_PRODUCER_STATUS: '{"lint":"${{ needs.lint.result }}","rust":"${{ needs.rust.result }}","flutter":"${{ needs.flutter.result }}","e2e":"${{ needs.e2e.result }}","verify":"${{ needs.verify.result }}"}'
         run: >-
           python3 scripts/ci_test_report.py
           --shards "${{ runner.temp }}/shards"
           --out "${{ runner.temp }}/e2e-test-report"
+          --suite-artifacts "${{ runner.temp }}/suite-artifacts"
           --evidence-out "${{ runner.temp }}/sitepulse-actions-evidence"
           --run-id "${{ github.run_id }}"
           --attempt "${{ github.run_attempt }}"
+          --commit "$GITHUB_SHA"
+          --producer-status "$SITEPULSE_PRODUCER_STATUS"
       - id: evidence_metadata
         name: Name this attempt's evidence artifact
         run: |
@@ -300,9 +401,29 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test run recorded for the branch
+        env:
+          SITEPULSE_GATE_ARTIFACT_DIR: ${{ runner.temp }}/sitepulse-suite-verify/gates
         run: python3 scripts/run_tests.py --group final
       - name: Traceability (VERIFIED requirements need current evidence)
         run: python3 harness/rtm_validator.py
+      - name: Write verification gate metadata
+        if: always()
+        env:
+          JOB_RESULT: ${{ job.status }}
+        run: >-
+          python3 apps/development-time/SitePulse/scripts/ci_case_results.py --json --job verify
+          --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA"
+          --job-result "$JOB_RESULT"
+          --metadata-out "${{ runner.temp }}/sitepulse-suite-verify/producer.json"
+          --gate-manifest-out "${{ runner.temp }}/sitepulse-suite-verify/expected-gates.json"
+          > "${{ runner.temp }}/sitepulse-suite-verify/expected-suites.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sitepulse-suite-verify-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sitepulse-suite-verify/
+          if-no-files-found: warn
+          retention-days: 30
 
   record-evidence:
     if: github.event_name == 'push'

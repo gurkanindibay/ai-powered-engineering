@@ -41,8 +41,8 @@ class CiTestReportTest(unittest.TestCase):
             self.assertEqual((summary["junit"]["tests"], summary["junit"]["passed"], summary["junit"]["failures"]),
                              (2, 1, 1))
             self.assertEqual(sorted(p.name for p in out.iterdir()),
-                             ["executions.jsonl", "feature-report.html", "product-status.html", "product-status.json",
-                              "summary.json", "test-report.md"])
+                             ["case-results.jsonl", "executions.jsonl", "feature-report.html", "product-status.html",
+                              "product-status.json", "suite-collection.json", "suite-report.md", "summary.json", "test-report.md"])
             status = json.loads((out / "product-status.json").read_text(encoding="utf-8"))
             self.assertEqual((status["status"], status["scenarios"]["SC-06-06-01"]["state"],
                               status["scenarios"]["SC-06-06-02"]["state"]), ("FAIL", "passing", "failing"))

@@ -65,9 +65,10 @@ class LinkedSuitesCoveredInCi(unittest.TestCase):
                     self.assertTrue((PROJECT_ROOT / "flutter" / argv[2]).exists())
                     gate = "flutter-test"
                     expected = ["flutter", "test"]
-                elif argv[1:] == ["-m", "unittest", "discover", "-s", "harness/tests"]:
+                elif (argv[1:2] == ["scripts/unittest_json_runner.py"] or
+                      argv[1:4] == ["-m", "unittest", "discover"]) and "harness/tests" in argv:
                     gate = "harness-selftest"
-                    expected = ["python3", "-m", "unittest", "discover", "-s", "harness/tests"]
+                    expected = ["python3", "scripts/unittest_json_runner.py"]
                 elif argv[1:2] == ["scripts/api_system_check.py"] and "--only" not in argv:
                     gate = "api-system"
                     expected = ["python3", "scripts/api_system_check.py", "--json"]
@@ -75,7 +76,11 @@ class LinkedSuitesCoveredInCi(unittest.TestCase):
                     self.fail(f"unrecognised linked suite {argv}: add a CI gate for it or classify it here")
                 in_ci, gate_argvs = _ci_gate_argv(gate)
                 self.assertTrue(in_ci, f"gate {gate} is in no CI group")
-                self.assertIn(expected, gate_argvs, f"gate {gate} no longer runs the full suite")
+                self.assertTrue(any(command[:len(expected)] == expected for command in gate_argvs),
+                                f"gate {gate} no longer runs the full suite")
+                if gate == "harness-selftest":
+                    self.assertIn("-s", gate_argvs[0])
+                    self.assertIn("harness/tests", gate_argvs[0])
 
     @unittest.skipUnless(WORKFLOW.exists(), "workflow file not in this checkout")
     def test_ci_ignores_only_the_linked_file(self):
