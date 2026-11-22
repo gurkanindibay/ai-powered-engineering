@@ -148,6 +148,194 @@ def test_single_debt_in_current_month_in_youngest_bucket(request, api, actors, s
         teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
 
 
+@pytest.mark.covers("SC-13-02-07")
+@pytest.mark.core
+def test_multiple_debts_across_periods_listed_oldest_first(request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    fixture = None
+    try:
+        fixture = site_in_state("F5", api=api, stack=stack, saas=saas, manifest=manifest)
+        u5 = fixture.unit_ids[4]  # A-5
+
+        stmt = api.resident_statement(fixture.manager, u5)
+        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "TENANT")
+        open_items = debtor["open_items"]
+        assert len(open_items) == 3
+        assert [i["period"] for i in open_items] == ["Eylül 2026", "Ekim 2026", "Kasım 2026"]
+        assert Decimal(str(open_items[0]["penalty_outstanding"])) == Decimal("175.00")
+        assert Decimal(str(open_items[1]["penalty_outstanding"])) == Decimal("100.00")
+        assert Decimal(str(open_items[2]["penalty_outstanding"])) == Decimal("22.50")
+        total = sum(
+            Decimal(str(i["principal_outstanding"])) + Decimal(str(i["penalty_outstanding"]))
+            for i in open_items
+        )
+        assert total == Decimal("4797.50")
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-02-07")
+    except BaseException as failure:
+        teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
+    else:
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
+
+
+@pytest.mark.covers("SC-13-02-08")
+@pytest.mark.core
+def test_advance_balance_offsets_next_accrual(request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    fixture = None
+    try:
+        fixture = site_in_state("F5", api=api, stack=stack, saas=saas, manifest=manifest)
+        u6 = fixture.unit_ids[5]  # A-6
+
+        stmt_before = api.resident_statement(fixture.manager, u6)
+        debtor_before = next(d for d in stmt_before["debtors"] if d["debtor_type"] == "OWNER")
+        assert len(debtor_before["open_items"]) == 0
+        overview_before = api.site_overview(fixture.manager, fixture.site_id)
+        flat_6_before = next(f for f in overview_before["flats"] if str(f["id"]) == str(u6))
+        assert Decimal(str(flat_6_before["advance_balance"])) == Decimal("1250.00")
+
+        # Accrue Aralık 2026 (Large flat tariff is 2250.00)
+        api.accrue_period(fixture.manager, "Aralık 2026", None, "2026-12-10")
+
+        overview_after = api.site_overview(fixture.manager, fixture.site_id)
+        flat_6_after = next(f for f in overview_after["flats"] if str(f["id"]) == str(u6))
+        assert Decimal(str(flat_6_after["advance_balance"])) == Decimal("0.00")
+        assert Decimal(str(flat_6_after["amount_due"])) == Decimal("1000.00")
+
+        stmt_after = api.resident_statement(fixture.manager, u6)
+        debtor_after = next(d for d in stmt_after["debtors"] if d["debtor_type"] == "OWNER")
+        aralik_item = next(i for i in debtor_after["open_items"] if i["period"] == "Aralık 2026")
+        assert Decimal(str(aralik_item["principal_outstanding"])) == Decimal("1000.00")
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-02-08")
+    except BaseException as failure:
+        teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
+    else:
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
+
+
+@pytest.mark.covers("SC-13-02-09")
+@pytest.mark.core
+def test_fourth_accrual_idempotent(request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    fixture = None
+    try:
+        fixture = site_in_state("F5", api=api, stack=stack, saas=saas, manifest=manifest)
+        liabilities_before = int(stack.sql(
+            "SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {int(fixture.site_id)};"
+        ))
+
+        api.accrue_period(fixture.manager, "Aralık 2026", None, "2026-12-10")
+
+        liabilities_after1 = int(stack.sql(
+            "SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {int(fixture.site_id)};"
+        ))
+        assert liabilities_after1 == liabilities_before + 6
+
+        u7 = fixture.unit_ids[6]  # A-7
+        a7_liabilities = int(stack.sql(
+            f"SELECT COUNT(*) FROM dues_liabilities WHERE unit_id = {int(u7)} AND period = 'Aralık 2026';"
+        ))
+        assert a7_liabilities == 0
+
+        # Repeated accrual adds nothing
+        api.accrue_period(fixture.manager, "Aralık 2026", None, "2026-12-10")
+        liabilities_after2 = int(stack.sql(
+            "SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {int(fixture.site_id)};"
+        ))
+        assert liabilities_after2 == liabilities_after1
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-02-09")
+    except BaseException as failure:
+        teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
+    else:
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
+
+
+@pytest.mark.covers("SC-13-02-10")
+@pytest.mark.core
+def test_closed_period_accepts_no_new_accrual_keeps_debts(request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    fixture = None
+    try:
+        fixture = site_in_state("F7", api=api, stack=stack, saas=saas, manifest=manifest)
+        sep_status = stack.sql(
+            f"SELECT status FROM dues_periods WHERE site_id = {int(fixture.site_id)} AND period_name = 'Eylül 2026';"
+        )
+        assert sep_status == "CLOSED"
+
+        with pytest.raises(ApiError) as exc_info:
+            api.accrue_period(fixture.manager, "Eylül 2026", None, "2026-09-10")
+        assert "409" in str(exc_info.value) or "400" in str(exc_info.value)
+
+        u3 = fixture.unit_ids[2]  # A-3
+        stmt = api.resident_statement(fixture.manager, u3)
+        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "OWNER")
+        sep_item = next(i for i in debtor["open_items"] if i["period"] == "Eylül 2026")
+        assert Decimal(str(sep_item["principal_outstanding"])) == Decimal("1500.00")
+        assert Decimal(str(sep_item["penalty_outstanding"])) == Decimal("175.00")
+
+        # Clock advances one day to 2026-11-20 and late-fee job runs
+        api.clock.advance_to("2026-11-20")
+        api.clock.tick()
+
+        stmt_next = api.resident_statement(fixture.manager, u3)
+        debtor_next = next(d for d in stmt_next["debtors"] if d["debtor_type"] == "OWNER")
+        sep_item_next = next(i for i in debtor_next["open_items"] if i["period"] == "Eylül 2026")
+        assert Decimal(str(sep_item_next["penalty_outstanding"])) == Decimal("177.50")
+    except BaseException as failure:
+        teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
+    else:
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
+
+
+@pytest.mark.covers("SC-13-02-11")
+@pytest.mark.edge
+def test_payment_toward_closed_period_allocated_to_oldest_debt(request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    fixture = None
+    try:
+        fixture = site_in_state("F7", api=api, stack=stack, saas=saas, manifest=manifest)
+        u3 = fixture.unit_ids[2]  # A-3
+
+        api.record_manual_payment(fixture.manager, u3, Decimal("1675.00"), "Burak Şahin", payer_role="OWNER")
+
+        stmt = api.resident_statement(fixture.manager, u3)
+        debtor = next(d for d in stmt["debtors"] if d["debtor_type"] == "OWNER")
+        assert not any(i["period"] == "Eylül 2026" for i in debtor["open_items"])
+        assert Decimal(str(debtor["total_outstanding"])) == Decimal("0.00")
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="SC-13-02-11")
+    except BaseException as failure:
+        teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
+    else:
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
+
+
 @pytest.mark.covers("SC-13-04-01")
 @pytest.mark.smoke
 @pytest.mark.core

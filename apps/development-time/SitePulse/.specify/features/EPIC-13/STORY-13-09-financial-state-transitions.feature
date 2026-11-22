@@ -60,8 +60,7 @@ Feature: Financial transitions that cross periods or ledgers
     And retries approval of that same item
     Then the item is settled, "A-3" owes 0.00, and one payment, receipt and allocation set exist
 
-  # Pending: the exact tenant-occupied F5 fixture and cross-ledger balance checks are not available in the journey harness.
-  @SC-13-09-08 @J-16 @depth:2 @state:F2 @layer:backend @core @role_manager @pending
+  @SC-13-09-08 @J-16 @depth:2 @state:F2 @layer:backend @core @role_manager @linked
   Scenario: Operational and capital balances stay separate for a tenant-occupied unit
     Given unit "A-2" has operational principal of 1500.00 for the tenant and capital principal of 1000.00 for the owner
     And both charges are current and have no fee or advance

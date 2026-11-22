@@ -297,3 +297,44 @@ def test_duplicate_national_id_returns_match_without_second_person(journey_site)
 
     j.invariants("SC-13-03-11")
 
+
+@pytest.mark.covers("SC-13-05-09")
+@pytest.mark.edge
+@pytest.mark.role_manager
+def test_move_out_after_accrual_resplits_open_liability(journey_site):
+    j = journey_site("F6")
+    j.clock.advance_to("2026-11-26")
+
+    shares_before = j.shares(2, "Kasım 2026")
+    transition(j, 2, "MOVE_OUT", effective_date="2026-11-25")
+
+    reviewer = second_manager(j)
+    pending = [
+        c for c in j.api.call("GET", "/api/v1/accrual-corrections", reviewer.token)
+        if c.get("status") == "PENDING"
+    ]
+    assert len(pending) >= 1
+    assert j.shares(2, "Kasım 2026") == shares_before
+
+    for correction in pending:
+        j.api.call(
+            "POST",
+            f"/api/v1/accrual-corrections/{correction['id']}/decide",
+            reviewer.token,
+            body={"approve": True, "note": "SC-13-05-09 split approved"},
+        )
+
+    assert j.shares(2, "Kasım 2026") == {
+        "Selin Demir": D("700.00"),
+        "Mert Kılıç": D("500.00"),
+        "Ahmet Yılmaz": D("300.00"),
+    }
+    kasim_rows = j.share_rows(2, "Kasım 2026")
+    owner_row = next(r for r in kasim_rows if r["debtor"] == "OWNER")
+    mert_row = next(r for r in kasim_rows if r["name"] == "Mert Kılıç")
+    assert owner_row["due"] == "2026-11-26"
+    assert (mert_row["effective_due"] or mert_row["due"]) == "2026-11-15"
+
+    j.invariants("SC-13-05-09")
+
+

@@ -202,6 +202,13 @@ class Api:
             body["amount"] = str(amount)
         return self.call("POST", "/api/v1/dues/accrue-period", session.token, body=body)
 
+    def list_periods(self, session: Session, site_id: str | None = None) -> list[dict]:
+        query = f"?site_id={site_id or session.user['site_id']}"
+        return self.call("GET", f"/api/v1/dues/periods{query}", session.token)
+
+    def close_period(self, session: Session, period_id: str | int) -> dict:
+        return self.call("POST", f"/api/v1/dues/periods/{period_id}/close", session.token)
+
     def create_capital_project(self, session: Session, title: str, budget: Decimal,
                                basis: str = "BY_LAND_SHARE", installments: int = 1,
                                first_due: str = "2026-11-30") -> dict:
@@ -237,6 +244,14 @@ class Api:
         if designation:
             body["designation"] = designation
         return self.call("POST", "/api/v1/payments/record-manual", session.token, body=body)
+
+    def reverse_payment(self, session: Session, receipt: str, reason: str = "Bounced payment") -> dict:
+        return self.call(
+            "POST",
+            "/api/v1/payments/reverse",
+            session.token,
+            body={"site_id": session.user.get("site_id"), "receipt": str(receipt), "reason": reason},
+        )
 
     def get_blocks(self, session: Session, site_id: str | None = None) -> list[dict]:
         """Lists blocks for the site."""

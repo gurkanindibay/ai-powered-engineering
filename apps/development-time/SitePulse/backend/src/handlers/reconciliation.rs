@@ -100,7 +100,7 @@ pub async fn parse_bank_statement(
         .cloned()
         .collect();
 
-    let matches = recon_service.reconcile_transactions_with_site(
+    let mut matches = recon_service.reconcile_transactions_with_site(
         Some(&payload.site_id),
         &txns,
         &site_units,
@@ -108,6 +108,44 @@ pub async fn parse_bank_statement(
         &site_dues,
         today,
     );
+
+    let already_approved_refs: std::collections::HashSet<String> = inner
+        .reconciliation_queue
+        .iter()
+        .filter(|m| {
+            crate::auth::same_id(&m.site_id, &payload.site_id)
+                && m.status == ReconciliationStatus::Approved
+        })
+        .flat_map(|m| {
+            let mut refs = Vec::new();
+            let tid = m.transaction.transaction_id.trim();
+            if !tid.is_empty() {
+                refs.push(tid.to_string());
+            }
+            if let Some(r) = &m.transaction.reference_no {
+                let r_trimmed = r.trim();
+                if !r_trimmed.is_empty() {
+                    refs.push(r_trimmed.to_string());
+                }
+            }
+            refs
+        })
+        .collect();
+
+    for m in &mut matches {
+        let tid = m.transaction.transaction_id.trim();
+        let ref_no = m.transaction.reference_no.as_deref().unwrap_or("").trim();
+        if (!tid.is_empty() && already_approved_refs.contains(tid))
+            || (!ref_no.is_empty() && already_approved_refs.contains(ref_no))
+        {
+            m.status = ReconciliationStatus::AlreadyProcessed;
+            m.status_code = ReconciliationStatus::AlreadyProcessed.as_str().to_string();
+            m.notes = Some(
+                "Bu dairenin aidatı daha önce zaten yüklenmiş / ödenmiştir. Mükerrer tahsilat önlendi."
+                    .to_string(),
+            );
+        }
+    }
 
     // Append to reconciliation queue in state
     for m in &matches {
@@ -267,9 +305,13 @@ pub async fn confirm_reconciliation(
                 .reconciliation_queue
                 .iter()
                 .find(|q| q.match_id == *match_id);
-            if match_id.starts_with(DEBTOR_REVIEW_PREFIX)
-                && queued.is_some_and(|q| q.status == ReconciliationStatus::Approved)
-            {
+            if queued.is_some_and(|q| q.status == ReconciliationStatus::Rejected) {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("Match {} is rejected and cannot be approved", match_id),
+                ));
+            }
+            if queued.is_some_and(|q| q.status == ReconciliationStatus::Approved) {
                 return Err((
                     StatusCode::CONFLICT,
                     format!("Match {} is already approved", match_id),
@@ -569,11 +611,17 @@ pub async fn assign_reconciliation_match(
         }
         if matches!(
             queued.status,
-            ReconciliationStatus::Approved | ReconciliationStatus::AlreadyProcessed
+            ReconciliationStatus::Approved
+                | ReconciliationStatus::AlreadyProcessed
+                | ReconciliationStatus::Rejected
         ) {
             return Err((
                 StatusCode::CONFLICT,
-                format!("Match {} is already approved", match_id),
+                format!(
+                    "Match {} is already {} and cannot be assigned",
+                    match_id,
+                    queued.status.as_str()
+                ),
             ));
         }
         // An automatic match always wins at confirmation, so accepting an
@@ -660,6 +708,109 @@ pub async fn assign_reconciliation_match(
     assigned.assigned_unit_id = Some(unit.id);
     assigned.assigned_debtor_role = Some(payload.debtor_role);
     Ok(Json(assigned.clone()))
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct RejectReconciliationMatchRequest {
+    pub site_id: String,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+pub async fn reject_reconciliation_match(
+    Path(match_id): Path<String>,
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Json(mut payload): Json<RejectReconciliationMatchRequest>,
+) -> Result<Json<ReconciliationMatch>, (StatusCode, String)> {
+    scope.pin(&mut payload.site_id)?;
+
+    // Phase 1 (state lock): tenant boundary and approval check
+    {
+        let inner = state.inner.read().await;
+        let Some(queued) = inner
+            .reconciliation_queue
+            .iter()
+            .find(|m| m.match_id == match_id)
+        else {
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("Match {} not found", match_id),
+            ));
+        };
+        if queued.site_id.is_empty() {
+            return Err((
+                StatusCode::FORBIDDEN,
+                format!(
+                    "Match {} is not bound to a site and cannot be rejected",
+                    match_id
+                ),
+            ));
+        }
+        if !crate::auth::same_id(&queued.site_id, &payload.site_id) {
+            return Err((
+                StatusCode::FORBIDDEN,
+                format!(
+                    "Match {} belongs to site {}, not {}",
+                    match_id, queued.site_id, payload.site_id
+                ),
+            ));
+        }
+        if queued.status == ReconciliationStatus::Approved {
+            return Err((
+                StatusCode::CONFLICT,
+                format!(
+                    "Match {} is already approved and cannot be rejected",
+                    match_id
+                ),
+            ));
+        }
+        if queued.status == ReconciliationStatus::Rejected {
+            return Err((
+                StatusCode::CONFLICT,
+                format!("Match {} is already rejected", match_id),
+            ));
+        }
+    }
+
+    let reason_note = payload
+        .reason
+        .clone()
+        .unwrap_or_else(|| "Rejected by manager".to_string());
+
+    // Phase 2: update in PostgreSQL
+    if let Some(p) = state.db_pool() {
+        crate::db::update_reconciliation_status(
+            p,
+            &match_id,
+            ReconciliationStatus::Rejected,
+            Some(&reason_note),
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                crate::error::sanitized("Database write failed", &e),
+            )
+        })?;
+    }
+
+    // Phase 3: update in-memory read model
+    let mut inner = state.inner.write().await;
+    let Some(item) = inner
+        .reconciliation_queue
+        .iter_mut()
+        .find(|m| m.match_id == match_id)
+    else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("Match {} not found", match_id),
+        ));
+    };
+    item.status = ReconciliationStatus::Rejected;
+    item.status_code = ReconciliationStatus::Rejected.as_str().to_string();
+    item.notes = Some(reason_note);
+    Ok(Json(item.clone()))
 }
 
 pub async fn remember_sender_iban(
