@@ -931,9 +931,19 @@ async fn scope_request(
             3
         };
         if let Some(id) = parts.get(idx) {
+            // The statement is a historical record: a former owner or tenant with
+            // an outstanding charge keeps read access to their own liabilities.
+            // Every other unit route keeps the current-relationship rule.
+            if template.starts_with("/api/v1/residents/:unit_id/statement")
+                || template.starts_with("/api/v1/residents/{unit_id}/statement")
+            {
+                authorization::statement_unit(state, claims, id)
+                    .await
+                    .map_err(IntoResponse::into_response)?;
+            } else if
             // Household and payment-profile changes by residents need the unit's owner;
             // managers are scoped to their site by `check_unit_access`.
-            if matches!(
+            matches!(
                 policy,
                 RoutePolicy::Require(
                     Permission::UnitInviteCoResident | Permission::UnitManageHousehold

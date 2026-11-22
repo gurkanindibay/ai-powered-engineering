@@ -328,7 +328,7 @@ pub async fn get_resident_statement(
         .iter()
         .find(|user| crate::auth::same_id(&user.id, &claims.sub))
         .and_then(|user| user.person_id);
-    let viewer = resident_statement::caller_debtor_role(&claims, unit, viewer_person_id);
+    let viewer = resident_statement::caller_debtor_role(&inner, &claims, unit, viewer_person_id);
     Ok(Json(resident_statement::build_statement_for_person(
         &inner,
         unit,
@@ -360,7 +360,7 @@ pub async fn create_payment_intent(
             .iter()
             .find(|user| crate::auth::same_id(&user.id, &claims.sub))
             .and_then(|user| user.person_id);
-        resident_statement::caller_debtor_role(&claims, unit, person_id)
+        resident_statement::caller_debtor_role(&inner, &claims, unit, person_id)
     };
     CardPaymentService::new(state)
         .create_intent(&unit_id, req, role, &actor(&claims))

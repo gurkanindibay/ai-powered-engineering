@@ -18,8 +18,30 @@ use crate::state::AppStateInner;
 /// TBK 147/1: periodic payments are time-barred after five years.
 const LIMITATION_DAYS: i64 = 5 * 365;
 
+/// The roles a person still owes on `unit` under a collectable charge, in the
+/// order the charges are stored. A predecessor's only remaining tie to the unit
+/// is such a charge, so it also names the historical section they may read.
+fn owed_roles(inner: &AppStateInner, unit: &IndependentUnit, person_id: i64) -> Vec<&'static str> {
+    let mut roles: Vec<&'static str> = Vec::new();
+    for due in inner.dues.iter().filter(|due| {
+        crate::auth::same_id(&due.unit_id, &unit.id)
+            && due.status.is_collectable()
+            && due.liable_person_id == Some(person_id)
+    }) {
+        let role = match due.debtor_type {
+            crate::models::DebtorType::Owner => DEBTOR_OWNER,
+            crate::models::DebtorType::Tenant => DEBTOR_TENANT,
+        };
+        if !roles.contains(&role) {
+            roles.push(role);
+        }
+    }
+    roles
+}
+
 /// The debtor a signed-in resident is on `unit`, or `None` for site staff.
 pub fn caller_debtor_role(
+    inner: &AppStateInner,
     claims: &crate::auth::Claims,
     unit: &IndependentUnit,
     viewer_person_id: Option<i64>,
@@ -52,11 +74,15 @@ pub fn caller_debtor_role(
     {
         return Some(DEBTOR_OWNER);
     }
-    // A household member: the tenant household when the unit is let, else the owner's.
-    match claims.role {
+    // A household member: the tenant household when the unit is let, else the
+    // owner's. A predecessor whose only tie is an unpaid charge keeps the role
+    // that charge was accrued under, even after the unit changed hands or stands
+    // vacant.
+    let historical = viewer_person_id.and_then(|pid| owed_roles(inner, unit, pid).first().copied());
+    historical.or(match claims.role {
         Role::HomeResident if unit.tenant_user_id.is_some() => Some(DEBTOR_TENANT),
         _ => Some(DEBTOR_OWNER),
-    }
+    })
 }
 
 pub fn build_statement(
@@ -205,9 +231,28 @@ pub fn build_statement_for_person(
         joint_items
     };
 
+    // Roles the viewer may read. A signed-in resident reads their own role, and a
+    // former owner or tenant whose only remaining tie to the unit is a charge
+    // they still owe keeps the role that charge was accrued under, so their own
+    // historical section is built while every other role stays out of reach.
+    let viewer_roles = viewer.map(|role| {
+        let mut roles = vec![role];
+        if let Some(pid) = viewer_person_id {
+            for accrued_role in owed_roles(inner, unit, pid) {
+                if !roles.contains(&accrued_role) {
+                    roles.push(accrued_role);
+                }
+            }
+        }
+        roles
+    });
+
     let mut debtors = Vec::new();
     for debtor in [DEBTOR_OWNER, DEBTOR_TENANT] {
-        if viewer.map(|v| v != debtor).unwrap_or(false) {
+        if viewer_roles
+            .as_ref()
+            .is_some_and(|roles| !roles.contains(&debtor))
+        {
             continue;
         }
 
@@ -370,13 +415,14 @@ pub fn build_statement_for_person(
     // A resident sees only their own section. A predecessor with outstanding
     // items still sees their own (now former) section, never the current
     // holder's; a caller with no attributed section (for example a household
-    // member) sees the current holder's section. Site staff keep every section.
-    if viewer.is_some() {
+    // member) sees the current holder's section of their own role. Site staff
+    // keep every section.
+    if let Some(role) = viewer {
         match viewer_person_id {
             Some(pid) if debtors.iter().any(|d| d.liable_person_id == Some(pid)) => {
                 debtors.retain(|d| d.liable_person_id == Some(pid));
             }
-            _ => debtors.retain(|d| !d.is_former),
+            _ => debtors.retain(|d| !d.is_former && d.debtor_type == role),
         }
     }
 

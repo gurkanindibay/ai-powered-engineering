@@ -166,6 +166,78 @@ pub fn same_unit(a: &str, b: &str) -> bool {
 pub async fn unit(state: &AppState, claims: &Claims, id: &str) -> Result<(), SecurityError> {
     unit_relationship(state, claims, id, false).await
 }
+
+/// Authorize the resident statement of a unit, which is a historical record.
+///
+/// A current owner, tenant or household member may read it, and so may a former
+/// owner or tenant whose only remaining tie to the unit is a charge they still
+/// owe (after a move-out or a sale), because the statement then returns only
+/// that person's own liabilities. Every other unit endpoint keeps the
+/// current-relationship rule of [`unit`] through the response for this one.
+///
+/// # Errors
+/// Returns a scoped 404 or dependency failure. Never falls back from DB to memory.
+pub async fn statement_unit(
+    state: &AppState,
+    claims: &Claims,
+    id: &str,
+) -> Result<(), SecurityError> {
+    match unit(state, claims, id).await {
+        Ok(()) => return Ok(()),
+        Err(SecurityError::NotFound) => {}
+        Err(err) => return Err(err),
+    }
+    let unit_id = UnitId::parse(id)?;
+    if let Some(client) = crate::db::security_connection(state).await? {
+        let site = SiteId::parse(&claims.site_id)?;
+        let user = crate::db::require_id("user", &claims.sub)
+            .map_err(|_| SecurityError::Unauthenticated)?;
+        let row = client
+            .query_opt(
+                "SELECT 1 FROM units u JOIN users actor ON actor.id=$3 \
+                 WHERE u.id=$1 AND u.site_id=$2 AND u.deleted_at IS NULL \
+                 AND actor.person_id IS NOT NULL AND (EXISTS ( \
+                    SELECT 1 FROM dues_liabilities d WHERE d.unit_id=u.id \
+                    AND d.liable_person_id=actor.person_id \
+                    AND d.status IN ('PENDING','OVERDUE')) OR EXISTS ( \
+                    SELECT 1 FROM dues_liability_joint_owners j \
+                    JOIN dues_liabilities d ON d.id=j.due_id WHERE d.unit_id=u.id \
+                    AND j.owner_person_id=actor.person_id \
+                    AND d.status IN ('PENDING','OVERDUE')))",
+                &[&unit_id.0, &site.0, &user],
+            )
+            .await
+            .map_err(|_| SecurityError::Unavailable)?;
+        return row.map(|_| ()).ok_or(SecurityError::NotFound);
+    }
+    let inner = state.inner.read().await;
+    let target = inner
+        .units
+        .iter()
+        .find(|u| same_unit(&u.id, id) && same_site(&u.site_id, &claims.site_id))
+        .ok_or(SecurityError::NotFound)?;
+    let person_id = inner
+        .users
+        .iter()
+        .find(|u| crate::auth::same_id(&u.id, &claims.sub))
+        .and_then(|u| u.person_id);
+    let owes_on_unit = person_id.is_some_and(|pid| {
+        inner.dues.iter().any(|due| {
+            same_unit(&due.unit_id, &target.id)
+                && due.status.is_collectable()
+                && (due.liable_person_id == Some(pid)
+                    || inner
+                        .joint_liability_owners
+                        .get(&due.id)
+                        .is_some_and(|owners| owners.iter().any(|o| o.person_id == pid)))
+        })
+    });
+    if owes_on_unit {
+        Ok(())
+    } else {
+        Err(SecurityError::NotFound)
+    }
+}
 /// Apply the authenticated security operation.
 ///
 /// # Errors
