@@ -1,0 +1,174 @@
+# Mutation Testing: Runs curated mutation scenarios across layers (Rust, Flutter, Python, DB).
+# Scheduled nightly or triggered manually via workflow_dispatch.
+name: Mutation Testing
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # Nightly at 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: apps/development-time/SitePulse
+
+concurrency:
+  group: mutation-testing-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+
+jobs:
+  mutate-python:
+    name: mutation (python harness)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Run Python mutation scenarios
+        run: |
+          mkdir -p "${{ runner.temp }}/mutation"
+          python3 scripts/mutation_scenarios.py run --layer python \
+            --markdown "${{ runner.temp }}/mutation/mutation_python.md" \
+            --output "${{ runner.temp }}/mutation/mutation_python.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mutation-shard-python
+          path: ${{ runner.temp }}/mutation/
+          retention-days: 14
+
+  mutate-flutter:
+    name: mutation (flutter frontend)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
+      - name: Flutter dependencies
+        working-directory: apps/development-time/SitePulse/flutter
+        run: flutter pub get
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Run Flutter mutation scenarios
+        run: |
+          mkdir -p "${{ runner.temp }}/mutation"
+          python3 scripts/mutation_scenarios.py run --layer flutter \
+            --markdown "${{ runner.temp }}/mutation/mutation_flutter.md" \
+            --output "${{ runner.temp }}/mutation/mutation_flutter.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mutation-shard-flutter
+          path: ${{ runner.temp }}/mutation/
+          retention-days: 14
+
+  mutate-rust:
+    name: mutation (rust backend)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: apps/development-time/SitePulse/backend
+          cache-on-failure: true
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Run Rust mutation scenarios
+        run: |
+          mkdir -p "${{ runner.temp }}/mutation"
+          python3 scripts/mutation_scenarios.py run --layer rust \
+            --markdown "${{ runner.temp }}/mutation/mutation_rust.md" \
+            --output "${{ runner.temp }}/mutation/mutation_rust.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mutation-shard-rust
+          path: ${{ runner.temp }}/mutation/
+          retention-days: 14
+
+  mutate-db:
+    name: mutation (database & migrations)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sitepulse_user
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: sitepulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sitepulse_user -d sitepulse"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: apps/development-time/SitePulse/backend
+          cache-on-failure: true
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Run DB mutation scenarios
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: "5432"
+          DB_USER: sitepulse_user
+          DB_PASS: ci-only-password
+        run: |
+          mkdir -p "${{ runner.temp }}/mutation"
+          python3 scripts/mutation_scenarios.py run --layer db --with postgres \
+            --markdown "${{ runner.temp }}/mutation/mutation_db.md" \
+            --output "${{ runner.temp }}/mutation/mutation_db.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mutation-shard-db
+          path: ${{ runner.temp }}/mutation/
+          retention-days: 14
+
+  mutation-report:
+    name: mutation report & summary
+    if: always()
+    needs: [mutate-python, mutate-flutter, mutate-rust, mutate-db]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-shard-*
+          path: ${{ runner.temp }}/mutation-shards
+      - name: Aggregate layer mutation reports
+        run: |
+          python3 scripts/ci_mutation_report.py \
+            --reports-dir "${{ runner.temp }}/mutation-shards" \
+            --out "${{ runner.temp }}/mutation-report" \
+            --markdown "${{ runner.temp }}/mutation-report/summary.md"
+          cat "${{ runner.temp }}/mutation-report/summary.md" >> $GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-test-report
+          path: ${{ runner.temp }}/mutation-report/
+          retention-days: 30

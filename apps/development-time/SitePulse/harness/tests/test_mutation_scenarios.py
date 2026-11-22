@@ -183,5 +183,21 @@ class SummaryTest(unittest.TestCase):
         self.assertIsNone(ms.summarise([])["score"])
 
 
+class SelectionAndStrictTest(unittest.TestCase):
+    def test_select_filters_by_changed_files(self):
+        catalogue = ms.load_catalogue()
+        self.assertGreater(len(catalogue.scenarios), 0)
+        first_file = catalogue.scenarios[0].file
+        matching = ms.select(catalogue, [], [], [], changed_files={first_file})
+        self.assertTrue(all(s.file == first_file for s in matching))
+        self.assertGreater(len(matching), 0)
+        unmatched = ms.select(catalogue, [], [], [], changed_files={"nonexistent/file.rs"})
+        self.assertEqual(len(unmatched), 0)
+
+    def test_detect_changed_files_returns_set(self):
+        result = ms.detect_changed_files()
+        self.assertIsInstance(result, set)
+
+
 if __name__ == "__main__":
     unittest.main()
