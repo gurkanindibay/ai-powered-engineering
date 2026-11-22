@@ -65,7 +65,8 @@ def merge_executions(files: list[Path], out: Path) -> int:
     return len(lines)
 
 
-def build(shards: Path, out: Path, task: str | None, history: Path) -> dict:
+def build(shards: Path, out: Path, task: str | None, history: Path,
+          evidence_out: Path | None = None, run_id: str | None = None, attempt: str | None = None) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     execution_files = sorted(shards.rglob("executions.jsonl"))
     junit = junit_totals(sorted(shards.rglob("junit.xml")))
@@ -80,6 +81,18 @@ def build(shards: Path, out: Path, task: str | None, history: Path) -> dict:
     store = ft.DirStore(store_dir)
     meta = ft.run_metadata(trigger="ci", task=task)
     ft.record_run(merged, store, meta)
+
+    # Keep the disposable execution history in its own Actions-only payload. The publisher selects
+    # public report files, so evidence stays separate from the report output entirely.
+    if evidence_out is not None:
+        if not run_id or not attempt:
+            raise ValueError("Actions evidence requires both run_id and attempt")
+        evidence_runs = evidence_out / f"run-{run_id}" / f"attempt-{attempt}" / "runs"
+        if evidence_runs.exists():
+            shutil.rmtree(evidence_runs)
+        if (store_dir / "runs").is_dir():
+            evidence_runs.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(store_dir / "runs", evidence_runs)
 
     catalogue = ft.load_catalogue()
     records = ft.load_history(store, 10_000)
@@ -133,6 +146,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--task", help="label of the run (default: $SITEPULSE_TASK, else the branch)")
     parser.add_argument("--history", type=Path, default=Path(ft.DEFAULT_STORE),
                         help="committed run history to show next to this run (default: .specify/executions)")
+    parser.add_argument("--evidence-out", type=Path,
+                        help="optional Actions-only output directory for this run's execution history")
+    parser.add_argument("--run-id", help="GitHub Actions run id used to namespace the evidence payload")
+    parser.add_argument("--attempt", help="GitHub Actions run attempt used to namespace the evidence payload")
     parser.add_argument("--no-summary", action="store_true", help="do not append to $GITHUB_STEP_SUMMARY")
     parser.add_argument("--json", action="store_true", help="print the stats as JSON")
     args = parser.parse_args(argv)
@@ -141,7 +158,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"warning: --shards {args.shards} does not exist; reporting no results", file=sys.stderr)
         args.shards.mkdir(parents=True, exist_ok=True)
 
-    summary = build(args.shards, args.out, args.task, args.history)
+    summary = build(args.shards, args.out, args.task, args.history,
+                    args.evidence_out, args.run_id, args.attempt)
     target = os.environ.get("GITHUB_STEP_SUMMARY")
     if target and not args.no_summary:
         with open(target, "a", encoding="utf-8") as handle:
