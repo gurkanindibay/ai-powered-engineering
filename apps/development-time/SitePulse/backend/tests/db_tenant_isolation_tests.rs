@@ -12,6 +12,8 @@
 //! The verification gate `rust-db-test` (scripts/run_tests.py) runs them; with
 //! `--skip-db` the gate is reported as SKIPPED, never as passed.
 
+use std::sync::OnceLock;
+
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
@@ -125,6 +127,15 @@ impl TestDb {
 }
 
 const MANAGER_PASSWORD: &str = "Tenant-Manager-123";
+
+/// The password of the residents that [`seed_resident`] creates. It is derived
+/// per test process so the seeding never adds a hard-coded credential to the
+/// source: code scanning flags a literal used as a password, and a throwaway
+/// database gives nothing for a stable value to protect.
+fn resident_password() -> &'static str {
+    static PASSWORD: OnceLock<String> = OnceLock::new();
+    PASSWORD.get_or_init(|| format!("Resident-{}", uuid::Uuid::new_v4()))
+}
 
 /// Logs in as the seeded manager of `site` and returns a session-backed token.
 async fn manager_token(app: &Router, site: i64) -> String {
@@ -736,9 +747,9 @@ async fn reconciliation_assignment_is_persisted_for_its_site_only() {
     t.drop_db().await;
 }
 
-/// Seeds a resident login (person + session-backed user) and returns its email.
+/// Seeds a resident login (person + session-backed user) and returns its person id.
 async fn seed_resident(t: &TestDb, site: i64, name: &str, email: &str) -> i64 {
-    let hash = auth::hash_password(MANAGER_PASSWORD).expect("hash");
+    let hash = auth::hash_password(resident_password()).expect("hash");
     let person = t
         .scalar_i64(&format!(
             "INSERT INTO persons (full_name, email, person_type) \
@@ -803,7 +814,7 @@ async fn statement_access_grants_former_debtors_in_postgresql() {
         ("former tenant", "former@sitepulse.test"),
         ("joint owner", "joint@sitepulse.test"),
     ] {
-        let token = login(&app, email, MANAGER_PASSWORD).await;
+        let token = login(&app, email, resident_password()).await;
         let (status, body) = call(&app, "GET", &statement_uri, &token, None).await;
         assert_eq!(status, StatusCode::OK, "{} statement: {}", who, body);
         let (status, body) = call(&app, "GET", &dashboard_uri, &token, None).await;
@@ -817,7 +828,7 @@ async fn statement_access_grants_former_debtors_in_postgresql() {
     }
 
     // A resident with no charge on the unit keeps the ordinary current-relationship answer.
-    let stranger_token = login(&app, "stranger@sitepulse.test", MANAGER_PASSWORD).await;
+    let stranger_token = login(&app, "stranger@sitepulse.test", resident_password()).await;
     let (status, body) = call(&app, "GET", &statement_uri, &stranger_token, None).await;
     assert_eq!(
         status,
@@ -832,7 +843,7 @@ async fn statement_access_grants_former_debtors_in_postgresql() {
         &app,
         "GET",
         &format!("/api/v1/residents/{other_unit}/statement"),
-        &login(&app, "former@sitepulse.test", MANAGER_PASSWORD).await,
+        &login(&app, "former@sitepulse.test", resident_password()).await,
         None,
     )
     .await;
@@ -855,7 +866,7 @@ async fn statement_access_grants_former_debtors_in_postgresql() {
         &app,
         "GET",
         &statement_uri,
-        &login(&app, "joint@sitepulse.test", MANAGER_PASSWORD).await,
+        &login(&app, "joint@sitepulse.test", resident_password()).await,
         None,
     )
     .await;
