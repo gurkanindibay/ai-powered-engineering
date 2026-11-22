@@ -359,10 +359,8 @@ impl SiteAdminService {
             .house_type
             .clone()
             .or_else(|| Some("2+1".to_string()));
-        let custom_tariff_override = request
-            .monthly_dues
-            .filter(|d| *d > rust_decimal::Decimal::ZERO);
         let mut resolved_dues = request.monthly_dues;
+        let mut house_type_tariff_amount: Option<rust_decimal::Decimal> = None;
 
         // Resolve monthly dues from house_type tariff
         if let Some(ref ht_name) = effective_house_type {
@@ -373,11 +371,21 @@ impl SiteAdminService {
                         == crate::db::parse_id_to_i64(site_id))
                     && t.type_name.eq_ignore_ascii_case(ht_name)
             }) {
+                house_type_tariff_amount = Some(tariff.dues_amount);
                 if resolved_dues.is_none() {
                     resolved_dues = Some(tariff.dues_amount);
                 }
             }
         }
+
+        // A custom tariff override is an explicit amount differing from the house-type
+        // tariff (or specified when no house type tariff exists). If the request merely passed the
+        // current house-type tariff amount, do not freeze it as a unit override so subsequent
+        // house-type tariff updates apply live to the unit.
+        let custom_tariff_override = request
+            .monthly_dues
+            .filter(|d| *d > rust_decimal::Decimal::ZERO)
+            .filter(|d| house_type_tariff_amount != Some(*d));
         // F4: a fallback amount is never applied silently; the response says so.
         let mut warnings: Vec<String> = Vec::new();
         let monthly_dues = resolved_dues.unwrap_or_else(|| {
@@ -3599,5 +3607,82 @@ mod tests {
             Some(Decimal::new(2500, 0)),
             "tariff_for must reflect the updated override"
         );
+    }
+
+    #[tokio::test]
+    async fn when_registering_with_default_house_type_tariff_then_no_override_is_pinned() {
+        let state = AppState::new_with_test_fixtures();
+        let service = SiteAdminService::new(state.clone());
+
+        // In test fixtures, 2+1 house type has 1400.00 tariff
+        let req = RegisterHomeOwnerRequest {
+            block: "A".to_string(),
+            unit_no: 89,
+            floor: 1,
+            owner: None,
+            tenant: None,
+            members: Vec::new(),
+            owner_full_name: "Inherited Tariff Malik".to_string(),
+            email: "inherited.tariff@sitepulse.test".to_string(),
+            phone: "+90 555 987 6543".to_string(),
+            tenant_full_name: None,
+            tenant_email: None,
+            tenant_phone: None,
+            land_share: Some("24/24".to_string()),
+            monthly_dues: Some(Decimal::new(1400, 0)), // Matches house type tariff
+            house_type: Some("2+1".to_string()),
+            is_resident: true,
+            role: Some("OWNER".to_string()),
+        };
+
+        let response = service
+            .register_home_owner("site-1", req)
+            .await
+            .expect("registration should succeed");
+
+        {
+            let inner = state.inner.read().await;
+            let unit = inner
+                .units
+                .iter()
+                .find(|u| u.id == response.unit_id)
+                .expect("unit must exist");
+            assert_eq!(
+                unit.monthly_tariff_override, None,
+                "an ordinary registration inheriting house-type tariff must not pin an override"
+            );
+            assert_eq!(
+                crate::scheduler::tariff_for(&inner, unit),
+                Some(Decimal::new(1400, 0)),
+                "tariff_for resolves from house-type tariff"
+            );
+        }
+
+        // Now simulate manager updating the house-type tariff to 1800.00
+        {
+            let mut inner = state.inner.write().await;
+            if let Some(ht) = inner
+                .house_types
+                .iter_mut()
+                .find(|ht| ht.site_id == "site-1" && ht.type_name == "2+1")
+            {
+                ht.dues_amount = Decimal::new(1800, 0);
+            }
+        }
+
+        // Verify the unit's effective tariff live-updates to 1800.00
+        {
+            let inner = state.inner.read().await;
+            let unit = inner
+                .units
+                .iter()
+                .find(|u| u.id == response.unit_id)
+                .expect("unit must exist");
+            assert_eq!(
+                crate::scheduler::tariff_for(&inner, unit),
+                Some(Decimal::new(1800, 0)),
+                "unit without override must follow subsequent house-type tariff increase"
+            );
+        }
     }
 }

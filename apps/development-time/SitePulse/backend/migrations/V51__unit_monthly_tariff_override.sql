@@ -1,4 +1,4 @@
--- V50: explicit per-unit monthly tariff override.
+-- V51: explicit per-unit monthly tariff override.
 --
 -- Registration and unit edit accept a monthly dues amount typed by the manager.
 -- Until now that amount was only used to charge nobody (issue #286) and was then

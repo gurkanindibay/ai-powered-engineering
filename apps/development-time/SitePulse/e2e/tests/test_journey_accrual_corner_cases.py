@@ -250,3 +250,175 @@ def test_manager_of_another_site_sees_nothing_of_this_site(request, api, actors,
                     assert "Deniz Arslan" not in body and email not in body, path
             ledger_invariants(api, home.manager, home.site_id, stage="SC-13-05-13-home")
             ledger_invariants(api, other.manager, other.site_id, stage="SC-13-05-13-other")
+
+
+@pytest.mark.covers("SC-13-05-05")
+@pytest.mark.edge
+@pytest.mark.role_manager
+def test_scheduler_catches_up_missed_months(request, api, actors, stack):
+    with journey_site(request, api, actors, stack, "F2") as (fixture, _):
+        site = int(fixture.site_id)
+        # The F2 scenario is specified for the 6-unit fixture (Units A-1 through A-6).
+        # Remove the 7th vacant unit so exactly 6 units are accrued.
+        stack.sql(f"DELETE FROM units WHERE site_id = {site} AND unit_number = 7;")
+        # Configure accrual schedule with go-live date on September 1, 2026 so catch-up starts from September,
+        # with due day on the 10th (journey period standard) and 0 grace days.
+        stack.sql(
+            f"UPDATE sites SET go_live_date = DATE '2026-09-01', due_day = 10, grace_days = 0 WHERE id = {site};"
+        )
+        stack.restart_backend()
+        manager = api.login(fixture.manager_email, fixture.manager_password)
+
+        # Scheduler runs on 2026-11-19
+        api.clock.set_date("2026-11-19")
+        api.clock.tick()
+
+        # Liabilities exist for "Eylül 2026", "Ekim 2026" and "Kasım 2026", each once
+        periods = stack.sql(
+            "SELECT DISTINCT period FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {site} AND d.status <> 'CANCELLED' ORDER BY period;"
+        ).splitlines()
+        assert periods == ["Ekim 2026", "Eylül 2026", "Kasım 2026"]
+
+        # Exactly 18 liabilities exist (6 units x 3 periods)
+        total_liabilities = int(stack.sql(
+            "SELECT count(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {site} AND d.status <> 'CANCELLED';"
+        ))
+        assert total_liabilities == 18
+
+        # Each liability keeps its period due date for FIFO but its effective due date is "2026-11-19"
+        due_dates = stack.sql(
+            "SELECT DISTINCT due_date::text || '|' || effective_due_date::text FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {site} AND d.status <> 'CANCELLED' ORDER BY 1;"
+        ).splitlines()
+        assert due_dates == [
+            "2026-09-10|2026-11-19",
+            "2026-10-10|2026-11-19",
+            "2026-11-10|2026-11-19",
+        ]
+
+        # Total outstanding is 29250.00 with late fee 0.00, because no charge existed before "2026-11-19"
+        total_principal = Decimal(stack.sql(
+            "SELECT COALESCE(SUM(principal_amount), 0) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {site} AND d.status <> 'CANCELLED';"
+        ))
+        total_late_fee = Decimal(stack.sql(
+            "SELECT COALESCE(SUM(delay_penalty), 0) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {site} AND d.status <> 'CANCELLED';"
+        ))
+        assert total_principal == Decimal("29250.00")
+        assert total_late_fee == Decimal("0.00")
+
+        # When the clock advances to "2026-11-29"
+        api.clock.advance_to("2026-11-29")
+        api.clock.tick()
+
+        # The total late fee is 487.50, which is 15 x 25.00 plus 3 x 37.50 for "A-6"
+        fee_by_unit = stack.sql(
+            "SELECT u.unit_number || '|' || d.period || '|' || d.delay_penalty FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {site} AND d.status <> 'CANCELLED' ORDER BY u.unit_number, d.period;"
+        ).splitlines()
+        for line in fee_by_unit:
+            unit_no, period, fee = line.split("|")
+            if int(unit_no) == 6:
+                assert Decimal(fee) == Decimal("37.50"), line
+            else:
+                assert Decimal(fee) == Decimal("25.00"), line
+
+        total_late_fee_after = Decimal(stack.sql(
+            "SELECT COALESCE(SUM(delay_penalty), 0) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {site} AND d.status <> 'CANCELLED';"
+        ))
+        assert total_late_fee_after == Decimal("487.50")
+
+        # Running the scheduler again adds nothing
+        api.clock.tick()
+        assert int(stack.sql(
+            "SELECT count(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {site} AND d.status <> 'CANCELLED';"
+        )) == 18
+        assert Decimal(stack.sql(
+            "SELECT COALESCE(SUM(delay_penalty), 0) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {site} AND d.status <> 'CANCELLED';"
+        )) == Decimal("487.50")
+        ledger_invariants(api, manager, fixture.site_id, stage="SC-13-05-05")
+
+
+@pytest.mark.covers("SC-13-05-11")
+@pytest.mark.edge
+@pytest.mark.role_manager
+def test_merging_duplicate_people_preserves_liabilities_and_payments(request, api, actors, stack):
+    with journey_site(request, api, actors, stack, "F5") as (fixture, _):
+        site = int(fixture.site_id)
+        manager = fixture.manager
+        a5 = fixture.unit_ids[4]
+
+        # In F5, Deniz Arslan lives in unit 5 (A-5) and owes dues. Record a payment for him so one owns a payment.
+        api.record_manual_payment(manager, a5, Decimal("500.00"), "Deniz Arslan", payer_role="TENANT", idempotency_key="deniz-pay-1")
+        deniz_1 = stack.sql(f"SELECT id FROM persons WHERE site_id = {site} AND full_name = 'Deniz Arslan';")
+
+        # Ensure deniz_1 has a distinct phone number
+        version = int(stack.sql(f"SELECT version FROM persons WHERE id = {int(deniz_1)};"))
+        api.call(
+            "PATCH", f"/api/v1/site-admin/persons/{deniz_1}?site_id={fixture.site_id}", manager.token,
+            body={"phone": "+90 532 111 22 33", "version": version},
+        )
+
+        # Create the second "Deniz Arslan" with a different phone number
+        created = api.call(
+            "POST", f"/api/v1/site-admin/persons?site_id={fixture.site_id}", manager.token,
+            body={"card": {"full_name": "Deniz Arslan", "phone": "+90 532 999 88 77"}, "confirm_distinct": True},
+        )
+        deniz_2 = str(created["card"]["person_id"])
+
+        # Two distinct person records exist with full_name "Deniz Arslan"
+        assert int(stack.sql(
+            f"SELECT count(*) FROM persons WHERE site_id = {site} AND deleted_at IS NULL AND full_name = 'Deniz Arslan';"
+        )) == 2
+
+        # Step up and merge the duplicates (merging deniz_2 into deniz_1)
+        api.call("POST", "/api/v1/auth/step-up", manager.token, body={"password": fixture.manager_password})
+        api.call(
+            "POST", f"/api/v1/site-admin/persons/{deniz_2}/merge?site_id={fixture.site_id}", manager.token,
+            body={"target_person_id": deniz_1},
+        )
+
+        # One active person remains
+        assert int(stack.sql(
+            f"SELECT count(*) FROM persons WHERE site_id = {site} AND deleted_at IS NULL AND full_name = 'Deniz Arslan';"
+        )) == 1
+
+        # The people directory still lists one Deniz Arslan
+        resp = api.call("GET", f"/api/v1/site-admin/persons?site_id={fixture.site_id}", manager.token)
+        items = resp.get("items", resp) if isinstance(resp, dict) else resp
+        deniz_cards = [
+            item["card"] if "card" in item else item
+            for item in items
+            if (item.get("card", {}).get("full_name") or item.get("full_name")) == "Deniz Arslan"
+        ]
+        assert len(deniz_cards) == 1
+        assert str(deniz_cards[0]["person_id"]) == str(deniz_1)
+
+        # Liabilities and payments of both are attached to the surviving person
+        survivor_liabilities = int(stack.sql(
+            "SELECT count(*) FROM dues_liabilities "
+            f"WHERE liable_person_id = {int(deniz_1)} AND status <> 'CANCELLED';"
+        ))
+        assert survivor_liabilities >= 2
+
+        survivor_payments = int(stack.sql(
+            f"SELECT count(*) FROM payment_entries WHERE site_id = {site} AND payer_person_id = {int(deniz_1)};"
+        ))
+        assert survivor_payments >= 1
+
+        # Unit statement reflects the payments and liabilities under tenant
+        stmt = api.resident_statement(manager, a5)
+        debtors = {d["debtor_type"]: d for d in stmt["debtors"]}
+        assert "TENANT" in debtors
+        assert debtors["TENANT"]["name"] == "Deniz Arslan"
+        assert len(debtors["TENANT"]["open_items"]) >= 1
+        assert any(Decimal(str(r["total_amount"])) == Decimal("500.00") for r in stmt.get("receipts", []))
+
+        ledger_invariants(api, manager, fixture.site_id, stage="SC-13-05-11")
+
