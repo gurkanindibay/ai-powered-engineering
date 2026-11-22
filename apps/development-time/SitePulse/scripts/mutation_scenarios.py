@@ -153,7 +153,91 @@ def validate(catalogue: Catalogue, root: Path = PROJECT_ROOT) -> list[str]:
     return problems
 
 
-def select(catalogue: Catalogue, ids: Sequence[str], layers: Sequence[str], areas: Sequence[str]) -> list[Scenario]:
+def _parse_git_output_paths(stdout: str, repo_root: Path, root: Path, is_status: bool = False) -> set[str]:
+    paths: set[str] = set()
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if is_status:
+            parts = line.split(maxsplit=1)
+            if len(parts) != 2:
+                continue
+            path_str = parts[1]
+            if " -> " in path_str:
+                path_str = path_str.split(" -> ")[1]
+        else:
+            path_str = line
+        p = (repo_root / path_str.strip('"')).resolve()
+        try:
+            paths.add(str(p.relative_to(root.resolve())))
+        except ValueError:
+            pass
+    return paths
+
+
+def detect_changed_files(root: Path = PROJECT_ROOT, base: str | None = None) -> set[str]:
+    """Detects modified files in git relative to `root`. Raises ValueError on git failure or invalid base."""
+    proc = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise ValueError(f"git rev-parse failed: {proc.stderr.strip() or 'not a git repository'}")
+    repo_root = Path(proc.stdout.strip()).resolve()
+
+    if base:
+        diff = subprocess.run(
+            ["git", "diff", "--name-only", base],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if diff.returncode != 0:
+            raise ValueError(f"git diff failed against base {base!r}: {diff.stderr.strip() or 'unknown revision'}")
+        return _parse_git_output_paths(diff.stdout, repo_root, root, is_status=False)
+
+    # 1. Uncommitted working tree / staged changes
+    st = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if st.returncode != 0:
+        raise ValueError(f"git status failed: {st.stderr.strip()}")
+    changed = _parse_git_output_paths(st.stdout, repo_root, root, is_status=True)
+
+    # 2. Diff against HEAD~1 or origin/master...HEAD if working tree clean
+    if not changed:
+        for target in ("HEAD~1", "origin/master...HEAD"):
+            diff = subprocess.run(
+                ["git", "diff", "--name-only", target],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if diff.returncode == 0:
+                target_changed = _parse_git_output_paths(diff.stdout, repo_root, root, is_status=False)
+                if target_changed:
+                    changed = target_changed
+                    break
+    return changed
+
+
+def select(
+    catalogue: Catalogue,
+    ids: Sequence[str],
+    layers: Sequence[str],
+    areas: Sequence[str],
+    changed_files: Sequence[str] | set[str] | None = None,
+) -> list[Scenario]:
     chosen = catalogue.scenarios
     if ids:
         wanted = set(ids)
@@ -165,6 +249,9 @@ def select(catalogue: Catalogue, ids: Sequence[str], layers: Sequence[str], area
         chosen = [s for s in chosen if s.layer in layers]
     if areas:
         chosen = [s for s in chosen if s.area in areas]
+    if changed_files is not None:
+        changed_set = set(changed_files)
+        chosen = [s for s in chosen if s.file in changed_set]
     return chosen
 
 
@@ -357,6 +444,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="print JSON instead of text")
     parser.add_argument("--output", type=Path, help="write the JSON result here")
     parser.add_argument("--markdown", type=Path, help="write a markdown report here")
+    parser.add_argument(
+        "--changed",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="BASE",
+        help="only run scenarios targeting files changed in git (optionally compared against BASE)",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit with code 1 if any mutant survives, times out, or fails to compile",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "restore":
@@ -373,7 +473,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("\n".join(problems) or f"ok: {len(catalogue.scenarios)} scenarios, {len(catalogue.suites)} suites")
         return 1 if problems else 0
 
-    chosen = select(catalogue, args.id, args.layer, args.area)
+    changed_files = None
+    if args.changed is not None:
+        try:
+            changed_files = detect_changed_files(PROJECT_ROOT, base=args.changed if args.changed else None)
+        except ValueError as err:
+            print(f"error: {err}", file=sys.stderr)
+            return 2
+
+    chosen = select(catalogue, args.id, args.layer, args.area, changed_files=changed_files)
+    if args.changed is not None and not chosen:
+        if args.command == "list":
+            if args.json:
+                print(json.dumps([], indent=2))
+            else:
+                print("no mutation scenarios match changed files")
+            return 0
+        if args.command in ("baseline", "run"):
+            if args.json:
+                print(json.dumps({"summary": {"score": None, "counts": {}, "survivors": [], "by_layer": {}}, "results": []}, indent=2))
+            else:
+                print("no mutation scenarios match changed files")
+            return 0
+
     if args.command == "list":
         if args.json:
             print(json.dumps([asdict(s) for s in chosen], indent=2))
@@ -433,6 +555,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"score {score}; " + ", ".join(f"{k} {v}" for k, v in sorted(summary["counts"].items())))
         if summary["survivors"]:
             print("survivors: " + ", ".join(summary["survivors"]))
+    if args.strict:
+        has_survivors = bool(summary["survivors"])
+        has_unviable = summary["counts"].get("unviable", 0) > 0
+        has_timeout = summary["counts"].get("timeout", 0) > 0
+        if has_survivors or has_unviable or has_timeout:
+            return 1
     return 0
 
 
