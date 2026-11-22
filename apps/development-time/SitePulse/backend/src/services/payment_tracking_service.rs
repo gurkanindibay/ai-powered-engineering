@@ -456,15 +456,6 @@ impl PaymentTrackingService {
         &self,
         req: RecordManualPaymentRequest,
     ) -> Result<PaymentReceipt, String> {
-        self.record_and_allocate_payment_with_person_id(req, None)
-            .await
-    }
-
-    pub async fn record_and_allocate_payment_with_person_id(
-        &self,
-        req: RecordManualPaymentRequest,
-        validated_payer_person_id: Option<i64>,
-    ) -> Result<PaymentReceipt, String> {
         let site_id = req
             .site_id
             .clone()
@@ -637,7 +628,7 @@ impl PaymentTrackingService {
                 eligible_joint_due_ids,
             )
         };
-        let resolved_payer_person_id = if let Some(pid) = validated_payer_person_id {
+        let resolved_payer_person_id = if let Some(pid) = req.payer_person_id {
             Some(pid)
         } else {
             let folded_payer = crate::domain::fold_turkish(req.payer_name.trim());

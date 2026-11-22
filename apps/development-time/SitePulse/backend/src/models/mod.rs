@@ -2524,6 +2524,10 @@ pub struct RecordManualPaymentRequest {
     pub payer_name: String,
     #[serde(default)]
     pub payer_role: DebtorType,
+    /// Explicit person ID of the payer when known (e.g. from debtor assignments or matched party).
+    /// Skipped during deserialization so public endpoints cannot be injected with an untrusted person ID.
+    #[serde(skip_deserializing, default)]
+    pub payer_person_id: Option<i64>,
     #[serde(default)]
     pub payment_channel: PaymentChannel,
     #[serde(default)]

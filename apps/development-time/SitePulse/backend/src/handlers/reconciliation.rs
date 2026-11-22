@@ -355,27 +355,25 @@ pub async fn confirm_reconciliation(
             txn.transaction_id.clone()
         };
         let result = service
-            .record_and_allocate_payment_with_person_id(
-                crate::models::RecordManualPaymentRequest {
-                    site_id: Some(line.unit.site_id.clone()),
-                    unit_id: line.unit.id.clone(),
-                    amount: txn.amount,
-                    payer_name: line.payer_name.clone(),
-                    payer_role: line.payer_role,
-                    payment_channel: PaymentChannel::BankStatement,
-                    description: Some(txn.description.clone()),
-                    // The money arrived on the statement date; penalties stop accruing there.
-                    payment_date: txn.date.and_hms_opt(0, 0, 0).map(|d| d.and_utc()),
-                    idempotency_key: Some(format!("STMT:{}", key)),
-                    designation: line.request_designation.clone(),
-                    settles_owner_capital_dues: line.settles_owner_capital_dues,
-                    settles_tenant_joint_liability: false,
-                    external_reference: txn.reference_no.clone().or_else(|| Some(key.clone())),
-                    designate_from_description: true,
-                    settles_unmatched_entry_id: None,
-                },
-                line.payer_person_id,
-            )
+            .record_and_allocate_payment(crate::models::RecordManualPaymentRequest {
+                site_id: Some(line.unit.site_id.clone()),
+                unit_id: line.unit.id.clone(),
+                amount: txn.amount,
+                payer_name: line.payer_name.clone(),
+                payer_role: line.payer_role,
+                payer_person_id: line.payer_person_id,
+                payment_channel: PaymentChannel::BankStatement,
+                description: Some(txn.description.clone()),
+                // The money arrived on the statement date; penalties stop accruing there.
+                payment_date: txn.date.and_hms_opt(0, 0, 0).map(|d| d.and_utc()),
+                idempotency_key: Some(format!("STMT:{}", key)),
+                designation: line.request_designation.clone(),
+                settles_owner_capital_dues: line.settles_owner_capital_dues,
+                settles_tenant_joint_liability: false,
+                external_reference: txn.reference_no.clone().or_else(|| Some(key.clone())),
+                designate_from_description: true,
+                settles_unmatched_entry_id: None,
+            })
             .await;
         match result {
             Ok(receipt) => confirmed.push((line, receipt)),
@@ -1672,6 +1670,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             amount: payload.amount,
             payer_name,
             payer_role,
+            payer_person_id: None,
             payment_channel: if is_virtual_iban {
                 PaymentChannel::VirtualIban
             } else {
