@@ -130,6 +130,7 @@ class LoopGh:
     def __init__(self):
         self.pr = {**pr(42), "state": "OPEN", "mergeable": "MERGEABLE", "reviewDecision": ""}
         self.bot_reviews = []
+        self.activity_calls = []
         self.activity = {"reviews": [], "comments": [], "inline": []}
 
     def __call__(self, args):
@@ -143,6 +144,7 @@ class LoopGh:
         if path.endswith("/reviews"):
             items = self.bot_reviews if "commit_id,submitted_at" in args[-1] else self.activity["reviews"]
         else:
+            self.activity_calls.append(path)
             items = self.activity["inline" if "/pulls/" in path else "comments"]
         return "\n".join(json.dumps(item) for item in items)
 
@@ -241,6 +243,45 @@ class DeveloperReviewerLoop(unittest.TestCase):
         self.assertIsNone(changes(unknown, conflict))
         self.assertEqual(changes(conflict, unknown)["changed"], ["mergeable"])
         self.assertEqual(changes(known, conflict)["changed"], ["mergeable"])
+
+    def test_ci_start_alone_is_quiet_but_finished_ci_wakes(self):
+        gh = LoopGh()
+        base = w.activity_tool.author_snapshot(gh, "owner/repo", 42)
+        pending = {**base, "ci": "pending"}
+        failed = {**base, "ci": "failed"}
+        changes = w.activity_tool.author_changes
+        self.assertIsNone(changes(pending, base))
+        self.assertEqual(changes(failed, base)["changed"], ["ci"])
+        self.assertEqual(changes(base, pending)["changed"], ["ci"])
+
+    def test_cheap_ci_refresh_reuses_feedback_but_safety_refresh_reads_it_again(self):
+        gh = LoopGh()
+        gh.add_review("APPROVED", "2026-11-22T10:00:00Z")
+        check = w.QueueCheck(gh, "bot", set(), 100)
+        self.assertEqual(check(force=True), [])
+        self.assertEqual(len(gh.activity_calls), 2)
+        gh.pr["statusCheckRollup"] = RUNNING
+        self.assertEqual(check(), [])
+        self.assertEqual(len(gh.activity_calls), 2)
+        check(force=True)
+        self.assertEqual(len(gh.activity_calls), 4)
+
+    def test_activity_gh_contract_parses_paginated_json_lines(self):
+        calls = []
+        first = feedback(1, "dev", "2026-11-22T10:01:00Z")
+        second = feedback(2, "dev", "2026-11-22T10:02:00Z")
+
+        def gh(args):
+            calls.append(args)
+            return "\n".join(map(json.dumps, (first, second))) if "/issues/" in args[1] else ""
+
+        found = w.activity_tool.read_activity(gh, 42, "bot", include_reviews=False)
+        self.assertEqual([item["id"] for item in found], [1, 2])
+        self.assertEqual([args[:4] for args in calls], [
+            ["api", "repos/{owner}/{repo}/issues/42/comments", "--paginate", "--jq"],
+            ["api", "repos/{owner}/{repo}/pulls/42/comments", "--paginate", "--jq"],
+        ])
+        self.assertTrue(all('.[] | select(.state != "PENDING")' in args[4] for args in calls))
 
     def test_subscriptions_include_comment_events(self):
         self.assertTrue({"pull_request_review_comment", "issue_comment", "pull_request_review"}

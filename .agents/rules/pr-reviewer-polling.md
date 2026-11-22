@@ -45,6 +45,7 @@ A PR is **ready** when it is not a draft, all its CI checks have finished (passe
 - `new`: the bot never reviewed it (a new PR, or a draft just marked ready). Review the whole PR.
 - `new_head`: commits arrived after the bot's last review. Look first at what changed (`git diff <last_reviewed>..<head>`; the `--json` output has both SHAs), then at the whole PR if the change is wide.
 - `unfinished`: the bot's last review of this head is a `COMMENT` (or was dismissed), so no verdict exists yet. Finish it with `APPROVE` or `REQUEST_CHANGES`.
+- `feedback` (watcher only): a conversation or inline comment was posted or edited after the bot's final review. Read the linked comment and acknowledge its cursor after handling it.
 
 PRs under `waiting_ci` need a review but CI is still running: the watcher wakes you when their CI finishes (or block on `gh pr checks <n> --watch` if you want that one now). `skipped` covers drafts, PRs you authored (`--skip-author <login>`) and heads the bot already gave a final verdict, even if comments exist; if the author replied with a disagreement on such a head, answer it once with a comment and do not repeat the review.
 

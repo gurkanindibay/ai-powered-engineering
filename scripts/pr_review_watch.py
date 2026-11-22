@@ -143,33 +143,46 @@ class QueueCheck:
                  seen_activity: set[str] | None = None) -> None:
         self.seen_activity = seen_activity or set()
         self.gh, self.bot_login, self.skip_authors, self.limit = gh, bot_login, skip_authors, limit
-        self._fingerprint: str | None = None
+        self._fingerprint: dict[int, tuple[str, bool, str, str | None]] | None = None
+        self._feedback: dict[int, tuple[str, str, str | None, list[Entry]]] = {}
         self._ready: list[Entry] = []
 
-    def fingerprint(self) -> str:
+    def fingerprint(self) -> dict[int, tuple[str, bool, str, str | None]]:
         fields = "number,isDraft,headRefOid,updatedAt,statusCheckRollup"
         prs = json.loads(self.gh(["pr", "list", "--state", "open", "--limit", str(self.limit),
                                   "--json", fields]) or "[]")
-        summary = sorted((p["number"], p.get("headRefOid", ""), bool(p.get("isDraft")),
-                          queue_tool.ci_state(p.get("statusCheckRollup")), p.get("updatedAt")) for p in prs)
-        return json.dumps(summary)
+        return {
+            pr["number"]: (pr.get("headRefOid", ""), bool(pr.get("isDraft")),
+                           queue_tool.ci_state(pr.get("statusCheckRollup")), pr.get("updatedAt"))
+            for pr in prs
+        }
 
     def __call__(self, force: bool = False) -> list[Entry]:
         current = self.fingerprint()
         if force or current != self._fingerprint:
             queue = queue_tool.build_queue(self.gh, self.bot_login, self.skip_authors, self.limit)
             ready = queue["ready"]
+            feedback = {}
             for entry in queue["skipped"]:
                 reviewed_at = entry.get("reviewed_at")
                 if reviewed_at is None:
                     continue
-                activity = activity_tool.read_activity(
-                    self.gh, entry["number"], self.bot_login, reviewed_at, include_reviews=False,
-                )
+                number = entry["number"]
+                listing = current.get(number)
+                signature = (entry["head"], reviewed_at, listing[3] if listing else None)
+                cached = self._feedback.get(number)
+                if force or listing is None or cached is None or signature != cached[:3]:
+                    activity = activity_tool.read_activity(
+                        self.gh, number, self.bot_login, reviewed_at, include_reviews=False,
+                    )
+                else:
+                    activity = cached[3]
+                feedback[number] = (*signature, activity)
                 fresh = [item for item in activity if item["cursor"] not in self.seen_activity]
                 if fresh:
                     ready.append({**entry, "reason": "feedback", "activity": fresh})
             self._ready = ready
+            self._feedback = feedback
             self._fingerprint = current
         return self._ready
 
