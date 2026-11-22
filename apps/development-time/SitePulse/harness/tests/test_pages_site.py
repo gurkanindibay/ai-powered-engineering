@@ -1,7 +1,9 @@
 """Public archive migration, ordering, and artifact verification tests."""
 import importlib.util
 import json
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import tempfile
+from threading import Thread
 import unittest
 from pathlib import Path
 
@@ -113,6 +115,27 @@ class PagesSiteTests(unittest.TestCase):
             self.assertEqual(result["latest"]["run_attempt"], 2)
             self.assertTrue((site / "reports/300-1/index.html").is_file())
             self.assertTrue((site / "reports/300-2/index.html").is_file())
+
+    def test_remote_verifier_fetches_served_identity_and_archive_url(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            site = root / "site"
+            report = self._report(root)
+            result = pages.build(site, report, "500", "1", 50, "b" * 40, "6000")
+            handler = lambda *args, **kwargs: SimpleHTTPRequestHandler(*args, directory=str(site), **kwargs)
+            server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                verified = pages.verify_remote(f"http://127.0.0.1:{server.server_port}/", result["latest"],
+                                               attempts=1, delay=0)
+            finally:
+                server.shutdown()
+                thread.join()
+                server.server_close()
+
+            self.assertIn("reports/500-1/", verified["routes"])
+            self.assertEqual(verified["identity"]["commit"], "b" * 40)
 
 
 if __name__ == "__main__":

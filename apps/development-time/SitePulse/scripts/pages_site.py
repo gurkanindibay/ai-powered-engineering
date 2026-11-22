@@ -397,7 +397,7 @@ def verify_local(site: Path, expected: dict) -> None:
 def verify_remote(base_url: str, expected: dict, attempts: int = 12, delay: float = 10) -> dict:
     base = base_url.rstrip("/") + "/"
     paths = ("sitepulse-pages.json", "index.html", "latest.html", "history.html",
-             f"reports/{expected['run_id']}-{expected['run_attempt']}/index.html")
+             f"reports/{expected['run_id']}-{expected['run_attempt']}/")
     last_error = ""
     for attempt in range(attempts):
         try:
@@ -428,6 +428,7 @@ def verify_remote(base_url: str, expected: dict, attempts: int = 12, delay: floa
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--json", action="store_true", help="print the result as JSON")
     subparsers = parser.add_subparsers(dest="command", required=True)
     build_parser = subparsers.add_parser("build", help="sanitize archive state and build Pages tree")
     build_parser.add_argument("--site", type=Path, required=True)
@@ -462,7 +463,12 @@ def main() -> int:
             result = verify_remote(args.url, {"run_id": args.run_id, "run_attempt": args.attempt,
                                               "run_number": args.run_number, "commit": args.commit,
                                               "action_run_id": args.action_run_id}, args.attempts)
-        print(json.dumps(result))
+        if args.json:
+            print(json.dumps(result))
+        elif args.command == "build":
+            print(f"Prepared Pages archive {result['archive']} ({result['archives']} reports).")
+        else:
+            print(f"Verified Pages routes at {result.get('url', result.get('site'))}.")
         return 0
     except (OSError, ValueError, json.JSONDecodeError) as error:
         parser.exit(1, f"pages_site.py: error: {error}\n")
