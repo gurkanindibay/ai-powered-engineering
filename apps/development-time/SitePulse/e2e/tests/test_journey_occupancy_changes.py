@@ -211,3 +211,49 @@ def test_tenant_left_without_notice_is_moved_out_at_the_real_date(journey_site):
     assert j.roles(2, "Aralık 2026") == {"OWNER": D("1500.00")}
     assert {row["due"] for row in j.share_rows(2, "Aralık 2026")} == {"2026-12-05"}
     j.invariants("SC-13-05-18")
+
+
+@pytest.mark.covers("SC-13-03-11")
+@pytest.mark.edge
+@pytest.mark.role_manager
+def test_duplicate_national_id_returns_match_without_second_person(journey_site):
+    j = journey_site("F6")
+    mert_id = int(j.people["Mert Kılıç"])
+    tckn = "10000000146"
+
+    # Step-up and record national id for Mert Kılıç
+    j.api.call("POST", "/api/v1/auth/step-up", j.manager.token, body={"password": j.fixture.manager_password})
+    j.api.call(
+        "PUT", f"/api/v1/site-admin/persons/{mert_id}/national-id?site_id={j.site_id}", j.manager.token,
+        body={"national_id": tckn},
+    )
+    # Manager moves in a tenant with the national id of "Mert Kılıç" under a different spelling of the name:
+    # duplicate check detects the matching national ID
+    candidates = j.api.call(
+        "POST", f"/api/v1/site-admin/persons/duplicate-check?site_id={j.site_id}", j.manager.token,
+        body={"full_name": "Mert Can Kılıç", "national_id": tckn},
+    )
+    assert len(candidates) >= 1
+    match = candidates[0]
+    assert match["person"]["person_id"] == mert_id
+    assert "SAME_NATIONAL_ID" in match["reasons"]
+
+    # Moving in uses the matched existing person instead of creating a duplicate
+    transition(j, 5, "REPLACE_TENANT", person={"kind": "existing", "person_id": mert_id})
+
+    # The people directory still lists one "Mert Kılıç"
+    people_resp = j.api.call("GET", f"/api/v1/site-admin/persons?site_id={j.site_id}", j.manager.token)
+    items = people_resp.get("items", people_resp) if isinstance(people_resp, dict) else people_resp
+    mert_entries = [
+        item["card"] if "card" in item else item
+        for item in items
+        if "mert" in (item.get("card", {}).get("full_name") or item.get("full_name", "")).lower()
+    ]
+    assert len(mert_entries) == 1
+    assert mert_entries[0]["person_id"] == mert_id
+    assert j.stack.sql(
+        f"SELECT count(*) FROM persons WHERE site_id = {int(j.site_id)} AND deleted_at IS NULL AND lower(full_name) LIKE '%mert%';"
+    ) == "1"
+
+    j.invariants("SC-13-03-11")
+

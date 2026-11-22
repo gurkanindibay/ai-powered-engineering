@@ -51,8 +51,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     And exactly 6 liabilities exist
     And the ledger invariants hold
 
-  # Pending: the scheduler test does not assert this six-unit fixture’s exact late-fee totals at both dates.
-  @SC-13-05-05 @J-12 @depth:2 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-05-05 @J-12 @depth:2 @state:F2 @layer:backend @edge @role_manager @linked
   Scenario: The scheduler catches up months that were missed
     Given the site is in state F2 with the accrual scheduler enabled
     And the scheduler did not run for "Eylül 2026" and "Ekim 2026"
@@ -115,8 +114,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     And the result lists row 6 with the reason
     And no partial person exists for the bad row
 
-  # Pending: the journey harness does not verify duplicate-person merging preserves every liability and payment relationship.
-  @SC-13-05-11 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-05-11 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario: Merging two duplicate people keeps every liability and payment
     Given the site is in state F5
     And "Deniz Arslan" exists twice with different phone numbers, one of them owning a payment

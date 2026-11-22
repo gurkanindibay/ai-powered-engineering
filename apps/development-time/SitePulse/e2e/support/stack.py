@@ -37,7 +37,7 @@ WEBHOOK_SECRET = "gui-e2e-webhook-secret"
 JWT_SECRET = "gui-e2e-jwt-secret-0123456789abcdef0123"
 
 # Tables are emptied between modules; schema bookkeeping is kept.
-KEEP_TABLES = {"schema_migrations", "refinery_schema_history", "_sqlx_migrations", "audit_events"}
+KEEP_TABLES = {"schema_migrations", "refinery_schema_history", "_sqlx_migrations", "audit_events", "pii_settings"}
 
 SetupError = asc.SetupError
 
@@ -155,6 +155,7 @@ class E2EStack:
         seed_dir = SITEPULSE / "backend" / "db" / "seed"
         self.sql((seed_dir / "01-system-seed.sql").read_text(encoding="utf-8"))
         self.sql((seed_dir / "02-test-seed.sql").read_text(encoding="utf-8"))
+        self.sql("INSERT INTO pii_settings (hmac_key) VALUES (gen_random_bytes(32)) ON CONFLICT (id) DO NOTHING;")
         self.backend.start()
         # Seed actors have permanent test passwords. Temporary-account password
         # change scenarios create their own accounts after this fixture reset.
@@ -177,6 +178,7 @@ class E2EStack:
             self.sql(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE;")
         seed_dir = SITEPULSE / "backend" / "db" / "seed"
         self.sql((seed_dir / "01-system-seed.sql").read_text(encoding="utf-8"))
+        self.sql("INSERT INTO pii_settings (hmac_key) VALUES (gen_random_bytes(32)) ON CONFLICT (id) DO NOTHING;")
         self.backend.start()
         self.sql("UPDATE users SET must_change_password=false;")
 
