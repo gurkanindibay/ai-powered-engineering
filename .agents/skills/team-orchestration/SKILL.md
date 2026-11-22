@@ -25,6 +25,10 @@ Risk floors cannot be lowered by `--complexity`: financial/concurrency/destructi
 
 Gate failures trigger bounded developer repairs followed by another tester review and complete gate run. Two unsuccessful repairs request a higher eligible tier while preserving explicit target constraints. Environment/model/configuration failures block; they are not disguised as code repairs. Unknown usage retains its full reservation.
 
+## GitHub handoff after verification
+
+Use `scripts/pr_review_watch.py` as a background process for each active author or reviewer session. It waits on GitHub in Python and emits JSON before the harness resumes an agent. Authors use `--author-pr N --snapshot` followed by `--author-pr N --after FILE --json`. Reviewers use `--json` and carry forward `--seen N@SHA:CI` and `--seen-activity CURSOR` for handled items. The [author](../../rules/pr-author-followup.md) and [reviewer](../../rules/pr-reviewer-polling.md) rules govern the next action, acknowledgement and cleanup.
+
 ## Verification
 
 - `python3 -m unittest discover -s tests/engineering_harness -v`
