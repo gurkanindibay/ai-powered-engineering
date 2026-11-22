@@ -80,8 +80,18 @@ fn owed_roles(inner: &AppStateInner, unit: &IndependentUnit, person_id: i64) -> 
                 && due.debtor_type == role
         })
     };
+    // A joint owner owes alongside the charge's own debtor, and their share is
+    // reported under the owner section, so joint liability always names `OWNER`.
+    let is_joint_owner = inner.dues.iter().any(|due| {
+        crate::auth::same_id(&due.unit_id, &unit.id)
+            && due.status.is_collectable()
+            && inner
+                .joint_liability_owners
+                .get(&due.id)
+                .is_some_and(|owners| owners.iter().any(|owner| owner.person_id == person_id))
+    });
     let mut roles: Vec<&'static str> = Vec::new();
-    if owes(crate::models::DebtorType::Owner) {
+    if owes(crate::models::DebtorType::Owner) || is_joint_owner {
         roles.push(DEBTOR_OWNER);
     }
     if owes(crate::models::DebtorType::Tenant) {
@@ -214,6 +224,14 @@ fn create_statement_debtor(
     row
 }
 
+/// One person's view of a unit's financial position.
+///
+/// `debtors` holds one section per liable person. A tenant charge with joint
+/// owners therefore appears in the current owner's `jointly_liable_open_items`
+/// and again in each former joint owner's section. That is intentional: the
+/// sections are per debtor, so anything summing the unit's position must use
+/// `total_outstanding` (as `unit_position` and `live_open_rows` do) and never
+/// add `jointly_liable_total` to it, which would count the charge twice.
 pub fn build_statement_for_person(
     inner: &AppStateInner,
     unit: &IndependentUnit,

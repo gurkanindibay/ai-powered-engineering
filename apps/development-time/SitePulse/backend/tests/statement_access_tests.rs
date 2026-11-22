@@ -238,6 +238,57 @@ async fn state_after_sale() -> AppState {
     state
 }
 
+/// Unit A-14 after Ben Kaya sold it to Gül Tanrıverdi, with Dan still renting.
+/// Ben's only remaining tie is joint liability for Dan's tenant charge, and his
+/// account role is the resident one — so the role he owes under must come from
+/// the joint liability, not from his login.
+async fn state_after_joint_only_former_owner() -> AppState {
+    let state = AppState::new_with_test_fixtures();
+    {
+        let mut inner = state.inner.write().await;
+        inner
+            .dues
+            .retain(|due| !sitepulse_backend::auth::same_id(&due.unit_id, UNIT));
+        inner.advance_balances.clear();
+        inner.payment_receipts.clear();
+        inner.payment_entries.clear();
+        inner
+            .users
+            .push(person("person-102", 102, "Ben Kaya", Role::HomeResident));
+        inner
+            .users
+            .push(person("person-201", 201, "Dan Yılmaz", Role::HomeResident));
+        inner
+            .users
+            .push(person("person-300", 300, "Gül Tanrıverdi", Role::HomeOwner));
+        let today = Utc::now().date_naive();
+        let unit = inner
+            .units
+            .iter_mut()
+            .find(|unit| unit.id == UNIT)
+            .expect("fixture unit");
+        unit.owner_user_id = Some("person-300".to_string());
+        unit.tenant_user_id = Some("person-201".to_string());
+        inner.dues.push(due(
+            "due-dan-jan",
+            201,
+            DebtorType::Tenant,
+            "Ocak 2027",
+            today,
+        ));
+        inner.joint_liability_owners.insert(
+            "due-dan-jan".to_string(),
+            vec![JointLiabilityOwner {
+                person_id: 102,
+                tenant_person_id: Some(201),
+                start_date: today - Days::new(60),
+                end_date: None,
+            }],
+        );
+    }
+    state
+}
+
 async fn call(
     app: Router,
     method: &str,
@@ -456,6 +507,60 @@ async fn site_staff_read_every_correction_after_a_sale() {
     let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
     let corrections = statement["corrections"].as_array().expect("corrections");
     assert_eq!(corrections.len(), 2, "both corrections: {body}");
+}
+
+#[tokio::test]
+// covers: SC-13-10-07 (Issue #295: a joint-only predecessor reads their own section)
+async fn joint_only_former_owner_reads_only_their_joint_section() {
+    let state = state_after_joint_only_former_owner().await;
+    let ben = support::token(&state, "person-102", Role::HomeResident, SITE, None).await;
+    let (status, body) = call(
+        build_router(state.clone()),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&ben),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "joint-only former owner: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let debtors = statement["debtors"].as_array().expect("debtors");
+    assert_eq!(debtors.len(), 1, "only Ben's own section: {body}");
+    assert_eq!(debtors[0]["liable_person_id"], 102, "{body}");
+    assert_eq!(debtors[0]["is_former"], true, "{body}");
+    let joint = debtors[0]["jointly_liable_open_items"]
+        .as_array()
+        .expect("joint items");
+    assert_eq!(joint.len(), 1, "joint liability: {body}");
+    assert_eq!(joint[0]["due_id"], "due-dan-jan", "{body}");
+    assert!(
+        debtors[0]["open_items"]
+            .as_array()
+            .expect("open items")
+            .is_empty(),
+        "no owner charge of his own: {body}"
+    );
+}
+
+#[tokio::test]
+// covers: SC-13-10-07 (Issue #295: a joint-only predecessor does not read the tenant's section)
+async fn current_tenant_does_not_see_the_joint_owners_section() {
+    let state = state_after_joint_only_former_owner().await;
+    let dan = support::token(&state, "person-201", Role::HomeResident, SITE, None).await;
+    let (status, body) = call(
+        build_router(state.clone()),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&dan),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "current tenant statement: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let debtors = statement["debtors"].as_array().expect("debtors");
+    assert_eq!(debtors.len(), 1, "only Dan's own section: {body}");
+    assert_eq!(debtors[0]["liable_person_id"], 201, "{body}");
+    assert!(!body.contains("Ben Kaya"), "joint owner hidden: {body}");
 }
 
 #[tokio::test]

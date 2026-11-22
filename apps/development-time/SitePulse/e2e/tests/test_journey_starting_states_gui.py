@@ -449,3 +449,32 @@ def test_f5_multiple_periods_add_up_per_unit_and_per_site(request, api, actors, 
         UnitWorkspace(page).open(unit).action(unit, "statement")
         page.wait_for_timeout(1_500)
         assert any("1.250,00" in line for line in page_lines(page)), "A-6 advance balance 1250.00 not shown"
+
+
+@pytest.mark.edge
+@pytest.mark.role_manager
+@pytest.mark.covers("SC-13-05-06")
+def test_f5_vacant_unit_shows_the_former_tenant_section_under_a_suffixed_id(
+        request, api, actors, stack, page, login_page):
+    with journey_site(request, api, actors, stack, "F5") as fixture:
+        unit = fixture.unit_ids[4]  # A-5: Deniz Arslan (tenant) leaves with three unpaid periods
+        api.e2e_clock("set_date", "2026-11-30")
+        api.e2e_clock("tick")
+        api.e2e_clock("set_date", "2026-12-01")
+        api.call(
+            "POST", f"/api/v1/site-admin/units/{unit}/occupancy-transitions?site_id={fixture.site_id}",
+            fixture.manager.token, body={"command": "MOVE_OUT", "effective_date": "2026-12-01"})
+
+        sign_in_manager(page, login_page, fixture)
+        Shell(page).nav("residents")
+        UnitWorkspace(page).open(unit).action(unit, "statement")
+        # #295: the plain id belongs to the current holder only, so a vacant
+        # unit's former section is the first suffixed one.
+        by_id(page, "statement_total_tenant_1").wait_for(timeout=15_000)
+        assert by_id(page, "statement_total_tenant").count() == 0, \
+            "a former tenant section never takes the current holder's id"
+        # 4500.00 principal plus the penalty through the statement's own date
+        # (2026-12-01, one day past the 2026-11-30 exit settlement).
+        assert amount_of(page, "statement_total_tenant_1") == Decimal("4887.50")
+        assert by_id(page, "statement_debtor_tenant").count() == 0, \
+            "the former tenant's card is not the current holder's card"

@@ -933,9 +933,11 @@ async fn scope_request(
         if let Some(id) = parts.get(idx) {
             // The statement is a historical record: a former owner or tenant with
             // an outstanding charge keeps read access to their own liabilities.
-            // Every other unit route keeps the current-relationship rule.
-            if template.starts_with("/api/v1/residents/:unit_id/statement")
-                || template.starts_with("/api/v1/residents/{unit_id}/statement")
+            // Every other unit route keeps the current-relationship rule. The
+            // template is compared exactly so a future `/statement/...` subroute
+            // can never inherit the historical rule.
+            if template == "/api/v1/residents/:unit_id/statement"
+                || template == "/api/v1/residents/{unit_id}/statement"
             {
                 authorization::statement_unit(state, claims, id)
                     .await

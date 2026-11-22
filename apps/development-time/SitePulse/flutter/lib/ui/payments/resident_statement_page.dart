@@ -35,14 +35,24 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
   }
 
   /// A role can have several sections since #295 (the current holder and the
-  /// predecessors still owing), so each section after the first of its role
-  /// gets an index in its widget ids. The first one keeps the plain id.
+  /// predecessors still owing), so each section carries an index in its widget
+  /// ids. The current holder's section keeps the plain id.
   List<Widget> _debtorCards(ResidentStatement statement) {
-    final seen = <String, int>{};
+    // The plain id always addresses the current holder of a role: a former
+    // section never takes it, even on a vacant unit where no section is
+    // current. Former sections are numbered from 1 in response order.
+    final nextFormerIndex = <String, int>{};
+    final currentSeen = <String>{};
     final cards = <Widget>[];
     for (final debtor in statement.debtors) {
-      final index = seen[debtor.debtorType] ?? 0;
-      seen[debtor.debtorType] = index + 1;
+      final isCurrent = !debtor.isFormer && currentSeen.add(debtor.debtorType);
+      final int index;
+      if (isCurrent) {
+        index = 0;
+      } else {
+        index = nextFormerIndex[debtor.debtorType] ?? 1;
+        nextFormerIndex[debtor.debtorType] = index + 1;
+      }
       cards.add(_DebtorCard(debtor: debtor, sectionIndex: index));
     }
     return cards;
