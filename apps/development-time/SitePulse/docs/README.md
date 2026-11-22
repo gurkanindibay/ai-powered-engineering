@@ -11,7 +11,7 @@ standards, designs, test plans and reports are easy to find.
 | [quality/](quality/) | Code and database flaw reports, product throughput and cost, product action observability. |
 | [reusability/](reusability/) | Flutter and Rust reuse reports that feed the reuse gates. |
 | [standards/](standards/) | Normative standards: [RUST_STANDARDS.md](standards/RUST_STANDARDS.md) and [LOGGING_STANDARDS.md](standards/LOGGING_STANDARDS.md). |
-| [testing/](testing/) | GUI test plan and scenario catalogue, GUI automation plan, coverage gaps, test plans and the execution matrix, test coverage assessment, the [Cucumber and Serenity BDD migration analysis](testing/cucumber-serenity-migration-analysis.md). |
+| [testing/](testing/) | GUI test plan and scenario catalogue, GUI automation plan, coverage gaps, test plans and the execution matrix, test coverage assessment, the [Cucumber and Serenity BDD migration analysis](testing/cucumber-serenity-migration-analysis.md), and the [test reporting on GitHub Pages analysis](testing/test-reporting-pages-analysis.md). |
 | [engineering-process/](engineering-process/) | Engineering harness guide, CMMI pipeline (agent roles, pipeline specification, traceability matrix) and the harness plan and report. |
 | [ux/](ux/) | UX and UI evaluation, Papara design guidelines, page layout standard, UX reference pages and images. |
 | [api/](api/) | Generated OpenAPI specification ([openapi.json](api/openapi.json)); regenerate with `generate_openapi`. |
