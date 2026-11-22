@@ -48,6 +48,10 @@ def live_open_rows(api, stack, sessions: dict[str, object], units: dict[tuple[st
                     "SELECT p.full_name FROM dues_liabilities d JOIN persons p ON p.id = d.liable_person_id "
                     f"WHERE d.id = {int(item['due_id'])};").split()[0]
                 key = (site, label, name, LABEL_PERIODS[item["period"]])
+                assert key not in rows, (
+                    f"duplicate primary receivable row in resident statement: site {site}, period {LABEL_PERIODS[item['period']]}, "
+                    f"unit {label}, debtor {name} (due_id {item['due_id']})"
+                )
                 rows[key] = (D(str(item["principal_outstanding"])), D(str(item["penalty_outstanding"])),
                              joint.get(str(item["due_id"])))
     return rows
