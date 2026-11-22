@@ -429,7 +429,6 @@ impl CardPaymentService {
                         } else {
                             crate::models::DebtorType::from_str_loose(&intent.debtor_type)
                         },
-                        payer_person_id: None,
                         payment_channel: crate::models::PaymentChannel::CreditCard,
                         description: Some(format!("Kredi kartı ile ödeme ({})", intent.provider)),
                         payment_date: None,

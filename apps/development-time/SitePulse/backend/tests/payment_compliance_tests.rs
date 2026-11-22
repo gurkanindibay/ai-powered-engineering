@@ -835,7 +835,6 @@ async fn successor_owner_payment_does_not_settle_predecessor_charges() {
             external_reference: None,
             settles_unmatched_entry_id: None,
             designate_from_description: false,
-            ..Default::default()
         })
         .await
         .unwrap();

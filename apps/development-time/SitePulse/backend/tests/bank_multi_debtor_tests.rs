@@ -571,3 +571,49 @@ async fn when_debtor_assignment_is_invalid_or_unknown_then_rejected_and_match_re
         ReconciliationStatus::Unmatched
     );
 }
+
+#[tokio::test]
+async fn when_manual_payment_requests_unrelated_person_then_payer_person_id_is_not_trusted() {
+    let state = state_with(vec![
+        due("owner-sept", DebtorType::Owner),
+        DuesLiability {
+            liable_person_id: Some(102),
+            ..due("mert-former-oct", DebtorType::Tenant)
+        },
+    ])
+    .await;
+
+    // A client submits a manual payment through the REST endpoint, attempting to pass
+    // an arbitrary/unrelated person_id in the JSON body, or specifying an unrelated name.
+    let json_payload = serde_json::json!({
+        "site_id": "site-1",
+        "unit_id": UNIT,
+        "amount": "800.00",
+        "payer_name": "Unrelated Stranger",
+        "payer_role": "TENANT",
+        "payer_person_id": 102
+    });
+    let req: RecordManualPaymentRequest = serde_json::from_value(json_payload).unwrap();
+
+    let (status, axum::Json(receipt)) = sitepulse_backend::handlers::record_manual_payment(
+        axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        axum::http::HeaderMap::new(),
+        axum::Json(req),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    // Trusted payer person ID must not be accepted from the manual request
+    assert_eq!(receipt.payer_person_id, None);
+
+    // The unrelated stranger's payment must not settle the former tenant's liabilities
+    let inner = state.inner.read().await;
+    let due = inner
+        .dues
+        .iter()
+        .find(|x| x.id == "mert-former-oct")
+        .unwrap();
+    assert_eq!(due.paid_principal, Decimal::ZERO);
+}
