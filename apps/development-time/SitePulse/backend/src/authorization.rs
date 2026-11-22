@@ -167,6 +167,21 @@ pub async fn unit(state: &AppState, claims: &Claims, id: &str) -> Result<(), Sec
     unit_relationship(state, claims, id, false).await
 }
 
+/// How the statement route was authorized for the caller.
+///
+/// The statement is built from a state read that is separate from the guard's
+/// decision, so the decision travels to the handler in the request extensions.
+/// A historical grant must never widen into a current holder's section when the
+/// liability it was based on no longer produces an open item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatementAccess {
+    /// The normal current-relationship rule of [`unit`] authorized the caller.
+    Current,
+    /// Only the historical rule authorized the caller: their remaining tie to
+    /// the unit is an outstanding charge, so they may read their own sections.
+    Historical,
+}
+
 /// Authorize the resident statement of a unit, which is a historical record.
 ///
 /// A current owner, tenant or household member may read it, and so may a former
@@ -181,9 +196,9 @@ pub async fn statement_unit(
     state: &AppState,
     claims: &Claims,
     id: &str,
-) -> Result<(), SecurityError> {
+) -> Result<StatementAccess, SecurityError> {
     match unit(state, claims, id).await {
-        Ok(()) => return Ok(()),
+        Ok(()) => return Ok(StatementAccess::Current),
         Err(SecurityError::NotFound) => {}
         Err(err) => return Err(err),
     }
@@ -208,7 +223,9 @@ pub async fn statement_unit(
             )
             .await
             .map_err(|_| SecurityError::Unavailable)?;
-        return row.map(|_| ()).ok_or(SecurityError::NotFound);
+        return row
+            .map(|_| StatementAccess::Historical)
+            .ok_or(SecurityError::NotFound);
     }
     let inner = state.inner.read().await;
     let target = inner
@@ -233,7 +250,7 @@ pub async fn statement_unit(
         })
     });
     if owes_on_unit {
-        Ok(())
+        Ok(StatementAccess::Historical)
     } else {
         Err(SecurityError::NotFound)
     }

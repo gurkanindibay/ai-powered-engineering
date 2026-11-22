@@ -239,6 +239,32 @@ pub fn build_statement_for_person(
     viewer_person_id: Option<i64>,
     today: NaiveDate,
 ) -> ResidentStatement {
+    build_statement_for_access(
+        inner,
+        unit,
+        viewer,
+        viewer_person_id,
+        crate::authorization::StatementAccess::Current,
+        today,
+    )
+}
+
+/// Builds the statement under the guard's access decision.
+///
+/// [`crate::authorization::StatementAccess::Current`] covers a current owner,
+/// tenant or household member, so a caller with no attributed section may fall
+/// back to the current holder's section of their household role. A
+/// [`crate::authorization::StatementAccess::Historical`] grant is limited to the
+/// caller's own sections: if the charge the grant was based on no longer
+/// produces an open item, the statement is empty rather than somebody else's.
+pub fn build_statement_for_access(
+    inner: &AppStateInner,
+    unit: &IndependentUnit,
+    viewer: Option<&str>,
+    viewer_person_id: Option<i64>,
+    access: crate::authorization::StatementAccess,
+    today: NaiveDate,
+) -> ResidentStatement {
     let calc = crate::services::DuesCalculationService::new();
     let name_of = |uid: &Option<String>| {
         uid.as_ref()
@@ -260,10 +286,12 @@ pub fn build_statement_for_person(
                     .map(|occ| occ.person_name.clone())
             })
     };
+    // A person's exposure to the unit's tenant charges as a joint owner. It is
+    // resolved per person, never suppressed by the viewer's primary role: a
+    // former owner who now rents the same unit owes in both roles and must see
+    // each obligation in its own section. Scoping the response to the caller's
+    // sections is the final retain below.
     let joint_items_for_owner = |owner_pid: i64| -> Vec<StatementOpenItem> {
-        if viewer == Some(DEBTOR_TENANT) {
-            return Vec::new();
-        }
         let mut joint_items: Vec<StatementOpenItem> = inner
             .dues
             .iter()
@@ -386,8 +414,10 @@ pub fn build_statement_for_person(
             }
         }
 
-        // Also check if any former owners have joint liability on tenant dues for this unit
-        if debtor == DEBTOR_OWNER && viewer != Some(DEBTOR_TENANT) {
+        // Also emit a section for every joint owner of the unit's tenant dues,
+        // so their own joint obligations stay reachable after an occupancy
+        // change. The final retain keeps only the caller's sections.
+        if debtor == DEBTOR_OWNER {
             for due in inner.dues.iter().filter(|d| {
                 crate::auth::same_id(&d.unit_id, &unit.id)
                     && d.status.is_collectable()
@@ -486,17 +516,22 @@ pub fn build_statement_for_person(
         }
     }
 
-    // A resident sees only their own section. A predecessor with outstanding
+    // A resident sees only their own sections. A predecessor with outstanding
     // items still sees their own (now former) section, never the current
-    // holder's; a caller with no attributed section (for example a household
-    // member) sees the current holder's section of their own role. Site staff
-    // keep every section.
+    // holder's. Only a current relationship may fall back to the current
+    // holder's section of the household role: a historical grant whose charge
+    // no longer produces an open section yields an empty statement, so it can
+    // never hand back somebody else's name, items or advance balance. Site
+    // staff keep every section.
     if let Some(role) = viewer {
         match viewer_person_id {
             Some(pid) if debtors.iter().any(|d| d.liable_person_id == Some(pid)) => {
                 debtors.retain(|d| d.liable_person_id == Some(pid));
             }
-            _ => debtors.retain(|d| !d.is_former && d.debtor_type == role),
+            _ if access == crate::authorization::StatementAccess::Current => {
+                debtors.retain(|d| !d.is_former && d.debtor_type == role);
+            }
+            _ => debtors.clear(),
         }
     }
 

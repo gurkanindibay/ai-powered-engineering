@@ -289,6 +289,64 @@ async fn state_after_joint_only_former_owner() -> AppState {
     state
 }
 
+/// Unit A-14 after Ben Kaya sold it to Gül Tanrıverdi and now rents it back:
+/// Ben is the current tenant and still a joint owner of the unpaid tenant
+/// charge of Dan, who rented the unit from him before the sale.
+async fn state_after_former_owner_rents_back() -> AppState {
+    let state = AppState::new_with_test_fixtures();
+    {
+        let mut inner = state.inner.write().await;
+        inner
+            .dues
+            .retain(|due| !sitepulse_backend::auth::same_id(&due.unit_id, UNIT));
+        inner.advance_balances.clear();
+        inner.payment_receipts.clear();
+        inner.payment_entries.clear();
+        inner
+            .users
+            .push(person("person-102", 102, "Ben Kaya", Role::HomeResident));
+        inner
+            .users
+            .push(person("person-201", 201, "Dan Yılmaz", Role::HomeResident));
+        inner
+            .users
+            .push(person("person-300", 300, "Gül Tanrıverdi", Role::HomeOwner));
+        let today = Utc::now().date_naive();
+        let unit = inner
+            .units
+            .iter_mut()
+            .find(|unit| unit.id == UNIT)
+            .expect("fixture unit");
+        unit.owner_user_id = Some("person-300".to_string());
+        unit.tenant_user_id = Some("person-102".to_string());
+        // Dan's charge from the tenancy he held while Ben still owned the unit.
+        inner.dues.push(due(
+            "due-dan-old",
+            201,
+            DebtorType::Tenant,
+            "Kasım 2026",
+            today,
+        ));
+        inner.dues.push(due(
+            "due-ben-nov",
+            102,
+            DebtorType::Tenant,
+            "Kasım 2026",
+            today,
+        ));
+        inner.joint_liability_owners.insert(
+            "due-dan-old".to_string(),
+            vec![JointLiabilityOwner {
+                person_id: 102,
+                tenant_person_id: Some(201),
+                start_date: today - Days::new(120),
+                end_date: None,
+            }],
+        );
+    }
+    state
+}
+
 async fn call(
     app: Router,
     method: &str,
@@ -579,4 +637,93 @@ async fn former_owner_keeps_no_access_to_other_unit_routes() {
             "{path} for a former owner: {body}"
         );
     }
+}
+
+#[tokio::test]
+// covers: SC-13-10-07 (Issue #295: a historical grant never widens to a current holder's section)
+async fn historical_grant_without_an_open_section_reads_nothing() {
+    let state = state_after_sale().await;
+    {
+        // The charge the historical grant rests on is settled, but its row is
+        // still collectable, so the guard grants access while the statement
+        // construction no longer produces a section for Ben.
+        let mut inner = state.inner.write().await;
+        let due = inner
+            .dues
+            .iter_mut()
+            .find(|due| due.id == "due-ben-dec")
+            .expect("seller charge");
+        due.paid_principal = due.principal_amount;
+    }
+    let ben = support::token(&state, "person-102", Role::HomeOwner, SITE, None).await;
+    let (status, body) = call(
+        build_router(state.clone()),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&ben),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "historical grant: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let debtors = statement["debtors"].as_array().expect("debtors");
+    assert!(
+        debtors.is_empty(),
+        "no section of Ben's own to show, so nothing else either: {body}"
+    );
+    assert!(
+        !body.contains("Gül Tanrıverdi"),
+        "the current owner's section never leaks: {body}"
+    );
+    assert!(
+        !body.contains("due-gul-dec"),
+        "the current owner's charge never leaks: {body}"
+    );
+}
+
+#[tokio::test]
+// covers: SC-13-10-07 (Issue #295: a former owner who rents the unit reads both roles)
+async fn former_owner_who_now_rents_reads_their_owner_and_tenant_sections() {
+    let state = state_after_former_owner_rents_back().await;
+    let ben = support::token(&state, "person-102", Role::HomeResident, SITE, None).await;
+    let (status, body) = call(
+        build_router(state.clone()),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&ben),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "tenant and former joint owner: {body}"
+    );
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let debtors = statement["debtors"].as_array().expect("debtors");
+    assert_eq!(debtors.len(), 2, "one section per role Ben owes on: {body}");
+    let owner = debtors
+        .iter()
+        .find(|debtor| debtor["debtor_type"] == "OWNER")
+        .expect("owner section");
+    assert_eq!(owner["liable_person_id"], 102, "{body}");
+    assert_eq!(owner["is_former"], true, "{body}");
+    let joint = owner["jointly_liable_open_items"]
+        .as_array()
+        .expect("joint items");
+    assert_eq!(joint.len(), 1, "his joint liability: {body}");
+    assert_eq!(joint[0]["due_id"], "due-dan-old", "{body}");
+    let tenant = debtors
+        .iter()
+        .find(|debtor| debtor["debtor_type"] == "TENANT")
+        .expect("tenant section");
+    assert_eq!(tenant["liable_person_id"], 102, "{body}");
+    assert_eq!(tenant["is_former"], false, "{body}");
+    assert_eq!(
+        tenant["open_items"].as_array().expect("open items")[0]["due_id"],
+        "due-ben-nov",
+        "{body}"
+    );
+    assert!(!body.contains("Gül Tanrıverdi"), "{body}");
+    assert!(!body.contains("Dan Yılmaz"), "{body}");
 }

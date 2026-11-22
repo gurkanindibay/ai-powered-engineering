@@ -47,13 +47,43 @@ class _StatementSelfServiceState extends State<StatementSelfService> {
   bool _saveCard = false;
   bool _busy = false;
 
-  List<StatementOpenItem> get _jointItems => [
-    for (final d in widget.statement.debtors) ...d.jointlyLiableOpenItems,
-  ];
-  List<StatementOpenItem> get _items => [
-    for (final d in widget.statement.debtors) ...d.openItems,
-    ..._jointItems,
-  ];
+  /// The dues the resident can pay here, one entry per due id.
+  ///
+  /// A tenant charge with joint owners reaches the manager's statement once per
+  /// debtor section -- the tenant's own open items and a copy in each former
+  /// joint owner's section -- so counting every section would add the same
+  /// amount twice to the designated payment total.
+  List<StatementOpenItem> get _items {
+    final byDueId = <String, StatementOpenItem>{};
+    for (final d in widget.statement.debtors) {
+      for (final i in d.openItems) {
+        byDueId.putIfAbsent(i.dueId, () => i);
+      }
+    }
+    for (final i in _jointItems) {
+      byDueId.putIfAbsent(i.dueId, () => i);
+    }
+    return byDueId.values.toList();
+  }
+
+  /// Joint liability that is not already an item of a section of its own: these
+  /// are the ones the resident pays on another debtor's behalf.
+  List<StatementOpenItem> get _jointItems {
+    final ownDueIds = {
+      for (final d in widget.statement.debtors)
+        for (final i in d.openItems) i.dueId,
+    };
+    final byDueId = <String, StatementOpenItem>{};
+    for (final d in widget.statement.debtors) {
+      for (final i in d.jointlyLiableOpenItems) {
+        if (!ownDueIds.contains(i.dueId)) {
+          byDueId.putIfAbsent(i.dueId, () => i);
+        }
+      }
+    }
+    return byDueId.values.toList();
+  }
+
   Set<String> get _jointDueIds => _jointItems.map((item) => item.dueId).toSet();
 
   Future<void> _pay() async {
