@@ -72,6 +72,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
   String _homeOwnerSearchQuery = '';
+  final TextEditingController _residentSearchController = TextEditingController();
   String _homeOwnerBlockFilter = 'ALL';
   String _homeOwnerOccupancyFilter = 'ALL';
 
@@ -97,6 +98,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _residentSearchController.dispose();
     widget.controller.removeListener(_onControllerUpdate);
     super.dispose();
   }
@@ -800,6 +802,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         testId(
           'resident_search_field',
           TextField(
+            controller: _residentSearchController,
             key: const Key('resident_search_field'),
             onChanged: (val) {
               setState(() {
@@ -818,6 +821,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         tooltip: 'Aramayı temizle',
                         icon: const Icon(Icons.clear, size: 16),
                         onPressed: () {
+                          _residentSearchController.clear();
                           setState(() {
                             _homeOwnerSearchQuery = '';
                           });
@@ -906,6 +910,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       TextButton(
                         key: const Key('empty_state_reset_filters_btn'),
                         onPressed: () {
+                          _residentSearchController.clear();
                           setState(() {
                             _homeOwnerSearchQuery = '';
                             _homeOwnerBlockFilter = allBlocksFilter;
