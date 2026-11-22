@@ -9,6 +9,19 @@ This is **reference material, not the adopted suite**. The canonical runner stay
 [`../e2e`](../e2e) (pytest-bdd + Python Playwright), and no CI job or SitePulse gate runs this
 directory. Keep it runnable when touching it, but do not grow it without a migration decision.
 
+The opt-in GitHub Actions workflow is [`sitepulse-cucumber-pilot.yml`](../../../../.github/workflows/sitepulse-cucumber-pilot.yml).
+It produces the allowlisted `cucumber-pilot-results` artifact from JUnit and execution records.
+The safe JSON contains only the five fixed pilot case IDs, example IDs, static labels, statuses,
+durations, and the Actions run link. Every case is labeled comparison-only; pytest remains the
+authority for overlapping scenarios. The private JUnit, execution JSONL, Serenity tree, and runner
+log are not uploaded. A Pages renderer can consume the safe JSON after the shared report schema is
+available; the workflow does not publish Pages itself.
+
+Serenity is generated once by `run_pilot.py` and remains on the ephemeral runner. The current report
+captures screenshots on failed scenarios and embeds detailed test evidence, so it has not passed a
+full-tree public-safety review. A Pages-ready Serenity build still needs a separate synthetic-input
+run with attachments disabled and an audit of every HTML, JSON, and asset before retention.
+
 ## Run
 
 Use Node.js 22.22.2+ (22.x) or 24.15.0+ (24.x) and Java 17 or newer. Make
