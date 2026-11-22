@@ -11,15 +11,26 @@ directory. Keep it runnable when touching it, but do not grow it without a migra
 
 ## Run
 
+Use Node.js 22.22.2+ (22.x) or 24.15.0+ (24.x) and Java 17 or newer. Make
+`java` available on `PATH` so the Serenity BDD CLI can generate the HTML report.
+The locked `@serenity-js/serenity-bdd` package includes the CLI JAR under
+`node_modules/@serenity-js/serenity-bdd/cache/`; `npm ci` installs it.
+
 ```bash
 npm ci
+npx playwright install chromium
 npm run lint:money        # arbitrary-precision money check over src/**/*.ts
 python3 scripts/run_pilot.py   # isolated stack: Postgres + backend :8180 + Flutter web :9190
 ```
 
-`scripts/run_pilot.py` needs the Rust backend build and the Flutter web build available locally;
-it starts the stack, runs `npm test` (the four pilot scenarios), generates the Serenity report, then
-stops the stack. To run against an already-running stack, just use `npm test`.
+On a Linux machine that also needs Chromium's system dependencies, use
+`npx playwright install --with-deps chromium`.
+
+The runner needs a local PostgreSQL server and the Rust and Flutter build tools.
+It starts an isolated SitePulse stack, runs `npm test` (five cases across the four
+pilot scenarios), generates the Serenity report, and stops the stack. To run
+against an already-running stack, use `npm test`, then run
+`npx serenity-bdd run --features ../.specify/features` to generate the HTML report.
 
 ## Outputs
 

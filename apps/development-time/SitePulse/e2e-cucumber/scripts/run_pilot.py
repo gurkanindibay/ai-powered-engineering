@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.server
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import threading
@@ -54,7 +55,6 @@ def main() -> int:
     stack = st.E2EStack(artifacts / "logs")
     ResetHandler.stack_ref = stack
 
-    import shutil
     serenity_target = CUCUMBER_DIR / "target" / "site" / "serenity"
     if serenity_target.exists():
         shutil.rmtree(serenity_target)
@@ -84,11 +84,22 @@ def main() -> int:
         print(f"[run_pilot] Executing: {' '.join(cmd)}")
         proc = subprocess.run(cmd, cwd=CUCUMBER_DIR, env=env)
         serenity_cli = CUCUMBER_DIR / "node_modules" / ".bin" / "serenity-bdd"
-        serenity_target = CUCUMBER_DIR / "target" / "site" / "serenity"
-        if serenity_cli.exists() and serenity_target.exists():
-            print("[run_pilot] Generating Serenity BDD HTML living documentation report...")
-            subprocess.run([str(serenity_cli), "run", "--features", "../.specify/features"], cwd=CUCUMBER_DIR)
-        return proc.returncode
+        if not serenity_target.exists():
+            if proc.returncode == 0:
+                print("[run_pilot] Cucumber did not produce Serenity JSON reports.", file=sys.stderr)
+                return 1
+            return proc.returncode
+
+        print("[run_pilot] Generating Serenity BDD HTML living documentation report...")
+        try:
+            report = subprocess.run(
+                [str(serenity_cli), "run", "--features", "../.specify/features"],
+                cwd=CUCUMBER_DIR,
+            )
+        except OSError as error:
+            print(f"[run_pilot] Could not start the Serenity BDD CLI: {error}", file=sys.stderr)
+            return proc.returncode or 1
+        return proc.returncode or report.returncode
     finally:
         print("[run_pilot] Stopping E2E stack...")
         reset_server.shutdown()

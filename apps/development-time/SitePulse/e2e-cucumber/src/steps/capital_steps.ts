@@ -1,4 +1,4 @@
-import { Given, When, Then } from '@cucumber/cucumber';
+import { defineParameterType, Given, When, Then } from '@cucumber/cucumber';
 import assert from 'assert';
 import Decimal from 'decimal.js';
 import crypto from 'crypto';
@@ -13,6 +13,12 @@ import { VIRTUAL_IBANS } from '../support/api';
 
 const CENT = new Decimal('0.01');
 const ACTIVE_UNITS = 'FROM units WHERE site_id = 1 AND deleted_at IS NULL';
+
+defineParameterType({
+  name: 'money',
+  regexp: /[+-]?(?:\d+(?:\.\d+)?|\.\d+)/,
+  transformer: (amount: string) => new Decimal(amount),
+});
 
 let capitalProjectsPage: CapitalProjects;
 
@@ -35,17 +41,15 @@ When(
 );
 
 When(
-  'the manager creates capital project {string} with budget {float} allocated by land share in {int} installments',
-  async function (this: CustomWorld, title: string, budgetNum: number, installments: number) {
-    const budget = new Decimal(budgetNum.toFixed(2));
+  'the manager creates capital project {string} with budget {money} allocated by land share in {int} installments',
+  async function (this: CustomWorld, title: string, budget: Decimal, installments: number) {
     await capitalProjectsPage.create(title, budget.toFixed(2), true, installments);
   }
 );
 
 Then(
-  'the project is stored as {string} with budget {float} and allocation {string}',
-  async function (this: CustomWorld, status: string, budgetNum: number, basis: string) {
-    const budget = new Decimal(budgetNum.toFixed(2));
+  'the project is stored as {string} with budget {money} and allocation {string}',
+  async function (this: CustomWorld, status: string, budget: Decimal, basis: string) {
     const row = await waitSql(
       'SELECT status || \'|\' || total_budget || \'|\' || allocation_basis FROM capital_projects;',
       `${status}|${budget.toFixed(2)}|${basis}`
@@ -55,9 +59,8 @@ Then(
 );
 
 Then(
-  'the unit shares shown add up to exactly {float}',
-  async function (this: CustomWorld, budgetNum: number) {
-    const budget = new Decimal(budgetNum.toFixed(2));
+  'the unit shares shown add up to exactly {money}',
+  async function (this: CustomWorld, budget: Decimal) {
     await capitalProjectsPage.showUnitShares();
     const shares = await capitalProjectsPage.unitShareTexts();
     const sum = Object.values(shares).reduce((acc, val) => acc.plus(val), new Decimal(0));
@@ -66,9 +69,8 @@ Then(
 );
 
 Then(
-  'unit {string} is shown its land share proportion of {float}',
-  async function (this: CustomWorld, unit: string, budgetNum: number) {
-    const budget = new Decimal(budgetNum.toFixed(2));
+  'unit {string} is shown its land share proportion of {money}',
+  async function (this: CustomWorld, unit: string, budget: Decimal) {
     const rows = (await querySql(`SELECT unit_number, land_share ${ACTIVE_UNITS};`)).split('\n');
     const land: Record<string, Decimal> = {};
     let totalLand = new Decimal(0);
@@ -88,9 +90,8 @@ Then(
 // -- SC-10-04-01 Steps --------------------------------------------------------
 
 Given(
-  'the owner of unit {word} has paid {float} by FAST with description {string}',
-  async function (this: CustomWorld, unit: string, amountNum: number, description: string) {
-    const amount = new Decimal(amountNum.toFixed(2));
+  'the owner of unit {word} has paid {money} by FAST with description {string}',
+  async function (this: CustomWorld, unit: string, amount: Decimal, description: string) {
     const iban = VIRTUAL_IBANS[unit];
     assert.ok(iban, `Unknown unit virtual IBAN for ${unit}`);
     const txId = `E2E-FAST-${crypto.randomBytes(5).toString('hex')}`;
@@ -120,10 +121,8 @@ Then(
 // -- SC-10-04-02 Steps --------------------------------------------------------
 
 Given(
-  'unit {word} has an advance balance of {float} and an accrued capital due of {float}',
-  async function (this: CustomWorld, unit: string, advanceNum: number, dueNum: number) {
-    const advance = new Decimal(advanceNum.toFixed(2));
-    const due = new Decimal(dueNum.toFixed(2));
+  'unit {word} has an advance balance of {money} and an accrued capital due of {money}',
+  async function (this: CustomWorld, unit: string, advance: Decimal, due: Decimal) {
     const iban = VIRTUAL_IBANS[unit] || VIRTUAL_IBANS[`A${unit}`];
     assert.ok(iban, `Virtual IBAN missing for unit ${unit}`);
     const txId = `E2E-FAST-${crypto.randomBytes(5).toString('hex')}`;
@@ -146,9 +145,8 @@ Given(
 );
 
 When(
-  'the site manager executes a virman transfer of {float} to the capital project',
-  async function (this: CustomWorld, amountNum: number) {
-    const amount = new Decimal(amountNum.toFixed(2));
+  'the site manager executes a virman transfer of {money} to the capital project',
+  async function (this: CustomWorld, amount: Decimal) {
     await this.loginAs('manager');
     await new ManagerCockpit(this.page!).wait();
     const dues = new DuesManagement(this.page!);
@@ -163,9 +161,8 @@ When(
 );
 
 Then(
-  'the advance balance of unit {word} decreases to {float}',
-  async function (this: CustomWorld, unit: string, expectedNum: number) {
-    const expected = new Decimal(expectedNum.toFixed(2));
+  'the advance balance of unit {word} decreases to {money}',
+  async function (this: CustomWorld, unit: string, expected: Decimal) {
     const val = await waitSql(
       `SELECT balance FROM advance_balances WHERE unit_id = (SELECT id FROM units WHERE unit_number = ${parseInt(unit, 10)}) AND debtor_type = 'OWNER';`,
       expected.toFixed(2),

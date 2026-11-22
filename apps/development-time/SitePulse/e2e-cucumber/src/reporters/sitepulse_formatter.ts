@@ -4,13 +4,25 @@ import * as messages from '@cucumber/messages';
 import * as fs from 'fs';
 import * as path from 'path';
 
+interface StepRecord {
+  keyword: string;
+  text: string;
+  status: string;
+  duration_s: number;
+}
+
+interface TestCaseAttempt {
+  testCase: messages.TestCase;
+  timestamp: messages.Timestamp;
+  results: messages.TestStepResult[];
+  steps: StepRecord[];
+}
+
 export default class SitePulseFormatter extends Formatter {
   private gherkinDocuments: Map<string, messages.GherkinDocument> = new Map();
   private pickles: Map<string, messages.Pickle> = new Map();
   private testCases: Map<string, messages.TestCase> = new Map();
-  private testCaseStarted: Map<string, { pickleId: string; timestamp: messages.Timestamp }> = new Map();
-  private stepStarted: Map<string, messages.Timestamp> = new Map();
-  private stepResults: Map<string, Array<{ keyword: string; text: string; status: string; duration_s: number }>> = new Map();
+  private attempts = new Map<string, TestCaseAttempt>();
   private outputPath: string;
 
   constructor(options: IFormatterOptions) {
@@ -34,52 +46,37 @@ export default class SitePulseFormatter extends Formatter {
     } else if (envelope.testCase) {
       this.testCases.set(envelope.testCase.id, envelope.testCase);
     } else if (envelope.testCaseStarted) {
-      const tc = this.testCases.get(envelope.testCaseStarted.testCaseId);
-      if (tc) {
-        this.testCaseStarted.set(envelope.testCaseStarted.id, {
-          pickleId: tc.pickleId,
-          timestamp: envelope.testCaseStarted.timestamp,
-        });
-        this.stepResults.set(envelope.testCaseStarted.id, []);
+      const { id, testCaseId, timestamp } = envelope.testCaseStarted;
+      const testCase = this.testCases.get(testCaseId);
+      if (testCase) {
+        this.attempts.set(id, { testCase, timestamp, results: [], steps: [] });
       }
-    } else if (envelope.testStepStarted) {
-      this.stepStarted.set(envelope.testStepStarted.testStepId, envelope.testStepStarted.timestamp);
     } else if (envelope.testStepFinished) {
-      const tcStarted = this.testCaseStarted.get(envelope.testStepFinished.testCaseStartedId);
-      const start = this.stepStarted.get(envelope.testStepFinished.testStepId);
-      if (tcStarted && start) {
-        const testCase = Array.from(this.testCases.values()).find(
-          tc => tc.pickleId === tcStarted.pickleId
-        );
-        const testStep = testCase?.testSteps.find(ts => ts.id === envelope.testStepFinished?.testStepId);
-        if (testStep && testStep.pickleStepId) {
-          const pickle = this.pickles.get(tcStarted.pickleId);
-          const pickleStep = pickle?.steps.find(s => s.id === testStep.pickleStepId);
-          if (pickleStep) {
-            const durationNanos =
-              (envelope.testStepFinished.timestamp.seconds - start.seconds) * 1e9 +
-              (envelope.testStepFinished.timestamp.nanos - start.nanos);
-            const duration_s = Math.max(0, Math.round((durationNanos / 1e9) * 1000) / 1000);
-
-            let status = 'PASS';
-            if (envelope.testStepFinished.testStepResult.status !== messages.TestStepResultStatus.PASSED) {
-              status = 'FAIL';
-            }
-
-            const stepKeyword = this.resolveStepKeyword(pickle?.uri || '', pickleStep.astNodeIds[0]) || 'Step';
-
-            this.stepResults.get(envelope.testStepFinished.testCaseStartedId)?.push({
-              keyword: stepKeyword,
-              text: pickleStep.text,
-              status,
-              duration_s,
-            });
-          }
-        }
-      }
+      this.recordTestStep(envelope.testStepFinished);
     } else if (envelope.testCaseFinished) {
       this.recordTestCase(envelope.testCaseFinished);
     }
+  }
+
+  private recordTestStep(finished: messages.TestStepFinished): void {
+    const attempt = this.attempts.get(finished.testCaseStartedId);
+    if (!attempt) return;
+
+    const result = finished.testStepResult;
+    attempt.results.push(result);
+
+    const testStep = attempt.testCase.testSteps.find(step => step.id === finished.testStepId);
+    const pickle = this.pickles.get(attempt.testCase.pickleId);
+    const pickleStep = pickle?.steps.find(step => step.id === testStep?.pickleStepId);
+    if (!pickle || !pickleStep) return;
+
+    const { seconds, nanos } = result.duration;
+    attempt.steps.push({
+      keyword: this.resolveStepKeyword(pickle.uri, pickleStep.astNodeIds[0]) || 'Step',
+      text: pickleStep.text,
+      status: result.status === messages.TestStepResultStatus.PASSED ? 'PASS' : 'FAIL',
+      duration_s: seconds + Math.round(nanos / 1e6) / 1000,
+    });
   }
 
   private resolveStepKeyword(uri: string, astNodeId: string): string | undefined {
@@ -102,10 +99,11 @@ export default class SitePulseFormatter extends Formatter {
   }
 
   private recordTestCase(finished: messages.TestCaseFinished): void {
-    const started = this.testCaseStarted.get(finished.testCaseStartedId);
+    const started = this.attempts.get(finished.testCaseStartedId);
     if (!started) return;
+    this.attempts.delete(finished.testCaseStartedId);
 
-    const pickle = this.pickles.get(started.pickleId);
+    const pickle = this.pickles.get(started.testCase.pickleId);
     if (!pickle) return;
 
     const uri = pickle.uri || '';
@@ -149,8 +147,10 @@ export default class SitePulseFormatter extends Formatter {
       (finished.timestamp.nanos - started.timestamp.nanos);
     const duration_s = Math.max(0, Math.round((durationNanos / 1e9) * 1000) / 1000);
 
-    const steps = this.stepResults.get(finished.testCaseStartedId) || [];
-    const isPass = steps.length > 0 && steps.every(s => s.status === 'PASS');
+    const { results, steps } = started;
+    const failures = results.filter(result => result.status !== messages.TestStepResultStatus.PASSED);
+    const isPass = results.length > 0 && failures.length === 0;
+    const error = failures.map(result => result.message).filter(Boolean).join('\n');
 
     const featureRel = path.relative(path.resolve(process.cwd(), '../.specify/features'), uri).replace(/\\/g, '/');
 
@@ -169,7 +169,7 @@ export default class SitePulseFormatter extends Formatter {
       status: isPass ? 'PASS' : 'FAIL',
       duration_s,
       steps,
-      error: '',
+      error,
       gui_ids,
     };
 
