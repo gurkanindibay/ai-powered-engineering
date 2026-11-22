@@ -71,8 +71,8 @@ class OccupancyJourney:
 def liability_rows(stack: E2EStack, unit_id: str, period: str) -> list[dict]:
     """Operational liabilities of a unit and period as dicts (cancelled rows are excluded)."""
     raw = stack.sql(
-        "SELECT p.full_name || '|' || d.debtor_type || '|' || d.principal_amount || '|' || d.due_date "
-        "|| '|' || d.effective_due_date || '|' || d.status "
+        "SELECT COALESCE(p.full_name, '') || '|' || d.debtor_type || '|' || d.principal_amount || '|' || d.due_date "
+        "|| '|' || COALESCE(d.effective_due_date::text, '') || '|' || d.status "
         "FROM dues_liabilities d LEFT JOIN persons p ON p.id = d.liable_person_id "
         f"WHERE d.unit_id = {int(unit_id)} AND d.expense_type = 'OPERATIONAL_DUES' "
         f"AND d.period = '{period.replace(chr(39), '')}' AND d.status <> 'CANCELLED' ORDER BY d.id;"

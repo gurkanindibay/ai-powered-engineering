@@ -372,6 +372,127 @@ async fn when_a_paid_month_is_split_then_approval_reissues_both_roles_and_credit
     );
 }
 
+// covers: SC-13-05-18
+// Backend coverage: SC-13-05-18 late move-out split correction and later period transfer to owner.
+#[tokio::test]
+async fn when_tenant_leaves_without_notice_then_split_and_later_accrual_corrections_are_requested()
+{
+    let state = fixture().await;
+    let nov_date = NaiveDate::from_ymd_opt(2026, 11, 10).expect("fixture date");
+    let dec_date = NaiveDate::from_ymd_opt(2026, 12, 10).expect("fixture date");
+    let mut nov_due = liability("due-nov", "1500.00", nov_date);
+    nov_due.period = "2026-11".to_string();
+    nov_due.debtor_type = DebtorType::Tenant;
+
+    let mut dec_due = liability("due-dec", "1500.00", dec_date);
+    dec_due.period = "2026-12".to_string();
+    dec_due.debtor_type = DebtorType::Tenant;
+
+    let effective_date = NaiveDate::from_ymd_opt(2026, 11, 25).expect("fixture date");
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues.push(nov_due);
+        inner.dues.push(dec_due);
+        inner
+            .dues_budget_basis
+            .insert("due-nov".to_string(), "b-1".to_string());
+        inner
+            .dues_budget_basis
+            .insert("due-dec".to_string(), "b-1".to_string());
+        inner
+            .sites
+            .iter_mut()
+            .find(|site| site.id == SITE)
+            .expect("fixture site")
+            .proration_enabled = true;
+        inner.dues_periods.push(DuesPeriod {
+            id: "period-nov".to_string(),
+            site_id: SITE.to_string(),
+            period_name: "2026-11".to_string(),
+            due_date: nov_date,
+            status: DuesPeriodStatus::Active,
+            created_at: None,
+        });
+        inner.dues_periods.push(DuesPeriod {
+            id: "period-dec".to_string(),
+            site_id: SITE.to_string(),
+            period_name: "2026-12".to_string(),
+            due_date: dec_date,
+            status: DuesPeriodStatus::Active,
+            created_at: None,
+        });
+        inner.unit_occupancies.insert(
+            UNIT.to_string(),
+            vec![OccupancyHistoryItem {
+                id: 81,
+                unit_id: 14,
+                person_id: 12,
+                person_name: "Departed Tenant".to_string(),
+                person_phone: None,
+                person_email: None,
+                role: DebtorType::Tenant,
+                start_date: "2026-11-01".to_string(),
+                end_date: Some("2026-11-25".to_string()),
+                is_active: false,
+                exit_balance: Decimal::ZERO,
+                notes: None,
+                created_at: Utc::now(),
+            }],
+        );
+        let unit_obj = inner
+            .units
+            .iter_mut()
+            .find(|u| u.id == UNIT)
+            .expect("unit in fixture");
+        unit_obj.owner_user_id = Some("person-42".to_string());
+    }
+
+    let corrections = OccupancyService::new(state.clone())
+        .request_occupancy_corrections(&first_manager(), UNIT, effective_date)
+        .await
+        .unwrap();
+
+    assert_eq!(corrections.len(), 2);
+    let nov_corr = corrections.iter().find(|c| c.period == "2026-11").unwrap();
+    assert_eq!(nov_corr.kind, CORRECTION_SPLIT_REISSUE);
+    assert_eq!(nov_corr.replacement_shares.len(), 2);
+
+    let dec_corr = corrections.iter().find(|c| c.period == "2026-12").unwrap();
+    assert_eq!(dec_corr.kind, CORRECTION_REISSUE);
+    assert_eq!(dec_corr.new_debtor_type.as_deref(), Some("OWNER"));
+    assert_eq!(dec_corr.amount, d("1500.00"));
+
+    let correction_service = CorrectionService::new(&state);
+    let approved_dec = correction_service
+        .decide(&second_manager(), dec_corr.id, approve())
+        .await
+        .unwrap();
+    assert_eq!(approved_dec.status, REQUEST_APPROVED);
+    let replacement = due_of(&state, &approved_dec.replacement_due_id.unwrap()).await;
+    assert_eq!(replacement.debtor_type, DebtorType::Owner);
+    assert_eq!(replacement.principal_amount, d("1500.00"));
+    assert_eq!(replacement.liable_person_id, Some(42));
+    assert_eq!(replacement.due_date, today());
+    assert_eq!(replacement.effective_due_date, Some(today()));
+
+    let approved_nov = correction_service
+        .decide(&second_manager(), nov_corr.id, approve())
+        .await
+        .unwrap();
+    assert_eq!(approved_nov.status, REQUEST_APPROVED);
+    let mut nov_dues = Vec::new();
+    for id in approved_nov.replacement_due_ids {
+        nov_dues.push(due_of(&state, &id).await);
+    }
+    let owner_nov = nov_dues
+        .iter()
+        .find(|d| d.debtor_type == DebtorType::Owner)
+        .unwrap();
+    assert_eq!(owner_nov.liable_person_id, Some(42));
+    assert_eq!(owner_nov.due_date, today());
+    assert_eq!(owner_nov.effective_due_date, Some(today()));
+}
+
 // covers: SC-07-11-03
 #[tokio::test]
 async fn when_a_credit_note_is_approved_then_the_amount_and_the_late_fee_drop_in_proportion() {
