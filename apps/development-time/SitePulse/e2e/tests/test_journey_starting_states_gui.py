@@ -470,7 +470,7 @@ def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack,
         # Directory reports zero matches
         lines = page_lines(page)
         assert any("bulunamadı" in line.lower() or "bulunamadi" in line.lower() or "bulunmuyor" in line.lower() for line in lines)
-        assert not any("A-01" in line or "A-1" in line for line in lines)
+        assert not any("A Blok 1" in line or "Ayşe Kaya" in line or "A-01" in line or "A-1" in line for line in lines)
 
         # Clear search
         clear_btn = by_id(page, "resident_search_clear_btn")
@@ -488,7 +488,7 @@ def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack,
 
         # All units reappear and site unit count remains 7
         refreshed_lines = page_lines(page)
-        assert any("A-01" in line or "A-1" in line for line in refreshed_lines)
+        assert any("A Blok 1" in line or "Ayşe Kaya" in line or "A-01" in line or "A-1" in line for line in refreshed_lines)
         assert stack.sql(f"SELECT COUNT(*) FROM units WHERE site_id = {int(fixture.site_id)};") == "7"
 
 
