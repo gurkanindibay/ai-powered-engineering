@@ -57,7 +57,10 @@ pub fn plan_correction(
     amount: Decimal,
 ) -> FinanceResult<CorrectionPlan> {
     if due.status == DebtStatus::Cancelled {
-        return Err(conflict("The liability is already cancelled"));
+        return Err(conflict("The liability is already CANCELLED"));
+    }
+    if due.status == DebtStatus::Paid && kind != CORRECTION_SPLIT_REISSUE {
+        return Err(conflict("The liability is already PAID"));
     }
     if kind != CORRECTION_CREDIT_NOTE {
         return Ok(CorrectionPlan {
@@ -167,7 +170,12 @@ impl CorrectionService {
             .await;
         let due = due?;
         if due.status == DebtStatus::Cancelled {
-            return Err(conflict("The liability is already cancelled"));
+            return Err(conflict("The liability is already CANCELLED"));
+        }
+        if due.status == DebtStatus::Paid
+            && (kind == CORRECTION_CREDIT_NOTE || kind == CORRECTION_CANCEL)
+        {
+            return Err(conflict("The liability is already PAID"));
         }
         if kind == CORRECTION_SPLIT_REISSUE {
             if due.expense_type != ExpenseType::OperationalDues {

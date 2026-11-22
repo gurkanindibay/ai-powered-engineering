@@ -135,6 +135,7 @@ routes! {
     get "/api/v1/bank/statements/reconciliation-queue" => handlers::get_reconciliation_queue, Require(ReconciliationConfirm);
     post "/api/v1/bank/statements/confirm-reconciliation" => handlers::confirm_reconciliation, Require(ReconciliationConfirm);
     post "/api/v1/bank/statements/reconciliation-queue/{match_id}/assign" => handlers::assign_reconciliation_match, Require(ReconciliationConfirm);
+    post "/api/v1/bank/statements/reconciliation-queue/{match_id}/reject" => handlers::reject_reconciliation_match, Require(ReconciliationConfirm);
     get "/api/v1/site-admin/banks" => handlers::list_supported_banks, Public;
     get "/api/v1/site-admin/bank-account/{site_id}" => handlers::get_site_bank_account, Require(BankAccountManage);
     post "/api/v1/site-admin/bank-account/{site_id}" => handlers::configure_site_bank_account, Require(BankAccountManage);

@@ -225,16 +225,18 @@ def site_in_state(
     manifest: JourneyManifest,
     name_suffix: str = "",
 ) -> JourneyFixture:
-    """Build an isolated F0-F5 site and record its resources before setup work.
-
-    F6-F7 need the later close and correction builders. Those states fail
-    explicitly rather than silently returning partial data.
-    """
+    """Build an isolated F0-F7 site and record its resources before setup work."""
     if state not in {f"F{number}" for number in range(8)}:
         raise ValueError(f"Unknown Site Admin reference state: {state!r}")
     manifest.bind_database(stack.db_name)
-    if state not in {"F0", "F1", "F2", "F3", "F4", "F5"}:
-        raise JourneyFixturePending(f"{state} is pending the later journey fixture builders and #211 clock integration")
+    if state == "F6":
+        from .journey_occupancy import build_f6
+        j = build_f6(api=api, stack=stack, saas=saas, manifest=manifest, name_suffix=name_suffix)
+        api.clock.set_date("2026-11-19")
+        all_persons = tuple(
+            stack.sql(f"SELECT id FROM persons WHERE site_id = {int(j.site_id)} ORDER BY id;").splitlines()
+        )
+        return JourneyFixture("F6", j.site_id, j.manager, j.fixture.manager_email, j.fixture.manager_password, j.fixture.unit_ids, all_persons)
 
     attempt = _slug(f"{manifest.attempt_id}{name_suffix}")
     site_name = f"Journey {manifest.run_id[:30]} {attempt[:12]}"
@@ -257,10 +259,10 @@ def site_in_state(
         # F0 deliberately removes that empty structure to match the catalogue.
         stack.sql(f"DELETE FROM blocks WHERE site_id = {site};")
         requires_restart = True
-    if state in {"F1", "F2", "F3", "F4", "F5"}:
+    if state in {"F1", "F2", "F3", "F4", "F5", "F7"}:
         unit_ids = _create_structure(stack, site_id, manifest)
         requires_restart = True
-    if state in {"F2", "F4", "F5"}:
+    if state in {"F2", "F4", "F5", "F7"}:
         person_ids = _create_residents(stack, site_id, manager_user_id, manifest, attempt_slug=attempt)
     if state == "F3":
         _create_period_no_residents(stack, site_id)
@@ -268,12 +270,14 @@ def site_in_state(
     elif state == "F4":
         _build_f4(stack, site_id, unit_ids)
         requires_restart = True
-    elif state == "F5":
+    elif state in {"F5", "F7"}:
         _build_f5(stack, site_id, unit_ids)
+        if state == "F7":
+            _close_september(stack, site_id)
         requires_restart = True
     if requires_restart:
         stack.restart_backend()
-    if state in {"F4", "F5"}:
+    if state in {"F4", "F5", "F7"}:
         api.clock.set_date("2026-11-19")
 
     manager = api.login(manager_email, manager_password)
@@ -510,6 +514,21 @@ def _build_f5(stack: E2EStack, site_id: str | int, unit_ids: tuple[str, ...]) ->
     )
     statements.append("COMMIT;")
     stack.sql(" ".join(statements))
+
+
+def _close_september(stack: E2EStack, site_id: str | int) -> None:
+    site = _safe_id(site_id)
+    stack.sql(
+        "BEGIN; "
+        f"UPDATE dues_periods SET status = 'CLOSED' WHERE site_id = {site} AND period_name = 'Eylül 2026'; "
+        f"INSERT INTO dues_period_snapshots (site_id, period_id, period_key, snapshot_version, accrued, collected, outstanding, corrections, per_unit, trial_balance, account_report, journal_entries, closed_by, closed_at) "
+        f"SELECT {site}, p.id, '2026-09', 1, 9750.00, 6750.00, 3000.00, 0.00, '[]'::jsonb, "
+        f"jsonb_build_object('site_id', '{site}', 'from', '2026-09-01', 'to', '2026-09-30', 'rows', '[]'::jsonb, 'total_debit', '0.00', 'total_credit', '0.00', 'balanced', true), "
+        "jsonb_build_object('period_id', p.id::text, 'period_key', '2026-09', 'status', 'CLOSED', 'accrued', '9750.00', 'collected', '6750.00', 'outstanding', '3000.00', 'corrections', '0.00', 'per_unit', '[]'::jsonb), "
+        "'[]'::jsonb, 'manager', TIMESTAMPTZ '2026-11-19 12:00:00+03' "
+        f"FROM dues_periods p WHERE p.site_id = {site} AND p.period_name = 'Eylül 2026'; "
+        "COMMIT;"
+    )
 
 
 def _create_period_no_residents(stack: E2EStack, site_id: str) -> None:

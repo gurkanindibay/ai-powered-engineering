@@ -92,8 +92,7 @@ Feature: Corner cases around accrual, occupancy, access and time
     When the manager moves tenant "Selin Demir" into unit "A-1" that is owner-occupied
     Then the request is refused with the allowed commands for the current state
 
-  # Pending: the F6 journey fixture and exact 700.00/500.00/300.00 split-correction assertions are not available yet.
-  @SC-13-05-09 @J-12 @depth:2 @state:F6 @layer:backend @edge @role_manager @pending
+  @SC-13-05-09 @J-12 @depth:2 @state:F6 @layer:backend @edge @role_manager @linked
   Scenario: A move-out recorded after accrual re-splits the open liability
     Given the site is in state F6
     And the clock has advanced to "2026-11-26"
@@ -159,8 +158,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ------------------------------------------------------------- persistence
 
-  # Pending: historical F4-F7 fixture construction and restart checkpoints are not available to this journey suite.
-  @SC-13-05-16 @J-12 @depth:1 @layer:backend @core @role_manager @pending
+  @SC-13-05-16 @J-12 @depth:1 @layer:backend @core @role_manager @linked
   Scenario Outline: Balances are identical after a backend restart at any point of the history
     Given the site is in state <state>
     When the backend is restarted

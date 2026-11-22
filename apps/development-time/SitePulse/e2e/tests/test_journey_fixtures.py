@@ -27,6 +27,8 @@ EXPECTED = {
     "F3": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 1, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
     "F4": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 1, "liabilities": 6, "receipts": 1, "overdue": Decimal("8800.00"), "advance": Decimal("0.00")},
     "F5": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 3, "liabilities": 18, "receipts": 9, "overdue": Decimal("4567.50"), "advance": Decimal("1250.00")},
+    "F6": {"blocks": 1, "units": 7, "people": 10, "accounts": 7, "periods": 3, "liabilities": 21, "receipts": 0, "overdue": Decimal("9750.00"), "advance": Decimal("0.00")},
+    "F7": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 3, "liabilities": 18, "receipts": 9, "overdue": Decimal("4567.50"), "advance": Decimal("1250.00")},
 }
 
 _APPEND_ONLY_TABLES = {"audit_events", "financial_access_log"}
@@ -108,6 +110,152 @@ def test_site_admin_reference_fixtures(state, request, api, actors, stack):
         assert all(stack.sql(f"SELECT COUNT(*) FROM sites WHERE id = {int(site_id)};") == "0" for site_id in site_ids)
         for site_id in site_ids:
             assert not any(site_scoped_row_counts(stack, site_id).values())
+        if user_ids:
+            assert stack.sql(f"SELECT COUNT(*) FROM users WHERE id IN ({', '.join(user_ids)});") == "0"
+        if person_ids:
+            assert stack.sql(f"SELECT COUNT(*) FROM persons WHERE id IN ({', '.join(person_ids)});") == "0"
+        assert _shared_seed_checksum(stack) == seed_checksum
+
+
+@pytest.mark.covers("SC-13-07-10", "SC-13-07-02", "SC-13-07-03")
+@pytest.mark.core
+@pytest.mark.parametrize("state", ["F6", "F7"])
+def test_site_admin_historical_reference_fixtures(state, request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    seed_checksum = _shared_seed_checksum(stack)
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    fixture = None
+    try:
+        fixture = site_in_state(state, api=api, stack=stack, saas=saas, manifest=manifest)
+        overview = ledger_invariants(api, fixture.manager, fixture.site_id, stage=state)
+        expected = EXPECTED[state]
+
+        assert len(overview["flats"]) == expected["units"]
+        assert len(fixture.unit_ids) == expected["units"]
+        assert stack.sql(f"SELECT COUNT(*) FROM blocks WHERE site_id = {int(fixture.site_id)};") == str(expected["blocks"])
+        assert Decimal(str(overview["summary"]["total_overdue_with_interest"])) == expected["overdue"]
+        assert Decimal(str(overview["summary"]["total_advance_balance"])) == expected["advance"]
+        assert len(overview["available_periods"]) == expected["periods"]
+        assert stack.sql(
+            f"SELECT COUNT(*) FROM persons WHERE site_id = {int(fixture.site_id)} "
+            "AND person_type IN ('HOME_OWNER', 'HOME_RESIDENT');"
+        ) == str(expected["people"])
+        assert stack.sql(
+            f"SELECT COUNT(*) FROM users WHERE site_id = {int(fixture.site_id)} "
+            "AND role IN ('HOME_OWNER', 'HOME_RESIDENT') AND is_active AND NOT must_change_password;"
+        ) == str(expected["accounts"])
+        assert stack.sql(f"SELECT COUNT(*) FROM dues_periods WHERE site_id = {int(fixture.site_id)};") == str(expected["periods"])
+        assert stack.sql(
+            "SELECT COUNT(*) FROM dues_liabilities d JOIN units u ON u.id = d.unit_id "
+            f"WHERE u.site_id = {int(fixture.site_id)};"
+        ) == str(expected["liabilities"])
+        assert stack.sql(f"SELECT COUNT(*) FROM payment_receipts WHERE site_id = {int(fixture.site_id)};") == str(expected["receipts"])
+        if state == "F7":
+            assert stack.sql(
+                f"SELECT status FROM dues_periods WHERE site_id = {int(fixture.site_id)} AND period_name = 'Eylül 2026';"
+            ) == "CLOSED"
+    except BaseException as failure:
+        teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
+    else:
+        site_ids = list(manifest.site_ids)
+        user_ids = list(manifest.user_ids)
+        person_ids = list(manifest.person_ids)
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
+        assert all(stack.sql(f"SELECT COUNT(*) FROM sites WHERE id = {int(site_id)};") == "0" for site_id in site_ids)
+        for site_id in site_ids:
+            assert not any(site_scoped_row_counts(stack, site_id).values())
+        if user_ids:
+            assert stack.sql(f"SELECT COUNT(*) FROM users WHERE id IN ({', '.join(user_ids)});") == "0"
+        if person_ids:
+            assert stack.sql(f"SELECT COUNT(*) FROM persons WHERE id IN ({', '.join(person_ids)});") == "0"
+        assert _shared_seed_checksum(stack) == seed_checksum
+
+
+@pytest.mark.covers("SC-13-07-05")
+@pytest.mark.core
+def test_teardown_works_after_half_built_state(request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    seed_checksum = _shared_seed_checksum(stack)
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    failure = RuntimeError("synthetic builder failure after second period accrued")
+    site_id = None
+    try:
+        from support.journey_occupancy import build_base, tenant_move_in
+        j = build_base(api=api, stack=stack, saas=saas, manifest=manifest)
+        site_id = int(j.site_id)
+        j.accrue("Eylül 2026")  # first period
+        j.clock.advance_to("2026-10-11")
+        tenant_move_in(j, 2, "Selin Demir", "selin")
+        j.accrue("Ekim 2026")  # second period accrued
+        raise failure
+    except BaseException as err:
+        try:
+            teardown_with_evidence(stack, manifest, failed=err, capture_evidence=manifest.save)
+        except BaseException:
+            pass
+    else:
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
+
+    assert site_id is not None
+    assert stack.sql(f"SELECT COUNT(*) FROM sites WHERE id = {site_id};") == "0"
+    assert not any(site_scoped_row_counts(stack, site_id).values())
+    assert _shared_seed_checksum(stack) == seed_checksum
+
+
+@pytest.mark.covers("SC-13-05-16")
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.parametrize("state", ["F4", "F5", "F6", "F7"])
+def test_balances_identical_after_backend_restart(state, request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    seed_checksum = _shared_seed_checksum(stack)
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    fixture = None
+    try:
+        fixture = site_in_state(state, api=api, stack=stack, saas=saas, manifest=manifest)
+        overview_before = api.site_overview(fixture.manager, fixture.site_id)
+        statements_before = [api.resident_statement(fixture.manager, uid) for uid in fixture.unit_ids]
+
+        stack.restart_backend()
+        api.clock.set_date("2026-11-19")
+        manager = api.login(fixture.manager_email, fixture.manager_password)
+
+        overview_after = api.site_overview(manager, fixture.site_id)
+        statements_after = [api.resident_statement(manager, uid) for uid in fixture.unit_ids]
+
+        def normalize_summary(s: dict) -> dict:
+            return {
+                k: Decimal(str(v))
+                if k in ("total_expected", "total_collected", "total_overdue_with_interest", "total_advance_balance")
+                else v
+                for k, v in s.items()
+            }
+
+        assert normalize_summary(overview_before["summary"]) == normalize_summary(overview_after["summary"])
+        for b, a in zip(overview_before["flats"], overview_after["flats"]):
+            assert Decimal(str(b["amount_due"])) == Decimal(str(a["amount_due"]))
+            assert Decimal(str(b["advance_balance"])) == Decimal(str(a["advance_balance"]))
+            assert b["is_paid"] == a["is_paid"]
+        for sb, sa in zip(statements_before, statements_after):
+            assert sb["debtors"] == sa["debtors"]
+
+        ledger_invariants(api, manager, fixture.site_id, stage=f"{state}-restart")
+    finally:
+        user_ids = list(manifest.user_ids)
+        person_ids = list(manifest.person_ids)
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
         if user_ids:
             assert stack.sql(f"SELECT COUNT(*) FROM users WHERE id IN ({', '.join(user_ids)});") == "0"
         if person_ids:

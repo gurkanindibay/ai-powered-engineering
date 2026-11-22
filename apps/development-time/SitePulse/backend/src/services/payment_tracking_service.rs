@@ -679,6 +679,39 @@ impl PaymentTrackingService {
                 );
             }
         }
+        if let Some(des) = designation.as_ref() {
+            let inner = self.state.inner.read().await;
+            let matching_dues: Vec<&DuesLiability> = inner
+                .dues
+                .iter()
+                .filter(|d| {
+                    crate::auth::same_id(&d.unit_id, &unit_id)
+                        && (des.due_ids.is_empty()
+                            || des.due_ids.iter().any(|id| crate::auth::same_id(id, &d.id)))
+                        && (des.periods.is_empty()
+                            || des.periods.iter().any(|p| {
+                                crate::domain::fold_turkish(p.trim())
+                                    == crate::domain::fold_turkish(d.period.trim())
+                            }))
+                        && des
+                            .expense_type
+                            .as_deref()
+                            .is_none_or(|e| e.eq_ignore_ascii_case(d.expense_type.as_str()))
+                })
+                .collect();
+            if !matching_dues.is_empty() && matching_dues.iter().all(|d| !d.status.is_collectable())
+            {
+                if matching_dues.iter().all(|d| d.status == DebtStatus::Paid) {
+                    return Err("The designated liability is already PAID".to_string());
+                }
+                if matching_dues
+                    .iter()
+                    .all(|d| d.status == DebtStatus::Cancelled)
+                {
+                    return Err("The designated liability is CANCELLED".to_string());
+                }
+            }
+        }
         let allocate = |dues: &mut Vec<DuesLiability>| {
             let mut candidates = dues_ledger::open_dues_for(dues, |_| true, settling_role.as_str());
             if on_behalf_of_owner {
@@ -805,6 +838,44 @@ impl PaymentTrackingService {
                 .map_err(db_err)?
             {
                 return Err(format!("Daire bulunamadı: {}", unit_id));
+            }
+            if let Some(des) = designation.as_ref() {
+                for due_id_str in &des.due_ids {
+                    if let Ok(id_num) = crate::db::require_id("dues liability", due_id_str) {
+                        let row = tx
+                            .query_opt(
+                                "SELECT status FROM dues_liabilities WHERE id = $1 AND unit_id = $2",
+                                &[&id_num, &unit_num],
+                            )
+                            .await
+                            .map_err(|e| db_err(Box::new(e)))?;
+                        if let Some(r) = row {
+                            let status: String = r.get("status");
+                            if status == "PAID" {
+                                return Err("The designated liability is already PAID".to_string());
+                            } else if status == "CANCELLED" {
+                                return Err("The designated liability is CANCELLED".to_string());
+                            }
+                        }
+                    }
+                }
+                for period in &des.periods {
+                    let rows = tx
+                        .query(
+                            "SELECT status FROM dues_liabilities WHERE unit_id = $1 AND period = $2",
+                            &[&unit_num, period],
+                        )
+                        .await
+                        .map_err(|e| db_err(Box::new(e)))?;
+                    if !rows.is_empty() {
+                        let statuses: Vec<String> = rows.iter().map(|r| r.get("status")).collect();
+                        if statuses.iter().all(|s| s == "PAID") {
+                            return Err("The designated liability is already PAID".to_string());
+                        } else if statuses.iter().all(|s| s == "CANCELLED") {
+                            return Err("The designated liability is CANCELLED".to_string());
+                        }
+                    }
+                }
             }
             let mut dues: Vec<DuesLiability> = crate::db::tx_load_open_dues(&tx, unit_num)
                 .await

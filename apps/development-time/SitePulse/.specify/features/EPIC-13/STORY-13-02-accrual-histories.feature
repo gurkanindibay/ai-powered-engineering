@@ -58,16 +58,14 @@ Feature: Accrual histories F4, F5 and F7
     Then unit "A-4" has exactly one open liability: period "Kasım 2026", principal 1500.00, late fee 22.50
     And the admin aging report puts principal 1500.00 in bucket "1-30" and shows 22.50 separately as late fee
 
-  # Pending: Multiple debts listing order verification pending.
-  @SC-13-02-07 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-02-07 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: Multiple debts across periods are listed oldest first with a fee each
     Given the site is in state F5
     Then unit "A-5" has 3 open liabilities in the order Eylül 2026, Ekim 2026, Kasım 2026
     And their late fees are 175.00, 100.00 and 22.50
     And the total is 4797.50
 
-  # Pending: Advance balance automatic offset during next accrual pending.
-  @SC-13-02-08 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-02-08 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: An advance balance has already offset later periods
     Given the site is in state F5
     Then unit "A-6" has 0 open liabilities, 3 settled liabilities and an advance of 1250.00
@@ -76,8 +74,7 @@ Feature: Accrual histories F4, F5 and F7
     And the advance becomes 0.00 and 1000.00 of that liability remains open
     And the ledger invariants hold
 
-  # Pending: Subsequent accrual idempotence verification pending.
-  @SC-13-02-09 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-02-09 @J-08 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: A fourth accrual adds exactly one liability per responsible debtor
     Given the site is in state F5
     When the manager accrues period "Aralık 2026" due "2026-12-10"
@@ -87,8 +84,7 @@ Feature: Accrual histories F4, F5 and F7
 
   # ------------------------------------------------------ F7 CLOSED_HISTORY
 
-  # Pending: F7 closed period accrual rejection pending.
-  @SC-13-02-10 @J-09 @depth:2 @state:F7 @layer:backend @core @role_manager @pending
+  @SC-13-02-10 @J-09 @depth:2 @state:F7 @layer:backend @core @role_manager @linked
   Scenario: A closed period accepts no new accrual or edit but keeps its open debts
     Given the site is in state F7
     Then period "Eylül 2026" is CLOSED
@@ -99,8 +95,7 @@ Feature: Accrual histories F4, F5 and F7
     Then the live fee of unit "A-3" increases from 175.00 to 177.50
     And the fee is booked in the open November period and the September snapshot is unchanged
 
-  # Pending: F7 closed period payment allocation pending.
-  @SC-13-02-11 @J-09 @depth:1 @state:F7 @layer:backend @edge @role_manager @pending
+  @SC-13-02-11 @J-09 @depth:1 @state:F7 @layer:backend @edge @role_manager @linked
   Scenario: A payment toward a closed period is still allocated to its oldest debt
     Given the site is in state F7
     When the manager records a manual payment of 1675.00 for unit "A-3"

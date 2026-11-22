@@ -131,11 +131,11 @@ def person_id(stack: E2EStack, site_id: str, full_name: str) -> str:
 
 def build_base(
     *, api: Api, stack: E2EStack, saas: Session, manifest: JourneyManifest, start: str = "2026-09-01",
-    proration: bool = True, vacate_a2: bool = True,
+    proration: bool = True, vacate_a2: bool = True, name_suffix: str = "",
 ) -> OccupancyJourney:
     """F2 plus a clock and the proration switch; A-2 is vacant when `vacate_a2` (F6 start)."""
     manifest.bind_database(stack.db_name)
-    fixture = site_in_state("F2", api=api, stack=stack, saas=saas, manifest=manifest)
+    fixture = site_in_state("F2", api=api, stack=stack, saas=saas, manifest=manifest, name_suffix=name_suffix)
     if vacate_a2:
         unit = int(fixture.unit_ids[1])
         stack.sql(
@@ -197,13 +197,23 @@ def sell_unit(j: OccupancyJourney, unit_number: int, buyer: str, email_key: str,
     return result
 
 
-def second_manager(j: OccupancyJourney, person_name: str = "Ayşe Kaya") -> Session:
-    """Promotes a resident account of the isolated site to a second site manager."""
-    email = j.stack.sql(f"SELECT email FROM persons WHERE id = {int(j.people[person_name])};")
-    j.stack.sql(f"UPDATE users SET role = 'SITE_MANAGER' WHERE lower(email) = lower('{email}');")
+def second_manager(j: OccupancyJourney, person_name: str | None = None) -> Session:
+    """Creates a second site manager for the isolated site (four-eyes reviewer)."""
+    reviewer_email = f"journey.reviewer.{j.manifest.attempt_id[:8]}@e2e.test"
+    existing = j.stack.sql(f"SELECT id FROM users WHERE email = '{reviewer_email}';")
+    if existing:
+        return j.api.login(reviewer_email, j.fixture.manager_password)
+    existing_user_id = j.manifest.user_ids[0]
+    password_hash = j.stack.sql(f"SELECT password_hash FROM users WHERE id = {int(existing_user_id)};")
+    user_id = j.stack.sql(
+        f"INSERT INTO users (site_id, email, password_hash, role, is_active, must_change_password) "
+        f"VALUES ({int(j.site_id)}, '{reviewer_email}', '{password_hash}', 'SITE_MANAGER', TRUE, FALSE) "
+        "RETURNING id;"
+    )
+    j.manifest.record("user_ids", user_id)
     j.stack.restart_backend()
     j.clock.set_date(j.clock.current_date.isoformat())
-    return j.api.login(email, j.fixture.manager_password)
+    return j.api.login(reviewer_email, j.fixture.manager_password)
 
 
 def build_f6(**kwargs: object) -> OccupancyJourney:
@@ -236,4 +246,5 @@ def build_f6(**kwargs: object) -> OccupancyJourney:
             j.api.call("POST", f"/api/v1/accrual-corrections/{correction['id']}/decide", reviewer.token,
                        body={"approve": True, "note": "F6 split approved"})
     j.invariants("F6 step 5: Oya's split approved")
+    j.clock.advance_to("2026-11-19")
     return j

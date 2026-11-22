@@ -30,8 +30,7 @@ Feature: Every status of the billing state machines is reached and left correctl
       | 0     | 1502.50 is paid on "2026-11-11"                               | PAID      | 0.00        |
       | 0     | an approved cancellation takes effect on "2026-11-12"         | CANCELLED | 0.00        |
 
-  # Pending: the F5 fixture and end-to-end payment/correction refusal checks with unchanged ledger rows are not available.
-  @SC-13-11-02 @J-18 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-11-02 @J-18 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario Outline: A settled or cancelled liability cannot be paid or corrected again
     Given the site is in state F5
     And the "<period>" liability of unit "<unit>" is <status>, after an approved cancellation where the status is CANCELLED
@@ -46,14 +45,14 @@ Feature: Every status of the billing state machines is reached and left correctl
       | A-5  | Eylül 2026 | CANCELLED | records a 100.00 payment designating |
       | A-5  | Eylül 2026 | CANCELLED | requests cancellation of             |
 
-  # Pending: the journey harness has no fixed-date payment-reversal flow that verifies the ordered liability status history.
-  @SC-13-11-03 @J-18 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-11-03 @J-18 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario: A reversal moves a PAID liability back to OVERDUE
     Given the site is in state F5
     And unit "A-3" paid its "Eylül 2026" liability in full on "2026-11-19"
     When that payment is reversed on "2026-11-19"
     Then the "Eylül 2026" liability of "A-3" is OVERDUE with outstanding 1675.00
     And the status history lists OVERDUE, PAID and OVERDUE with the reversal reference
+
 
   # ---------------------------------------------------------------- period
 
@@ -86,8 +85,7 @@ Feature: Every status of the billing state machines is reached and left correctl
 
   # -------------------------------------------------------- reconciliation
 
-  # Pending: the F5 fixture and complete bank import/approve/reject/duplicate flow with payment and receipt counts are not wired to journeys.
-  @SC-13-11-06 @J-18 @depth:1 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-11-06 @J-18 @depth:1 @state:F5 @layer:backend @core @role_manager @linked
   Scenario Outline: A bank statement item reaches each reconciliation status
     Given the site is in state F5
     When a bank statement item of 1675.00 is imported <input>
@@ -102,8 +100,7 @@ Feature: Every status of the billing state machines is reached and left correctl
       | to an unknown virtual IBAN                                 | UNMATCHED         | 0        |
       | twice with the same bank reference, the first one approved | ALREADY_PROCESSED | 1        |
 
-  # Pending: the GUI/API journey does not yet verify that approving a rejected item and rejecting an approved item are refused without changing counts.
-  @SC-13-11-07 @J-18 @depth:1 @state:F5 @layer:backend @edge @role_manager @pending
+  @SC-13-11-07 @J-18 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
   Scenario: A rejected or approved statement item cannot change status again
     Given the site is in state F5
     And one statement item for "A-3" is APPROVED and another is REJECTED
@@ -113,8 +110,7 @@ Feature: Every status of the billing state machines is reached and left correctl
 
   # ------------------------------------------------------------- occupancy
 
-  # Pending: the API command-read matrix and unchanged occupancy, ownership, household and financial rows are not asserted together.
-  @SC-13-11-08 @J-18 @depth:2 @state:F5 @layer:backend @core @role_manager @pending
+  @SC-13-11-08 @J-18 @depth:2 @state:F5 @layer:backend @core @role_manager @linked
   Scenario Outline: Each unit occupancy state offers its own commands and refuses the rest
     Given the site is in state F5
     When the manager reads the allowed commands of unit "<unit>"
@@ -129,3 +125,4 @@ Feature: Every status of the billing state machines is reached and left correctl
       | A-3  | owned, vacant   | move out tenant |
       | A-1  | owner-occupied  | move in tenant  |
       | A-2  | tenant-occupied | move in owner   |
+

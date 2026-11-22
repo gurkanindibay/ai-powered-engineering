@@ -13,6 +13,8 @@ pub(crate) fn payment_error_status(e: String) -> (StatusCode, String) {
             StatusCode::SERVICE_UNAVAILABLE,
             crate::error::sanitized("Payment storage is temporarily unavailable", &e),
         )
+    } else if e.contains("already PAID") || e.contains("CANCELLED") {
+        (StatusCode::CONFLICT, e)
     } else {
         (StatusCode::BAD_REQUEST, e)
     }
@@ -645,7 +647,7 @@ pub async fn record_manual_payment(
         .record_and_allocate_payment(payload)
         .await
         .map(|r| (StatusCode::CREATED, Json(r)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(payment_error_status)
 }
 
 pub async fn inter_ledger_transfer(

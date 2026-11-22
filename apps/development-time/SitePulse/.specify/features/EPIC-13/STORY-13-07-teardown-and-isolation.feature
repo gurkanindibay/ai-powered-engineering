@@ -18,8 +18,7 @@ Feature: Journey setup, teardown and isolation
       | F4    |
       | F5    |
 
-  # Pending: historical fixture construction is in progress; F6 and F7 need later journey fixture builders.
-  @SC-13-07-10 @J-14 @depth:1 @layer:backend @pending
+  @SC-13-07-10 @J-14 @depth:1 @layer:backend @linked
   Scenario Outline: Every historical starting state can be built using the documented fixture path
     When a site is created in state <state>
     Then its units, people, periods, liabilities, payments and balances equal the catalogue values of <state>
@@ -52,8 +51,7 @@ Feature: Journey setup, teardown and isolation
     Then the redacted site row counts and route/status network evidence are saved first
     And the teardown still removes the site
 
-  # Pending: F6's multi-period fixture builder is not implemented yet.
-  @SC-13-07-05 @J-14 @depth:1 @layer:backend @core @pending
+  @SC-13-07-05 @J-14 @depth:1 @layer:backend @core @linked
   Scenario: Teardown works after a half-built state
     Given building state F6 fails after the second period was accrued
     When the teardown runs

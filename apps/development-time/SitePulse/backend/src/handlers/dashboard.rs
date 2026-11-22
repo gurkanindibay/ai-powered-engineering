@@ -664,26 +664,55 @@ pub async fn get_site_overview(
             })
             .unwrap_or_else(|| format!("Daire Sakini {}", unit.unit_number));
 
-        // Find due for this unit in the selected period
-        let due_opt = inner
+        // Find dues for this unit in the selected period
+        let unit_dues: Vec<&DuesLiability> = inner
             .dues
             .iter()
-            .find(|d| d.unit_id == unit.id && d.period == selected_period);
+            .filter(|d| {
+                d.unit_id == unit.id
+                    && d.period == selected_period
+                    && d.status != DebtStatus::Cancelled
+            })
+            .collect();
         let advance = inner.advance_total(&unit.id);
         total_advance += advance;
 
         let (amount_due, billed_amount, collected_amount, is_paid, days_overdue, paid_date_str) =
-            if let Some(due) = due_opt {
-                let (billed, collected) =
-                    collection_amounts(due.principal_amount, due.paid_principal);
-                let is_p = due.status == DebtStatus::Paid;
-                let days_o = overdue_days(due.fee_due_date(), today, is_p);
-                let p_date = if is_p {
+            if !unit_dues.is_empty() {
+                let mut sum_amount_due = Decimal::ZERO;
+                let mut sum_billed = Decimal::ZERO;
+                let mut sum_collected = Decimal::ZERO;
+                let mut all_paid = true;
+                let mut max_days_overdue = 0;
+
+                for due in &unit_dues {
+                    let (billed, collected) =
+                        collection_amounts(due.principal_amount, due.paid_principal);
+                    let is_p = due.status == DebtStatus::Paid;
+                    let days_o = overdue_days(due.fee_due_date(), today, is_p);
+                    sum_amount_due += due.total_amount;
+                    sum_billed += billed;
+                    sum_collected += collected;
+                    if !is_p {
+                        all_paid = false;
+                    }
+                    if days_o > max_days_overdue {
+                        max_days_overdue = days_o;
+                    }
+                }
+                let p_date = if all_paid {
                     Some("Ödendi".to_string())
                 } else {
                     None
                 };
-                (due.total_amount, billed, collected, is_p, days_o, p_date)
+                (
+                    sum_amount_due,
+                    sum_billed,
+                    sum_collected,
+                    all_paid,
+                    max_days_overdue,
+                    p_date,
+                )
             } else {
                 (Decimal::ZERO, Decimal::ZERO, Decimal::ZERO, true, 0, None)
             };

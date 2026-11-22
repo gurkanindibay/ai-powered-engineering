@@ -161,3 +161,64 @@ def test_aging_bucket_changes_at_each_day_boundary(
         for name in STATEMENT_BUCKETS:
             assert money(debtor[name]) == (D("1500.00") if name == statement_bucket else ZERO), name
         assert money(debtor["penalty_outstanding"]) == D(fee)
+
+
+@pytest.mark.covers("SC-13-09-08")
+@pytest.mark.core
+@pytest.mark.role_manager
+def test_operational_and_capital_balances_separate_for_tenant(request, api, actors, stack):
+    with journey_site(request, api, actors, stack, "F2") as (fixture, _):
+        manager = fixture.manager
+        a2 = fixture.unit_ids[1]
+
+        clock = JourneyClock(api, "2026-11-19")
+        api.accrue_period(manager, "Kasım 2026", None, "2026-11-30")
+
+        proj = api.create_capital_project(
+            manager, "Çatı Onarımı", D("7000.00"), basis="EQUAL_PER_UNIT", installments=1, first_due="2026-11-30"
+        )
+        api.accrue_installment(manager, str(proj.get("id") or proj.get("project_id")), 1)
+
+        stmt_initial = api.resident_statement(manager, a2)
+        tenant_d = next(d for d in stmt_initial["debtors"] if d["debtor_type"] == "TENANT")
+        owner_d = next(d for d in stmt_initial["debtors"] if d["debtor_type"] == "OWNER")
+        assert money(tenant_d["total_outstanding"]) == D("1500.00")
+        assert money(owner_d["total_outstanding"]) == D("1000.00")
+
+        rec_op = api.record_manual_payment(
+            manager,
+            a2,
+            D("1500.00"),
+            "Selin Demir",
+            payer_role="TENANT",
+            description="Kira aidat",
+            settles_owner_capital_dues=False,
+        )
+
+        stmt_mid = api.resident_statement(manager, a2)
+        tenant_mid = next(d for d in stmt_mid["debtors"] if d["debtor_type"] == "TENANT")
+        owner_mid = next(d for d in stmt_mid["debtors"] if d["debtor_type"] == "OWNER")
+        assert money(tenant_mid["total_outstanding"]) == ZERO
+        assert money(owner_mid["total_outstanding"]) == D("1000.00")
+
+        rec_cap = api.record_manual_payment(
+            manager,
+            a2,
+            D("400.00"),
+            "Selin Demir",
+            payer_role="TENANT",
+            description="Demirbaş payı",
+            settles_owner_capital_dues=True,
+        )
+
+        stmt_final = api.resident_statement(manager, a2)
+        tenant_final = next(d for d in stmt_final["debtors"] if d["debtor_type"] == "TENANT")
+        owner_final = next(d for d in stmt_final["debtors"] if d["debtor_type"] == "OWNER")
+        assert money(owner_final["total_outstanding"]) == D("600.00")
+        assert money(tenant_final["total_outstanding"]) == ZERO
+
+        assert rec_cap["payer_name"] == "Selin Demir"
+        assert rec_cap["on_behalf_of_name"] == "Ahmet Yılmaz"
+
+        ledger_invariants(api, manager, fixture.site_id, stage="SC-13-09-08")
+

@@ -238,7 +238,7 @@ class JourneyAttemptTests(unittest.TestCase):
             self.assertGreaterEqual(stack.restarts, 1)
             manifest.release_lock()
 
-    def test_site_in_state_f6_and_f7_raise_pending(self) -> None:
+    def test_site_in_state_unknown_state_raises_value_error(self) -> None:
         from unittest.mock import MagicMock
         api = MagicMock()
         saas = MagicMock()
@@ -246,8 +246,8 @@ class JourneyAttemptTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             manifest = JourneyManifest.create(Path(directory), "run", "shard", "attempt")
-            for state in ["F6", "F7"]:
-                with self.assertRaises(JourneyFixturePending):
+            for state in ["F8", "UNKNOWN", "FX"]:
+                with self.assertRaises(ValueError):
                     site_in_state(state, api=api, stack=stack, saas=saas, manifest=manifest)
             manifest.release_lock()
 
