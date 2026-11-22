@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-22T16:03:30Z",
- "run_id": "20261122T160329Z-71012e9",
- "commit": "71012e98c60c3fe2cb5d9dc76a2ff63a0d68db95",
+ "generated_at": "2026-11-22T16:34:41Z",
+ "run_id": "20261122T163441Z-9001e96",
+ "commit": "9001e962efe8deb4238f427d75120712f67cd3aa",
  "task": "master",
  "status": "DEFECT",
  "junit": {
-  "tests": 276,
+  "tests": 278,
   "failures": 0,
   "errors": 0,
-  "skipped": 3,
-  "passed": 273,
-  "seconds": 3128.9,
+  "skipped": 2,
+  "passed": 276,
+  "seconds": 3252.5,
   "files": 8,
   "unparseable": []
  },
@@ -20,11 +20,11 @@
   "stories_with_scenarios": 116,
   "stories_passing": 33,
   "scenarios": 465,
-  "automated": 418,
-  "passing": 207,
-  "failing": 2,
+  "automated": 420,
+  "passing": 210,
+  "failing": 1,
   "no_result": 209,
-  "planned": 47,
+  "planned": 45,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 1
@@ -205,11 +205,11 @@
    "stories_with_scenarios": 16,
    "stories_passing": 1,
    "scenarios": 151,
-   "automated": 112,
-   "passing": 93,
-   "failing": 2,
+   "automated": 114,
+   "passing": 96,
+   "failing": 1,
    "no_result": 17,
-   "planned": 39,
+   "planned": 37,
    "health": "failing"
   }
  ],
@@ -2465,7 +2465,7 @@
    "story": "STORY-13-04"
   },
   "SC-13-04-15": {
-   "state": "failing",
+   "state": "passing",
    "name": "A unit-level transfer on a unit with several debtors waits for the manager",
    "epic": "EPIC-13",
    "story": "STORY-13-04"
@@ -2663,7 +2663,7 @@
    "story": "STORY-13-08"
   },
   "SC-13-08-03": {
-   "state": "planned",
+   "state": "passing",
    "name": "A search with zero matches is recoverable without changing the site",
    "epic": "EPIC-13",
    "story": "STORY-13-08"
@@ -2675,7 +2675,7 @@
    "story": "STORY-13-08"
   },
   "SC-13-08-05": {
-   "state": "planned",
+   "state": "passing",
    "name": "Cancelling accrual confirmation makes no financial change",
    "epic": "EPIC-13",
    "story": "STORY-13-08"
@@ -3188,7 +3188,7 @@
    "stories": 116,
    "stories_with_scenarios": 116,
    "scenarios": 465,
-   "automated": 418
+   "automated": 420
   }
  ],
  "recent_changes": [
@@ -3198,12 +3198,13 @@
    "title": "Site Admin Journeys",
    "new_stories": 0,
    "new_scenarios": 0,
-   "newly_automated": 3,
-   "items": 3,
+   "newly_automated": 5,
+   "items": 5,
    "samples": [
     "SC-13-03-11: The same national id entered twice does not create a second person",
     "SC-13-05-05: The scheduler catches up months that were missed",
-    "SC-13-05-11: Merging two duplicate people keeps every liability and payment"
+    "SC-13-05-11: Merging two duplicate people keeps every liability and payment",
+    "SC-13-08-03: A search with zero matches is recoverable without changing the site"
    ]
   },
   {
@@ -3948,5 +3949,5 @@
    ]
   }
  ],
- "href": "reports/45037618278-1/"
+ "href": "reports/45038307450-1/"
 }
