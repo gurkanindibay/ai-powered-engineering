@@ -387,13 +387,14 @@ python3 -m unittest discover -s tests/pr_review_queue
 ## 5c-3c. PR Review Watcher (`pr_review_watch.py`)
 
 - **Executable Script:** [scripts/pr_review_watch.py](file:///scripts/pr_review_watch.py)
-- **Purpose:** Event-driven reviewer wake-up (AGENTS.md rule 16). Blocks until `pr_review_queue.py` would report a ready PR, then prints it and exits, so the reviewer runs it in the background and is woken only when there is work. Sources: `webhook` (`gh webhook forward` from the `cli/gh-webhook` extension relays `pull_request`, `pull_request_review`, `check_suite` and `workflow_run` events to a 127.0.0.1 listener; each event only triggers a recheck through the API), `poll` (a `gh` check every `--interval` seconds that skips review lookups while the open-PR list is unchanged) and `auto` (webhook if installed, else poll; a dead forwarder falls back to poll). A `--recheck` safety pass runs regardless. `--seen N@SHA[:ci]` ignores a PR you already handled while its head and CI state are unchanged (a same-commit rerun from red to green wakes you). Webhook events and an independent `--recheck` deadline force a full review-history refresh; `--repo` scopes listener, listing and reviews to one repository. A just-pushed head that shows no checks yet is held for `--ci-grace` seconds (default 300) so it does not wake the reviewer before CI registers. Exit 0 ready, 2 error, 3 `--timeout`.
+- **Purpose:** Blocks in Python until there is actionable GitHub PR activity (AGENTS.md rules 15–16). The reviewer receives ready PRs and new or edited follow-up comments on reviewed heads. The author receives new or edited reviews and comments plus changes to CI or PR state. The harness waits on the process before invoking either agent. GitHub webhook forwarding or read-only `gh` polling supplies the activity.
+- **State:** The reviewer keeps `--seen N@SHA[:CI]` and `--seen-activity CURSOR` arguments for handled items. The author keeps the last handled JSON snapshot and passes it to `--after`. Use `--repo owner/name` to scope either mode. Exit 0 returns a wake-up, exit 2 reports an error, and exit 3 ends a bounded wait.
 
 ```bash
-python3 scripts/pr_review_watch.py                           # wait, then print ready PRs
-python3 scripts/pr_review_watch.py --json --seen 257@ab12cd34ef56:failed
-python3 scripts/pr_review_watch.py --source poll --interval 60 --timeout 3600
-gh extension install cli/gh-webhook                          # optional: enables --source webhook
+python3 scripts/pr_review_watch.py --json
+python3 scripts/pr_review_watch.py --json --seen 257@ab12cd34ef56:failed --seen-activity <cursor>
+python3 scripts/pr_review_watch.py --author-pr 257 --snapshot > "$pr_baseline"
+python3 scripts/pr_review_watch.py --author-pr 257 --after "$pr_baseline" --json > "$pr_wake"
 python3 -m unittest discover -s tests/pr_review_watch
 ```
 

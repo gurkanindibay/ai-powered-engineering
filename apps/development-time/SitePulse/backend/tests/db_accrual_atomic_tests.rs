@@ -326,8 +326,8 @@ async fn another_spelling_of_an_accrued_month_creates_nothing_in_the_database() 
         .await
         .expect("connection")
         .execute(
-            "INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type)
-             SELECT unit_id, 'ekim 2026', '2026-10', 1, due_date, 'PENDING', 0, debtor_type, expense_type
+            "INSERT INTO dues_liabilities (unit_id, period, period_key, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type, liable_person_id)
+             SELECT unit_id, 'ekim 2026', '2026-10', 1, due_date, 'PENDING', 0, debtor_type, expense_type, liable_person_id
              FROM dues_liabilities WHERE period_key = '2026-10' LIMIT 1",
             &[],
         )

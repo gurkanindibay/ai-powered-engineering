@@ -175,30 +175,34 @@ impl CorrectionService {
                     "Only an operational dues liability can be split and re-issued",
                 ));
             }
-            if req.replacement_shares.len() != 2 {
+            if req.replacement_shares.len() < 2 {
                 return Err(invalid(
-                    "A split re-issue must include exactly one owner share and one tenant share",
+                    "A split re-issue must include at least two replacement shares",
                 ));
             }
-            // A share is told apart by its role and, when two persons share a role, by person.
+            // A share is told apart by its role and, when multiple persons share a role, by person.
             let mut keys = std::collections::HashSet::new();
             let mut total = Decimal::ZERO;
-            let same_role =
-                req.replacement_shares[0].debtor_type == req.replacement_shares[1].debtor_type;
+            let mut role_counts = std::collections::HashMap::new();
+            for share in &req.replacement_shares {
+                *role_counts.entry(share.debtor_type).or_insert(0) += 1;
+            }
             for share in &req.replacement_shares {
                 if share.amount <= Decimal::ZERO || share.amount.normalize().scale() > 2 {
                     return Err(invalid(
                         "Each replacement share must be a positive amount with at most two decimal places",
                     ));
                 }
-                if same_role && share.liable_person_id.is_none() {
+                if role_counts.get(&share.debtor_type).copied().unwrap_or(0) > 1
+                    && share.liable_person_id.is_none()
+                {
                     return Err(invalid(
                         "Shares of the same role must each name the liable person",
                     ));
                 }
                 if !keys.insert((share.debtor_type, share.liable_person_id)) {
                     return Err(invalid(
-                        "A split re-issue must contain two different shares: one owner and one tenant, or two persons of one role",
+                        "A split re-issue must contain distinct shares: distinct roles or distinct persons of the same role",
                     ));
                 }
                 total += share.amount;
@@ -374,6 +378,17 @@ impl CorrectionService {
             let inner = self.state.inner.read().await;
             site_today(&inner, &correction.site_id)
         };
+        let owner_id = self
+            .store
+            .read(|inner| {
+                inner
+                    .units
+                    .iter()
+                    .find(|u| crate::auth::same_id(&u.id, &due.unit_id))
+                    .and_then(|u| u.owner_user_id.as_deref())
+                    .and_then(|s| s.strip_prefix("person-").unwrap_or(s).parse::<i64>().ok())
+            })
+            .await;
         let replacements: Vec<DuesLiability> = if correction.kind == CORRECTION_SPLIT_REISSUE {
             correction
                 .replacement_shares
@@ -387,16 +402,32 @@ impl CorrectionService {
                     next.paid_principal = Decimal::ZERO;
                     next.paid_penalty = Decimal::ZERO;
                     next.status = DebtStatus::Pending;
-                    next.due_date = share
-                        .due_date
-                        .or(correction.new_due_date)
-                        .unwrap_or(due.due_date);
+                    let due_date = if due.debtor_type != share.debtor_type
+                        && share.debtor_type == DebtorType::Owner
+                        && share.due_date.is_none()
+                        && correction.new_due_date.is_none()
+                    {
+                        approved_on
+                    } else {
+                        share
+                            .due_date
+                            .or(correction.new_due_date)
+                            .unwrap_or(due.due_date)
+                    };
+                    next.due_date = due_date;
                     next.debtor_type = share.debtor_type;
                     next.penalty_accrued_through = None;
                     next.effective_due_date = Some(DuesLiability::effective_due_date_for(
                         next.due_date,
                         approved_on,
                     ));
+                    if share.debtor_type == DebtorType::Owner {
+                        next.liable_person_id = share.liable_person_id.or(owner_id);
+                    } else if share.debtor_type == DebtorType::Tenant {
+                        next.liable_person_id = share.liable_person_id.or(due.liable_person_id);
+                    } else {
+                        next.liable_person_id = share.liable_person_id;
+                    }
                     if share.debtor_type == due.debtor_type
                         && share.amount < due.principal_amount
                         && correction.new_due_date.is_none()
@@ -418,20 +449,29 @@ impl CorrectionService {
                 .as_deref()
                 .map(DebtorType::from_str_loose)
                 .unwrap_or(due.debtor_type);
+            let due_date = if due.debtor_type != debtor && correction.new_due_date.is_none() {
+                approved_on
+            } else {
+                correction.new_due_date.unwrap_or(due.due_date)
+            };
             let mut next = due.clone();
+            next.id.clear();
             next.principal_amount = correction.amount;
             next.total_amount = correction.amount;
             next.delay_penalty = Decimal::ZERO;
             next.paid_principal = Decimal::ZERO;
             next.paid_penalty = Decimal::ZERO;
             next.status = DebtStatus::Pending;
-            next.due_date = correction.new_due_date.unwrap_or(due.due_date);
+            next.due_date = due_date;
             next.debtor_type = debtor;
             next.penalty_accrued_through = None;
             next.effective_due_date = Some(DuesLiability::effective_due_date_for(
                 next.due_date,
                 approved_on,
             ));
+            if debtor == DebtorType::Owner {
+                next.liable_person_id = owner_id;
+            }
             vec![next]
         } else {
             Vec::new()
@@ -498,6 +538,18 @@ impl CorrectionService {
             // The re-issued liability keeps the original's legal basis (KMK 37).
             if let Some(basis) = inner.dues_budget_basis.get(&due.id).cloned() {
                 inner.dues_budget_basis.insert(next.id.clone(), basis);
+            }
+            if next.debtor_type == DebtorType::Tenant {
+                if let Some(joint) = inner.joint_liability_owners.get(&due.id).cloned() {
+                    let joint: Vec<_> = joint
+                        .into_iter()
+                        .map(|mut j| {
+                            j.tenant_person_id = next.liable_person_id.or(j.tenant_person_id);
+                            j
+                        })
+                        .collect();
+                    inner.joint_liability_owners.insert(next.id.clone(), joint);
+                }
             }
             inner.dues.push(next.clone());
         }

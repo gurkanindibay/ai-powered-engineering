@@ -146,8 +146,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And his resident statement API lists both liabilities with their unit and role
     And the people directory shows one person "Ahmet Yılmaz", not two
 
-  # Pending: duplicate national id matching is not automated yet.
-  @SC-13-03-11 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @pending
+  @SC-13-03-11 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @linked
   Scenario: The same national id entered twice does not create a second person
     Given the site is in state F6
     When the manager moves in a tenant with the national id of "Mert Kılıç" under a different spelling of the name

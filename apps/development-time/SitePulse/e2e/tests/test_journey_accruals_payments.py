@@ -851,6 +851,9 @@ def test_multi_site_journey_accruals_through_march_first(request, api, actors, s
 
 @pytest.mark.covers("SC-13-13-02")
 @pytest.mark.covers("SC-13-26-02")
+@pytest.mark.covers("SC-13-25-02")
+@pytest.mark.covers("SC-13-25-03")
+@pytest.mark.covers("SC-13-25-04")
 @pytest.mark.covers("SC-13-25-06")
 @pytest.mark.covers("SC-13-25-07")
 @pytest.mark.gui_id("GUI-13-04")

@@ -16,7 +16,7 @@ tower = { version = "0.4", features = ["limit"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rust_decimal = { version = "1.35", features = ["serde-str", "maths", "db-tokio-postgres"] }
-tower-http = { version = "0.5", features = ["cors", "trace", "timeout"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "timeout"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.8", features = ["v4", "serde"] }
 thiserror = "2"
@@ -30,7 +30,7 @@ reqwest = { version = "0.13.5", features = ["form", "json", "rustls"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1"] }
 deadpool-postgres = "0.14"
 jsonwebtoken = { version = "11.1", default-features = false, features = ["rust_crypto", "use_pem"] }
-argon2 = "0.5"
+argon2 = "0.6"
 hmac = "0.13"
 hex = "0.4"
 chrono-tz = "0.10"
@@ -39,7 +39,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 webpki-roots = "1.0"
 # Receipt PDFs (SPEC-007 R3): embedded, subset DejaVu Sans for Turkish glyphs, and the verification QR code.
 printpdf = { version = "0.7.0", default-features = false, features = ["font_subsetting"] }
-qrcode = { version = "0.14.1", default-features = false }
+qrcode = { version = "0.15.0", default-features = false }
 utoipa = { version = "6.0.0", features = ["chrono", "decimal", "uuid"] }
 
 # Password hashing is deliberately expensive; keep it fast in debug/test builds.

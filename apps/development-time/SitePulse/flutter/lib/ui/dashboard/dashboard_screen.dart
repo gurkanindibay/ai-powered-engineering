@@ -72,6 +72,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
   String _homeOwnerSearchQuery = '';
+  final TextEditingController _residentSearchController = TextEditingController();
   String _homeOwnerBlockFilter = 'ALL';
   String _homeOwnerOccupancyFilter = 'ALL';
 
@@ -97,6 +98,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _residentSearchController.dispose();
     widget.controller.removeListener(_onControllerUpdate);
     super.dispose();
   }
@@ -797,27 +799,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 8),
 
         // Search & Filter
-        TextField(
-          onChanged: (val) {
-            setState(() {
-              _homeOwnerSearchQuery = val.trim();
-            });
-          },
-          decoration: InputDecoration(
-            hintText: 'İsim, daire no, telefon veya e-posta ile ara...',
-            hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-            prefixIcon: const Icon(Icons.search, size: 18),
-            suffixIcon: _homeOwnerSearchQuery.isNotEmpty
-                ? IconButton(
-                    tooltip: 'Aramayı temizle',
-                    icon: const Icon(Icons.clear, size: 16),
-                    onPressed: () {
-                      setState(() {
-                        _homeOwnerSearchQuery = '';
-                      });
-                    },
-                  )
-                : null,
+        testId(
+          'resident_search_field',
+          TextField(
+            controller: _residentSearchController,
+            key: const Key('resident_search_field'),
+            onChanged: (val) {
+              setState(() {
+                _homeOwnerSearchQuery = val.trim();
+              });
+            },
+            decoration: InputDecoration(
+              hintText: 'İsim, daire no, telefon veya e-posta ile ara...',
+              hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+              prefixIcon: const Icon(Icons.search, size: 18),
+              suffixIcon: _homeOwnerSearchQuery.isNotEmpty
+                  ? testId(
+                      'resident_search_clear_btn',
+                      IconButton(
+                        key: const Key('resident_search_clear_btn'),
+                        tooltip: 'Aramayı temizle',
+                        icon: const Icon(Icons.clear, size: 16),
+                        onPressed: () {
+                          _residentSearchController.clear();
+                          setState(() {
+                            _homeOwnerSearchQuery = '';
+                          });
+                        },
+                      ),
+                    )
+                  : null,
             filled: true,
             fillColor: AppColors.surface(context),
             contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
@@ -831,6 +842,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ),
+      ),
 
         const SizedBox(height: 6),
 
@@ -898,6 +910,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       TextButton(
                         key: const Key('empty_state_reset_filters_btn'),
                         onPressed: () {
+                          _residentSearchController.clear();
                           setState(() {
                             _homeOwnerSearchQuery = '';
                             _homeOwnerBlockFilter = allBlocksFilter;

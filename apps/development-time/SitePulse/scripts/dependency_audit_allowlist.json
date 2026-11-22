@@ -28,5 +28,17 @@
     "package": "crypto-bigint",
     "reason": "Reached through rsa, public-key verification only; no secret-dependent operations run in SitePulse.",
     "expires": "2027-03-31"
+  },
+  {
+    "id": "RUSTSEC-2026-0543",
+    "package": "chrono",
+    "reason": "Chrono unmaintained informational advisory; no security vulnerability reported and no drop-in replacement exists yet.",
+    "expires": "2027-03-31"
+  },
+  {
+    "id": "RUSTSEC-2026-0555",
+    "package": "chrono-tz",
+    "reason": "Chrono-tz unmaintained informational advisory; no security vulnerability reported and no drop-in replacement exists yet.",
+    "expires": "2027-03-31"
   }
 ]

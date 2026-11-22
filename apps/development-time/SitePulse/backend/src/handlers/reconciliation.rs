@@ -197,6 +197,7 @@ pub async fn confirm_reconciliation(
         unit: crate::models::IndependentUnit,
         payer_role: DebtorType,
         payer_name: String,
+        payer_person_id: Option<i64>,
         request_designation: Option<crate::models::PaymentDesignation>,
         settles_owner_capital_dues: bool,
         item: ReconciliationMatch,
@@ -277,8 +278,16 @@ pub async fn confirm_reconciliation(
             let assigned = payload
                 .debtor_assignments
                 .get(match_id)
-                .copied()
-                .or_else(|| assignment.as_ref().map(|(_, role)| *role));
+                .cloned()
+                .or_else(|| {
+                    assignment
+                        .as_ref()
+                        .map(|(_, role)| crate::models::DebtorAssignment::Role(*role))
+                })
+                .or_else(|| {
+                    m.assigned_debtor_role
+                        .map(crate::models::DebtorAssignment::Role)
+                });
             if assigned.is_none()
                 && queued.is_some_and(|q| {
                     q.status == ReconciliationStatus::Unmatched
@@ -293,12 +302,12 @@ pub async fn confirm_reconciliation(
                     ),
                 ));
             }
-            let (resolved_role, resolved_name) =
-                resolve_payer(&inner, &unit, m.transaction.sender_name.as_deref());
-            let (payer_role, payer_name) = match assigned {
-                Some(role) => (role, resolved_name),
-                None => (resolved_role, resolved_name),
-            };
+            let (payer_role, payer_name, payer_person_id) = resolve_payer_with_assignment(
+                &inner,
+                &unit,
+                m.transaction.sender_name.as_deref(),
+                assigned.as_ref(),
+            )?;
             // A due id is only trusted when it names a real due of the matched unit;
             // client-built rows may carry placeholders, which fall back to oldest-first.
             let matched_due_id = m.matched_due_id.clone().filter(|due_id| {
@@ -319,6 +328,7 @@ pub async fn confirm_reconciliation(
                 unit,
                 payer_role,
                 payer_name,
+                payer_person_id,
                 request_designation,
                 settles_owner_capital_dues: payload.owner_capital_match_ids.contains(match_id),
                 item: {
@@ -351,6 +361,7 @@ pub async fn confirm_reconciliation(
                 amount: txn.amount,
                 payer_name: line.payer_name.clone(),
                 payer_role: line.payer_role,
+                payer_person_id: line.payer_person_id,
                 payment_channel: PaymentChannel::BankStatement,
                 description: Some(txn.description.clone()),
                 // The money arrived on the statement date; penalties stop accruing there.
@@ -1659,6 +1670,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             amount: payload.amount,
             payer_name,
             payer_role,
+            payer_person_id: None,
             payment_channel: if is_virtual_iban {
                 PaymentChannel::VirtualIban
             } else {
@@ -1792,36 +1804,310 @@ pub(crate) fn resolve_payer(
     unit: &crate::models::IndependentUnit,
     sender_name: Option<&str>,
 ) -> (DebtorType, String) {
+    let (role, name, _) = resolve_payer_with_assignment(inner, unit, sender_name, None)
+        .unwrap_or_else(|_| (DebtorType::Owner, "Bilinmeyen Gönderen".to_string(), None));
+    (role, name)
+}
+
+pub(crate) fn resolve_payer_with_assignment(
+    inner: &crate::state::AppStateInner,
+    unit: &crate::models::IndependentUnit,
+    sender_name: Option<&str>,
+    assignment: Option<&crate::models::DebtorAssignment>,
+) -> Result<(DebtorType, String, Option<i64>), (StatusCode, String)> {
     let name_of = |uid: &Option<String>| {
         uid.as_ref()
             .and_then(|id| inner.users.iter().find(|u| &u.id == id))
             .map(|u| u.full_name.clone())
+            .or_else(|| {
+                uid.as_ref()
+                    .and_then(|id| id.strip_prefix("person-"))
+                    .and_then(|pid| pid.parse::<i64>().ok())
+                    .and_then(|pid| inner.users.iter().find(|u| u.person_id == Some(pid)))
+                    .map(|u| u.full_name.clone())
+            })
     };
-    let tenant_name = name_of(&unit.tenant_user_id).or_else(|| {
-        inner.unit_occupancies.get(&unit.id).and_then(|occ| {
+    let person_id_of = |uid: &Option<String>| {
+        uid.as_ref()
+            .and_then(|id| inner.users.iter().find(|u| &u.id == id))
+            .and_then(|u| u.person_id)
+            .or_else(|| {
+                uid.as_ref()
+                    .and_then(|id| id.strip_prefix("person-"))
+                    .and_then(|pid| pid.parse::<i64>().ok())
+            })
+    };
+    let occupancies = inner.unit_occupancies.get(&unit.id);
+    let active_tenant_occ = occupancies
+        .and_then(|occ| {
             occ.iter()
                 .find(|h| h.is_active && h.role == DebtorType::Tenant)
-                .map(|h| h.person_name.clone())
         })
-    });
+        .or_else(|| {
+            occupancies.and_then(|occ| {
+                occ.iter()
+                    .filter(|h| h.role == DebtorType::Tenant)
+                    .find(|h| {
+                        inner.dues.iter().any(|d| {
+                            crate::auth::same_id(&d.unit_id, &unit.id)
+                                && d.debtor_type == DebtorType::Tenant
+                                && d.liable_person_id == Some(h.person_id)
+                                && crate::services::finance_common::is_open(d)
+                        })
+                    })
+                    .or_else(|| {
+                        occ.iter()
+                            .filter(|h| h.role == DebtorType::Tenant)
+                            .max_by_key(|h| &h.start_date)
+                    })
+            })
+        });
+
+    let (tenant_name, tenant_person_id) = if let Some(name) = name_of(&unit.tenant_user_id) {
+        let pid =
+            person_id_of(&unit.tenant_user_id).or_else(|| active_tenant_occ.map(|h| h.person_id));
+        (Some(name), pid)
+    } else if let Some(h) = active_tenant_occ {
+        (Some(h.person_name.clone()), Some(h.person_id))
+    } else {
+        (None, None)
+    };
+
+    let active_owner_occ = occupancies
+        .and_then(|occ| {
+            occ.iter()
+                .find(|h| h.is_active && h.role == DebtorType::Owner)
+        })
+        .or_else(|| {
+            occupancies.and_then(|occ| {
+                occ.iter()
+                    .filter(|h| h.role == DebtorType::Owner)
+                    .max_by_key(|h| &h.start_date)
+            })
+        });
+
+    let (owner_name, owner_person_id) = if let Some(name) = name_of(&unit.owner_user_id) {
+        let pid =
+            person_id_of(&unit.owner_user_id).or_else(|| active_owner_occ.map(|h| h.person_id));
+        (Some(name), pid)
+    } else if let Some(h) = active_owner_occ {
+        (Some(h.person_name.clone()), Some(h.person_id))
+    } else {
+        (None, None)
+    };
+
     let sender = sender_name.map(str::trim).filter(|s| !s.is_empty());
-    if let (Some(sender), Some(ref tenant)) = (sender, &tenant_name) {
-        let (a, b) = (
-            crate::services::dues_ledger::fold_turkish(sender),
-            crate::services::dues_ledger::fold_turkish(tenant),
-        );
-        if a.contains(&b) || b.contains(&a) {
-            return (DebtorType::Tenant, sender.to_string());
+
+    let match_tenant = |sender_str: &str| -> Option<(String, Option<i64>)> {
+        let folded_s = crate::services::dues_ledger::fold_turkish(sender_str);
+        if let Some(ref t) = tenant_name {
+            let folded_t = crate::services::dues_ledger::fold_turkish(t);
+            if folded_s.contains(&folded_t) || folded_t.contains(&folded_s) {
+                return Some((sender_str.to_string(), tenant_person_id));
+            }
+        }
+        if let Some(occ) = occupancies {
+            for h in occ.iter().filter(|h| h.role == DebtorType::Tenant) {
+                let folded_h = crate::services::dues_ledger::fold_turkish(&h.person_name);
+                if folded_s.contains(&folded_h) || folded_h.contains(&folded_s) {
+                    return Some((sender_str.to_string(), Some(h.person_id)));
+                }
+            }
+        }
+        None
+    };
+
+    let match_owner = |sender_str: &str| -> Option<(String, Option<i64>)> {
+        let folded_s = crate::services::dues_ledger::fold_turkish(sender_str);
+        if let Some(ref o) = owner_name {
+            let folded_o = crate::services::dues_ledger::fold_turkish(o);
+            if folded_s.contains(&folded_o) || folded_o.contains(&folded_s) {
+                return Some((sender_str.to_string(), owner_person_id));
+            }
+        }
+        if let Some(occ) = occupancies {
+            for h in occ.iter().filter(|h| h.role == DebtorType::Owner) {
+                let folded_h = crate::services::dues_ledger::fold_turkish(&h.person_name);
+                if folded_s.contains(&folded_h) || folded_h.contains(&folded_s) {
+                    return Some((sender_str.to_string(), Some(h.person_id)));
+                }
+            }
+        }
+        None
+    };
+
+    // Assemble this unit's eligible debtors (unit owner, occupants, or debtors with open liabilities)
+    let mut eligible: Vec<(Option<i64>, String, DebtorType)> = Vec::new();
+    if let Some(occ) = occupancies {
+        for h in occ {
+            eligible.push((Some(h.person_id), h.person_name.clone(), h.role));
         }
     }
-    let owner_name = name_of(&unit.owner_user_id);
-    if let (Some(sender), Some(ref owner)) = (sender, &owner_name) {
-        let (a, b) = (
-            crate::services::dues_ledger::fold_turkish(sender),
-            crate::services::dues_ledger::fold_turkish(owner),
-        );
-        if a.contains(&b) || b.contains(&a) {
-            return (DebtorType::Owner, sender.to_string());
+    if let Some(ref oname) = owner_name {
+        if !eligible
+            .iter()
+            .any(|(pid, name, _)| *pid == owner_person_id && name == oname)
+        {
+            eligible.push((owner_person_id, oname.clone(), DebtorType::Owner));
+        }
+    }
+    if let Some(ref tname) = tenant_name {
+        if !eligible
+            .iter()
+            .any(|(pid, name, _)| *pid == tenant_person_id && name == tname)
+        {
+            eligible.push((tenant_person_id, tname.clone(), DebtorType::Tenant));
+        }
+    }
+    for d in inner.dues.iter().filter(|d| {
+        crate::auth::same_id(&d.unit_id, &unit.id) && crate::services::finance_common::is_open(d)
+    }) {
+        if let Some(pid) = d.liable_person_id {
+            if !eligible.iter().any(|(p, _, _)| *p == Some(pid)) {
+                let name = inner
+                    .users
+                    .iter()
+                    .find(|u| u.person_id == Some(pid))
+                    .map(|u| u.full_name.clone())
+                    .unwrap_or_else(|| format!("Person {}", pid));
+                eligible.push((Some(pid), name, d.debtor_type));
+            }
+        }
+    }
+
+    if let Some(assign) = assignment {
+        match assign {
+            crate::models::DebtorAssignment::PersonId(pid) => {
+                let pid_val = *pid;
+                let matched = eligible.iter().find(|(p, _, _)| *p == Some(pid_val));
+                if let Some((_, name, role)) = matched {
+                    return Ok((*role, name.clone(), Some(pid_val)));
+                }
+                return Err((
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    format!(
+                        "Debtor assignment '{}' is not valid for unit {}",
+                        pid_val, unit.id
+                    ),
+                ));
+            }
+            crate::models::DebtorAssignment::Person(name_str) => {
+                let trimmed = name_str.trim();
+                if trimmed.is_empty() {
+                    return Err((
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        format!("Debtor assignment cannot be empty for unit {}", unit.id),
+                    ));
+                }
+                if let Ok(pid_val) = trimmed.parse::<i64>() {
+                    let matched = eligible.iter().find(|(p, _, _)| *p == Some(pid_val));
+                    if let Some((_, name, role)) = matched {
+                        return Ok((*role, name.clone(), Some(pid_val)));
+                    }
+                    return Err((
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        format!(
+                            "Debtor assignment '{}' is not valid for unit {}",
+                            pid_val, unit.id
+                        ),
+                    ));
+                }
+                let folded = crate::services::dues_ledger::fold_turkish(trimmed);
+                if folded == "tenant" || folded == "kiraci" {
+                    let (name, pid) = sender
+                        .and_then(match_tenant)
+                        .or_else(|| tenant_name.clone().map(|n| (n, tenant_person_id)))
+                        .or_else(|| sender.map(|s| (s.to_string(), tenant_person_id)))
+                        .unwrap_or_else(|| ("Bilinmeyen Kiracı".to_string(), tenant_person_id));
+                    return Ok((DebtorType::Tenant, name, pid));
+                } else if folded == "owner" || folded == "kat maliki" {
+                    let (name, pid) = sender
+                        .and_then(match_owner)
+                        .or_else(|| owner_name.clone().map(|n| (n, owner_person_id)))
+                        .or_else(|| sender.map(|s| (s.to_string(), owner_person_id)))
+                        .unwrap_or_else(|| ("Bilinmeyen Kat Maliki".to_string(), owner_person_id));
+                    return Ok((DebtorType::Owner, name, pid));
+                }
+
+                // Match against unit's eligible debtors
+                let candidate_matches: Vec<&(Option<i64>, String, DebtorType)> = eligible
+                    .iter()
+                    .filter(|(_, cand_name, _)| {
+                        let fc = crate::services::dues_ledger::fold_turkish(cand_name);
+                        fc == folded || fc.contains(&folded) || folded.contains(&fc)
+                    })
+                    .collect();
+
+                let mut unique: Vec<(Option<i64>, String, DebtorType)> = Vec::new();
+                for cand in candidate_matches {
+                    let already_present = unique.iter().any(|u| {
+                        if u.0.is_some() && cand.0.is_some() {
+                            u.0 == cand.0
+                        } else {
+                            u.0 == cand.0 && u.1 == cand.1
+                        }
+                    });
+                    if !already_present {
+                        unique.push(cand.clone());
+                    }
+                }
+
+                if unique.is_empty() {
+                    return Err((
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        format!(
+                            "Debtor assignment '{}' is not valid for unit {}",
+                            trimmed, unit.id
+                        ),
+                    ));
+                }
+                if unique.len() > 1 {
+                    return Err((
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        format!(
+                            "Debtor assignment '{}' is ambiguous for unit {}",
+                            trimmed, unit.id
+                        ),
+                    ));
+                }
+                let Some((pid, name, role)) = unique.into_iter().next() else {
+                    return Err((
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        format!(
+                            "Debtor assignment '{}' is not valid for unit {}",
+                            trimmed, unit.id
+                        ),
+                    ));
+                };
+                return Ok((role, name, pid));
+            }
+            crate::models::DebtorAssignment::Role(role) => match role {
+                DebtorType::Tenant => {
+                    let (name, pid) = sender
+                        .and_then(match_tenant)
+                        .or_else(|| tenant_name.clone().map(|n| (n, tenant_person_id)))
+                        .or_else(|| sender.map(|s| (s.to_string(), tenant_person_id)))
+                        .unwrap_or_else(|| ("Bilinmeyen Kiracı".to_string(), tenant_person_id));
+                    return Ok((DebtorType::Tenant, name, pid));
+                }
+                DebtorType::Owner => {
+                    let (name, pid) = sender
+                        .and_then(match_owner)
+                        .or_else(|| owner_name.clone().map(|n| (n, owner_person_id)))
+                        .or_else(|| sender.map(|s| (s.to_string(), owner_person_id)))
+                        .unwrap_or_else(|| ("Bilinmeyen Kat Maliki".to_string(), owner_person_id));
+                    return Ok((DebtorType::Owner, name, pid));
+                }
+            },
+        }
+    }
+
+    if let Some(s) = sender {
+        if let Some((name, pid)) = match_tenant(s) {
+            return Ok((DebtorType::Tenant, name, pid));
+        }
+        if let Some((name, pid)) = match_owner(s) {
+            return Ok((DebtorType::Owner, name, pid));
         }
     }
 
@@ -1829,21 +2115,46 @@ pub(crate) fn resolve_payer(
     let open_debtors = open_debtor_types(inner, &unit.id);
     if open_debtors.len() == 1 {
         let single_role = open_debtors[0];
-        let name = sender
-            .map(str::to_string)
-            .or_else(|| match single_role {
-                DebtorType::Tenant => tenant_name,
-                DebtorType::Owner => name_of(&unit.owner_user_id),
-            })
-            .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
-        return (single_role, name);
+        let (name, pid) = match single_role {
+            DebtorType::Tenant => (
+                sender
+                    .map(str::to_string)
+                    .or(tenant_name)
+                    .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string()),
+                if sender.is_some() {
+                    None
+                } else {
+                    tenant_person_id
+                },
+            ),
+            DebtorType::Owner => (
+                sender
+                    .map(str::to_string)
+                    .or(owner_name)
+                    .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string()),
+                if sender.is_some() {
+                    None
+                } else {
+                    owner_person_id
+                },
+            ),
+        };
+        return Ok((single_role, name, pid));
     }
 
     let name = sender
         .map(str::to_string)
-        .or_else(|| name_of(&unit.owner_user_id))
+        .or(owner_name)
         .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
-    (DebtorType::Owner, name)
+    Ok((
+        DebtorType::Owner,
+        name,
+        if sender.is_some() {
+            None
+        } else {
+            owner_person_id
+        },
+    ))
 }
 
 /// Match id prefix of a transfer held for the manager to pick one debtor; such an

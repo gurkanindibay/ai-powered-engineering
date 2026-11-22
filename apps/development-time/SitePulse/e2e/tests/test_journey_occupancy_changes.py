@@ -13,7 +13,6 @@ from pathlib import Path
 import pytest
 
 from support.journey_attempts import JourneyManifest, teardown_sites
-from support.known_issues import DEPARTED_TENANT_KEEPS_LATER_ACCRUAL
 from support.journey_occupancy import (
     OccupancyJourney,
     build_base,
@@ -191,7 +190,6 @@ def test_sale_of_a_tenant_occupied_unit_with_the_same_tenant_is_not_split(journe
 
 
 @pytest.mark.covers("SC-13-05-18")
-@pytest.mark.xfail(strict=True, reason=DEPARTED_TENANT_KEEPS_LATER_ACCRUAL)
 @pytest.mark.core
 @pytest.mark.role_manager
 def test_tenant_left_without_notice_is_moved_out_at_the_real_date(journey_site):
@@ -206,8 +204,96 @@ def test_tenant_left_without_notice_is_moved_out_at_the_real_date(journey_site):
             j.api.call("POST", f"/api/v1/accrual-corrections/{correction['id']}/decide", reviewer.token,
                        body={"approve": True, "note": "SC-13-05-18 split approved"})
 
-    # November is split between the tenants and the owner; rows re-issued by a correction carry no person (SC-13-03-21).
+    # November is split between the tenants and the owner (SC-13-05-18).
+    assert j.shares(2, "Kasım 2026") == {"Selin Demir": D("700.00"), "Mert Kılıç": D("500.00"), "Ahmet Yılmaz": D("300.00")}
     assert j.roles(2, "Kasım 2026") == {"TENANT": D("1200.00"), "OWNER": D("300.00")}
+    assert j.shares(2, "Aralık 2026") == {"Ahmet Yılmaz": D("1500.00")}
     assert j.roles(2, "Aralık 2026") == {"OWNER": D("1500.00")}
     assert {row["due"] for row in j.share_rows(2, "Aralık 2026")} == {"2026-12-05"}
+    assert [row["name"] for row in j.share_rows(2, "Aralık 2026")] == ["Ahmet Yılmaz"]
+    assert [row["name"] for row in j.share_rows(2, "Kasım 2026") if row["debtor"] == "OWNER"] == ["Ahmet Yılmaz"]
+    assert {row["due"] for row in j.share_rows(2, "Kasım 2026") if row["debtor"] == "OWNER"} == {"2026-12-05"}
+    assert {row["name"] for row in j.share_rows(2, "Kasım 2026") if row["debtor"] == "TENANT"} == {"Selin Demir", "Mert Kılıç"}
+
+    unit = int(j.unit_id(2))
+    joint = j.stack.sql(
+        "SELECT p.full_name || '|' || tp.full_name || '|' || d.principal_amount "
+        "FROM dues_liability_joint_owners jo "
+        "JOIN persons p ON p.id = jo.owner_person_id "
+        "JOIN persons tp ON tp.id = jo.tenant_person_id "
+        "JOIN dues_liabilities d ON d.id = jo.due_id "
+        f"WHERE d.unit_id = {unit} AND d.period = 'Kasım 2026' AND d.status <> 'CANCELLED' "
+        "ORDER BY d.id;"
+    ).splitlines()
+    assert "Ahmet Yılmaz|Mert Kılıç|500.00" in joint
+    assert "Ahmet Yılmaz|Selin Demir|700.00" in joint
+
     j.invariants("SC-13-05-18")
+
+
+@pytest.mark.covers("SC-13-05-18")
+@pytest.mark.core
+@pytest.mark.role_manager
+def test_tenant_left_without_notice_delayed_approval_sets_due_date_to_approval_date(journey_site):
+    j = journey_site("F6")
+    j.clock.advance_to("2026-12-01")
+    j.accrue("Aralık 2026", due="2026-12-10")
+    j.clock.advance_to("2026-12-05")
+    transition(j, 2, "MOVE_OUT", effective_date="2026-11-25")
+    j.clock.advance_to("2026-12-09")
+    reviewer = second_manager(j)
+    for correction in j.api.call("GET", "/api/v1/accrual-corrections", reviewer.token):
+        if correction.get("status") == "PENDING":
+            j.api.call("POST", f"/api/v1/accrual-corrections/{correction['id']}/decide", reviewer.token,
+                       body={"approve": True, "note": "SC-13-05-18 delayed split approved"})
+
+    assert j.shares(2, "Kasım 2026") == {"Selin Demir": D("700.00"), "Mert Kılıç": D("500.00"), "Ahmet Yılmaz": D("300.00")}
+    assert {row["due"] for row in j.share_rows(2, "Aralık 2026")} == {"2026-12-09"}
+    assert {row["due"] for row in j.share_rows(2, "Kasım 2026") if row["debtor"] == "OWNER"} == {"2026-12-09"}
+    assert [row["name"] for row in j.share_rows(2, "Aralık 2026")] == ["Ahmet Yılmaz"]
+
+
+@pytest.mark.covers("SC-13-03-11")
+@pytest.mark.edge
+@pytest.mark.role_manager
+def test_duplicate_national_id_returns_match_without_second_person(journey_site):
+    j = journey_site("F6")
+    mert_id = int(j.people["Mert Kılıç"])
+    tckn = "10000000146"
+
+    # Step-up and record national id for Mert Kılıç
+    j.api.call("POST", "/api/v1/auth/step-up", j.manager.token, body={"password": j.fixture.manager_password})
+    j.api.call(
+        "PUT", f"/api/v1/site-admin/persons/{mert_id}/national-id?site_id={j.site_id}", j.manager.token,
+        body={"national_id": tckn},
+    )
+    # Manager moves in a tenant with the national id of "Mert Kılıç" under a different spelling of the name:
+    # duplicate check detects the matching national ID
+    candidates = j.api.call(
+        "POST", f"/api/v1/site-admin/persons/duplicate-check?site_id={j.site_id}", j.manager.token,
+        body={"full_name": "Mert Can Kılıç", "national_id": tckn},
+    )
+    assert len(candidates) >= 1
+    match = candidates[0]
+    assert match["person"]["person_id"] == mert_id
+    assert "SAME_NATIONAL_ID" in match["reasons"]
+
+    # Moving in uses the matched existing person instead of creating a duplicate
+    transition(j, 5, "REPLACE_TENANT", person={"kind": "existing", "person_id": mert_id})
+
+    # The people directory still lists one "Mert Kılıç"
+    people_resp = j.api.call("GET", f"/api/v1/site-admin/persons?site_id={j.site_id}", j.manager.token)
+    items = people_resp.get("items", people_resp) if isinstance(people_resp, dict) else people_resp
+    mert_entries = [
+        item["card"] if "card" in item else item
+        for item in items
+        if "mert" in (item.get("card", {}).get("full_name") or item.get("full_name", "")).lower()
+    ]
+    assert len(mert_entries) == 1
+    assert mert_entries[0]["person_id"] == mert_id
+    assert j.stack.sql(
+        f"SELECT count(*) FROM persons WHERE site_id = {int(j.site_id)} AND deleted_at IS NULL AND lower(full_name) LIKE '%mert%';"
+    ) == "1"
+
+    j.invariants("SC-13-03-11")
+

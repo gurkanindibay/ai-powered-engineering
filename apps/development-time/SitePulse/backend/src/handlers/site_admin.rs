@@ -345,13 +345,11 @@ pub async fn apply_occupancy_transition(
             .await
             .map_err(correction_error)?;
     }
-    if let Some(correction) = service
-        .request_open_period_split(&Caller::from_claims(&ctx.claims), &id, accrued_on)
+    let corrections = service
+        .request_occupancy_corrections(&Caller::from_claims(&ctx.claims), &id, accrued_on)
         .await
-        .map_err(correction_error)?
-    {
-        response.correction_requests.push(correction);
-    }
+        .map_err(correction_error)?;
+    response.correction_requests.extend(corrections);
     Ok(Json(response))
 }
 

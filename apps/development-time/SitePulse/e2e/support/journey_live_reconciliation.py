@@ -10,6 +10,7 @@ from datetime import date
 from decimal import Decimal
 
 from support.journey_reconciliation import PERIODS, cash_checkpoints, reconcile
+from support.journey_snapshots import section_of
 
 D = Decimal
 PERIOD_LABELS = {"January": "Ocak 2027", "February": "Şubat 2027", "March": "Mart 2027", "April": "Nisan 2027"}
@@ -44,6 +45,10 @@ def live_open_rows(api, sessions: dict[str, object], units: dict[tuple[str, str]
                 # section after Ben takes the title, instead of moving under the current holder.
                 name = debtor["name"].split()[0]
                 key = (site, label, name, LABEL_PERIODS[item["period"]])
+                assert key not in rows, (
+                    f"duplicate primary receivable row in resident statement: site {site}, period {LABEL_PERIODS[item['period']]}, "
+                    f"unit {label}, debtor {name} (due_id {item['due_id']})"
+                )
                 rows[key] = (D(str(item["principal_outstanding"])), D(str(item["penalty_outstanding"])),
                              joint.get(str(item["due_id"])))
     return rows
@@ -61,6 +66,33 @@ def assert_statements_match_model(api, sessions: dict[str, object], units: dict[
             f"!= reconciliation {expected.get(key)}")
     for site in ("A", "B"):
         totals = ledger.site_totals(site)
+        statement_principal = sum((p for (s, *_), (p, _, _) in actual.items() if s == site), D("0.00"))
+        statement_fees = sum((f for (s, *_), (_, f, _) in actual.items() if s == site), D("0.00"))
         statement_total = sum((p + f for (s, *_), (p, f, _) in actual.items() if s == site), D("0.00"))
+        assert statement_principal == totals["principal_open"], (
+            f"site {site}: open principal {statement_principal} != reconciliation {totals['principal_open']}")
+        assert statement_fees == totals["fees_open"], (
+            f"site {site}: open fees {statement_fees} != reconciliation {totals['fees_open']}")
         assert statement_total == totals["total_debt_open"], (
             f"site {site}: statements total {statement_total} != reconciliation {totals['total_debt_open']}")
+
+    # Homeowner primary debt and joint exposure (SC-13-25-03)
+    for owner, label, site in [("Cara", "A-02", "A"), ("Ivan", "B2-01", "B")]:
+        unit_id = units[(site, label)]
+        statement = api.resident_statement(sessions[site], unit_id)
+        # #295 groups the sections by liable person, so a unit with former owners
+        # or tenants lists several OWNER sections; select this person's own one.
+        owner_debtor = section_of(statement, "OWNER", owner)
+        expected_joint = ledger.joint_exposure(owner)
+        expected_primary = ledger.primary_debt(owner)
+        actual_joint = D(str(owner_debtor.get("jointly_liable_total", "0.00")))
+        actual_primary = D(str(owner_debtor.get("total_outstanding", "0.00")))
+        assert actual_joint == expected_joint, (
+            f"owner {owner} on unit {label}: joint exposure {actual_joint} != reconciliation {expected_joint}")
+        assert actual_primary == expected_primary, (
+            f"owner {owner} on unit {label}: primary debt {actual_primary} != reconciliation {expected_primary}")
+
+    statement_a03 = api.resident_statement(sessions["A"], units[("A", "A-03")])
+    fay = section_of(statement_a03, "OWNER", "Fay")
+    assert D(str(fay["total_outstanding"])) == ledger.primary_debt("Fay"), (
+        f"Fay primary debt {fay['total_outstanding']} != reconciliation {ledger.primary_debt('Fay')}")

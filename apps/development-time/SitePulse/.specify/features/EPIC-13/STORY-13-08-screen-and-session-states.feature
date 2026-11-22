@@ -35,8 +35,7 @@ Feature: Manager screen and session states
       | unit directory      | network error | seven units including A-7  |
       | payment stream      | HTTP 503      | the A-6 payment of 8000.00 |
 
-  # Pending: GUI journey automation for zero-match unit search recovery is pending.
-  @SC-13-08-03 @J-15 @depth:2 @state:F5 @layer:gui @core @role_manager @pending
+  @SC-13-08-03 @J-15 @depth:2 @state:F5 @layer:gui @core @role_manager @linked
   Scenario: A search with zero matches is recoverable without changing the site
     Given a manager has opened the populated unit directory in state F5
     When the manager searches for an absent unit label
@@ -55,8 +54,7 @@ Feature: Manager screen and session states
     Then only the second site's 8800.00 and its own rows appear
     And browser back and a saved link to the first site reveal no first-site data
 
-  # Pending: GUI journey automation for cancelling accrual confirmation is pending.
-  @SC-13-08-05 @J-15 @depth:1 @state:F2 @layer:gui @core @role_manager @pending
+  @SC-13-08-05 @J-15 @depth:1 @state:F2 @layer:gui @core @role_manager @linked
   Scenario: Cancelling accrual confirmation makes no financial change
     Given a manager in state F2 has opened the first accrual confirmation with valid inputs
     When the manager cancels and returns to collection tracking

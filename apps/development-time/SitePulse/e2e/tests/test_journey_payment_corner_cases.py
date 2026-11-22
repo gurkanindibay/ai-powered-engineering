@@ -337,19 +337,14 @@ def test_transfer_on_unit_with_several_debtors_is_held_for_the_manager(request, 
 @pytest.mark.covers("SC-13-04-15")
 @pytest.mark.core
 @pytest.mark.role_manager
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG #278 and #255: the API assigns a held item only by debtor role (OWNER/TENANT), not to a person, "
-    "and approving it for the tenant credits the whole amount as an advance instead of settling Mert Kılıç's share",
-)
 def test_approved_held_transfer_settles_only_the_assigned_person(request, api, actors, stack):
     with _multi_debtor_unit(request, api, actors, stack) as (j, a2):
         item = _hold_transfer(api, stack, j, a2)
-        # The closest the API offers to "assign to Mert Kılıç" is the TENANT role (he is the current tenant).
+        # SC-13-04-15: Assign explicitly to Mert Kılıç.
         api.call(
             "POST", "/api/v1/bank/statements/confirm-reconciliation", j.manager.token,
             body={"site_id": j.site_id, "match_ids": [item["match_id"]],
-                  "debtor_assignments": {item["match_id"]: "TENANT"}},
+                  "debtor_assignments": {item["match_id"]: "Mert Kılıç"}},
         )
 
         def paid(person: str, period: str) -> Decimal:
@@ -364,6 +359,8 @@ def test_approved_held_transfer_settles_only_the_assigned_person(request, api, a
         assert paid("Ahmet Yılmaz", "Eylül 2026") == D("0.00")
         assert paid("Ahmet Yılmaz", "Ekim 2026") == D("0.00")
         assert stack.sql(f"SELECT COALESCE(SUM(allocated_advance), 0) FROM payment_receipts WHERE site_id = {int(j.site_id)};") == "0.00"
+        assert stack.sql(f"SELECT payer_name || '|' || payer_role FROM payment_receipts WHERE site_id = {int(j.site_id)};") == "Mert Kılıç|TENANT"
+        assert stack.sql(f"SELECT p.full_name FROM payment_receipts r JOIN persons p ON p.id = r.payer_person_id WHERE r.site_id = {int(j.site_id)};") == "Mert Kılıç"
         j.invariants("SC-13-04-15-approved")
 
 

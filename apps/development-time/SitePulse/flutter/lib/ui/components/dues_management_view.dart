@@ -655,9 +655,13 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 ],
               ),
               actions: [
-                TextButton(
-                  onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
-                  child: const Text(AppStrings.cancel),
+                testId(
+                  'btn_cancel_period_accrual',
+                  TextButton(
+                    key: const Key('btn_cancel_period_accrual'),
+                    onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
+                    child: const Text(AppStrings.cancel),
+                  ),
                 ),
                 testId('btn_confirm_period_accrual', ElevatedButton(
                   style: ElevatedButton.styleFrom(

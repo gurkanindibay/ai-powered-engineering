@@ -628,7 +628,9 @@ impl PaymentTrackingService {
                 eligible_joint_due_ids,
             )
         };
-        let resolved_payer_person_id = {
+        let resolved_payer_person_id = if let Some(pid) = req.payer_person_id {
+            Some(pid)
+        } else {
             let folded_payer = crate::domain::fold_turkish(req.payer_name.trim());
             if owner_name
                 .as_ref()

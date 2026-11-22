@@ -59,7 +59,7 @@ pub struct DuesBasis {
 
 /// The operational dues of `unit` due on `due_date`: the unit's monthly share of the
 /// budget in force, or (only where the site does not require a budget) its
-/// house-type tariff. `Err` explains why nothing may be accrued.
+/// per-unit override, else its house-type tariff. `Err` explains why nothing may be accrued.
 pub fn operational_dues_basis(
     inner: &AppStateInner,
     unit: &IndependentUnit,
@@ -90,7 +90,12 @@ pub fn operational_dues_basis(
             amount,
             operating_budget_id: None,
         })
-        .ok_or_else(|| format!("Unit {} has no house-type tariff", unit.id))
+        .ok_or_else(|| {
+            format!(
+                "Unit {} has no per-unit tariff and no house-type tariff",
+                unit.id
+            )
+        })
 }
 
 pub fn budget_in_force<'a>(
