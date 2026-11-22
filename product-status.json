@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-22T15:05:10Z",
- "run_id": "20261122T150509Z-ecd5585",
- "commit": "ecd55857441b9aba61e47b8541c38873a9fdbc62",
+ "generated_at": "2026-11-22T15:20:37Z",
+ "run_id": "20261122T152036Z-c5beaee",
+ "commit": "c5beaee3184f9fbc871e9299e90d02d09bbbd2cb",
  "task": "master",
  "status": "DEFECT",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 3,
   "passed": 273,
-  "seconds": 2910.5,
+  "seconds": 3124.9,
   "files": 8,
   "unparseable": []
  },
@@ -3948,5 +3948,5 @@
    ]
   }
  ],
- "href": "reports/45034509914-1/"
+ "href": "reports/45035006437-1/"
 }
