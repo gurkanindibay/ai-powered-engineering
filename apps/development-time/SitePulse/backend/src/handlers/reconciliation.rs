@@ -311,7 +311,9 @@ pub async fn confirm_reconciliation(
                     format!("Match {} is rejected and cannot be approved", match_id),
                 ));
             }
-            if queued.is_some_and(|q| q.status == ReconciliationStatus::Approved) {
+            if match_id.starts_with(DEBTOR_REVIEW_PREFIX)
+                && queued.is_some_and(|q| q.status == ReconciliationStatus::Approved)
+            {
                 return Err((
                     StatusCode::CONFLICT,
                     format!("Match {} is already approved", match_id),
