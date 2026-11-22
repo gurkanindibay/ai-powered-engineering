@@ -11,32 +11,24 @@ Pair rule for reviewers: [pr-reviewer-polling.md](pr-reviewer-polling.md).
 
 ## The loop
 
-After the PR is open, labelled (rule 10) and pushed, **watch it until it is merged or closed**. There is no timer; you block on two cheap watchers and wake only when something happens. Run each as a background command (or with your harness's monitor tool) so you are notified when it exits. Keep the claim labels on the issue and the PR while you wait.
+After opening and labeling the PR, watch it until it is merged or closed. Keep its claim labels in place while waiting. The harness starts the Python watcher as a background process and resumes the author on exit. GitHub I/O and idle waits happen in the process.
 
-1. **CI:** `gh pr checks <pr> --watch` blocks until every check finishes (rule 12). Note it watches checks only, it does not report comments.
-2. **Review activity:** after CI is green, wait for a new review, comment or state change by someone other than you. Take a baseline right after your own last push or reply (so your own comment does not wake you), then loop:
+1. **CI.** Run `gh pr checks <pr> --watch` as required by rule 12.
+2. **Review activity.** Capture a baseline once, and inspect any review or comment already present in it before waiting. Keep the file outside the worktree.
 
    ```bash
-   snap() { gh pr view <pr> --json state,headRefOid,reviews,comments --jq '[.state,.headRefOid,(.reviews|length),(.comments|length)]|@tsv'; }
-   base=$(snap); until [ "$(snap)" != "$base" ]; do sleep 60; done; snap
+   python3 scripts/pr_review_watch.py --author-pr <pr> --snapshot > "$pr_baseline"
+   python3 scripts/pr_review_watch.py --author-pr <pr> --after "$pr_baseline" --json > "$pr_wake"
    ```
 
-   The loop costs no model tokens while it waits (a `gh` call per minute). When it exits, go to "Each wake-up" below. Do not use a model-driven timer or poll every few minutes in the conversation.
+   The watcher reports new or edited reviews, conversation comments, inline review comments and changes to the PR's head, state, CI, draft status, review decision or mergeability. It filters out the PR author's own comments. A wake-up contains changed fields, links to new activity and a snapshot that can be passed directly to `--after`. After handling the wake-up, advance the baseline to that output and restart the watcher. Keep the handled baseline across pushes and CI waits so that feedback arriving during fixes is picked up on the next call. Use a different output path from the input for every wait. Exit 2 reports a watcher error, and exit 3 ends a bounded wait without new activity.
 
-**Compact before every wake-up.** Before acting on a wake-up, compact your context (`/compact` in Claude Code, or your harness's equivalent; if none exists, continue in a fresh session). Keep only this handoff state, and write it into the compaction summary or the watcher's follow-up prompt so the next wake-up can resume cold: PR number, issue number, branch, worktree path, harness and claim session id, last pushed head SHA, last review or comment you handled, and the number of fix rounds per blocking note. Drop diffs, logs and earlier tool output; re-read only what the wake-up needs (AGENTS.md rule 9).
-
-Each wake-up, read the current state (cheap, compact output):
-
-```bash
-gh pr view <pr> --json state,isDraft,mergeable,reviewDecision,headRefOid,reviews,comments \
-  --jq '{state,mergeable,reviewDecision,head:.headRefOid,reviews:[.reviews[]|{u:.author.login,s:.state,c:.commit.oid}],last:[.comments[-3:][]|{u:.author.login,b:(.body|.[0:200])}]}'
-gh pr checks <pr>
-```
+**Compact before every wake-up.** Carry the PR, issue, branch, worktree, harness and claim session ID, author snapshot path, and fix count for each blocking note. Read linked reviews and comments in GitHub and verify the live head and CI before acting. The snapshot can become stale between the wake-up and an action.
 
 Then act on exactly one of these cases:
 
 1. **Nothing new** (no review or comment since your last push or last wake-up): do nothing and go back to watching.
-2. **Review notes to fix** (a `CHANGES_REQUESTED` review, or a comment or review body that lists problems): fix every note in your own worktree and branch, run the relevant local suite (rule 3), push, reply on the PR with what changed (one comment, citing the commit), wait for CI to go green (rule 12), then take a fresh baseline and go back to watching. The reviewer's watcher wakes it for the new head once CI finishes.
+2. **Review notes to fix** (a `CHANGES_REQUESTED` review, or a comment or review body that lists problems): fix every note in your own worktree and branch, run the relevant local suite (rule 3), push, reply on the PR with what changed (one comment, citing the commit), wait for CI to go green (rule 12), then resume from the last handled baseline. The reviewer's watcher wakes it for the new head once CI finishes.
    - If you disagree with a note, do not silently skip it: reply with the reasoning and let the reviewer decide.
 3. **Approved with no notes**: go to Merge.
 4. **Approved with minor notes**: fix the notes, push, wait for CI to go green, then Merge. Do not wait for a second approval of the fix commits.
@@ -63,7 +55,7 @@ Use the repository's merge style (squash). Never use `--admin`, never bypass bra
 
 ## Close and clean up (all of it, in this order)
 
-1. **Stop the watchers first**, so nothing fires mid-cleanup or after the worktree is gone: kill the background `gh pr checks --watch` and the review-wait loop you started (stop the background task, or `pkill -f 'gh pr checks <pr>'`) and confirm none is left running. Do this on every exit from the loop, not only after a merge: PR closed unmerged, user says stop, or you hand the PR to the user. If your harness also gave you a timer, cancel that too.
+1. **Stop the watchers first**, so nothing fires mid-cleanup or after the worktree is gone: kill the background `gh pr checks --watch` and the Python watcher you started using their background task handles and confirm none is left running. Do this on every exit from the loop, not only after a merge: PR closed unmerged, user says stop, or you hand the PR to the user. If your harness also gave you a timer, cancel that too.
 2. **Close the issue**: confirm it is closed (the PR body should say `Closes #<n>`); if not, `gh issue close <issue> --comment "Delivered in #<pr>"`.
 3. **Release the claims** on the issue and the PR: `python3 scripts/issue_claim.py release <issue> --harness <name> --session <id> --pr <pr>`.
 4. **Remove your worktree** (rule 11): confirm it is clean and pushed, then `git -C <main-checkout> worktree remove <worktree-path>`. If your host manages the worktree and you cannot remove it from inside, use the host's cleanup, or report the path and branch as ready to delete.

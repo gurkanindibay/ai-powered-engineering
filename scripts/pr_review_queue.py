@@ -47,9 +47,11 @@ class GhError(RuntimeError):
 
 def run_gh(args: list[str]) -> str:
     try:
-        proc = subprocess.run(["gh", *args], capture_output=True, text=True, check=False)
+        proc = subprocess.run(["gh", *args], capture_output=True, text=True, check=False, timeout=60)
     except FileNotFoundError as exc:
         raise GhError("gh CLI not found") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise GhError("gh command timed out") from exc
     if proc.returncode != 0:
         raise GhError(f"gh {' '.join(args[:3])} failed: {proc.stderr.strip()[:300]}")
     return proc.stdout
@@ -100,7 +102,8 @@ def classify(pr: dict[str, Any], last_review: dict[str, Any] | None, skip_author
         return {**entry, "bucket": "skipped", "reason": "own_pr"}
     reason = review_reason(head, last_review)
     if reason is None:
-        return {**entry, "bucket": "skipped", "reason": "already_reviewed"}
+        return {**entry, "bucket": "skipped", "reason": "already_reviewed",
+                "reviewed_at": (last_review or {}).get("submitted_at")}
     if ci == "pending":
         return {**entry, "bucket": "waiting_ci", "reason": reason}
     return {**entry, "bucket": "ready", "reason": reason}

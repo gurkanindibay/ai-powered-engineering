@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Block until a PR is ready for review, then print it and exit (AGENTS.md rule 16).
+"""Wait for actionable GitHub pull request activity and exit (AGENTS.md rules 15–16).
 
 Event-driven companion to pr_review_queue.py. The reviewer agent runs it as a
 background command (or with its harness's monitor tool) and is woken only when
@@ -8,12 +8,11 @@ the review queue has something new, instead of re-checking on a model timer.
 Event sources (``--source``):
 
     webhook   ``gh webhook forward`` (the ``cli/gh-webhook`` extension) relays the
-              repository's pull_request, pull_request_review, check_suite and
-              workflow_run events to a local HTTP listener on 127.0.0.1. Each
+              repository's pull request, review, comment and CI events to a local HTTP listener on 127.0.0.1. Each
               event only triggers a queue recheck through the GitHub API, so the
               payload is never trusted. Needs admin rights on the repository.
     poll      a quiet ``gh`` check every ``--interval`` seconds. Review lookups
-              run only when the open-PR list (heads, drafts, CI state) changed.
+              run only when the open-PR list (heads, drafts, CI state, update times) changed.
     auto      webhook when the extension is installed, else poll (default). A
               webhook forwarder that fails or dies falls back to poll.
 
@@ -45,7 +44,7 @@ Usage:
     python3 scripts/pr_review_watch.py --source poll --interval 60
     python3 scripts/pr_review_watch.py --seen 257@ab12cd34ef56 --timeout 3600
 
-Exit codes: 0 ready PRs found, 2 gh/usage error, 3 --timeout reached.
+Exit codes: 0 actionable activity found, 2 gh/usage error, 3 --timeout reached.
 Needs an authenticated `gh` (reading only; reviews are posted via review_bot.py).
 """
 
@@ -53,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import subprocess
 import sys
 import threading
@@ -63,9 +63,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pr_review_activity as activity_tool  # noqa: E402
 import pr_review_queue as queue_tool  # noqa: E402
 
-EVENTS = "pull_request,pull_request_review,check_suite,workflow_run"
+EVENTS = (
+    "pull_request,pull_request_review,pull_request_review_comment,issue_comment,"
+    "check_run,check_suite,status,workflow_run"
+)
 EXIT_READY, EXIT_ERROR, EXIT_TIMEOUT = 0, 2, 3
 
 Gh = queue_tool.Gh
@@ -97,7 +101,7 @@ def unseen(ready: list[Entry], seen: Seen) -> list[Entry]:
     out = []
     for e in ready:
         key = seen_key(seen, e)
-        if key is None:
+        if key is None or e["reason"] == "feedback":
             out.append(e)
             continue
         if seen[key] is None:
@@ -115,7 +119,7 @@ def seen_key(seen: Seen, e: Entry) -> tuple[int, str] | None:
 def bind_absent(seen: Seen, ready: list[Entry]) -> None:
     """At the first check, a bare --seen PR that is not ready (for example its CI rerun is
     still pending) binds to "absent", so its later appearance in any state wakes the reviewer."""
-    present = {seen_key(seen, e) for e in ready}
+    present = {seen_key(seen, e) for e in ready if e["reason"] != "feedback"}
     for key, state in seen.items():
         if state is None and key not in present:
             seen[key] = "absent"
@@ -135,24 +139,37 @@ def scoped_gh(gh: Gh, repo: str) -> Gh:
 class QueueCheck:
     """Recompute the ready list, skipping review lookups while the PR list is unchanged."""
 
-    def __init__(self, gh: Gh, bot_login: str, skip_authors: set[str], limit: int) -> None:
+    def __init__(self, gh: Gh, bot_login: str, skip_authors: set[str], limit: int,
+                 seen_activity: set[str] | None = None) -> None:
+        self.seen_activity = seen_activity or set()
         self.gh, self.bot_login, self.skip_authors, self.limit = gh, bot_login, skip_authors, limit
         self._fingerprint: str | None = None
         self._ready: list[Entry] = []
 
     def fingerprint(self) -> str:
-        fields = "number,isDraft,headRefOid,statusCheckRollup"
+        fields = "number,isDraft,headRefOid,updatedAt,statusCheckRollup"
         prs = json.loads(self.gh(["pr", "list", "--state", "open", "--limit", str(self.limit),
                                   "--json", fields]) or "[]")
         summary = sorted((p["number"], p.get("headRefOid", ""), bool(p.get("isDraft")),
-                          queue_tool.ci_state(p.get("statusCheckRollup"))) for p in prs)
+                          queue_tool.ci_state(p.get("statusCheckRollup")), p.get("updatedAt")) for p in prs)
         return json.dumps(summary)
 
     def __call__(self, force: bool = False) -> list[Entry]:
         current = self.fingerprint()
         if force or current != self._fingerprint:
             queue = queue_tool.build_queue(self.gh, self.bot_login, self.skip_authors, self.limit)
-            self._ready = queue["ready"]
+            ready = queue["ready"]
+            for entry in queue["skipped"]:
+                reviewed_at = entry.get("reviewed_at")
+                if reviewed_at is None:
+                    continue
+                activity = activity_tool.read_activity(
+                    self.gh, entry["number"], self.bot_login, reviewed_at, include_reviews=False,
+                )
+                fresh = [item for item in activity if item["cursor"] not in self.seen_activity]
+                if fresh:
+                    ready.append({**entry, "reason": "feedback", "activity": fresh})
+            self._ready = ready
             self._fingerprint = current
         return self._ready
 
@@ -165,7 +182,7 @@ def settle(found: list[Entry], first_seen: dict[tuple[int, str], float], now: fl
     Returns the ready entries and the time the next held head becomes due, if any."""
     ready, next_due = [], None
     for e in found:
-        if e.get("ci") != "none":
+        if e.get("ci") != "none" or e.get("reason") == "feedback":
             ready.append(e)
             continue
         key = (e["number"], e["head"][:12])
@@ -186,19 +203,32 @@ def watch(check: Callable[[bool], list[Entry]], trigger: Trigger, seen: Seen,
     A full refresh (review history included) runs at the start, on every EVENT, on a
     TIMEOUT, and whenever the independent `recheck` deadline has passed, so frequent
     poll ticks or webhook events can never postpone it."""
-    deadline = None if timeout is None else clock() + timeout
     first_seen: dict[tuple[int, str], float] = {}
-    next_refresh = clock()
     first = True
-    while True:
-        force = clock() >= next_refresh
-        if force:
-            next_refresh = clock() + recheck
+
+    def settled_check(force: bool) -> tuple[list[Entry], float | None]:
+        nonlocal first
         ready = check(force)
         if first:
             bind_absent(seen, ready)
             first = False
-        found, next_due = settle(unseen(ready, seen), first_seen, clock(), ci_grace)
+        return settle(unseen(ready, seen), first_seen, clock(), ci_grace)
+
+    return wait_for_action(settled_check, trigger, recheck, timeout, debounce, clock, sleep)
+
+
+def wait_for_action(check: Callable[[bool], tuple[list[Entry], float | None]],
+                    trigger: Trigger, recheck: float,
+                    timeout: float | None, debounce: float,
+                    clock: Callable[[], float] = time.monotonic,
+                    sleep: Callable[[float], None] = time.sleep) -> list[Entry] | None:
+    deadline = None if timeout is None else clock() + timeout
+    next_refresh = clock()
+    while True:
+        force = clock() >= next_refresh
+        if force:
+            next_refresh = clock() + recheck
+        found, next_due = check(force)
         if found:
             return found
         now = clock()
@@ -262,8 +292,8 @@ class WebhookListener:
 
 def webhook_available(run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run) -> bool:
     try:
-        return run(["gh", "webhook", "--help"], capture_output=True, text=True, check=False).returncode == 0
-    except FileNotFoundError:
+        return run(["gh", "webhook", "--help"], capture_output=True, text=True, check=False, timeout=30).returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
 
 
@@ -295,6 +325,7 @@ class Forwarder:
                 self.proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
+                self.proc.wait()
 
 
 def webhook_trigger(listener: WebhookListener, forwarder: Forwarder,
@@ -321,12 +352,25 @@ def webhook_trigger(listener: WebhookListener, forwarder: Forwarder,
 
 
 def format_text(found: list[Entry]) -> str:
-    return "\n".join(f"#{e['number']}\t{e['reason']}\tci={e['ci']}\t{e['head']}\t{e['title'][:70]}" for e in found)
+    lines = []
+    for entry in found:
+        lines.append(f"#{entry['number']}\t{entry['reason']}\tci={entry['ci']}\t"
+                     f"{entry['head']}\t{entry['title'][:70]}")
+        for item in entry.get("activity", []):
+            lines.append(f"  {item['kind']}\t{item['author']}\t{item['url']}\t{item['cursor']}")
+    return "\n".join(lines)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("--json", action="store_true", help="print {source, ready} as JSON")
+    p.add_argument("--json", action="store_true", help="print the wake-up result as JSON")
+    p.add_argument("--author-pr", type=int, metavar="N",
+                   help="watch one authored PR for reviews, comments and state changes")
+    baseline = p.add_mutually_exclusive_group()
+    baseline.add_argument("--snapshot", action="store_true", help="print the author snapshot as JSON and exit")
+    baseline.add_argument("--after", type=Path, help="watch for changes since an author snapshot JSON file")
+    p.add_argument("--seen-activity", action="append", default=[], metavar="CURSOR",
+                   help="acknowledge one handled reviewer feedback item (repeatable)")
     p.add_argument("--source", choices=["auto", "webhook", "poll"], default="auto", help="event source (default auto)")
     p.add_argument("--interval", type=float, default=60.0, help="poll interval in seconds (default 60)")
     p.add_argument("--recheck", type=float, default=900.0, help="safety recheck in seconds (default 900)")
@@ -343,7 +387,37 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     args = p.parse_args(argv)
     if args.interval <= 0 or args.recheck <= 0 or args.debounce < 0 or args.ci_grace < 0:
         p.error("--interval and --recheck must be positive, --debounce and --ci-grace not negative")
+    if args.timeout is not None and args.timeout < 0:
+        p.error("--timeout cannot be negative")
+    if args.author_pr is not None:
+        if args.author_pr < 1 or not (args.after or args.snapshot):
+            p.error("--author-pr requires a positive PR number and --snapshot or --after")
+        if args.seen or args.seen_activity:
+            p.error("--seen and --seen-activity apply to reviewer mode")
+    elif args.after or args.snapshot:
+        p.error("--snapshot and --after require --author-pr")
     return args
+
+
+def author_check(gh: Gh, repo: str, number: int, baseline: Path
+                 ) -> Callable[[bool], tuple[list[Entry], None]]:
+    previous = json.loads(baseline.read_text(encoding="utf-8"))
+    required = {"repo", "number", "state", "head", "draft", "mergeable", "review_decision", "ci", "activity"}
+    if isinstance(previous, dict) and "snapshot" in previous:
+        previous = previous["snapshot"]
+    if (not isinstance(previous, dict) or not required.issubset(previous)
+            or str(previous["repo"]).casefold() != repo.casefold() or previous["number"] != number
+            or not isinstance(previous["activity"], list)
+            or any(not isinstance(item, dict) or not isinstance(item.get("cursor"), str)
+                   for item in previous["activity"])):
+        raise ValueError("--after must contain a snapshot for the watched repository and PR")
+
+    def check(_force: bool) -> tuple[list[Entry], None]:
+        snapshot = activity_tool.author_snapshot(gh, repo, number)
+        changes = activity_tool.author_changes(snapshot, previous)
+        return ([changes] if changes else []), None
+
+    return check
 
 
 def main(argv: list[str] | None = None, gh: Gh = queue_tool.run_gh) -> int:
@@ -362,7 +436,14 @@ def main(argv: list[str] | None = None, gh: Gh = queue_tool.run_gh) -> int:
     try:
         # One repository for the listener, the PR listing and the review history.
         repo = args.repo or gh(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).strip()
-        check = QueueCheck(scoped_gh(gh, repo), args.bot_login, set(args.skip_author), args.limit)
+        scoped = scoped_gh(gh, repo)
+        if args.snapshot:
+            print(json.dumps(activity_tool.author_snapshot(scoped, repo, args.author_pr), indent=2))
+            return EXIT_READY
+        if args.author_pr is not None:
+            check = author_check(scoped, repo, args.author_pr, args.after)
+        else:
+            check = QueueCheck(scoped, args.bot_login, set(args.skip_author), args.limit, set(args.seen_activity))
         if args.source in ("auto", "webhook"):
             if webhook_available():
                 listener = WebhookListener().start()
@@ -374,8 +455,11 @@ def main(argv: list[str] | None = None, gh: Gh = queue_tool.run_gh) -> int:
             else:
                 note("gh webhook extension not installed; polling every %gs" % args.interval)
         note(f"watching {repo} via {source}")
-        found = watch(check, trigger, seen, args.recheck, args.timeout, args.debounce, ci_grace=args.ci_grace)
-    except (queue_tool.GhError, json.JSONDecodeError) as exc:
+        if args.author_pr is not None:
+            found = wait_for_action(check, trigger, args.recheck, args.timeout, args.debounce)
+        else:
+            found = watch(check, trigger, seen, args.recheck, args.timeout, args.debounce, ci_grace=args.ci_grace)
+    except (queue_tool.GhError, OSError, ValueError) as exc:
         note(f"error: {exc}")
         return EXIT_ERROR
     except KeyboardInterrupt:
@@ -389,9 +473,18 @@ def main(argv: list[str] | None = None, gh: Gh = queue_tool.run_gh) -> int:
     if found is None:
         note("timeout, nothing ready")
         return EXIT_TIMEOUT
-    print(json.dumps({"source": source, "ready": found}, indent=2) if args.json else format_text(found), flush=True)
+    if args.author_pr is not None:
+        result = found[0]
+        if args.json:
+            print(json.dumps(result, indent=2), flush=True)
+        else:
+            print(f"#{args.author_pr}: {len(result['activity'])} activity item(s), "
+                  f"changed fields: {', '.join(result['changed']) or 'none'}", flush=True)
+    else:
+        print(json.dumps({"source": source, "ready": found}, indent=2) if args.json else format_text(found), flush=True)
     return EXIT_READY
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     raise SystemExit(main())

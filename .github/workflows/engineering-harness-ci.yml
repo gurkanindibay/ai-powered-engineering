@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/pr_review_queue.py'
       - 'scripts/pr_review_watch.py'
+      - 'scripts/pr_review_activity.py'
       - 'tests/pr_review_queue/**'
       - 'tests/pr_review_watch/**'
       - 'scripts/engineering_harness/**'
@@ -21,6 +22,7 @@ on:
     paths:
       - 'scripts/pr_review_queue.py'
       - 'scripts/pr_review_watch.py'
+      - 'scripts/pr_review_activity.py'
       - 'tests/pr_review_queue/**'
       - 'tests/pr_review_watch/**'
       - 'scripts/engineering_harness/**'
