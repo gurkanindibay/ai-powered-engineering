@@ -617,3 +617,62 @@ async fn when_manual_payment_requests_unrelated_person_then_payer_person_id_is_n
         .unwrap();
     assert_eq!(due.paid_principal, Decimal::ZERO);
 }
+
+#[tokio::test]
+async fn when_unassigned_confirmation_has_unrecognized_sender_and_person_stamped_charge_then_preserves_debtor_identity(
+) {
+    let state = state_with(vec![DuesLiability {
+        liable_person_id: Some(102),
+        ..due("mert-stamped-oct", DebtorType::Tenant)
+    }])
+    .await;
+
+    let match_id = "MATCH-UNRECOGNIZED-01";
+    {
+        let mut inner = state.inner.write().await;
+        inner.reconciliation_queue.push(ReconciliationMatch {
+            match_id: match_id.to_string(),
+            site_id: "site-1".to_string(),
+            transaction: BankTransactionItem {
+                transaction_id: "TX-UNREC-01".to_string(),
+                date: chrono::Utc::now().date_naive(),
+                amount: d("800.00"),
+                currency: "TRY".to_string(),
+                description: "Aidat ödemesi".to_string(),
+                sender_name: Some("Unrecognized Stranger".to_string()),
+                sender_iban: None,
+                reference_no: None,
+            },
+            matched_unit_id: Some(UNIT.to_string()),
+            matched_block: Some("A".to_string()),
+            matched_unit_number: Some(14),
+            matched_resident_name: Some("Unrecognized Stranger".to_string()),
+            confidence_score: 90,
+            matched_due_id: None,
+            outstanding_balance: Some(d("800.00")),
+            amount_matches_balance: true,
+            status: ReconciliationStatus::PendingApproval,
+            status_code: "ONAY_BEKLIYOR".to_string(),
+            notes: None,
+            assigned_unit_id: None,
+            assigned_debtor_role: None,
+        });
+    }
+
+    let done = confirm(&state, match_id, None).await.unwrap();
+    assert_eq!(done.confirmed_count, 1);
+
+    let inner = state.inner.read().await;
+    assert_eq!(inner.payment_receipts.len(), 1);
+    let receipt = &inner.payment_receipts[0];
+    assert_eq!(receipt.payer_person_id, None);
+    assert_eq!(receipt.payer_name, "Unrecognized Stranger");
+
+    let due = inner
+        .dues
+        .iter()
+        .find(|x| x.id == "mert-stamped-oct")
+        .unwrap();
+    assert_eq!(due.paid_principal, Decimal::ZERO);
+    assert_eq!(receipt.allocated_advance, d("800.00"));
+}

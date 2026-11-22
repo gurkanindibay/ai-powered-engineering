@@ -2121,14 +2121,22 @@ pub(crate) fn resolve_payer_with_assignment(
                     .map(str::to_string)
                     .or(tenant_name)
                     .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string()),
-                tenant_person_id,
+                if sender.is_some() {
+                    None
+                } else {
+                    tenant_person_id
+                },
             ),
             DebtorType::Owner => (
                 sender
                     .map(str::to_string)
                     .or(owner_name)
                     .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string()),
-                owner_person_id,
+                if sender.is_some() {
+                    None
+                } else {
+                    owner_person_id
+                },
             ),
         };
         return Ok((single_role, name, pid));
@@ -2138,7 +2146,15 @@ pub(crate) fn resolve_payer_with_assignment(
         .map(str::to_string)
         .or(owner_name)
         .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
-    Ok((DebtorType::Owner, name, owner_person_id))
+    Ok((
+        DebtorType::Owner,
+        name,
+        if sender.is_some() {
+            None
+        } else {
+            owner_person_id
+        },
+    ))
 }
 
 /// Match id prefix of a transfer held for the manager to pick one debtor; such an
