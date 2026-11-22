@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -56,8 +57,18 @@ def _read_executions(path: Path) -> dict[str, dict]:
             row = json.loads(line)
         except json.JSONDecodeError as error:
             raise ValueError(f"invalid execution JSON on line {line_number}") from error
-        scenario = str(row.get("scenario", ""))
+        if not isinstance(row, dict):
+            raise ValueError(f"execution record on line {line_number} is not an object")
+        scenario = row.get("scenario")
+        if not isinstance(scenario, str) or scenario not in {case[0] for case in CASES}:
+            continue
         example_row = row.get("example_row")
+        if example_row is not None and type(example_row) is not int:
+            raise ValueError(f"invalid example row on line {line_number}")
+        if scenario == "SC-07-06-03" and example_row not in (1, 2):
+            raise ValueError(f"missing or invalid outline example row on line {line_number}")
+        if scenario != "SC-07-06-03" and example_row is not None:
+            raise ValueError(f"unexpected example row on line {line_number}")
         case = CASE_INDEX.get((scenario, example_row))
         if not case:
             continue
@@ -65,8 +76,9 @@ def _read_executions(path: Path) -> dict[str, dict]:
         if case_id in result:
             raise ValueError(f"duplicate result for {case_id}")
         duration = row.get("duration_s")
-        if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration < 0:
-            duration = 0.0
+        if (not isinstance(duration, (int, float)) or isinstance(duration, bool)
+                or not math.isfinite(duration) or duration < 0):
+            raise ValueError(f"invalid duration on line {line_number}")
         result[case_id] = {
             "case_id": case_id,
             "scenario_id": scenario,

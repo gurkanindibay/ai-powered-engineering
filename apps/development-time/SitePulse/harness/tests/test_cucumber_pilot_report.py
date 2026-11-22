@@ -62,6 +62,24 @@ class CucumberPilotReportTests(unittest.TestCase):
                 reporter.build(root / "junit.xml", root / "executions.jsonl",
                                "run-123", "1", "c" * 40, "owner/repo")
 
+    def test_invalid_jsonl_shapes_and_values_become_incomplete(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            junit, executions, _ = self.write_inputs(root)
+            invalid_records = (
+                "[]",
+                "null",
+                json.dumps({"scenario": "SC-07-06-03", "example_row": [], "duration_s": 1}),
+                json.dumps({"scenario": "SC-10-01-01", "duration_s": float("nan")}),
+                json.dumps({"scenario": "SC-10-01-01", "duration_s": float("inf")}),
+            )
+            for invalid_record in invalid_records:
+                with self.subTest(record=invalid_record):
+                    executions.write_text(invalid_record + "\n", encoding="utf-8")
+                    result = reporter.build(junit, executions, "123456", "1", "d" * 40, "owner/repo")
+                    self.assertEqual(result["status"], "INCOMPLETE")
+                    self.assertEqual(result["counts"]["passed"], 0)
+
     def test_workflow_retains_only_allowlisted_pilot_payload(self):
         workflow = (Path(__file__).resolve().parents[5] / ".github" / "workflows"
                     / "sitepulse-cucumber-pilot.yml").read_text(encoding="utf-8")

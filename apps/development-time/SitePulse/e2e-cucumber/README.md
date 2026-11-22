@@ -10,7 +10,7 @@ This is **reference material, not the adopted suite**. The canonical runner stay
 directory. Keep it runnable when touching it, but do not grow it without a migration decision.
 
 The opt-in GitHub Actions workflow is [`sitepulse-cucumber-pilot.yml`](../../../../.github/workflows/sitepulse-cucumber-pilot.yml).
-It produces the allowlisted `cucumber-pilot-results` artifact from JUnit and execution records.
+It produces the allowlisted `cucumber-pilot-results-<run-id>-<attempt>` artifact from JUnit and execution records.
 The safe JSON contains only the five fixed pilot case IDs, example IDs, static labels, statuses,
 durations, and the Actions run link. Every case is labeled comparison-only; pytest remains the
 authority for overlapping scenarios. The private JUnit, execution JSONL, Serenity tree, and runner
