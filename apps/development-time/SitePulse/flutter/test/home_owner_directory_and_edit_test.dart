@@ -324,5 +324,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.homeOwners.any((h) => h.unitId == unit.unitId), isFalse);
     });
+
+    testWidgets('Resident search clear button resets field text and filter query', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      await openResidentsTab(tester, controller);
+
+      final searchField = find.byKey(const Key('resident_search_field'));
+      expect(searchField, findsOneWidget);
+
+      await tester.enterText(searchField, 'Z-999-ABSENT');
+      await tester.pumpAndSettle();
+
+      final clearBtn = find.byKey(const Key('resident_search_clear_btn'));
+      expect(clearBtn, findsOneWidget);
+
+      await tester.tap(clearBtn);
+      await tester.pumpAndSettle();
+
+      final TextField field = tester.widget(searchField);
+      expect(field.controller?.text, isEmpty);
+      expect(find.byKey(const Key('resident_search_clear_btn')), findsNothing);
+    });
   });
 }

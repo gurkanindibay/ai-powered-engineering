@@ -13,7 +13,7 @@ import pytest
 
 from pages import DuesManagement, Occupancy, ResidentHome, ResidentsTab, Shell, UnitWorkspace
 from pages.login import LoginPage
-from support.flutter import by_id
+from support.flutter import by_id, fill
 from support.journey_gui import (
     amount_of,
     id_text,
@@ -449,3 +449,75 @@ def test_f5_multiple_periods_add_up_per_unit_and_per_site(request, api, actors, 
         UnitWorkspace(page).open(unit).action(unit, "statement")
         page.wait_for_timeout(1_500)
         assert any("1.250,00" in line for line in page_lines(page)), "A-6 advance balance 1250.00 not shown"
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.covers("SC-13-08-03")
+@pytest.mark.gui_id("GUI-13-14")
+def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack, page, login_page):
+    with journey_site(request, api, actors, stack, "F5") as fixture:
+        sign_in_manager(page, login_page, fixture)
+        ResidentsTab(page).open()
+
+        # Search for an absent unit label
+        fill(page, "resident_search_field", "Z-999-ABSENT")
+        try:
+            by_id(page, "units_filtered_empty_state").wait_for(timeout=10_000)
+        except Exception:
+            page.wait_for_timeout(1_500)
+
+        # Directory reports zero matches
+        lines = page_lines(page)
+        assert any("bulunamadı" in line.lower() or "bulunamadi" in line.lower() or "bulunmuyor" in line.lower() for line in lines)
+        assert not any("A Blok 1" in line or "Ayşe Kaya" in line or "A-01" in line or "A-1" in line for line in lines)
+
+        # Clear search
+        clear_btn = by_id(page, "resident_search_clear_btn")
+        reset_btn = by_id(page, "empty_state_reset_filters_btn")
+        if clear_btn.count() > 0:
+            clear_btn.click()
+        elif reset_btn.count() > 0:
+            reset_btn.click()
+        else:
+            fill(page, "resident_search_field", "")
+        try:
+            by_id(page, "units_filtered_empty_state").wait_for(state="detached", timeout=10_000)
+        except Exception:
+            page.wait_for_timeout(1_500)
+
+        # All units reappear and site unit count remains 7
+        refreshed_lines = page_lines(page)
+        assert any("A Blok 1" in line or "Ayşe Kaya" in line or "A-01" in line or "A-1" in line for line in refreshed_lines)
+        assert stack.sql(f"SELECT COUNT(*) FROM units WHERE site_id = {int(fixture.site_id)};") == "7"
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.covers("SC-13-08-05")
+@pytest.mark.gui_id("GUI-13-15")
+def test_f2_cancelling_accrual_confirmation_makes_no_financial_change(request, api, actors, stack, page, login_page):
+    with journey_site(request, api, actors, stack, "F2") as fixture:
+        sign_in_manager(page, login_page, fixture)
+        dues = DuesManagement(page).open()
+
+        # Open accrual confirmation with valid inputs
+        by_id(page, "btn_open_accrual_dialog").click()
+        by_id(page, "btn_confirm_period_accrual").wait_for(timeout=10_000)
+
+        # Cancel dialog
+        cancel_btn = by_id(page, "btn_cancel_period_accrual")
+        if cancel_btn.count() > 0:
+            cancel_btn.click()
+        else:
+            page.get_by_role("button", name=re.compile(r"İptal|Cancel", re.IGNORECASE)).click()
+        by_id(page, "btn_confirm_period_accrual").wait_for(state="detached", timeout=10_000)
+
+        # Verify no liabilities exist
+        site = int(fixture.site_id)
+        assert stack.sql(f"SELECT COUNT(*) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id = {site};") == "0"
+
+        # Reopening allows manager to confirm once successfully
+        period, text = dues.accrue_selected_period()
+        assert len(period) > 0
+        assert stack.sql(f"SELECT COUNT(*) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id = {site};") != "0"
