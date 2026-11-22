@@ -97,10 +97,13 @@ def main(argv: list[str] | None = None) -> int:
     if output is None and artifact_dir:
         output = Path(artifact_dir) / "unittest-case-results.json"
     if output:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps({"tests_run": result.testsRun, "passed": result.wasSuccessful(),
-                                      "adapter_test_count": sum(not case["is_subtest"] for case in result.cases),
-                                      "cases": result.cases}, indent=2) + "\n", encoding="utf-8")
+        try:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps({"tests_run": result.testsRun, "passed": result.wasSuccessful(),
+                                          "adapter_test_count": sum(not case["is_subtest"] for case in result.cases),
+                                          "cases": result.cases}, indent=2) + "\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"evidence collection warning: could not write unittest results: {exc}", file=sys.stderr)
     return 0 if result.wasSuccessful() else 1
 
 

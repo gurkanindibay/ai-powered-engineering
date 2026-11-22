@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -49,6 +50,14 @@ def _case(runner: str, suite: str, native_id: str, status: str, *, duration_s: f
             "duration_s": duration_s, "detail": detail}
 
 
+def _number(value: object, divisor: float = 1.0) -> float | None:
+    try:
+        result = float(value or 0) / divisor
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return result if math.isfinite(result) else None
+
+
 def parse_cargo(output: str, suite: str) -> list[dict[str, object]]:
     """Parse stable libtest human output, including doctests and ignored tests."""
     cases: list[dict[str, object]] = []
@@ -76,20 +85,32 @@ def parse_cargo(output: str, suite: str) -> list[dict[str, object]]:
 def parse_flutter_json(output: str, suite: str) -> list[dict[str, object]]:
     """Parse Flutter test's JSON reporter stream; malformed lines are omitted for gap detection."""
     names: dict[int, str] = {}
-    starts: dict[int, float] = {}
+    suite_paths: dict[int, str] = {}
     cases: list[dict[str, object]] = []
     for line in output.splitlines():
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(event, dict):
+            continue
         kind = event.get("type")
-        if kind == "testStart":
+        if kind == "suite":
+            suite_info = event.get("suite")
+            if isinstance(suite_info, dict) and isinstance(suite_info.get("id"), int):
+                path = suite_info.get("path")
+                if isinstance(path, str):
+                    normalized = path.replace("\\", "/")
+                    parts = normalized.split("/")
+                    suite_paths[suite_info["id"]] = "/".join(parts[parts.index("flutter"):] if "flutter" in parts else parts)
+        elif kind == "testStart":
             test_info = event.get("test") if isinstance(event.get("test"), dict) else {}
             test_id = event.get("testID", test_info.get("id"))
             if isinstance(test_id, int):
-                names[test_id] = str(event.get("name", test_info.get("name", test_id)))
-                starts[test_id] = float(event.get("time", 0) or 0)
+                name = str(event.get("name", test_info.get("name", test_id)))
+                suite_id = event.get("suiteID", test_info.get("suiteID"))
+                path = suite_paths.get(suite_id)
+                names[test_id] = f"{path}::{name}" if path else name
         elif kind == "testDone":
             test_id = event.get("testID")
             if not isinstance(test_id, int):
@@ -98,9 +119,9 @@ def parse_flutter_json(output: str, suite: str) -> list[dict[str, object]]:
                 continue
             result = str(event.get("result", "error")).lower()
             status = "skipped" if event.get("skipped") else {"success": "passed", "failure": "failed", "skipped": "skipped", "error": "error"}.get(result, "error")
-            name = str(event.get("name", names.get(test_id, test_id)))
+            name = names.get(test_id, str(event.get("name", test_id)))
             cases.append(_case("flutter", suite, name, status,
-                               duration_s=float(event.get("time", 0) or 0) / 1000,
+                               duration_s=_number(event.get("time"), 1000),
                                detail=event.get("message")))
     return cases
 
@@ -111,6 +132,8 @@ def flutter_reporter_errors(output: str) -> list[str]:
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
             continue
         if event.get("type") == "error":
             errors.append(str(event.get("error", event)))
@@ -131,6 +154,8 @@ def parse_unittest_verbose(output: str, suite: str) -> list[dict[str, object]]:
 
 def parse_check_json(payload: dict[str, object], runner: str, suite: str) -> list[dict[str, object]]:
     """Convert existing structured API/schema gate check rows into case records."""
+    if not isinstance(payload, dict):
+        return []
     rows = payload.get("checks", payload.get("findings", []))
     cases = []
     for row in rows if isinstance(rows, list) else []:
@@ -157,9 +182,10 @@ def parse_junit(path: Path, runner: str = "pytest-playwright", suite: str = "e2e
         skipped = element.find("skipped")
         status = "failed" if failed is not None else "error" if error is not None else "skipped" if skipped is not None else "passed"
         native_id = "::".join(filter(None, [element.get("classname"), element.get("name")]))
+        outcome = failed if failed is not None else error if error is not None else skipped
         cases.append(_case(runner, suite, native_id, status,
-                           duration_s=float(element.get("time", 0) or 0),
-                           detail=(failed or error or skipped).get("message") if (failed is not None or error is not None or skipped is not None) else None))
+                           duration_s=_number(element.get("time")),
+                           detail=outcome.get("message") if outcome is not None else None))
     return cases
 
 
@@ -191,12 +217,16 @@ def native_totals(output: str, runner: str, payload: dict[str, object] | None = 
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(event, dict):
+                continue
             if event.get("type") == "testDone" and not event.get("hidden"):
                 completed += 1
             elif event.get("type") == "done":
                 done = True
         return {"total": completed, "complete": done}
     if payload is not None:
+        if not isinstance(payload, dict):
+            return None
         rows = payload.get("checks", payload.get("findings", []))
         if isinstance(rows, list):
             passed = sum(1 for row in rows if isinstance(row, dict) and row.get("passed", row.get("ok")) is True)

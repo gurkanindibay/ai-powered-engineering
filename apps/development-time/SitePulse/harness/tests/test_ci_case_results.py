@@ -5,6 +5,9 @@ import os
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
+from unittest import mock
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -12,6 +15,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 import ci_case_results as cases
 from harness.loop import verification_gates as gates
+import unittest_json_runner
 
 
 class CaseAdapterTests(unittest.TestCase):
@@ -51,6 +55,31 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
         self.assertEqual([row["status"] for row in parsed], ["passed", "skipped"])
         self.assertEqual(cases.flutter_reporter_errors(output), ["bad setup"])
         self.assertEqual(cases.native_totals(output, "flutter"), {"total": 2, "complete": True})
+
+    def test_flutter_ids_include_file_path_and_malformed_json_is_ignored(self):
+        output = "\n".join([
+            "[]",
+            json.dumps({"type": "suite", "suite": {"id": 1, "path": "flutter/test/one_test.dart"}}),
+            json.dumps({"type": "suite", "suite": {"id": 2, "path": "flutter/test/two_test.dart"}}),
+            json.dumps({"type": "testStart", "testID": 1, "suiteID": 1, "name": "same"}),
+            json.dumps({"type": "testStart", "testID": 2, "suiteID": 2, "name": "same"}),
+            json.dumps({"type": "testDone", "testID": 1, "name": "same", "result": "success", "time": "bad"}),
+            json.dumps({"type": "testDone", "testID": 2, "name": "same", "result": "success", "time": "Infinity"}),
+        ])
+        parsed = cases.parse_flutter_json(output, "flutter-test")
+        self.assertEqual([row["native_id"] for row in parsed], [
+            "flutter/test/one_test.dart::same", "flutter/test/two_test.dart::same"])
+        self.assertEqual([row["duration_s"] for row in parsed], [None, None])
+
+    def test_junit_failure_and_error_elements_are_handled_and_bad_times_are_null(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "junit.xml"
+            path.write_text('<testsuite><testcase classname="m" name="bad" time="nan"><failure message="no">trace</failure></testcase>'
+                            '<testcase classname="m" name="err" time="oops"><error message="broken">trace</error></testcase></testsuite>')
+            parsed = cases.parse_junit(path)
+        self.assertEqual([row["status"] for row in parsed], ["failed", "error"])
+        self.assertEqual([row["detail"] for row in parsed], ["no", "broken"])
+        self.assertEqual([row["duration_s"] for row in parsed], [None, None])
 
     def test_unittest_parser_retains_fail_error_and_skip(self):
         output = """test_a (module.Case.test_a) ... ok
@@ -96,7 +125,23 @@ class GateCaptureTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 7)
             record = json.loads((artifact_dir / "fake-1.json").read_text())
             self.assertEqual(record["exit_code"], 7)
-            self.assertIn("captured", record["native_output"])
+            self.assertNotIn("native_output", record)
+
+    def test_sidecar_write_failure_does_not_change_native_gate_outcome(self):
+        result = gates.GateResult("fake", True, [], "fake", 0.1, 0, output="ok", stdout="ok")
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"SITEPULSE_GATE_ARTIFACT_DIR": tmp}), \
+                mock.patch.object(Path, "write_text", side_effect=OSError("disk full")):
+            gates._write_gate_artifacts("fake", [gates.CommandSpec(["fake"], ".")], [result], Path(tmp))
+        self.assertTrue(result.passed)
+        self.assertEqual(result.exit_code, 0)
+
+    def test_unittest_sidecar_failure_keeps_success_exit_status(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(Path, "write_text", side_effect=OSError("disk full")):
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                code = unittest_json_runner.main(["-s", tmp, "--json-output", str(Path(tmp) / "results.json")])
+        self.assertEqual(code, 0)
+        self.assertIn("evidence collection warning", stderr.getvalue())
 
 
 if __name__ == "__main__":

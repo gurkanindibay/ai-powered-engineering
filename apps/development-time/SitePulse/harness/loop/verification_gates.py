@@ -93,14 +93,15 @@ def run_command(name: str, spec: CommandSpec, root: Path) -> GateResult:
         return GateResult(name, False, [f"Required tool '{exe}' is not installed or not on PATH"], command)
     started = time.monotonic()
     try:
-        proc = subprocess.run(
-            list(spec.argv),
-            cwd=root / spec.cwd,
-            capture_output=True,
-            text=True,
-            timeout=spec.timeout_s,
-            env={**os.environ, "CARGO_TERM_COLOR": "never", "NO_COLOR": "1"},
-        )
+        command_env = {**os.environ, "CARGO_TERM_COLOR": "never", "NO_COLOR": "1"}
+        if "cargo" in spec.argv:
+            # Cargo writes target headings to stderr and libtest rows to stdout. Merge at the
+            # pipe so parser order matches the native stream, without a shell or altered exit code.
+            proc = subprocess.run(list(spec.argv), cwd=root / spec.cwd, stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT, text=True, timeout=spec.timeout_s, env=command_env)
+        else:
+            proc = subprocess.run(list(spec.argv), cwd=root / spec.cwd, capture_output=True,
+                                  text=True, timeout=spec.timeout_s, env=command_env)
     except subprocess.TimeoutExpired as exc:
         stdout = exc.stdout or ""
         stderr = exc.stderr or ""
@@ -113,7 +114,9 @@ def run_command(name: str, spec: CommandSpec, root: Path) -> GateResult:
                           time.monotonic() - started, output=output, timed_out=True,
                           stdout=str(stdout), stderr=str(stderr))
     duration = time.monotonic() - started
-    output = (proc.stdout or "") + (proc.stderr or "")
+    stdout = proc.stdout or ""
+    stderr = proc.stderr or ""
+    output = stdout + stderr
     if proc.returncode == 0:
         if cache is not None:
             try:
@@ -123,9 +126,9 @@ def run_command(name: str, spec: CommandSpec, root: Path) -> GateResult:
             except OSError:
                 pass
         return GateResult(name, True, [], command, duration, proc.returncode, output=output,
-                          stdout=proc.stdout or "", stderr=proc.stderr or "")
+                          stdout=stdout, stderr=stderr)
     return GateResult(name, False, extract_diagnostics(output), command, duration,
-                      proc.returncode, output=output, stdout=proc.stdout or "", stderr=proc.stderr or "")
+                      proc.returncode, output=output, stdout=stdout, stderr=stderr)
 
 
 def extract_diagnostics(output: str) -> List[str]:
@@ -246,6 +249,15 @@ def run_gate(name: str, root: Path) -> GateResult:
 
 
 def _write_gate_artifacts(name: str, specs: Sequence[CommandSpec], results: Sequence[GateResult], root: Path) -> None:
+    """Best-effort report capture. Evidence failures never change a gate's native outcome."""
+    try:
+        _write_gate_artifacts_impl(name, specs, results, root)
+    except Exception as exc:  # reporting is sidecar work; test exit status remains authoritative
+        import sys
+        print(f"evidence collection warning: {name}: {type(exc).__name__}: {exc}", file=sys.stderr)
+
+
+def _write_gate_artifacts_impl(name: str, specs: Sequence[CommandSpec], results: Sequence[GateResult], root: Path) -> None:
     """Persist raw command outcomes and adapted cases for CI without changing runner behavior."""
     destination = os.environ.get("SITEPULSE_GATE_ARTIFACT_DIR")
     if not destination:
@@ -259,33 +271,51 @@ def _write_gate_artifacts(name: str, specs: Sequence[CommandSpec], results: Sequ
         text = result.output
         structured_output = result.stdout
         cases: list[dict[str, object]] = []
+        runner_errors: list[str] = []
         native_runner: str | None = None
         payload: dict[str, object] | None = None
         if cargo_argv:
             native_runner = "cargo"
             suite = "money-fixtures" if "financial_fixtures" in cargo_argv else "rust-db-opt-in" if any(target in cargo_argv for target in ("accrual_corrections_tests", "finance_store_pg_tests")) else "rust-db-test" if "--ignored" in cargo_argv or "SITEPULSE_PG_TESTS=1" in argv else name
-            cases = ci_case_results.parse_cargo(text, suite)
+            try:
+                cases = ci_case_results.parse_cargo(text, suite)
+            except Exception as exc:
+                runner_errors.append(f"Cargo adapter error: {type(exc).__name__}: {exc}")
         elif argv and argv[0] == "flutter" and "test" in argv:
             native_runner = "flutter"
             suite = "money-fixtures" if "financial_fixture_test.dart" in argv else name
-            cases = ci_case_results.parse_flutter_json(structured_output, suite)
+            try:
+                cases = ci_case_results.parse_flutter_json(structured_output, suite)
+            except Exception as exc:
+                runner_errors.append(f"Flutter adapter error: {type(exc).__name__}: {exc}")
         elif any("unittest_json_runner.py" in part for part in argv):
             native_runner = "unittest"
             result_file = Path(destination) / "unittest-case-results.json"
             try:
                 result_payload = json.loads(result_file.read_text(encoding="utf-8"))
+                if not isinstance(result_payload, dict):
+                    raise ValueError("unittest result root is not an object")
                 raw_cases = result_payload.get("cases", [])
+                if not isinstance(raw_cases, list):
+                    raise ValueError("unittest cases are not a list")
                 cases = [dict(case) for case in raw_cases if isinstance(case, dict)]
                 payload = {"tests_run": result_payload.get("tests_run"),
                            "adapter_test_count": result_payload.get("adapter_test_count")}
-            except (OSError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
                 cases = ci_case_results.parse_unittest_verbose(text, name)
+                runner_errors.append(f"unittest result artifact unavailable: {type(exc).__name__}: {exc}")
+                if "evidence collection warning:" in result.stderr:
+                    runner_errors.append(result.stderr.strip()[-1000:])
         elif any("api_system_check.py" in part or "schema_integrity_check.py" in part for part in argv):
             try:
-                payload = json.loads(structured_output)
+                parsed_payload = json.loads(structured_output)
+                if not isinstance(parsed_payload, dict):
+                    raise ValueError("structured report root is not an object")
+                payload = parsed_payload
                 cases = ci_case_results.parse_check_json(payload, "sitepulse-check", name)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as exc:
                 cases = []
+                runner_errors.append(f"Structured gate output error: {type(exc).__name__}: {exc}")
             native_runner = "sitepulse-check"
         record = {"schema_version": 1, "gate": name, "command_index": index, "argv": argv,
                   "cwd": spec.cwd, "exit_code": result.exit_code, "timed_out": result.timed_out,
@@ -294,8 +324,10 @@ def _write_gate_artifacts(name: str, specs: Sequence[CommandSpec], results: Sequ
                                             if native_runner == "unittest" and payload else
                                             ci_case_results.native_totals(text, native_runner, payload) if native_runner else None),
                   "native_case_count": payload.get("adapter_test_count") if native_runner == "unittest" and payload else len(cases),
-                  "runner_errors": ci_case_results.flutter_reporter_errors(text) if native_runner == "flutter" else [],
-                  "adapter_case_count": len(cases), "cases": cases, "native_output": text}
+                  "native_runner": native_runner,
+                  "runner_errors": (runner_errors + ci_case_results.flutter_reporter_errors(structured_output)
+                                    if native_runner == "flutter" else runner_errors),
+                  "adapter_case_count": len(cases), "cases": cases}
         (out / f"{name}-{index}.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
 
 

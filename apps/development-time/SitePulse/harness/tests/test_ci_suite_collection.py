@@ -65,6 +65,33 @@ class SuiteCollectionTests(unittest.TestCase):
         self.assertEqual(report["unique_case_count"], 1)
         self.assertEqual([row["attempt_index"] for row in report["cases"]], [1, 2])
 
+    def test_explicit_native_count_mismatch_marks_gate_and_suite_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sitepulse-suite-rust-attempt-1"
+            gates = source / "gates"
+            gates.mkdir(parents=True)
+            (source / "producer.json").write_text(json.dumps({"job": "rust", "run_id": "42", "attempt": "1",
+                "commit": "abc", "job_result": "success"}))
+            (gates / "rust-test-1.json").write_text(json.dumps({"gate": "rust-test", "passed": True,
+                "native_runner": "cargo", "native_runner_totals": {"passed": 2, "failed": 0, "skipped": 0},
+                "native_case_count": 1, "adapter_case_count": 1,
+                "cases": [{"runner": "cargo", "suite": "rust", "native_id": "lib::one", "status": "passed"}]}))
+            report = collection.collect(root, root / "no-e2e", "42", "1", "abc", {"rust": "success"})
+        gate = next(row for row in report["gates"] if row["gate"] == "rust-test")
+        suite = next(row for row in report["suites"] if row["suite"] == "rust")
+        self.assertEqual(gate["parity_mismatches"], [0])
+        self.assertEqual(gate["status"], "incomplete")
+        self.assertEqual(suite["status"], "incomplete")
+
+    def test_scenario_linking_does_not_fall_back_to_basename(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "executions.jsonl").write_text(json.dumps({"test": "tests/one.py::test_shared",
+                "scenario": "SC-01-02-03"}) + "\n")
+            index = collection._scenario_index(root)
+        self.assertEqual(index.get("tests.two::test_shared"), None)
+
     def test_cancelled_not_run_and_missing_inputs_are_distinct(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

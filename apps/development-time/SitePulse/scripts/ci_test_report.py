@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shutil
@@ -50,20 +51,56 @@ def junit_totals(files: list[Path]) -> dict:
     for path in files:
         try:
             root = ET.parse(path).getroot()
-        except ET.ParseError:
+        except (ET.ParseError, OSError):
             broken.append(str(path))
             continue
-        for suite in [root] if root.tag == "testsuite" else root.iter("testsuite"):
-            totals.update({k: int(suite.get(k, 0)) for k in totals})
-            seconds += float(suite.get("time", 0) or 0)
+        suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+        if not suites:
+            broken.append(str(path))
+            continue
+        malformed = False
+        for suite in suites:
+            for key in totals:
+                try:
+                    totals[key] += int(suite.get(key, 0) or 0)
+                except (TypeError, ValueError, OverflowError):
+                    malformed = True
+            try:
+                duration = float(suite.get("time", 0) or 0)
+                if not math.isfinite(duration):
+                    raise ValueError("non-finite JUnit time")
+                seconds += duration
+            except (TypeError, ValueError, OverflowError):
+                malformed = True
+        if malformed:
+            broken.append(str(path))
     passed = totals["tests"] - totals["failures"] - totals["errors"] - totals["skipped"]
     return {**totals, "passed": passed, "seconds": round(seconds, 1), "files": len(files), "unparseable": broken}
 
 
-def merge_executions(files: list[Path], out: Path) -> int:
-    lines = [line for path in files for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    out.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
-    return len(lines)
+def merge_executions(files: list[Path], out: Path) -> tuple[int, int]:
+    count = invalid = 0
+    with out.open("w", encoding="utf-8") as merged:
+        for path in files:
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except (OSError, UnicodeError):
+                invalid += 1
+                continue
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                except (ValueError, RecursionError):
+                    invalid += 1
+                    continue
+                if not isinstance(record, dict) or not isinstance(record.get("status"), str):
+                    invalid += 1
+                    continue
+                merged.write(line + "\n")
+                count += 1
+    return count, invalid
 
 
 def build(shards: Path, out: Path, task: str | None, history: Path,
@@ -71,10 +108,27 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
           suite_artifacts: Path | None = None, producer_status: dict[str, str] | None = None,
           commit_override: str | None = None) -> dict:
     out.mkdir(parents=True, exist_ok=True)
-    execution_files = sorted(shards.rglob("executions.jsonl"))
-    junit = junit_totals(sorted(shards.rglob("junit.xml")))
+    meta = ft.run_metadata(trigger="ci", task=task)
+    collection = sc.collect(suite_artifacts or Path("."), shards,
+                            run_id or meta["run_id"], attempt or "1",
+                            commit_override or meta.get("commit", ""), producer_status)
+    if collection["saw_attempt_artifacts"]:
+        selected_shards = [Path(path) for _, path in sorted(collection["_selected_e2e_paths"].items())]
+        execution_files = sorted(path for folder in selected_shards for path in folder.rglob("executions.jsonl"))
+        junit_files = sorted(path for folder in selected_shards for path in folder.rglob("junit.xml"))
+    else:
+        # Compatibility for historical artifacts created before attempt metadata existed.
+        selected_shards = []
+        execution_files = sorted(shards.rglob("executions.jsonl"))
+        junit_files = sorted(shards.rglob("junit.xml"))
+    junit = junit_totals(junit_files)
     merged = out / "executions.jsonl"
-    count = merge_executions(execution_files, merged)
+    count, invalid_executions = merge_executions(execution_files, merged)
+    collection["invalid_execution_inputs"] = invalid_executions
+    if invalid_executions:
+        for suite in collection["suites"]:
+            if suite["suite"] == "e2e" and suite["status"] not in {"cancelled", "not-run"}:
+                suite["status"] = "incomplete"
 
     store_dir = out / "history"
     if store_dir.exists():
@@ -82,7 +136,6 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
     if (history / "runs").is_dir():
         shutil.copytree(history / "runs", store_dir / "runs")
     store = ft.DirStore(store_dir)
-    meta = ft.run_metadata(trigger="ci", task=task)
     ft.record_run(merged, store, meta)
 
     # Keep the disposable execution history in its own Actions-only payload. The publisher selects
@@ -97,9 +150,6 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
             evidence_runs.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(store_dir / "runs", evidence_runs)
 
-    collection = sc.collect(suite_artifacts or Path("."), shards,
-                            run_id or meta["run_id"], attempt or "1",
-                            commit_override or meta.get("commit", ""), producer_status)
     sc.write_report(collection, out)
     if collection["shard_inputs"]:
         e2e_cases = [row for row in collection["cases"] if row.get("runner") == "pytest-playwright"]
@@ -132,7 +182,7 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
                "ci_suites": {"case_count": collection["case_count"], "unique_case_count": collection["unique_case_count"],
                              "case_totals": collection["case_totals"],
                              "incomplete_suites": sum(1 for item in collection["suites"] if item["status"] in ("incomplete", "missing", "cancelled"))},
-               "status": run["status"] if run else "NO RESULTS",
+               "status": "INCOMPLETE" if invalid_executions else (run["status"] if run else "NO RESULTS"),
                "scenario_counts": run["counts"] if run else {},
                "scenarios_covered": f"{run['executed']}/{run['automated']}" if run else "0/0",
                "out": str(out)}
