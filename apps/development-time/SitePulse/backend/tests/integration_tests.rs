@@ -1426,7 +1426,19 @@ async fn when_querying_resident_dashboard_then_includes_allocated_virtual_iban()
 #[tokio::test]
 async fn when_getting_resident_dashboard_then_returns_real_time_calculated_dues() {
     let state = AppState::new();
-    let today = chrono::Utc::now().date_naive();
+    // The dashboard ages a charge by the site's local date, not UTC. Taking the
+    // reference date from the same site clock keeps the expected penalty at ten
+    // days instead of flipping to eleven every evening in UTC+3.
+    let today = {
+        let inner = state.inner.read().await;
+        let site = inner
+            .units
+            .iter()
+            .find(|unit| unit.id == "d-14")
+            .map(|unit| unit.site_id.clone())
+            .expect("fixture unit d-14");
+        sitepulse_backend::services::finance_common::site_today(&inner, &site)
+    };
     let due_date = today - chrono::Duration::days(10);
     {
         let mut inner = state.inner.write().await;
