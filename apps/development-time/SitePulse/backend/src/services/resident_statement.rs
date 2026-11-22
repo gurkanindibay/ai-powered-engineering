@@ -18,23 +18,74 @@ use crate::state::AppStateInner;
 /// TBK 147/1: periodic payments are time-barred after five years.
 const LIMITATION_DAYS: i64 = 5 * 365;
 
-/// The roles a person still owes on `unit` under a collectable charge, in the
-/// order the charges are stored. A predecessor's only remaining tie to the unit
-/// is such a charge, so it also names the historical section they may read.
-fn owed_roles(inner: &AppStateInner, unit: &IndependentUnit, person_id: i64) -> Vec<&'static str> {
-    let mut roles: Vec<&'static str> = Vec::new();
-    for due in inner.dues.iter().filter(|due| {
-        crate::auth::same_id(&due.unit_id, &unit.id)
-            && due.status.is_collectable()
-            && due.liable_person_id == Some(person_id)
-    }) {
-        let role = match due.debtor_type {
-            crate::models::DebtorType::Owner => DEBTOR_OWNER,
-            crate::models::DebtorType::Tenant => DEBTOR_TENANT,
-        };
-        if !roles.contains(&role) {
-            roles.push(role);
+/// The persons liable for the liability `due_id`, including its joint owners.
+fn due_liable_persons(inner: &AppStateInner, due_id: &str) -> Vec<i64> {
+    let mut persons: Vec<i64> = Vec::new();
+    if let Some(due) = inner
+        .dues
+        .iter()
+        .find(|due| crate::auth::same_id(&due.id, due_id))
+        .and_then(|due| due.liable_person_id)
+    {
+        persons.push(due);
+    }
+    for (joint_due_id, owners) in &inner.joint_liability_owners {
+        if !crate::auth::same_id(joint_due_id, due_id) {
+            continue;
         }
+        for owner in owners {
+            if !persons.contains(&owner.person_id) {
+                persons.push(owner.person_id);
+            }
+        }
+    }
+    persons
+}
+
+/// Every person a correction concerns: the liability it corrected, the
+/// liabilities it replaced and the person each replacement share belongs to.
+/// A correction that cannot be attributed to any person belongs to nobody.
+fn correction_persons(
+    inner: &AppStateInner,
+    correction: &crate::models::AccrualCorrection,
+) -> Vec<i64> {
+    let mut persons = due_liable_persons(inner, &correction.due_id);
+    let mut extra: Vec<i64> = Vec::new();
+    if let Some(due_id) = &correction.replacement_due_id {
+        extra.extend(due_liable_persons(inner, due_id));
+    }
+    for due_id in &correction.replacement_due_ids {
+        extra.extend(due_liable_persons(inner, due_id));
+    }
+    for share in &correction.replacement_shares {
+        extra.extend(share.liable_person_id);
+    }
+    for person in extra {
+        if !persons.contains(&person) {
+            persons.push(person);
+        }
+    }
+    persons
+}
+
+/// The roles a person still owes on `unit` under a collectable charge, in a
+/// fixed order (owner before tenant) so a person liable in both roles always
+/// resolves to the same role.
+fn owed_roles(inner: &AppStateInner, unit: &IndependentUnit, person_id: i64) -> Vec<&'static str> {
+    let owes = |role: crate::models::DebtorType| {
+        inner.dues.iter().any(|due| {
+            crate::auth::same_id(&due.unit_id, &unit.id)
+                && due.status.is_collectable()
+                && due.liable_person_id == Some(person_id)
+                && due.debtor_type == role
+        })
+    };
+    let mut roles: Vec<&'static str> = Vec::new();
+    if owes(crate::models::DebtorType::Owner) {
+        roles.push(DEBTOR_OWNER);
+    }
+    if owes(crate::models::DebtorType::Tenant) {
+        roles.push(DEBTOR_TENANT);
     }
     roles
 }
@@ -74,15 +125,20 @@ pub fn caller_debtor_role(
     {
         return Some(DEBTOR_OWNER);
     }
-    // A household member: the tenant household when the unit is let, else the
-    // owner's. A predecessor whose only tie is an unpaid charge keeps the role
-    // that charge was accrued under, even after the unit changed hands or stands
-    // vacant.
-    let historical = viewer_person_id.and_then(|pid| owed_roles(inner, unit, pid).first().copied());
-    historical.or(match claims.role {
+    // A predecessor whose only remaining tie to the unit is an unpaid charge
+    // keeps the role that charge was accrued under, even after the unit changed
+    // hands or stands vacant. `owed_roles` is ordered, so one person owing in
+    // both roles always resolves to the same one.
+    if let Some(person_id) = viewer_person_id {
+        if let Some(role) = owed_roles(inner, unit, person_id).first() {
+            return Some(role);
+        }
+    }
+    // A household member: the tenant household when the unit is let, else the owner's.
+    match claims.role {
         Role::HomeResident if unit.tenant_user_id.is_some() => Some(DEBTOR_TENANT),
         _ => Some(DEBTOR_OWNER),
-    })
+    }
 }
 
 pub fn build_statement(
@@ -453,14 +509,20 @@ pub fn build_statement_for_person(
     receipts.sort_by_key(|r| std::cmp::Reverse(r.issued_at));
     receipts.truncate(50);
 
+    // A resident reads only the corrections that concern them, resolved through
+    // the liability each correction touched (or replaced) rather than through
+    // the debtor role: after a sale or a move-out the role is shared with the
+    // current holder. A correction that cannot be attributed to a person is
+    // omitted for a resident, and site staff keep every one.
     let mut corrections: Vec<StatementCorrection> = inner
         .finance
         .corrections
         .iter()
-        .filter(|c| {
-            c.status == REQUEST_APPROVED
-                && crate::auth::same_id(&c.unit_id, &unit.id)
-                && viewer.is_none_or(|v| c.debtor_type == v)
+        .filter(|c| c.status == REQUEST_APPROVED && crate::auth::same_id(&c.unit_id, &unit.id))
+        .filter(|c| match (viewer, viewer_person_id) {
+            (None, _) => true,
+            (Some(_), Some(person_id)) => correction_persons(inner, c).contains(&person_id),
+            (Some(_), None) => false,
         })
         .map(|c| StatementCorrection {
             correction_id: c.id,

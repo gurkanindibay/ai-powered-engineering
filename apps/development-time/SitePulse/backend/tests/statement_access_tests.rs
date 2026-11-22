@@ -67,6 +67,44 @@ fn due(
     }
 }
 
+/// An approved correction on `due_id`, attributed to whoever that liability
+/// names as liable.
+fn correction(
+    id: i64,
+    due_id: &str,
+    debtor_type: DebtorType,
+    period: &str,
+    reason: &str,
+) -> sitepulse_backend::models::AccrualCorrection {
+    sitepulse_backend::models::AccrualCorrection {
+        id,
+        site_id: SITE.to_string(),
+        unit_id: UNIT.to_string(),
+        due_id: due_id.to_string(),
+        period: period.to_string(),
+        debtor_type: debtor_type.as_str().to_string(),
+        kind: sitepulse_backend::models::CORRECTION_CANCEL.to_string(),
+        amount: d("900.00"),
+        new_due_date: None,
+        new_debtor_type: None,
+        reason: reason.to_string(),
+        requested_by: "usr-site-manager-1".to_string(),
+        requested_at: Utc::now(),
+        status: sitepulse_backend::models::REQUEST_APPROVED.to_string(),
+        decided_by: Some("usr-site-manager-2".to_string()),
+        decided_at: Some(Utc::now()),
+        decision_note: None,
+        principal_before: Some(d("900.00")),
+        penalty_before: None,
+        paid_before: None,
+        penalty_reversed: None,
+        advance_credited: None,
+        replacement_due_id: None,
+        replacement_shares: Vec::new(),
+        replacement_due_ids: Vec::new(),
+    }
+}
+
 /// Unit A-14 after Dan Yılmaz moved out: the unit is vacant, Ben Kaya owns it,
 /// and Dan still owes his October tenant share.
 async fn state_after_move_out() -> AppState {
@@ -88,6 +126,12 @@ async fn state_after_move_out() -> AppState {
         inner
             .users
             .push(person("person-202", 202, "Mert Kılıç", Role::HomeResident));
+        inner.users.push(person(
+            "person-203",
+            203,
+            "Selin Arslan",
+            Role::HomeResident,
+        ));
         let today = Utc::now().date_naive();
         let unit = inner
             .units
@@ -102,6 +146,22 @@ async fn state_after_move_out() -> AppState {
             DebtorType::Tenant,
             "Ekim 2026",
             today,
+        ));
+        // Another tenant of this site still owes a charge carrying an approved
+        // correction: Dan was a tenant too, but the correction is not his.
+        inner.dues.push(due(
+            "due-selin-dec",
+            203,
+            DebtorType::Tenant,
+            "Aralık 2026",
+            today,
+        ));
+        inner.finance.corrections.push(correction(
+            9101,
+            "due-selin-dec",
+            DebtorType::Tenant,
+            "Aralık 2026",
+            "other-tenant-reason",
         ));
     }
     state
@@ -158,6 +218,22 @@ async fn state_after_sale() -> AppState {
             "Aralık 2026",
             today,
         ));
+        // One approved correction on each owner charge: the seller must see only
+        // his own, the buyer only hers, and staff both.
+        inner.finance.corrections.push(correction(
+            9001,
+            "due-gul-dec",
+            DebtorType::Owner,
+            "Aralık 2026",
+            "secret-reason-current-owner",
+        ));
+        inner.finance.corrections.push(correction(
+            9002,
+            "due-ben-dec",
+            DebtorType::Owner,
+            "Aralık 2026",
+            "seller-reason",
+        ));
     }
     state
 }
@@ -211,6 +287,12 @@ async fn former_tenant_reads_only_their_own_section_after_move_out() {
     let items = debtors[0]["open_items"].as_array().expect("open items");
     assert_eq!(items.len(), 1, "Dan's own charge only: {body}");
     assert_eq!(items[0]["due_id"], "due-dan-oct", "{body}");
+    let corrections = statement["corrections"].as_array().expect("corrections");
+    assert!(
+        corrections.is_empty(),
+        "no other tenant's correction: {body}"
+    );
+    assert!(!body.contains("other-tenant-reason"), "{body}");
 }
 
 #[tokio::test]
@@ -277,6 +359,12 @@ async fn site_staff_still_read_every_section() {
         names.contains(&"Dan Yılmaz"),
         "former tenant section: {body}"
     );
+    let corrections = statement["corrections"].as_array().expect("corrections");
+    assert_eq!(
+        corrections.len(),
+        1,
+        "staff keep the tenant correction too: {body}"
+    );
 }
 
 #[tokio::test]
@@ -302,6 +390,13 @@ async fn former_owner_reads_only_their_own_section_after_sale() {
     let items = debtors[0]["open_items"].as_array().expect("open items");
     assert_eq!(items.len(), 1, "Ben's own charge only: {body}");
     assert_eq!(items[0]["due_id"], "due-ben-dec", "{body}");
+    let corrections = statement["corrections"].as_array().expect("corrections");
+    assert_eq!(corrections.len(), 1, "only Ben's own correction: {body}");
+    assert_eq!(
+        corrections[0]["correction_id"], 9002,
+        "seller's own correction: {body}"
+    );
+    assert!(!body.contains("secret-reason-current-owner"), "{body}");
 }
 
 #[tokio::test]
@@ -328,6 +423,39 @@ async fn current_owner_does_not_see_the_former_owner_section() {
         !body.contains("due-ben-dec"),
         "seller charge hidden: {body}"
     );
+    let corrections = statement["corrections"].as_array().expect("corrections");
+    assert_eq!(corrections.len(), 1, "only Gül's own correction: {body}");
+    assert_eq!(corrections[0]["correction_id"], 9001, "{body}");
+    assert!(
+        !body.contains("seller-reason"),
+        "seller correction hidden: {body}"
+    );
+}
+
+#[tokio::test]
+// covers: SC-13-10-07 (Issue #295: staff still read every correction after a sale)
+async fn site_staff_read_every_correction_after_a_sale() {
+    let state = state_after_sale().await;
+    let manager = support::token(
+        &state,
+        "usr-statement-manager",
+        Role::SiteManager,
+        SITE,
+        None,
+    )
+    .await;
+    let (status, body) = call(
+        build_router(state.clone()),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&manager),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "manager statement: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let corrections = statement["corrections"].as_array().expect("corrections");
+    assert_eq!(corrections.len(), 2, "both corrections: {body}");
 }
 
 #[tokio::test]
