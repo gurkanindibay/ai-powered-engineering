@@ -63,7 +63,15 @@ def author_snapshot(gh: Gh, repo: str, number: int) -> Activity:
 
 
 def author_changes(snapshot: Activity, previous: Activity) -> Activity | None:
-    changed = [key for key in snapshot if key not in {"repo", "number", "activity"} and snapshot[key] != previous[key]]
+    changed = [
+        key for key in snapshot
+        if key not in {"repo", "number", "activity", "mergeable"} and snapshot[key] != previous[key]
+    ]
+    mergeable, prior_mergeable = snapshot["mergeable"], previous["mergeable"]
+    # GitHub briefly reports UNKNOWN while it recomputes mergeability.
+    if (mergeable == "CONFLICTING" and prior_mergeable != "CONFLICTING"
+            or mergeable == "MERGEABLE" and prior_mergeable == "CONFLICTING"):
+        changed.append("mergeable")
     prior = {item["cursor"] for item in previous["activity"]}
     activity = [item for item in snapshot["activity"] if item["cursor"] not in prior]
     if not changed and not activity:

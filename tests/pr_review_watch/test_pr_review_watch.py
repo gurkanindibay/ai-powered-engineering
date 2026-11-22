@@ -230,6 +230,18 @@ class DeveloperReviewerLoop(unittest.TestCase):
             gh.activity["inline"][0]["body"] = "Edited review feedback"
             self.assertEqual(_capture(lambda: w.main(after, gh=gh))[0], w.EXIT_READY)
 
+    def test_author_ignores_transient_mergeability_and_wakes_for_confirmed_conflicts(self):
+        gh = LoopGh()
+        known = w.activity_tool.author_snapshot(gh, "owner/repo", 42)
+        unknown = {**known, "mergeable": "UNKNOWN"}
+        conflict = {**known, "mergeable": "CONFLICTING"}
+        changes = w.activity_tool.author_changes
+        self.assertIsNone(changes(unknown, known))
+        self.assertIsNone(changes(known, unknown))
+        self.assertIsNone(changes(unknown, conflict))
+        self.assertEqual(changes(conflict, unknown)["changed"], ["mergeable"])
+        self.assertEqual(changes(known, conflict)["changed"], ["mergeable"])
+
     def test_subscriptions_include_comment_events(self):
         self.assertTrue({"pull_request_review_comment", "issue_comment", "pull_request_review"}
                         <= set(w.EVENTS.split(",")))
