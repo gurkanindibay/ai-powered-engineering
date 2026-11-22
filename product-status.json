@@ -1,30 +1,30 @@
 {
  "schema": 1,
- "generated_at": "2026-11-22T19:33:47Z",
- "run_id": "20261122T193346Z-b2fe98a",
- "commit": "b2fe98a4c8bc4851ce4a0418a52a5e4a9e37f5df",
+ "generated_at": "2026-11-22T20:08:15Z",
+ "run_id": "20261122T200815Z-33a615d",
+ "commit": "33a615da98eb30651d278152d156f17527f8de57",
  "task": "master",
  "status": "DEFECT",
  "junit": {
-  "tests": 278,
+  "tests": 307,
   "failures": 0,
   "errors": 0,
   "skipped": 2,
-  "passed": 276,
-  "seconds": 3014.1,
+  "passed": 305,
+  "seconds": 3263.8,
   "files": 8,
   "unparseable": []
  },
  "totals": {
   "stories": 116,
   "stories_with_scenarios": 116,
-  "stories_passing": 33,
+  "stories_passing": 34,
   "scenarios": 465,
-  "automated": 420,
-  "passing": 210,
+  "automated": 435,
+  "passing": 225,
   "failing": 1,
   "no_result": 209,
-  "planned": 45,
+  "planned": 30,
   "epics": 13,
   "epics_verified": 2,
   "epics_failing": 1
@@ -203,13 +203,13 @@
    "title": "Site Admin Journeys",
    "stories": 16,
    "stories_with_scenarios": 16,
-   "stories_passing": 1,
+   "stories_passing": 2,
    "scenarios": 151,
-   "automated": 114,
-   "passing": 96,
+   "automated": 129,
+   "passing": 111,
    "failing": 1,
    "no_result": 17,
-   "planned": 37,
+   "planned": 22,
    "health": "failing"
   }
  ],
@@ -2225,31 +2225,31 @@
    "story": "STORY-13-02"
   },
   "SC-13-02-07": {
-   "state": "planned",
+   "state": "passing",
    "name": "Multiple debts across periods are listed oldest first with a fee each",
    "epic": "EPIC-13",
    "story": "STORY-13-02"
   },
   "SC-13-02-08": {
-   "state": "planned",
+   "state": "passing",
    "name": "An advance balance has already offset later periods",
    "epic": "EPIC-13",
    "story": "STORY-13-02"
   },
   "SC-13-02-09": {
-   "state": "planned",
+   "state": "passing",
    "name": "A fourth accrual adds exactly one liability per responsible debtor",
    "epic": "EPIC-13",
    "story": "STORY-13-02"
   },
   "SC-13-02-10": {
-   "state": "planned",
+   "state": "passing",
    "name": "A closed period accepts no new accrual or edit but keeps its open debts",
    "epic": "EPIC-13",
    "story": "STORY-13-02"
   },
   "SC-13-02-11": {
-   "state": "planned",
+   "state": "passing",
    "name": "A payment toward a closed period is still allocated to its oldest debt",
    "epic": "EPIC-13",
    "story": "STORY-13-02"
@@ -2525,7 +2525,7 @@
    "story": "STORY-13-05"
   },
   "SC-13-05-09": {
-   "state": "planned",
+   "state": "passing",
    "name": "A move-out recorded after accrual re-splits the open liability",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
@@ -2567,7 +2567,7 @@
    "story": "STORY-13-05"
   },
   "SC-13-05-16": {
-   "state": "planned",
+   "state": "passing",
    "name": "Balances are identical after a backend restart at any point of the history",
    "epic": "EPIC-13",
    "story": "STORY-13-05"
@@ -2597,7 +2597,7 @@
    "story": "STORY-13-07"
   },
   "SC-13-07-10": {
-   "state": "planned",
+   "state": "passing",
    "name": "Every historical starting state can be built using the documented fixture path",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
@@ -2621,7 +2621,7 @@
    "story": "STORY-13-07"
   },
   "SC-13-07-05": {
-   "state": "planned",
+   "state": "passing",
    "name": "Teardown works after a half-built state",
    "epic": "EPIC-13",
    "story": "STORY-13-07"
@@ -2735,7 +2735,7 @@
    "story": "STORY-13-09"
   },
   "SC-13-09-08": {
-   "state": "planned",
+   "state": "passing",
    "name": "Operational and capital balances stay separate for a tenant-occupied unit",
    "epic": "EPIC-13",
    "story": "STORY-13-09"
@@ -2801,13 +2801,13 @@
    "story": "STORY-13-11"
   },
   "SC-13-11-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "A settled or cancelled liability cannot be paid or corrected again",
    "epic": "EPIC-13",
    "story": "STORY-13-11"
   },
   "SC-13-11-03": {
-   "state": "planned",
+   "state": "passing",
    "name": "A reversal moves a PAID liability back to OVERDUE",
    "epic": "EPIC-13",
    "story": "STORY-13-11"
@@ -2825,19 +2825,19 @@
    "story": "STORY-13-11"
   },
   "SC-13-11-06": {
-   "state": "planned",
+   "state": "passing",
    "name": "A bank statement item reaches each reconciliation status",
    "epic": "EPIC-13",
    "story": "STORY-13-11"
   },
   "SC-13-11-07": {
-   "state": "planned",
+   "state": "passing",
    "name": "A rejected or approved statement item cannot change status again",
    "epic": "EPIC-13",
    "story": "STORY-13-11"
   },
   "SC-13-11-08": {
-   "state": "planned",
+   "state": "passing",
    "name": "Each unit occupancy state offers its own commands and refuses the rest",
    "epic": "EPIC-13",
    "story": "STORY-13-11"
@@ -3188,7 +3188,7 @@
    "stories": 116,
    "stories_with_scenarios": 116,
    "scenarios": 465,
-   "automated": 420
+   "automated": 435
   }
  ],
  "recent_changes": [
@@ -3198,13 +3198,13 @@
    "title": "Site Admin Journeys",
    "new_stories": 0,
    "new_scenarios": 0,
-   "newly_automated": 5,
-   "items": 5,
+   "newly_automated": 20,
+   "items": 20,
    "samples": [
-    "SC-13-03-11: The same national id entered twice does not create a second person",
-    "SC-13-05-05: The scheduler catches up months that were missed",
-    "SC-13-05-11: Merging two duplicate people keeps every liability and payment",
-    "SC-13-08-03: A search with zero matches is recoverable without changing the site"
+    "SC-13-02-07: Multiple debts across periods are listed oldest first with a fee each",
+    "SC-13-02-08: An advance balance has already offset later periods",
+    "SC-13-02-09: A fourth accrual adds exactly one liability per responsible debtor",
+    "SC-13-02-10: A closed period accepts no new accrual or edit but keeps its open debts"
    ]
   },
   {
@@ -3949,5 +3949,5 @@
    ]
   }
  ],
- "href": "reports/45060244112-1/"
+ "href": "reports/45063699856-1/"
 }
