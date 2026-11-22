@@ -462,7 +462,10 @@ def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack,
 
         # Search for an absent unit label
         fill(page, "resident_search_field", "Z-999-ABSENT")
-        page.wait_for_timeout(500)
+        try:
+            by_id(page, "units_filtered_empty_state").wait_for(timeout=10_000)
+        except Exception:
+            page.wait_for_timeout(1_500)
 
         # Directory reports zero matches
         lines = page_lines(page)
@@ -471,11 +474,17 @@ def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack,
 
         # Clear search
         clear_btn = by_id(page, "resident_search_clear_btn")
+        reset_btn = by_id(page, "empty_state_reset_filters_btn")
         if clear_btn.count() > 0:
             clear_btn.click()
+        elif reset_btn.count() > 0:
+            reset_btn.click()
         else:
             fill(page, "resident_search_field", "")
-        page.wait_for_timeout(500)
+        try:
+            by_id(page, "units_filtered_empty_state").wait_for(state="detached", timeout=10_000)
+        except Exception:
+            page.wait_for_timeout(1_500)
 
         # All units reappear and site unit count remains 7
         refreshed_lines = page_lines(page)
