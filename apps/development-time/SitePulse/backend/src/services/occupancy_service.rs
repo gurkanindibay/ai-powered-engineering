@@ -389,25 +389,6 @@ impl OccupancyService {
                     .and_then(|u| u.owner_user_id.as_deref())
                     .and_then(|s| s.strip_prefix("person-").unwrap_or(s).parse::<i64>().ok())
             };
-            let db_owner_pid = if let Some(pool) = self.state.db_pool() {
-                if let Ok(client) = pool.get().await {
-                    if let Some(uid) = parse_unit_id(&due.unit_id) {
-                        client
-                            .query_opt("SELECT owner_person_id FROM units WHERE id = $1", &[&uid])
-                            .await
-                            .ok()
-                            .flatten()
-                            .and_then(|row| row.get(0))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            let owner_person_id = db_owner_pid.or(owner_person_id);
 
             let shares = detailed_accrual_shares(
                 due.principal_amount,
