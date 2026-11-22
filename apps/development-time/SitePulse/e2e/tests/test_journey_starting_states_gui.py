@@ -469,7 +469,7 @@ def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack,
 
         # Directory reports zero matches
         lines = page_lines(page)
-        assert any("Bulunamadı" in line or "bulunmuyor" in line.lower() for line in lines)
+        assert any("bulunamadı" in line.lower() or "bulunamadi" in line.lower() or "bulunmuyor" in line.lower() for line in lines)
         assert not any("A-01" in line or "A-1" in line for line in lines)
 
         # Clear search
@@ -515,9 +515,9 @@ def test_f2_cancelling_accrual_confirmation_makes_no_financial_change(request, a
 
         # Verify no liabilities exist
         site = int(fixture.site_id)
-        assert stack.sql(f"SELECT COUNT(*) FROM dues_liabilities WHERE site_id = {site};") == "0"
+        assert stack.sql(f"SELECT COUNT(*) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id = {site};") == "0"
 
         # Reopening allows manager to confirm once successfully
         period, text = dues.accrue_selected_period()
         assert len(period) > 0
-        assert stack.sql(f"SELECT COUNT(*) FROM dues_liabilities WHERE site_id = {site};") != "0"
+        assert stack.sql(f"SELECT COUNT(*) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id = {site};") != "0"
