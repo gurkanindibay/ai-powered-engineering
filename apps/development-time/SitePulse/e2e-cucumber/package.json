@@ -8,7 +8,7 @@
     "lint:money": "python3 scripts/check_ts_money.py"
   },
   "dependencies": {
-    "@cucumber/cucumber": "^11.2.0",
+    "@cucumber/cucumber": "^13.3.0",
     "@playwright/test": "^1.55.0",
     "@serenity-js/core": "^3.34.0",
     "@serenity-js/cucumber": "^3.34.0",
