@@ -92,7 +92,9 @@ class CiTestReportTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             (tmp / "shards").mkdir()
-            summary = ctr.build(tmp / "shards", tmp / "out", None, tmp / "missing")
+            evidence = tmp / "actions-evidence"
+            summary = ctr.build(tmp / "shards", tmp / "out", None, tmp / "missing", evidence, "123", "1")
+            self.assertFalse(evidence.exists())
             self.assertEqual((summary["status"], summary["executions"]), ("NO RESULTS", 0))
             self.assertIn("No execution records", (tmp / "out" / "test-report.md").read_text(encoding="utf-8"))
 

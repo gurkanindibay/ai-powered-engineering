@@ -88,10 +88,11 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
         if not run_id or not attempt:
             raise ValueError("Actions evidence requires both run_id and attempt")
         evidence_runs = evidence_out / f"run-{run_id}" / f"attempt-{attempt}" / "runs"
-        evidence_runs.parent.mkdir(parents=True, exist_ok=True)
         if evidence_runs.exists():
             shutil.rmtree(evidence_runs)
-        shutil.copytree(store_dir / "runs", evidence_runs)
+        if (store_dir / "runs").is_dir():
+            evidence_runs.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(store_dir / "runs", evidence_runs)
 
     catalogue = ft.load_catalogue()
     records = ft.load_history(store, 10_000)
