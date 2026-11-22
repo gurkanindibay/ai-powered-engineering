@@ -19,7 +19,7 @@
     "playwright": "^1.55.0"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.7",
+    "@types/adm-zip": "^0.6.0",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.11.10",
     "ts-node": "^10.9.2",
