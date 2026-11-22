@@ -860,6 +860,7 @@ pub async fn provision_site_units(
                 } else {
                     "2+1".to_string()
                 }),
+                monthly_tariff_override: None,
                 created_on: Some(Utc::now().date_naive()),
             });
             new_unit_id

@@ -173,7 +173,7 @@ pub async fn get_resident_dashboard(
         if let Ok(client) = pool.get().await {
             let num_id = crate::db::parse_id_to_i64(&unit_id).unwrap_or(0);
             if let Ok(Some(row)) = client.query_opt(
-                "SELECT u.id, u.site_id, COALESCE(b.block_name, 'A Blok'), u.unit_number, u.floor, u.land_share, u.owner_person_id, u.tenant_person_id, u.virtual_iban, u.house_type FROM units u LEFT JOIN blocks b ON u.block_id = b.id WHERE u.id = $1 OR u.id::text = $2",
+                "SELECT u.id, u.site_id, COALESCE(b.block_name, 'A Blok'), u.unit_number, u.floor, u.land_share, u.owner_person_id, u.tenant_person_id, u.virtual_iban, u.house_type, u.monthly_tariff_override FROM units u LEFT JOIN blocks b ON u.block_id = b.id WHERE u.id = $1 OR u.id::text = $2",
                 &[&num_id, &unit_id],
             ).await {
                 let u_id: i64 = row.get(0);
@@ -186,6 +186,7 @@ pub async fn get_resident_dashboard(
                 let t_pid: Option<i64> = row.get(7);
                 let v_iban: Option<String> = row.get(8);
                 let h_type: Option<String> = row.get(9);
+                let m_override: Option<Decimal> = row.get(10);
                 Some(IndependentUnit {
                     id: u_id.to_string(),
                     site_id: s_id.map(|s| s.to_string()).unwrap_or_default(),
@@ -197,6 +198,7 @@ pub async fn get_resident_dashboard(
                     tenant_user_id: t_pid.map(|p| p.to_string()),
                     virtual_iban: v_iban,
                     house_type: h_type,
+                    monthly_tariff_override: m_override,
                     created_on: None,
                 })
             } else {

@@ -160,7 +160,7 @@ extension DashboardControllerResidents on DashboardController {
           activationStatus: created.activationStatus,
           warnings: created.warnings,
           isResident: isResident,
-          duesAmount: dues,
+          duesAmount: created.monthlyDues,
           houseType: effectiveHouseType,
         );
         _lastHomeOwnerError = null;

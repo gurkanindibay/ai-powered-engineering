@@ -82,6 +82,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(48, "V48__seller_pays_overrides.sql"),
     migration!(49, "V49__reconciliation_match_assignments.sql"),
     migration!(50, "V50__dues_liabilities_liable_person_unique_index.sql"),
+    migration!(51, "V51__unit_monthly_tariff_override.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.

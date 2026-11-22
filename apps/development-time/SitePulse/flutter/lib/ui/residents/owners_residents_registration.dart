@@ -190,7 +190,7 @@ extension _Registration on _OwnersResidentsModulePageState {
                             : null,
                         members: members,
                         houseType: selectedHouseType,
-                        duesAmount: currentTariff?.duesAmount,
+                        duesAmount: null,
                         isResident: isResident,
                         role: isTenantOccupied ? 'TENANT' : 'OWNER',
                         landShare: parseLandShare(landShareCtrl.text),

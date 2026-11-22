@@ -76,6 +76,8 @@ async fn state_with(proration_enabled: bool, periods: Vec<DuesPeriod>) -> AppSta
         tenant_user_id: None,
         virtual_iban: None,
         house_type: Some("2+1".to_string()),
+        monthly_tariff_override: None,
+
         created_on: Some(date("2026-01-01")),
     });
     inner.house_types.push(HouseTypeTariff {

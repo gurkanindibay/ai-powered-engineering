@@ -1601,6 +1601,8 @@ async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent
         tenant_user_id: None,
         virtual_iban: Some("TR410020504213991067000014".to_string()),
         house_type: Some("2+1".to_string()),
+        monthly_tariff_override: None,
+
         created_on: None,
     }];
 
@@ -2086,6 +2088,8 @@ async fn when_homeowner_records_payment_with_no_debt_then_matches_as_advance_pay
                 tenant_user_id: None,
                 virtual_iban: None,
                 house_type: Some("2+1".to_string()),
+                monthly_tariff_override: None,
+
                 created_on: None,
             });
     }
@@ -2195,6 +2199,8 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
                 tenant_user_id: None,
                 virtual_iban: None,
                 house_type: Some("2+1".to_string()),
+                monthly_tariff_override: None,
+
                 created_on: None,
             });
 
@@ -2796,6 +2802,8 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
                 tenant_user_id: None,
                 virtual_iban: None,
                 house_type: None,
+                monthly_tariff_override: None,
+
                 created_on: None,
             });
     }
@@ -2835,6 +2843,8 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
                 tenant_user_id: None,
                 virtual_iban: None,
                 house_type: Some("2+1".to_string()),
+                monthly_tariff_override: None,
+
                 created_on: None,
             });
     }
