@@ -11,9 +11,7 @@
 
 use std::sync::OnceLock;
 
-use argon2::password_hash::{
-    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
-};
+use argon2::password_hash::{phc::PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::Argon2;
 use axum::{
     body::{to_bytes, Body},
@@ -236,9 +234,8 @@ pub fn verify_token(token: &str) -> Result<Claims, String> {
 // ---------------------------------------------------------------------------
 
 pub fn hash_password(password: &str) -> Result<String, String> {
-    let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|_| "Password hashing failed".to_string())
 }
