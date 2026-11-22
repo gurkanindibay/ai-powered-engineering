@@ -315,63 +315,102 @@ jobs:
           path: ${{ runner.temp }}/sitepulse-actions-evidence/
           retention-days: 30
 
-  # Keep a public product status dashboard (index.html: coverage per epic and trends over every
-  # archived run), the latest feature report and an archive for each completed master run.
-  # PR runs remain available through the job summary and e2e-test-report artifact.
-  publish-test-report:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+  # PR reports stay reviewable as the `e2e-test-report` artifact produced above. Pages migration is
+  # gated until the repository Pages source and the public inventory contract are ready.
+  build-pages:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.SITEPULSE_PAGES_ACTIONS_ENABLED == 'true'
     needs: test-report
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    outputs:
+      current: ${{ steps.head.outputs.current }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: e2e-test-report
           path: ${{ runner.temp }}/e2e-test-report
-      - name: Update and push report history
-        working-directory: ${{ github.workspace }}
+      - name: Check this run is still the current master revision
+        id: head
         env:
-          REPORT_SITE: ${{ runner.temp }}/sitepulse-test-report-site
-          REPORT_DIR: ${{ runner.temp }}/e2e-test-report
+          ACTIONS_SHA: ${{ github.sha }}
         run: |
-          # The loop below switches the checkout to gh-pages, where these scripts do not exist: run
-          # them from a copy. publish_test_report.py imports product_status.py, which imports
-          # feature_traceability.py (test_publish_test_report.py checks this list stays complete).
-          mkdir "$RUNNER_TEMP/report-tools"
-          cp apps/development-time/SitePulse/scripts/{publish_test_report,product_status,feature_traceability}.py \
-            "$RUNNER_TEMP/report-tools/"
-          for retry in 1 2 3 4 5; do
-            rm -rf "$REPORT_SITE"
-            mkdir -p "$REPORT_SITE"
-            if git ls-remote --exit-code origin refs/heads/gh-pages >/dev/null; then
-              git fetch origin gh-pages:refs/remotes/origin/gh-pages
-              git archive origin/gh-pages | tar -x -C "$REPORT_SITE"
-              git checkout -B gh-pages origin/gh-pages
-            else
-              git branch -D gh-pages >/dev/null 2>&1 || true
-              git checkout --orphan gh-pages
-            fi
-            python3 "$RUNNER_TEMP/report-tools/publish_test_report.py" \
-              --report "$REPORT_DIR" \
-              --site "$REPORT_SITE" \
-              --run-id "${{ github.run_id }}" \
-              --attempt "${{ github.run_attempt }}"
-            git rm -rf . >/dev/null 2>&1 || true
-            cp -a "$REPORT_SITE/." .
-            git add -A
-            if git diff --cached --quiet; then
-              exit 0
-            fi
-            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "Publish SitePulse test report ${{ github.run_id }}"
-            if git push origin HEAD:gh-pages; then
-              exit 0
-            fi
-            git checkout -f "${GITHUB_SHA}"
-          done
-          echo 'Could not publish report history after five retries' >&2
-          exit 1
+          git fetch origin master
+          if [ "$(git rev-parse origin/master)" = "$ACTIONS_SHA" ]; then
+            echo 'current=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'current=false' >> "$GITHUB_OUTPUT"
+            echo 'Skipping stale Pages artifact; master advanced after this run started.'
+          fi
+      - name: Restore archive state
+        if: steps.head.outputs.current == 'true'
+        run: |
+          git fetch origin gh-pages
+          git worktree add -B pages-state "$RUNNER_TEMP/pages-state" origin/gh-pages
+      - name: Build safe Pages site
+        if: steps.head.outputs.current == 'true'
+        env:
+          REPORT_SITE: ${{ runner.temp }}/pages-state
+          REPORT_DIR: ${{ runner.temp }}/e2e-test-report
+        run: python3 scripts/pages_site.py build --site "$REPORT_SITE" --report "$REPORT_DIR" \
+          --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" \
+          --run-number "${{ github.run_number }}" --commit "${{ github.sha }}" \
+          --action-run-id "${{ github.run_id }}" --require-public-report
+      - name: Commit sanitized archive state
+        if: steps.head.outputs.current == 'true'
+        env:
+          REPORT_SITE: ${{ runner.temp }}/pages-state
+        run: |
+          git -C "$REPORT_SITE" add -A
+          if ! git -C "$REPORT_SITE" diff --cached --quiet; then
+            git -C "$REPORT_SITE" -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "Publish SitePulse report ${{ github.run_id }}"
+            git -C "$REPORT_SITE" push origin HEAD:gh-pages
+          fi
+      - name: Prepare and verify Pages artifact
+        if: steps.head.outputs.current == 'true'
+        env:
+          REPORT_SITE: ${{ runner.temp }}/pages-state
+          ARTIFACT_SITE: ${{ runner.temp }}/sitepulse-pages-artifact
+        run: |
+          mkdir -p "$ARTIFACT_SITE"
+          git -C "$REPORT_SITE" archive HEAD | tar -x -C "$ARTIFACT_SITE"
+          python3 scripts/pages_site.py verify-local --site "$ARTIFACT_SITE"
+      - name: Upload GitHub Pages artifact
+        if: steps.head.outputs.current == 'true'
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: ${{ runner.temp }}/sitepulse-pages-artifact
+
+  deploy-pages:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.SITEPULSE_PAGES_ACTIONS_ENABLED == 'true' && needs['build-pages'].outputs.current == 'true'
+    needs: build-pages
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Verify served Pages revision and links
+        run: python3 scripts/pages_site.py verify-remote --url "${{ steps.deployment.outputs.page_url }}" \
+          --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" \
+          --run-number "${{ github.run_number }}" --commit "${{ github.sha }}" \
+          --action-run-id "${{ github.run_id }}"
 
   # Keeps the check name `verify` that branch protection requires. It runs even when a group
   # fails (a skipped required check would count as passing) and fails unless every group passed.
