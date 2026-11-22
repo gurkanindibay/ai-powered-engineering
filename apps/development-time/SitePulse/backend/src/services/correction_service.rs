@@ -175,30 +175,34 @@ impl CorrectionService {
                     "Only an operational dues liability can be split and re-issued",
                 ));
             }
-            if req.replacement_shares.len() != 2 {
+            if req.replacement_shares.len() < 2 {
                 return Err(invalid(
-                    "A split re-issue must include exactly one owner share and one tenant share",
+                    "A split re-issue must include at least two replacement shares",
                 ));
             }
-            // A share is told apart by its role and, when two persons share a role, by person.
+            // A share is told apart by its role and, when multiple persons share a role, by person.
             let mut keys = std::collections::HashSet::new();
             let mut total = Decimal::ZERO;
-            let same_role =
-                req.replacement_shares[0].debtor_type == req.replacement_shares[1].debtor_type;
+            let mut role_counts = std::collections::HashMap::new();
+            for share in &req.replacement_shares {
+                *role_counts.entry(share.debtor_type).or_insert(0) += 1;
+            }
             for share in &req.replacement_shares {
                 if share.amount <= Decimal::ZERO || share.amount.normalize().scale() > 2 {
                     return Err(invalid(
                         "Each replacement share must be a positive amount with at most two decimal places",
                     ));
                 }
-                if same_role && share.liable_person_id.is_none() {
+                if role_counts.get(&share.debtor_type).copied().unwrap_or(0) > 1
+                    && share.liable_person_id.is_none()
+                {
                     return Err(invalid(
                         "Shares of the same role must each name the liable person",
                     ));
                 }
                 if !keys.insert((share.debtor_type, share.liable_person_id)) {
                     return Err(invalid(
-                        "A split re-issue must contain two different shares: one owner and one tenant, or two persons of one role",
+                        "A split re-issue must contain distinct shares: distinct roles or distinct persons of the same role",
                     ));
                 }
                 total += share.amount;
@@ -537,6 +541,13 @@ impl CorrectionService {
             }
             if next.debtor_type == DebtorType::Tenant {
                 if let Some(joint) = inner.joint_liability_owners.get(&due.id).cloned() {
+                    let joint: Vec<_> = joint
+                        .into_iter()
+                        .map(|mut j| {
+                            j.tenant_person_id = next.liable_person_id.or(j.tenant_person_id);
+                            j
+                        })
+                        .collect();
                     inner.joint_liability_owners.insert(next.id.clone(), joint);
                 }
             }

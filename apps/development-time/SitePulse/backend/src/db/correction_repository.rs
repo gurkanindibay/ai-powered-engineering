@@ -240,12 +240,12 @@ pub async fn apply_accrual_correction(
                     r#"
                     INSERT INTO dues_liability_joint_owners
                         (site_id, due_id, owner_person_id, tenant_person_id, liable_from, liable_through)
-                    SELECT site_id, $1, owner_person_id, tenant_person_id, liable_from, liable_through
+                    SELECT site_id, $1, owner_person_id, COALESCE($3, tenant_person_id), liable_from, liable_through
                     FROM dues_liability_joint_owners
                     WHERE due_id = $2
                     ON CONFLICT (due_id, owner_person_id, liable_from, liable_through) DO NOTHING
                     "#,
-                    &[&new_id, &due],
+                    &[&new_id, &due, &liable_person],
                 )
                 .await
             {

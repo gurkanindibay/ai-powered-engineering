@@ -204,22 +204,29 @@ def test_tenant_left_without_notice_is_moved_out_at_the_real_date(journey_site):
             j.api.call("POST", f"/api/v1/accrual-corrections/{correction['id']}/decide", reviewer.token,
                        body={"approve": True, "note": "SC-13-05-18 split approved"})
 
-    # November is split between the tenants and the owner; owner rows name Ahmet Yılmaz.
+    # November is split between the tenants and the owner (SC-13-05-18).
+    assert j.shares(2, "Kasım 2026") == {"Selin Demir": D("700.00"), "Mert Kılıç": D("500.00"), "Ahmet Yılmaz": D("300.00")}
     assert j.roles(2, "Kasım 2026") == {"TENANT": D("1200.00"), "OWNER": D("300.00")}
+    assert j.shares(2, "Aralık 2026") == {"Ahmet Yılmaz": D("1500.00")}
     assert j.roles(2, "Aralık 2026") == {"OWNER": D("1500.00")}
     assert {row["due"] for row in j.share_rows(2, "Aralık 2026")} == {"2026-12-05"}
     assert [row["name"] for row in j.share_rows(2, "Aralık 2026")] == ["Ahmet Yılmaz"]
     assert [row["name"] for row in j.share_rows(2, "Kasım 2026") if row["debtor"] == "OWNER"] == ["Ahmet Yılmaz"]
     assert {row["due"] for row in j.share_rows(2, "Kasım 2026") if row["debtor"] == "OWNER"} == {"2026-12-05"}
+    assert {row["name"] for row in j.share_rows(2, "Kasım 2026") if row["debtor"] == "TENANT"} == {"Selin Demir", "Mert Kılıç"}
 
     unit = int(j.unit_id(2))
     joint = j.stack.sql(
-        "SELECT p.full_name FROM dues_liability_joint_owners jo "
+        "SELECT p.full_name || '|' || tp.full_name || '|' || d.principal_amount "
+        "FROM dues_liability_joint_owners jo "
         "JOIN persons p ON p.id = jo.owner_person_id "
+        "JOIN persons tp ON tp.id = jo.tenant_person_id "
         "JOIN dues_liabilities d ON d.id = jo.due_id "
-        f"WHERE d.unit_id = {unit} AND d.period = 'Kasım 2026' AND d.status <> 'CANCELLED';"
-    ).strip()
-    assert joint == "Ahmet Yılmaz"
+        f"WHERE d.unit_id = {unit} AND d.period = 'Kasım 2026' AND d.status <> 'CANCELLED' "
+        "ORDER BY d.id;"
+    ).splitlines()
+    assert "Ahmet Yılmaz|Mert Kılıç|500.00" in joint
+    assert "Ahmet Yılmaz|Selin Demir|700.00" in joint
 
     j.invariants("SC-13-05-18")
 
@@ -240,6 +247,7 @@ def test_tenant_left_without_notice_delayed_approval_sets_due_date_to_approval_d
             j.api.call("POST", f"/api/v1/accrual-corrections/{correction['id']}/decide", reviewer.token,
                        body={"approve": True, "note": "SC-13-05-18 delayed split approved"})
 
+    assert j.shares(2, "Kasım 2026") == {"Selin Demir": D("700.00"), "Mert Kılıç": D("500.00"), "Ahmet Yılmaz": D("300.00")}
     assert {row["due"] for row in j.share_rows(2, "Aralık 2026")} == {"2026-12-09"}
     assert {row["due"] for row in j.share_rows(2, "Kasım 2026") if row["debtor"] == "OWNER"} == {"2026-12-09"}
     assert [row["name"] for row in j.share_rows(2, "Aralık 2026")] == ["Ahmet Yılmaz"]
