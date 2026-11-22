@@ -50,6 +50,8 @@ def main() -> int:
     os.environ.setdefault("DB_HOST", "127.0.0.1")
     os.environ.setdefault("DB_PORT", "5432")
 
+    st.build_web()
+
     artifacts = E2E_DIR / ".artifacts"
     artifacts.mkdir(parents=True, exist_ok=True)
     stack = st.E2EStack(artifacts / "logs")

@@ -27,8 +27,9 @@ On a Linux machine that also needs Chromium's system dependencies, use
 `npx playwright install --with-deps chromium`.
 
 The runner needs a local PostgreSQL server and the Rust and Flutter build tools.
-It starts an isolated SitePulse stack, runs `npm test` (five cases across the four
-pilot scenarios), generates the Serenity report, and stops the stack. To run
+It builds the Flutter E2E bundle, starts an isolated SitePulse stack, runs
+`npm test` (five cases across the four pilot scenarios), generates the Serenity
+report, and stops the stack. To run
 against an already-running stack, use `npm test`, then run
 `npx serenity-bdd run --features ../.specify/features` to generate the HTML report.
 
