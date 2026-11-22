@@ -6,7 +6,7 @@ use crate::{
 };
 use authorization::RoutePolicy::{self, Development, Public, Require, RequireAny, SelfOnly};
 use axum::{
-    http::{header, HeaderName, HeaderValue, Method},
+    http::{header, HeaderName, HeaderValue, Method, StatusCode},
     middleware,
     routing::{delete, get, patch, post, put},
     Router,
@@ -383,7 +383,10 @@ pub fn build_router(state: AppState) -> Router {
         .layer(cors)
         .layer(middleware::from_fn(security_headers))
         .layer(middleware::from_fn(audit::correlate))
-        .layer(tower_http::timeout::TimeoutLayer::new(REQUEST_TIMEOUT))
+        .layer(tower_http::timeout::TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            REQUEST_TIMEOUT,
+        ))
         .layer(tower::limit::ConcurrencyLimitLayer::new(
             max_concurrent_requests(),
         ))
