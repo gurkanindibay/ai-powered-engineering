@@ -153,47 +153,69 @@ def validate(catalogue: Catalogue, root: Path = PROJECT_ROOT) -> list[str]:
     return problems
 
 
-def detect_changed_files(root: Path = PROJECT_ROOT, base: str | None = None) -> set[str]:
-    """Detects modified files in git relative to `root`."""
-    changed: set[str] = set()
-    try:
-        proc = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if proc.returncode != 0:
-            return changed
-        repo_root = Path(proc.stdout.strip()).resolve()
-
-        # 1. Uncommitted working tree / staged changes
-        st = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        for line in st.stdout.splitlines():
-            line = line.strip()
-            if not line:
-                continue
+def _parse_git_output_paths(stdout: str, repo_root: Path, root: Path, is_status: bool = False) -> set[str]:
+    paths: set[str] = set()
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if is_status:
             parts = line.split(maxsplit=1)
-            if len(parts) == 2:
-                path_str = parts[1]
-                if " -> " in path_str:
-                    path_str = path_str.split(" -> ")[1]
-                p = (repo_root / path_str.strip('"')).resolve()
-                try:
-                    changed.add(str(p.relative_to(root.resolve())))
-                except ValueError:
-                    pass
+            if len(parts) != 2:
+                continue
+            path_str = parts[1]
+            if " -> " in path_str:
+                path_str = path_str.split(" -> ")[1]
+        else:
+            path_str = line
+        p = (repo_root / path_str.strip('"')).resolve()
+        try:
+            paths.add(str(p.relative_to(root.resolve())))
+        except ValueError:
+            pass
+    return paths
 
-        # 2. Diff against base if provided, or if no uncommitted changes found
-        diff_targets = [base] if base else (["HEAD~1", "origin/master...HEAD"] if not changed else [])
-        for target in diff_targets:
+
+def detect_changed_files(root: Path = PROJECT_ROOT, base: str | None = None) -> set[str]:
+    """Detects modified files in git relative to `root`. Raises ValueError on git failure or invalid base."""
+    proc = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise ValueError(f"git rev-parse failed: {proc.stderr.strip() or 'not a git repository'}")
+    repo_root = Path(proc.stdout.strip()).resolve()
+
+    if base:
+        diff = subprocess.run(
+            ["git", "diff", "--name-only", base],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if diff.returncode != 0:
+            raise ValueError(f"git diff failed against base {base!r}: {diff.stderr.strip() or 'unknown revision'}")
+        return _parse_git_output_paths(diff.stdout, repo_root, root, is_status=False)
+
+    # 1. Uncommitted working tree / staged changes
+    st = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if st.returncode != 0:
+        raise ValueError(f"git status failed: {st.stderr.strip()}")
+    changed = _parse_git_output_paths(st.stdout, repo_root, root, is_status=True)
+
+    # 2. Diff against HEAD~1 or origin/master...HEAD if working tree clean
+    if not changed:
+        for target in ("HEAD~1", "origin/master...HEAD"):
             diff = subprocess.run(
                 ["git", "diff", "--name-only", target],
                 cwd=root,
@@ -202,18 +224,10 @@ def detect_changed_files(root: Path = PROJECT_ROOT, base: str | None = None) -> 
                 check=False,
             )
             if diff.returncode == 0:
-                for line in diff.stdout.splitlines():
-                    f = line.strip()
-                    if f:
-                        p = (repo_root / f.strip('"')).resolve()
-                        try:
-                            changed.add(str(p.relative_to(root.resolve())))
-                        except ValueError:
-                            pass
-                if changed:
+                target_changed = _parse_git_output_paths(diff.stdout, repo_root, root, is_status=False)
+                if target_changed:
+                    changed = target_changed
                     break
-    except Exception:
-        pass
     return changed
 
 
@@ -461,7 +475,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     changed_files = None
     if args.changed is not None:
-        changed_files = detect_changed_files(PROJECT_ROOT, base=args.changed if args.changed else None)
+        try:
+            changed_files = detect_changed_files(PROJECT_ROOT, base=args.changed if args.changed else None)
+        except ValueError as err:
+            print(f"error: {err}", file=sys.stderr)
+            return 2
 
     chosen = select(catalogue, args.id, args.layer, args.area, changed_files=changed_files)
     if args.changed is not None and not chosen:

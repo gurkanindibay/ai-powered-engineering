@@ -72,24 +72,25 @@ flowchart TD
     end
 ```
 
-### 3.1 Tier 1: Change-Aware PR Mutation Testing (`--changed`)
-- **Mechanism**: Extend `mutation_scenarios.py` with `--changed [BASE]` (matching `run_tests.py --changed` patterns).
-- **Filtering**: Compares working tree or PR branch against base (`origin/master...HEAD`). Matches modified files against scenario `file` attributes.
+### 3.1 Tier 1: Change-Aware Developer Gate & Targeted PR Tooling (`--changed`)
+- **Mechanism**: Extended `mutation_scenarios.py` with `--changed [BASE]` (matching `run_tests.py --changed` patterns).
+- **Filtering**: Compares working tree or branch against base (`origin/master...HEAD`). Matches modified files against scenario `file` attributes.
+- **Workflow Role**: Today, this operates as a fast developer verification tool prior to opening or updating a PR (`mutation_scenarios.py run --changed --strict`). If wired directly into automated PR CI in the future, the checkout step must set `fetch-depth: 0` so git can resolve `origin/master...HEAD`.
 - **Impact**: 
-  - If a PR edits `backend/src/services/dues_ledger.rs`, it runs only `MUT-RS-001` through `MUT-RS-010` (~2–3 minutes).
-  - If a PR touches documentation or unaffected modules, 0 mutants run (0 seconds overhead).
-- **Enforcement**: `--strict` flag causes non-zero exit code if any mutant survives or is unviable.
+  - If a change edits `backend/src/services/dues_ledger.rs`, it runs only `MUT-RS-001` through `MUT-RS-010` (~2–3 minutes).
+  - If a change touches documentation or unaffected modules, 0 mutants run (0 seconds overhead).
+- **Enforcement**: `--strict` flag causes non-zero exit code (exit 1 on survivors/unviable/timeouts, exit 2 on invalid git ref).
 
 ### 3.2 Tier 2: Dedicated Nightly & On-Demand Workflow (`mutation-testing.yml`)
 - **Triggers**: Nightly schedule (`cron: '0 2 * * *'`) and manual `workflow_dispatch`.
 - **Parallelization**: Shards execution by `--layer` (`python`, `flutter`, `rust`, `db`) across concurrent runners.
-- **Service Containers**: Spin up PostgreSQL 16 Alpine container only for the `db` layer.
-- **Caching**: Utilize `Swatinem/rust-cache` and `subosito/flutter-action` cache for fast compilation.
+- **Service Containers**: Spins up PostgreSQL 16 Alpine container only for the `db` layer.
+- **Caching**: Utilizes `Swatinem/rust-cache` and `subosito/flutter-action` cache for fast compilation.
 - **Reporting & Observability**:
-  - Exports `--markdown` report into `$GITHUB_STEP_SUMMARY`.
-  - Emits `--output` JSON payload.
-  - Uploads consolidated `mutation-test-report` artifact.
-  - Alerts if any previously killed mutant survives (regression guard).
+  - `actions/download-artifact` uses `merge-multiple: true` and `ci_mutation_report.py` uses recursive globbing (`rglob`) to ingest all shards.
+  - Aggregator runs with `--strict` to fail the nightly run if any mutant survives, times out, or fails to compile (active regression guard).
+  - Exports Markdown report into `$GITHUB_STEP_SUMMARY`.
+  - Emits JSON summary and uploads consolidated `mutation-test-report` artifact.
 
 ---
 

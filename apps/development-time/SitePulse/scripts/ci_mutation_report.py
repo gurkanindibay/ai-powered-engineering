@@ -99,9 +99,13 @@ def format_markdown(aggregated: Dict[str, Any]) -> str:
             "| ID | Layer | Area | Operator | Risk |",
             "| :--- | :--- | :--- | :--- | :--- |",
         ])
-        survivor_records = [r for r in aggregated["results"] if r["outcome"] == "survived"]
+        survivor_records = [r for r in aggregated["results"] if r.get("outcome") == "survived"]
         for r in survivor_records:
-            lines.append(f"| `{r['id']}` | {r['layer']} | {r['area']} | {r['operator']} | {r['risk']} |")
+            layer = r.get("layer", "-")
+            area = r.get("area", "-")
+            op = r.get("operator", "-")
+            risk = r.get("risk", "-")
+            lines.append(f"| `{r.get('id', '-')}` | {layer} | {area} | {op} | {risk} |")
         lines.append("")
 
     return "\n".join(lines)
@@ -113,10 +117,14 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, help="Directory to write aggregated report files")
     parser.add_argument("--markdown", type=Path, help="Write markdown summary here")
     parser.add_argument("--json", action="store_true", help="Print aggregated JSON to stdout")
-    parser.add_argument("--strict", action="store_true", help="Exit with 1 if any mutant survived or failed")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit with 1 if any mutant survived, timed out, or failed to compile",
+    )
     args = parser.parse_args(argv)
 
-    json_files = list(args.reports_dir.glob("*.json"))
+    json_files = [p for p in args.reports_dir.rglob("*.json") if p.name != "mutation_summary.json"]
     if not json_files:
         print(f"No JSON reports found in {args.reports_dir}", file=sys.stderr)
         return 1
@@ -138,8 +146,12 @@ def main(argv: List[str] | None = None) -> int:
     else:
         print(md_content)
 
-    if args.strict and aggregated["summary"]["survivors"]:
-        return 1
+    if args.strict:
+        has_survivors = bool(aggregated["summary"]["survivors"])
+        has_unviable = aggregated["summary"]["unviable"] > 0
+        has_timeout = aggregated["summary"]["timeout"] > 0
+        if has_survivors or has_unviable or has_timeout:
+            return 1
     return 0
 
 

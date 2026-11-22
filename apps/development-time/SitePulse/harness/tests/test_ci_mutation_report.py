@@ -51,6 +51,36 @@ class CiMutationReportTest(unittest.TestCase):
             self.assertIn("67%", md)
             self.assertIn("MUT-RS-002", md)
 
+    def test_main_with_nested_artifact_directories_and_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            reports_dir = tmp_path / "shards"
+            shard_py = reports_dir / "mutation-shard-python"
+            shard_rust = reports_dir / "mutation-shard-rust"
+            shard_py.mkdir(parents=True)
+            shard_rust.mkdir(parents=True)
+            out_dir = tmp_path / "out"
+
+            # Passing run (all killed)
+            (shard_py / "mutation_python.json").write_text(
+                json.dumps({"results": [{"id": "PY-1", "layer": "python", "area": "lint", "operator": "op", "risk": "high", "outcome": "killed"}]}), encoding="utf-8"
+            )
+            (shard_rust / "mutation_rust.json").write_text(
+                json.dumps({"results": [{"id": "RS-1", "layer": "rust", "area": "dues", "operator": "op", "risk": "high", "outcome": "killed"}]}), encoding="utf-8"
+            )
+
+            code = mr.main(["--reports-dir", str(reports_dir), "--out", str(out_dir), "--strict"])
+            self.assertEqual(code, 0)
+            self.assertTrue((out_dir / "mutation_summary.json").exists())
+            self.assertTrue((out_dir / "mutation_summary.md").exists())
+
+            # Failing run with survivor
+            (shard_rust / "mutation_rust.json").write_text(
+                json.dumps({"results": [{"id": "RS-2", "layer": "rust", "area": "dues", "operator": "op", "risk": "high", "outcome": "survived"}]}), encoding="utf-8"
+            )
+            code_failing = mr.main(["--reports-dir", str(reports_dir), "--out", str(out_dir), "--strict"])
+            self.assertEqual(code_failing, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

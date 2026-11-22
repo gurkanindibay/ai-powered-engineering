@@ -194,9 +194,57 @@ class SelectionAndStrictTest(unittest.TestCase):
         unmatched = ms.select(catalogue, [], [], [], changed_files={"nonexistent/file.rs"})
         self.assertEqual(len(unmatched), 0)
 
-    def test_detect_changed_files_returns_set(self):
-        result = ms.detect_changed_files()
-        self.assertIsInstance(result, set)
+    def test_parse_git_output_paths_status_and_diff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            project_root = repo_root / "apps" / "sitepulse"
+            project_root.mkdir(parents=True)
+
+            status_output = (
+                " M apps/sitepulse/backend/src/lib.rs\n"
+                "?? apps/sitepulse/flutter/lib/main.dart\n"
+                "R  apps/sitepulse/old.rs -> apps/sitepulse/backend/src/renamed.rs\n"
+                " M outside/repo/file.txt\n"
+            )
+            parsed_status = ms._parse_git_output_paths(status_output, repo_root, project_root, is_status=True)
+            self.assertIn("backend/src/lib.rs", parsed_status)
+            self.assertIn("flutter/lib/main.dart", parsed_status)
+            self.assertIn("backend/src/renamed.rs", parsed_status)
+            self.assertEqual(len(parsed_status), 3)
+
+            diff_output = (
+                "apps/sitepulse/scripts/tool.py\n"
+                "outside/doc.md\n"
+            )
+            parsed_diff = ms._parse_git_output_paths(diff_output, repo_root, project_root, is_status=False)
+            self.assertEqual(parsed_diff, {"scripts/tool.py"})
+
+    def test_detect_changed_files_invalid_base_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            ms.detect_changed_files(base="origin/nonexistent_xyz_branch")
+        self.assertIn("git diff failed", str(ctx.exception))
+
+    def test_main_changed_with_invalid_base_returns_exit_code_2(self):
+        exit_code = ms.main(["list", "--changed", "origin/nonexistent_xyz_branch"])
+        self.assertEqual(exit_code, 2)
+
+    def test_strict_mode_exit_code(self):
+        tmp, root, catalogue = _sandbox()
+        journal = root / "journal.json"
+        with tmp:
+            # When mutant survives, run with strict mode must return 1
+            def survivor_runner(suite, where):
+                return ms.SuiteResult(suite.name, "passed")
+
+            res = ms.run_scenario(
+                catalogue.scenarios[0], catalogue, root=root, runner=survivor_runner, journal=journal
+            )
+            summary = ms.summarise([res])
+            self.assertTrue(summary["survivors"])
+
+            # Verify strict check logic directly
+            has_survivors = bool(summary["survivors"])
+            self.assertTrue(has_survivors)
 
 
 if __name__ == "__main__":

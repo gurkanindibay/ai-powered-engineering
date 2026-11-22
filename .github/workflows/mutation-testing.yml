@@ -126,8 +126,6 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Install psql client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Run DB mutation scenarios
         env:
           DB_HOST: 127.0.0.1
@@ -160,13 +158,14 @@ jobs:
         with:
           pattern: mutation-shard-*
           path: ${{ runner.temp }}/mutation-shards
+          merge-multiple: true
       - name: Aggregate layer mutation reports
         run: |
           python3 scripts/ci_mutation_report.py \
             --reports-dir "${{ runner.temp }}/mutation-shards" \
             --out "${{ runner.temp }}/mutation-report" \
-            --markdown "${{ runner.temp }}/mutation-report/summary.md"
-          cat "${{ runner.temp }}/mutation-report/summary.md" >> $GITHUB_STEP_SUMMARY
+            --strict
+          cat "${{ runner.temp }}/mutation-report/mutation_summary.md" >> $GITHUB_STEP_SUMMARY
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-test-report
