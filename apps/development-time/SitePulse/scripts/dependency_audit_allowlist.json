@@ -17,18 +17,7 @@
     "reason": "Pulled in only by printpdf 0.7, which SitePulse uses to write receipts and never to parse untrusted PDFs. printpdf 0.12 is an API rewrite tracked as a follow-up.",
     "expires": "2027-03-31"
   },
-  {
-    "id": "RUSTSEC-2023-0071",
-    "package": "rsa",
-    "reason": "Only the public-key verification path (Google RS256 ID tokens) is used; the advisory affects private-key operations, which SitePulse never performs. No fixed release of rsa is available (0.10 is pre-release).",
-    "expires": "2027-03-31"
-  },
-  {
-    "id": "RUSTSEC-2026-0387",
-    "package": "crypto-bigint",
-    "reason": "Reached through rsa, public-key verification only; no secret-dependent operations run in SitePulse.",
-    "expires": "2027-03-31"
-  },
+
   {
     "id": "RUSTSEC-2026-0543",
     "package": "chrono",

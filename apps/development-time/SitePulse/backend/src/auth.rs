@@ -184,12 +184,10 @@ pub fn issue_token_for_session(
         exp: now + TOKEN_TTL_SECONDS,
         jti: uuid::Uuid::new_v4().to_string(),
     };
-    encode(
-        &Header::new(Algorithm::HS256),
-        &token,
-        &EncodingKey::from_secret(jwt_secret()?),
-    )
-    .map_err(|_| "Token signing failed".to_string())
+    let key =
+        EncodingKey::from_secret(jwt_secret()?).map_err(|_| "Token signing failed".to_string())?;
+    encode(&Header::new(Algorithm::HS256), &token, &key)
+        .map_err(|_| "Token signing failed".to_string())
 }
 /// Validate the credential, then resolve authority from server-side storage.
 ///
@@ -201,7 +199,9 @@ pub fn verify_token(token: &str) -> Result<Claims, String> {
     validation.set_issuer(&[issuer()]);
     validation.set_audience(&[audience()]);
     validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
-    let token = decode::<AccessToken>(token, &DecodingKey::from_secret(jwt_secret()?), &validation)
+    let key =
+        DecodingKey::from_secret(jwt_secret()?).map_err(|_| "Invalid access token".to_string())?;
+    let token = decode::<AccessToken>(token, &key, &validation)
         .map_err(|_| "Invalid access token".to_string())?
         .claims;
     if token.sid.is_empty()
@@ -1068,7 +1068,7 @@ mod tests {
         encode(
             &Header::new(Algorithm::HS256),
             &token,
-            &EncodingKey::from_secret(jwt_secret().expect("test secret")),
+            &EncodingKey::from_secret(jwt_secret().expect("test secret")).expect("encoding key"),
         )
         .expect("signed")
     }
