@@ -25,3 +25,9 @@ Feature: Selecting debts, disputes and virman requests
     Given open items with different amounts
     When some of them are selected
     Then the designated amount is the Decimal sum of the selected items only
+
+  @SC-11-05-05 @layer:flutter @linked
+  Scenario: Statement renders former holders and avoids repeating a joint item for one person
+    Given a statement with a former tenant and one person who is both tenant and owner
+    When the statement is rendered
+    Then every holder section is visible and the shared due is shown once for that person

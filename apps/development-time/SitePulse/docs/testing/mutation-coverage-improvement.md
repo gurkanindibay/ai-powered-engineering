@@ -55,6 +55,17 @@ Add the following eight candidates in order. These are proposed probes with expe
 
 Start with one precise assertion per fault, using exact IDs, decimal amounts, or persisted row counts. Run each new mutant before writing a test to establish whether it already dies. If it survives, add the cheapest assertion that detects the fault. Record the original result, the clean baseline, and the rerun result. Commit one behaving probe per fault. Where two probes are equivalent under the supported inputs, document the equivalence before changing the catalogue. Future regression fixes should contribute a probe when the fault exposes a distinct invariant.
 
+### Statement UI probes (issue #348)
+
+The initial clean baseline passed both `flutter-payments-phase3` and `flutter-all`. Before adding page-rendering assertions, the former-section mutant and a duplicate-joint-item mutant both survived those suites; no existing test instantiated `ResidentStatementPage` with former and current holders. The added fixture uses a distinct former tenant and one current person represented in both tenant and owner sections. Their role-specific balances differ, and the shared due ID is the same in the tenant's own items and the owner's joint items.
+
+| Mutant | Focused assertion | Clean baseline | Final result |
+| --- | --- | --- | --- |
+| `MUT-FL-011` | Former tenant label, due period and exact displayed balance remain visible. | `flutter-payments-phase3` and `flutter-all` pass. | Killed by `flutter-payments-phase3` when the former section is omitted. |
+| `MUT-FL-012` | Tenant and owner role labels remain distinct, while the shared due period and exact amount appear once in the statement section. | `flutter-payments-phase3` and `flutter-all` pass. | Killed by `flutter-payments-phase3` when duplicate joint items are no longer filtered by liable person. |
+
+`MUT-FL-012` treats sections with the same `liable_person_id` as the same person: an open item already shown in that person's own role section is excluded from their joint-liability section. Different people can still see their own joint-liability item. The page-level payment selector retains its existing due-ID de-duplication.
+
 ## 3. Make nightly scores trustworthy and actionable
 
 | Change | Evidence from the current implementation | Acceptance criteria |

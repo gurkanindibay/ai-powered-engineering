@@ -40,6 +40,11 @@ cwd = "flutter"
 cmd = ["flutter", "test"]
 timeout = 1800
 
+[suites.flutter-payments-phase3]
+cwd = "flutter"
+cmd = ["flutter", "test", "test/payments_phase3_test.dart"]
+timeout = 900
+
 [suites.harness]
 cwd = "."
 cmd = ["python3", "-m", "unittest", "discover", "-s", "harness/tests"]
@@ -769,6 +774,32 @@ original = "return '${negative ? '-' : ''}$symbol${_group(integerPart)},$fractio
 mutant = "return '$symbol${negative ? '-' : ''}${_group(integerPart)},$fraction';"
 intent = "Negative amounts render as ₺-1.234,50 instead of -₺1.234,50."
 suites = ["flutter-money", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-011"
+layer = "flutter"
+area = "statement-sections"
+operator = "omit-former-section"
+risk = "high"
+file = "flutter/lib/ui/payments/resident_statement_page.dart"
+original = "cards.add(_DebtorCard("
+mutant = "if (!debtor.isFormer) cards.add(_DebtorCard("
+intent = "A former resident's outstanding statement section is omitted."
+suites = ["flutter-payments-phase3", "flutter-all"]
+
+[[scenario]]
+id = "MUT-FL-012"
+layer = "flutter"
+area = "statement-sections"
+operator = "duplicate-joint-item"
+risk = "high"
+file = "flutter/lib/ui/payments/resident_statement_page.dart"
+original = '''final jointItems = debtor.jointlyLiableOpenItems
+        .where((item) => !duplicateJointDueIds.contains(item.dueId))
+        .toList();'''
+mutant = "final jointItems = debtor.jointlyLiableOpenItems;"
+intent = "A jointly liable due is rendered more than once when a person has tenant and owner sections."
+suites = ["flutter-payments-phase3", "flutter-all"]
 
 # ------------------------------------------------------------------ Python: harness gates
 
