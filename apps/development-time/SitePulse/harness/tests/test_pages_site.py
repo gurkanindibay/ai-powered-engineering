@@ -2,6 +2,7 @@
 import importlib.util
 import json
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import subprocess
 import tempfile
 from threading import Thread
 import unittest
@@ -14,6 +15,31 @@ spec.loader.exec_module(pages)
 
 
 class PagesSiteTests(unittest.TestCase):
+    def test_build_keeps_git_pointer_of_gh_pages_worktree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            ident = ["-c", "user.name=Test", "-c", "user.email=test@example.com"]
+
+            def git(cwd: Path, *args: str) -> str:
+                return subprocess.run(["git", *ident, *args], cwd=cwd, check=True,
+                                      capture_output=True, text=True).stdout
+
+            git(repo, "init", "-q")
+            git(repo, "commit", "-q", "--allow-empty", "-m", "init")
+            git(repo, "branch", "gh-pages")
+            site = root / "pages-state"
+            git(repo, "worktree", "add", "-q", str(site), "gh-pages")
+            (site / "stale.html").write_text("stale", encoding="utf-8")
+            report = self._report(root)
+            pages.build(site, report, "1", "1", 1, "a" * 40)
+            self.assertTrue((site / ".git").exists())
+            self.assertFalse((site / "stale.html").exists())
+            git(site, "add", "-A")
+            git(site, "commit", "-q", "-m", "publish")
+            self.assertIn("publish", git(site, "log", "-1", "--format=%s"))
+
     def _report(self, root: Path, status: str = "PASS", sentinel: str = "UNSAFE_PAYLOAD_MARKER") -> Path:
         report = root / "report"
         report.mkdir(parents=True, exist_ok=True)
