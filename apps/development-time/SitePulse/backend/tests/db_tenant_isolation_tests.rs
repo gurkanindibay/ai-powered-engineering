@@ -747,6 +747,41 @@ async fn reconciliation_assignment_is_persisted_for_its_site_only() {
     t.drop_db().await;
 }
 
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn the_database_rejects_capital_dues_billed_to_a_tenant() {
+    let t = TestDb::create("capital").await;
+    let a = t.site_id("begonya-sitesi").await;
+    let unit = t.unit_of(a).await;
+    let client = t.pool.get().await.expect("connection");
+    let insert = |debtor: &str| {
+        format!(
+            "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type)
+             VALUES ({}, 'RUST-CAPITAL-{}', 100.00, CURRENT_DATE + 5, 'PENDING', '{}', 'CAPITAL_DUES')",
+            unit, debtor, debtor
+        )
+    };
+
+    // Capital dues are owner-only (KMK, V12 chk_dues_capital_owner_only).
+    client
+        .batch_execute(&insert("OWNER"))
+        .await
+        .expect("an owner may be billed capital dues");
+    let err = client
+        .batch_execute(&insert("TENANT"))
+        .await
+        .expect_err("a tenant must never be billed capital dues");
+    assert_eq!(
+        err.as_db_error().and_then(|e| e.constraint()),
+        Some("chk_dues_capital_owner_only"),
+        "{}",
+        err
+    );
+
+    drop(client);
+    t.drop_db().await;
+}
+
 /// Seeds a resident login (person + session-backed user) and returns its person id.
 async fn seed_resident(t: &TestDb, site: i64, name: &str, email: &str) -> i64 {
     let hash = auth::hash_password(resident_password()).expect("hash");
