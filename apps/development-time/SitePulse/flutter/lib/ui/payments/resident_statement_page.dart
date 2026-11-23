@@ -43,6 +43,15 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
     // current. Former sections are numbered from 1 in response order.
     final nextFormerIndex = <String, int>{};
     final currentSeen = <String>{};
+    final ownDueIdsByPerson = <int, Set<String>>{};
+    for (final debtor in statement.debtors) {
+      final personId = debtor.liablePersonId;
+      if (personId != null) {
+        ownDueIdsByPerson
+            .putIfAbsent(personId, () => <String>{})
+            .addAll(debtor.openItems.map((item) => item.dueId));
+      }
+    }
     final cards = <Widget>[];
     for (final debtor in statement.debtors) {
       final isCurrent = !debtor.isFormer && currentSeen.add(debtor.debtorType);
@@ -53,7 +62,13 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
         index = nextFormerIndex[debtor.debtorType] ?? 1;
         nextFormerIndex[debtor.debtorType] = index + 1;
       }
-      cards.add(_DebtorCard(debtor: debtor, sectionIndex: index));
+      cards.add(_DebtorCard(
+        debtor: debtor,
+        sectionIndex: index,
+        duplicateJointDueIds: debtor.liablePersonId == null
+            ? const <String>{}
+            : ownDueIdsByPerson[debtor.liablePersonId] ?? const <String>{},
+      ));
     }
     return cards;
   }
@@ -108,7 +123,12 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
 class _DebtorCard extends StatelessWidget {
   final StatementDebtor debtor;
   final int sectionIndex;
-  const _DebtorCard({required this.debtor, required this.sectionIndex});
+  final Set<String> duplicateJointDueIds;
+  const _DebtorCard({
+    required this.debtor,
+    required this.sectionIndex,
+    required this.duplicateJointDueIds,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +144,13 @@ class _DebtorCard extends StatelessWidget {
       ('61–90 gün', debtor.overdue61To90),
       ('90+ gün', debtor.overdue90Plus),
     ];
+    final jointItems = debtor.jointlyLiableOpenItems
+        .where((item) => !duplicateJointDueIds.contains(item.dueId))
+        .toList();
+    final jointTotal = jointItems.fold(
+      Decimal.zero,
+      (total, item) => total + item.totalOutstanding,
+    );
     return testId('statement_debtor_$roleKey$idSuffix', Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -199,8 +226,7 @@ class _DebtorCard extends StatelessWidget {
                 ),
               ),
           ],
-          if (debtor.debtorType == 'OWNER' &&
-              debtor.jointlyLiableTotal > Decimal.zero) ...[
+          if (debtor.debtorType == 'OWNER' && jointTotal > Decimal.zero) ...[
             const Divider(height: 20),
             Text(
               'Kiracı borçlarında müşterek sorumluluk',
@@ -211,7 +237,7 @@ class _DebtorCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            for (final item in debtor.jointlyLiableOpenItems)
+            for (final item in jointItems)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
@@ -238,7 +264,7 @@ class _DebtorCard extends StatelessWidget {
             _line(
               context,
               'Müşterek sorumluluk toplamı',
-              debtor.jointlyLiableTotal,
+              jointTotal,
               bold: true,
               id: 'statement_joint_liability_total$idSuffix',
             ),

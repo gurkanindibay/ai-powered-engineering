@@ -17,6 +17,7 @@ import 'package:sitepulse/domain/services/payments_phase3_api.dart';
 import 'package:sitepulse/ui/components/sp_dialog_pages.dart';
 import 'package:sitepulse/ui/payments/finance_hub_page.dart';
 import 'package:sitepulse/ui/design_system/money_formatter.dart';
+import 'package:sitepulse/ui/payments/resident_statement_page.dart';
 import 'package:sitepulse/ui/payments/resident_self_service.dart';
 import 'package:sitepulse/ui/theme/app_theme.dart';
 
@@ -26,6 +27,103 @@ http.Response _json(Object body, [int status = 200]) =>
     http.Response.bytes(utf8.encode(json.encode(body)), status, headers: {'content-type': 'application/json'});
 
 Widget _app(Widget child) => MaterialApp(theme: AppTheme.light(), home: Scaffold(body: SingleChildScrollView(child: child)));
+
+
+Map<String, dynamic> _statementSectionsFixture() {
+  final formerItem = {
+    'due_id': '11',
+    'period': 'Eylül 2026',
+    'expense_type': 'OPERATIONAL_DUES',
+    'due_date': '2026-09-15',
+    'days_overdue': 54,
+    'principal_outstanding': '75.20',
+    'penalty_outstanding': '4.80',
+    'total_outstanding': '80.00',
+    'limitation_warning': false,
+  };
+  final sharedItem = {
+    'due_id': '9',
+    'period': 'Ekim 2026',
+    'expense_type': 'OPERATIONAL_DUES',
+    'due_date': '2026-10-15',
+    'days_overdue': 24,
+    'principal_outstanding': '150.00',
+    'penalty_outstanding': '0.00',
+    'total_outstanding': '150.00',
+    'limitation_warning': false,
+  };
+  final emptyBuckets = {
+    'current_due': '0.00',
+    'overdue_1_30_days': '0.00',
+    'overdue_31_60_days': '0.00',
+    'overdue_61_90_days': '0.00',
+    'overdue_90_plus_days': '0.00',
+  };
+  final formerHolder = {
+    'debtor_type': 'TENANT',
+    'name': 'Meral Kaya',
+    'liable_person_id': 21,
+    'is_former': true,
+    ...emptyBuckets,
+    'overdue_31_60_days': '80.00',
+    'principal_outstanding': '75.20',
+    'penalty_outstanding': '4.80',
+    'total_outstanding': '80.00',
+    'advance_balance': '0.00',
+    'open_items': [formerItem],
+    'jointly_liable_total': '0.00',
+    'jointly_liable_open_items': [],
+  };
+  final currentTenant = {
+    'debtor_type': 'TENANT',
+    'name': 'Ahmet Yılmaz',
+    'liable_person_id': 22,
+    ...emptyBuckets,
+    'overdue_1_30_days': '150.00',
+    'principal_outstanding': '150.00',
+    'penalty_outstanding': '0.00',
+    'total_outstanding': '150.00',
+    'advance_balance': '0.00',
+    'open_items': [sharedItem],
+    'jointly_liable_total': '0.00',
+    'jointly_liable_open_items': [],
+  };
+  final samePersonOwner = {
+    'debtor_type': 'OWNER',
+    'name': 'Ahmet Yılmaz',
+    'liable_person_id': 22,
+    ...emptyBuckets,
+    'principal_outstanding': '0.00',
+    'penalty_outstanding': '0.00',
+    'total_outstanding': '0.00',
+    'advance_balance': '0.00',
+    'open_items': [],
+    'jointly_liable_total': '150.00',
+    'jointly_liable_open_items': [sharedItem],
+  };
+  return {
+    'unit_id': '14',
+    'unit_label': 'A Blok D:14',
+    'as_of': '2026-11-08',
+    'debtors': [formerHolder, currentTenant, samePersonOwner],
+    'receipts': [],
+  };
+}
+
+Future<void> _pumpStatementSections(WidgetTester tester) async {
+  ApiClient.transport = MockClient((request) async {
+    expect(request.url.path, '/api/v1/residents/14/statement');
+    return _json(_statementSectionsFixture());
+  });
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.light(),
+      home: const ResidentStatementPage(unitId: '14', subtitle: 'A Blok D:14'),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+}
 
 void main() {
   late http.Client previous;
@@ -270,4 +368,26 @@ void main() {
       findsOneWidget,
     );
   });
+  testWidgets('statement keeps a former holder section and its exact balance', (
+    tester,
+  ) async {
+    // covers: SC-11-05-05
+    await _pumpStatementSections(tester);
+    expect(find.text('Meral Kaya · Önceki kiracı'), findsOneWidget);
+    expect(find.text('Eylül 2026'), findsOneWidget);
+    expect(find.text(formatTry(d('80.00'))), findsNWidgets(3));
+  });
+
+  testWidgets(
+    'statement does not repeat a joint item across the same person roles',
+    (tester) async {
+      // covers: SC-11-05-05
+      await _pumpStatementSections(tester);
+      expect(find.text('Ahmet Yılmaz · Kiracı'), findsOneWidget);
+      expect(find.text('Ahmet Yılmaz · Kat maliki'), findsOneWidget);
+      expect(find.text('Ekim 2026'), findsOneWidget);
+      expect(find.byKey(const Key('designate_9')), findsOneWidget);
+      expect(find.text(formatTry(d('150.00'))), findsNWidgets(4));
+    },
+  );
 }
