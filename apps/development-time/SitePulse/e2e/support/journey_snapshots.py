@@ -109,9 +109,56 @@ def unit_position(api: Api, manager: Session, site_id: str, unit_id: str) -> tup
 
 
 def open_items(api: Api, manager: Session, unit_id: str, debtor_type: str) -> list[dict]:
+    """All open items of a role, across the current holder's and predecessors' sections.
+
+    A role can have several statement sections since #295: the current holder's
+    and one per former liable person. The manager view lists them all, so a
+    role-level item list must collect every section, oldest due date first.
+    """
     statement = api.resident_statement(manager, unit_id)
-    debtor = next(d for d in statement["debtors"] if d["debtor_type"] == debtor_type)
-    return debtor["open_items"]
+    items = [
+        item
+        for debtor in statement["debtors"]
+        if debtor["debtor_type"] == debtor_type
+        for item in debtor["open_items"]
+    ]
+    return sorted(items, key=lambda item: (item.get("due_date") or "", item.get("period") or ""))
+
+
+def section_of(statement: dict, debtor_type: str, first_name: str) -> dict:
+    """The statement section of one named person in a role.
+
+    A role can have the current holder's section and one per former liable
+    person who still owes, so a test about a particular person must select that
+    person's section by name instead of taking the first of the role.
+    """
+    sections = [
+        d for d in statement["debtors"]
+        if d["debtor_type"] == debtor_type and d["name"].split()[0] == first_name
+    ]
+    assert len(sections) == 1, (
+        f"expected one {debtor_type} section for {first_name}, found "
+        f"{[(d['name'], d.get('is_former')) for d in sections]}"
+    )
+    return sections[0]
+
+
+def current_section(statement: dict, debtor_type: str, *, required: bool = True) -> dict | None:
+    """The statement section owned by the unit's current holder of a role.
+
+    A role can have several sections since #295: the current holder's section
+    and one per former liable person who still owes. A test that means the
+    holder's own balance must select that section, not merely the first one.
+    """
+    sections = [d for d in statement["debtors"] if d["debtor_type"] == debtor_type]
+    current = [d for d in sections if not d.get("is_former")]
+    if current:
+        return current[0]
+    if not sections:
+        if not required:
+            return None
+        raise AssertionError(f"statement has no {debtor_type} section: {[d['debtor_type'] for d in statement['debtors']]}")
+    return sections[0]
 
 
 def second_manager(api: Api, stack: E2EStack, fixture: JourneyFixture, person_name: str = "Ayşe Kaya") -> Session:

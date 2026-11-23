@@ -300,6 +300,16 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 python3 apps/development-time/SitePulse/scripts/publish_test_report.py --report /tmp/e2e-test-report --site /tmp/test-report-site --run-id 1234 --attempt 1 --json
 ```
 
+## 5b-7a. GitHub Pages Report Staging (`pages_site.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/pages_site.py](file:///apps/development-time/SitePulse/scripts/pages_site.py)
+- **Purpose:** Prepares a report archive from reviewed inputs and checks the staged or served Pages site's routes and run identity.
+
+```bash
+python3 apps/development-time/SitePulse/scripts/pages_site.py --help
+python3 apps/development-time/SitePulse/scripts/pages_site.py --json verify-local --site /tmp/pages-site
+```
+
 ## 5b-8. Product Status Dashboard (`product_status.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/product_status.py](file:///apps/development-time/SitePulse/scripts/product_status.py) (symlinked to `scripts/product_status.py`)
