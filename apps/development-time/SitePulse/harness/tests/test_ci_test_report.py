@@ -21,6 +21,41 @@ def _record(scenario: str, status: str) -> dict:
 
 
 class CiTestReportTest(unittest.TestCase):
+    def test_incomplete_suite_count_includes_mixed_and_reused_evidence(self):
+        suites = [
+            {"status": "collected"},
+            {"status": "collected-with-failures"},
+            {"status": "incomplete"},
+            {"status": "missing"},
+            {"status": "cancelled"},
+            {"status": "mixed-attempts"},
+            {"status": "reused"},
+            {"status": "not-run"},
+        ]
+
+        self.assertEqual(ctr.incomplete_suite_count(suites), 5)
+
+    def test_attempt_metadata_selects_latest_artifact_for_history_and_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            history, artifacts = tmp / "history", tmp / "artifacts"
+            (history / "runs").mkdir(parents=True)
+            for attempt, scenario in (("1", "SC-06-06-01"), ("2", "SC-06-06-02")):
+                shard = artifacts / f"e2e-shard-1-attempt-{attempt}"
+                shard.mkdir(parents=True)
+                (shard / "collection.json").write_text(json.dumps({"shard": "1/8", "run_id": "42",
+                    "attempt": attempt, "commit": "abc", "job_result": "success"}))
+                (shard / "executions.jsonl").write_text(json.dumps(_record(scenario, "PASS")) + "\n")
+                (shard / "junit.xml").write_text('<testsuite tests="1"><testcase classname="tests.demo" name="case" time="1"/></testsuite>')
+            out = tmp / "out"
+            summary = ctr.build(artifacts, out, None, history, run_id="42", attempt="2",
+                                suite_artifacts=artifacts, commit_override="abc")
+            records = [json.loads(line) for line in (out / "executions.jsonl").read_text().splitlines()]
+            self.assertEqual(summary["executions"], 1)
+            self.assertEqual([row["scenario"] for row in records], ["SC-06-06-02"])
+            collection = json.loads((out / "suite-collection.json").read_text())
+            self.assertEqual(collection["shard_inputs"]["1/8"]["attempt"], "2")
+
     def test_merges_shards_into_report_without_changing_history(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
@@ -41,8 +76,8 @@ class CiTestReportTest(unittest.TestCase):
             self.assertEqual((summary["junit"]["tests"], summary["junit"]["passed"], summary["junit"]["failures"]),
                              (2, 1, 1))
             self.assertEqual(sorted(p.name for p in out.iterdir()),
-                             ["executions.jsonl", "feature-report.html", "product-status.html", "product-status.json",
-                              "summary.json", "test-report.md"])
+                             ["case-results.jsonl", "executions.jsonl", "feature-report.html", "product-status.html",
+                              "product-status.json", "suite-collection.json", "suite-report.md", "summary.json", "test-report.md"])
             status = json.loads((out / "product-status.json").read_text(encoding="utf-8"))
             self.assertEqual((status["status"], status["scenarios"]["SC-06-06-01"]["state"],
                               status["scenarios"]["SC-06-06-02"]["state"]), ("FAIL", "passing", "failing"))
@@ -87,6 +122,21 @@ class CiTestReportTest(unittest.TestCase):
         self.assertIn('test -d "$EVIDENCE_RUNS"', consumer)
         self.assertIn('name: e2e-test-report', producer)
         self.assertIn('path: ${{ runner.temp }}/e2e-test-report/', producer)
+
+    def test_malformed_execution_records_keep_valid_evidence_and_mark_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shard = root / "shards" / "e2e-shard-1"
+            shard.mkdir(parents=True)
+            (shard / "executions.jsonl").write_text(
+                json.dumps(_record("SC-06-06-01", "PASS")) + "\n{invalid\nnull\n",
+                encoding="utf-8",
+            )
+            out = root / "out"
+            summary = ctr.build(root / "shards", out, None, root / "missing-history")
+            self.assertEqual((summary["executions"], summary["status"]), (1, "INCOMPLETE"))
+            collection = json.loads((out / "suite-collection.json").read_text(encoding="utf-8"))
+            self.assertEqual(collection["invalid_execution_inputs"], 2)
 
     def test_no_shard_results_still_writes_a_report(self):
         with tempfile.TemporaryDirectory() as tmp:

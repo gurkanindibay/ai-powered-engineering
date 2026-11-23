@@ -23,6 +23,7 @@ def _load_run_tests():
 
 
 run_tests = _load_run_tests()
+import ci_case_results
 
 
 class GateGroupTests(unittest.TestCase):
@@ -34,6 +35,11 @@ class GateGroupTests(unittest.TestCase):
 
     def test_every_gate_is_known(self):
         self.assertFalse(set(run_tests.ORDER) - set(run_tests.GATES))
+
+    def test_report_gate_manifest_tracks_ci_group_partition(self):
+        expected = dict(run_tests.GATE_GROUPS)
+        expected["verify"] = expected.pop("final")
+        self.assertEqual(ci_case_results.expected_gates(), expected)
 
     def test_lint_gates_run_before_compiles(self):
         order = run_tests.ORDER
