@@ -66,6 +66,10 @@ The initial clean baseline passed both `flutter-payments-phase3` and `flutter-al
 
 `MUT-FL-012` treats sections with the same `liable_person_id` as the same person: an open item already shown in that person's own role section is excluded from their joint-liability section. Different people can still see their own joint-liability item. The page-level payment selector retains its existing due-ID de-duplication.
 
+### Verification reporting probe results
+
+For #349, the initial runs used the existing harness suite before adding focused assertions. Both `MUT-PY-007` (missing required gate evidence reported as passed) and `MUT-PY-008` (failed cases included in passed totals) survived. The clean `harness` baseline passed in 16 seconds. After adding assertions in `harness/tests/test_ci_case_results.py`, both mutants were killed by the `harness` suite. The focused case-result tests passed (13 tests); the full harness suite is the final verification gate.
+
 ## 3. Make nightly scores trustworthy and actionable
 
 | Change | Evidence from the current implementation | Acceptance criteria |

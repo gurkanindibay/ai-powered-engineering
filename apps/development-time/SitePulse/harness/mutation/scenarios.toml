@@ -874,3 +874,27 @@ original = "return min(statuses, key=order.index) if statuses else \"MISSING\""
 mutant = "return max(statuses, key=order.index) if statuses else \"MISSING\""
 intent = "A story's status is its best scenario's instead of its worst, hiding failures."
 suites = ["harness"]
+
+[[scenario]]
+id = "MUT-PY-007"
+layer = "python"
+area = "verification-reporting"
+operator = "missing-suite-pass"
+risk = "medium"
+file = "scripts/ci_suite_collection.py"
+original = "status = \"cancelled\" if result == \"cancelled\" else \"not-run\" if result in (\"skipped\", \"failure\") else \"missing\""
+mutant = "status = \"cancelled\" if result == \"cancelled\" else \"not-run\" if result in (\"skipped\", \"failure\") else \"passed\""
+intent = "A required gate with no collected evidence is reported as passed."
+suites = ["harness"]
+
+[[scenario]]
+id = "MUT-PY-008"
+layer = "python"
+area = "verification-reporting"
+operator = "failed-case-pass"
+risk = "medium"
+file = "scripts/ci_suite_collection.py"
+original = "totals = Counter(row[\"status\"] for row in cases)"
+mutant = "totals = Counter(\"passed\" if row[\"status\"] == \"failed\" else row[\"status\"] for row in cases)"
+intent = "Failed verification cases are counted as passed in the aggregate status totals."
+suites = ["harness"]
