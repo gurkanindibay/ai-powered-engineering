@@ -2,10 +2,12 @@
 import importlib.util
 import io
 import json
+import os
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "cucumber_pilot_report.py"
 spec = importlib.util.spec_from_file_location("cucumber_pilot_report", SCRIPT)
@@ -104,6 +106,50 @@ class CucumberPilotReportTests(unittest.TestCase):
             self.assertNotIn(fixture_marker, output.read_text(encoding="utf-8"))
             self.assertNotIn(fixture_marker, public_output.read_text(encoding="utf-8"))
 
+    def test_cli_validates_both_payloads_before_writing_either(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            junit, executions, _ = self.write_inputs(root)
+            output = root / "cucumber-results.json"
+            public_output = root / "public-report.json"
+            args = ["--junit", str(junit), "--executions", str(executions),
+                    "--run-id", "123456", "--attempt", "1", "--commit", "a" * 40,
+                    "--repository", "owner/repo", "--out", str(output),
+                    "--public-out", str(public_output)]
+            with mock.patch.object(reporter, "public_report_from_result", side_effect=ValueError("invalid")):
+                with redirect_stderr(io.StringIO()):
+                    result = reporter.main(args)
+
+            self.assertEqual(result, 1)
+            self.assertFalse(output.exists())
+            self.assertFalse(public_output.exists())
+
+    def test_cli_writes_only_safe_failure_diagnostics_to_job_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            junit, executions, fixture_marker = self.write_inputs(root)
+            junit_text = junit.read_text(encoding="utf-8")
+            junit.write_text(junit_text.replace(
+                f"name='{fixture_marker}-0'/>", f"name='{fixture_marker}-0'><failure/></testcase>", 1),
+                encoding="utf-8")
+            records = [json.loads(line) for line in executions.read_text(encoding="utf-8").splitlines()]
+            records[0]["status"] = "FAIL"
+            executions.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+            summary = root / "step-summary.md"
+            args = ["--junit", str(junit), "--executions", str(executions),
+                    "--run-id", "123456", "--attempt", "1", "--commit", "a" * 40,
+                    "--repository", "owner/repo", "--out", str(root / "cucumber-results.json"),
+                    "--public-out", str(root / "public-report.json"), "--pilot-exit-code", "23"]
+            with mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
+                with redirect_stdout(io.StringIO()):
+                    result = reporter.main(args)
+
+            safe_summary = summary.read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("SC-10-01-01", safe_summary)
+            self.assertIn("Pilot process exit code: `23`", safe_summary)
+            self.assertNotIn(fixture_marker, safe_summary)
+
     def test_incomplete_inputs_are_not_counted_as_passes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -159,6 +205,7 @@ class CucumberPilotReportTests(unittest.TestCase):
         self.assertIn("cucumber-pilot-results", workflow)
         self.assertIn("cucumber-results.json", workflow)
         self.assertIn("public-report.json", workflow)
+        self.assertIn("PILOT_EXIT_CODE=$pilot_exit_code", workflow)
         self.assertNotIn("target/site/serenity", workflow)
         self.assertNotIn("cucumber-pilot-private.log\n          retention-days", workflow)
 

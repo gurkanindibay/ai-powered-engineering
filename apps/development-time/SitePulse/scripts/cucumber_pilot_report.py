@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -230,19 +231,43 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repository", required=True, help="owner/repository")
     parser.add_argument("--out", type=Path, required=True, help="safe JSON output")
     parser.add_argument("--public-out", type=Path, help="Pages schema-1 allowlist output (default: sibling public-report.json)")
+    parser.add_argument("--pilot-exit-code", type=int, default=0,
+                        help="exit code from the isolated pilot process, for the safe job summary")
     parser.add_argument("--json", action="store_true", help="print the safe result summary as JSON")
     args = parser.parse_args(argv)
     try:
+        if not 0 <= args.pilot_exit_code <= 255:
+            raise ValueError("pilot exit code must be between 0 and 255")
         report = build(args.junit, args.executions, args.run_id, args.attempt, args.commit, args.repository)
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         public_out = args.public_out or args.out.with_name("public-report.json")
+        # Validate and serialize both allowlisted payloads before creating either file.
+        report_text = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
         public_out.parent.mkdir(parents=True, exist_ok=True)
         public_report = public_report_from_result(report)
-        public_out.write_text(json.dumps(public_report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        public_text = json.dumps(public_report, indent=2, sort_keys=True) + "\n"
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        report_temp = args.out.with_name(args.out.name + ".tmp")
+        public_temp = public_out.with_name(public_out.name + ".tmp")
+        report_temp.write_text(report_text, encoding="utf-8")
+        public_temp.write_text(public_text, encoding="utf-8")
+        report_temp.replace(args.out)
+        public_temp.replace(public_out)
     except (OSError, ValueError, ET.ParseError) as error:
         print(f"Cucumber result export failed: {error}", file=sys.stderr)
         return 1
+    failed_case_ids = [case["case_id"] for case in report["cases"]
+                       if case["status"] in {"FAIL", "ERROR"}]
+    summary_value = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_value:
+        summary_path = Path(summary_value)
+        try:
+            with summary_path.open("a", encoding="utf-8") as summary:
+                summary.write("## Cucumber comparison pilot\n\n")
+                summary.write(f"- Result: `{report['status']}`\n")
+                summary.write(f"- Failed case IDs: {', '.join(f'`{case_id}`' for case_id in failed_case_ids) or 'none'}\n")
+                summary.write(f"- Pilot process exit code: `{args.pilot_exit_code}`\n")
+        except OSError as error:
+            print(f"Could not write safe Cucumber job summary: {error}", file=sys.stderr)
     summary = {"status": report["status"], "cases": report["counts"]["tests"], "output": str(args.out)}
     print(json.dumps(summary) if args.json else
           f"Wrote {report['status']} Cucumber comparison report ({report['counts']['tests']} cases)")

@@ -63,7 +63,11 @@ jobs:
         continue-on-error: true
         run: |
           rm -rf e2e-cucumber/target
+          set +e
           python3 e2e-cucumber/scripts/run_pilot.py > "$RUNNER_TEMP/cucumber-pilot-private.log" 2>&1
+          pilot_exit_code=$?
+          echo "PILOT_EXIT_CODE=$pilot_exit_code" >> "$GITHUB_ENV"
+          exit "$pilot_exit_code"
       - name: Build safe comparison report
         if: always()
         working-directory: apps/development-time/SitePulse
@@ -75,16 +79,15 @@ jobs:
           --attempt "${{ github.run_attempt }}"
           --commit "${{ github.sha }}"
           --repository "${{ github.repository }}"
-          --out "$RUNNER_TEMP/cucumber-results.json"
-          --public-out "$RUNNER_TEMP/cucumber-public-report/public-report.json"
+          --out "$RUNNER_TEMP/cucumber-pilot-public/cucumber-results.json"
+          --public-out "$RUNNER_TEMP/cucumber-pilot-public/public-report.json"
+          --pilot-exit-code "${PILOT_EXIT_CODE:-1}"
       - name: Retain allowlisted comparison data
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cucumber-pilot-results-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/cucumber-results.json
-            ${{ runner.temp }}/cucumber-public-report/public-report.json
+          path: ${{ runner.temp }}/cucumber-pilot-public/
           if-no-files-found: error
           retention-days: 30
       - name: Preserve pilot failure status
