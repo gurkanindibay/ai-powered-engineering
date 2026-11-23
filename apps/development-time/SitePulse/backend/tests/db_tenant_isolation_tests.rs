@@ -754,25 +754,37 @@ async fn the_database_rejects_capital_dues_billed_to_a_tenant() {
     let a = t.site_id("begonya-sitesi").await;
     let unit = t.unit_of(a).await;
     let client = t.pool.get().await.expect("connection");
-    let insert = |debtor: &str| {
+    let insert = |period: &str, debtor: &str, expense_type: &str| {
         format!(
             "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type)
-             VALUES ({}, 'RUST-CAPITAL-{}', 100.00, CURRENT_DATE + 5, 'PENDING', '{}', 'CAPITAL_DUES')",
-            unit, debtor, debtor
+             VALUES ({}, '{}', 100.00, CURRENT_DATE + 5, 'PENDING', '{}', '{}')",
+            unit, period, debtor, expense_type
         )
     };
 
     // Capital dues are owner-only (KMK, V12 chk_dues_capital_owner_only).
     client
-        .batch_execute(&insert("OWNER"))
+        .batch_execute(&insert("RUST-CAPITAL-OWNER", "OWNER", "CAPITAL_DUES"))
         .await
         .expect("an owner may be billed capital dues");
+    client
+        .batch_execute(&insert(
+            "RUST-OPERATIONAL-TENANT",
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ))
+        .await
+        .expect("a tenant may be billed operational dues");
     let err = client
-        .batch_execute(&insert("TENANT"))
+        .batch_execute(&insert("RUST-CAPITAL-TENANT", "TENANT", "CAPITAL_DUES"))
         .await
         .expect_err("a tenant must never be billed capital dues");
+    let db_error = err
+        .as_db_error()
+        .expect("the insert fails with a PostgreSQL error");
+    assert_eq!(db_error.code().code(), "23514", "{}", err);
     assert_eq!(
-        err.as_db_error().and_then(|e| e.constraint()),
+        db_error.constraint(),
         Some("chk_dues_capital_owner_only"),
         "{}",
         err
