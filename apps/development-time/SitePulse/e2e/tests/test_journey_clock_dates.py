@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from support.journey_attempts import JourneyManifest, teardown_sites
+from support.journey_snapshots import current_section
 from support.journey_occupancy import (
     OccupancyJourney,
     build_base,
@@ -333,8 +334,9 @@ def test_resplit_share_keeps_an_effective_due_date_and_a_late_fee_that_follow_it
     assert oya["effective_due"] == "2026-11-18", rows
     assert burak["effective_due"] == "2026-11-15", rows
     assert burak["principal"] == D("850.00"), rows
-    fees = {debtor["debtor_type"]: debtor for debtor in j.api.resident_statement(j.manager, j.unit_id(3))["debtors"]}
+    statement = j.api.resident_statement(j.manager, j.unit_id(3))
     assert D(str(tenant_item(j, 3)["penalty_outstanding"])) == D("1.08")
-    owner_fee = sum(D(str(i["penalty_outstanding"])) for i in fees["OWNER"]["open_items"] if i["period"] == PERIOD)
+    owner = current_section(statement, "OWNER")
+    owner_fee = sum(D(str(i["penalty_outstanding"])) for i in owner["open_items"] if i["period"] == PERIOD)
     assert owner_fee == D("5.67")
     j.invariants("SC-13-03-20")

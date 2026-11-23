@@ -10,6 +10,7 @@ from datetime import date
 from decimal import Decimal
 
 from support.journey_reconciliation import PERIODS, cash_checkpoints, reconcile
+from support.journey_snapshots import section_of
 
 D = Decimal
 PERIOD_LABELS = {"January": "Ocak 2027", "February": "Şubat 2027", "March": "Mart 2027", "April": "Nisan 2027"}
@@ -28,7 +29,7 @@ def assert_cash_matches_model(stack, site_a_id: str, site_b_id: str, day: date) 
         f"posted operating cash on {day} differs from the independent reconciliation: {actual} != {dict(expected)}")
 
 
-def live_open_rows(api, stack, sessions: dict[str, object], units: dict[tuple[str, str], str]) -> dict:
+def live_open_rows(api, sessions: dict[str, object], units: dict[tuple[str, str], str]) -> dict:
     """(site, unit, debtor first name, period) -> (principal, fee, jointly liable owner first name or None)."""
     rows: dict = {}
     for (site, label), unit_id in sorted(units.items()):
@@ -39,14 +40,10 @@ def live_open_rows(api, stack, sessions: dict[str, object], units: dict[tuple[st
                 joint[str(item["due_id"])] = debtor["name"].split()[0]
         for debtor in statement["debtors"]:
             for item in debtor["open_items"]:
-                # The resident statement groups items by role (OWNER / TENANT) under the unit's
-                # current occupant name (unit.owner_user_id / tenant_user_id). When ownership has
-                # transferred (e.g. A-01: Ada sold to Ben on March 1), Ada's February due is listed
-                # under the statement's OWNER card, but the primary debtor person at accrual time is
-                # recorded in dues_liabilities.liable_person_id. We look up the person to attribute the row.
-                name = stack.sql(
-                    "SELECT p.full_name FROM dues_liabilities d JOIN persons p ON p.id = d.liable_person_id "
-                    f"WHERE d.id = {int(item['due_id'])};").split()[0]
+                # The statement now groups open items by liable person (#295), so each row's debtor
+                # is the name on its own section: Ada's February due stays on Ada's former-owner
+                # section after Ben takes the title, instead of moving under the current holder.
+                name = debtor["name"].split()[0]
                 key = (site, label, name, LABEL_PERIODS[item["period"]])
                 assert key not in rows, (
                     f"duplicate primary receivable row in resident statement: site {site}, period {LABEL_PERIODS[item['period']]}, "
@@ -57,11 +54,11 @@ def live_open_rows(api, stack, sessions: dict[str, object], units: dict[tuple[st
     return rows
 
 
-def assert_statements_match_model(api, stack, sessions: dict[str, object], units: dict[tuple[str, str], str]) -> None:
+def assert_statements_match_model(api, sessions: dict[str, object], units: dict[tuple[str, str], str]) -> None:
     """The eleven open rows and both site totals on the final checkpoint equal the model."""
     ledger = reconcile()
     expected = {(r.site, r.unit, r.debtor, r.period): (r.principal, r.fee, r.joint_owner) for r in ledger.open_rows()}
-    actual = live_open_rows(api, stack, sessions, units)
+    actual = live_open_rows(api, sessions, units)
     for key in sorted(set(expected) | set(actual)):
         site, unit, debtor, period = key
         assert actual.get(key) == expected.get(key), (
@@ -83,7 +80,9 @@ def assert_statements_match_model(api, stack, sessions: dict[str, object], units
     for owner, label, site in [("Cara", "A-02", "A"), ("Ivan", "B2-01", "B")]:
         unit_id = units[(site, label)]
         statement = api.resident_statement(sessions[site], unit_id)
-        owner_debtor = next(d for d in statement["debtors"] if d["debtor_type"] == "OWNER")
+        # #295 groups the sections by liable person, so a unit with former owners
+        # or tenants lists several OWNER sections; select this person's own one.
+        owner_debtor = section_of(statement, "OWNER", owner)
         expected_joint = ledger.joint_exposure(owner)
         expected_primary = ledger.primary_debt(owner)
         actual_joint = D(str(owner_debtor.get("jointly_liable_total", "0.00")))
@@ -94,6 +93,6 @@ def assert_statements_match_model(api, stack, sessions: dict[str, object], units
             f"owner {owner} on unit {label}: primary debt {actual_primary} != reconciliation {expected_primary}")
 
     statement_a03 = api.resident_statement(sessions["A"], units[("A", "A-03")])
-    fay = next(d for d in statement_a03["debtors"] if d["debtor_type"] == "OWNER")
+    fay = section_of(statement_a03, "OWNER", "Fay")
     assert D(str(fay["total_outstanding"])) == ledger.primary_debt("Fay"), (
         f"Fay primary debt {fay['total_outstanding']} != reconciliation {ledger.primary_debt('Fay')}")

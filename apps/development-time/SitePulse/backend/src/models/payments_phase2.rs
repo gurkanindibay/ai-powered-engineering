@@ -352,6 +352,12 @@ pub struct JointLiabilityOwner {
 pub struct StatementDebtor {
     pub debtor_type: String,
     pub name: String,
+    /// The person liable for this section's open items, when the ledger knows it.
+    #[serde(default)]
+    pub liable_person_id: Option<i64>,
+    /// A predecessor owner or tenant rather than the unit's current role holder.
+    #[serde(default)]
+    pub is_former: bool,
     pub current_due: Decimal,
     pub overdue_1_30_days: Decimal,
     pub overdue_31_60_days: Decimal,

@@ -223,10 +223,11 @@ pub async fn get_resident_statement_logged(
     State(state): State<AppState>,
     ctx: AuthzContext,
     claims: axum::Extension<crate::auth::Claims>,
+    access: axum::Extension<crate::authorization::StatementAccess>,
     path: Path<String>,
 ) -> Result<Json<ResidentStatement>, ApiError> {
     let unit = path.0.clone();
-    let statement = super::get_resident_statement(State(state.clone()), claims, path)
+    let statement = super::get_resident_statement(State(state.clone()), claims, access, path)
         .await
         .map_err(|(s, m)| api_error(s, m))?;
     log(&state, &caller(&ctx), ACCESS_VIEW, "STATEMENT", Some(&unit)).await?;

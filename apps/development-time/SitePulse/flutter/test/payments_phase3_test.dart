@@ -16,6 +16,7 @@ import 'package:sitepulse/domain/services/api_client.dart';
 import 'package:sitepulse/domain/services/payments_phase3_api.dart';
 import 'package:sitepulse/ui/components/sp_dialog_pages.dart';
 import 'package:sitepulse/ui/payments/finance_hub_page.dart';
+import 'package:sitepulse/ui/design_system/money_formatter.dart';
 import 'package:sitepulse/ui/payments/resident_self_service.dart';
 import 'package:sitepulse/ui/theme/app_theme.dart';
 
@@ -221,5 +222,52 @@ void main() {
     expect(tester.widget<ButtonStyleButton>(pay).onPressed, isNotNull);
     expect(find.byKey(const Key('virman_request_owner')), findsOneWidget);
     expect(find.byKey(const Key('dispute_9')), findsOneWidget);
+  });
+
+  testWidgets('a due that several debtor sections share is counted once', (tester) async {
+    // covers: SC-11-05-03
+    // The manager workspace receives every section: the tenant's own charge and
+    // the former joint owner's copy of it. The payment selector must list and
+    // total that due once.
+    final item = {
+      'due_id': '9', 'period': 'Ekim 2026', 'expense_type': 'OPERATIONAL_DUES',
+      'due_date': '2026-10-15', 'days_overdue': 24,
+      'principal_outstanding': '150.00', 'penalty_outstanding': '0',
+      'total_outstanding': '150.00', 'limitation_warning': false,
+    };
+    final statement = ResidentStatement.fromJson({
+      'unit_id': '14',
+      'unit_label': 'A Blok D:14',
+      'as_of': '2026-11-08',
+      'debtors': [
+        {
+          'debtor_type': 'TENANT', 'name': 'Ahmet', 'current_due': '0',
+          'overdue_1_30_days': '150.00', 'overdue_31_60_days': '0',
+          'overdue_61_90_days': '0', 'overdue_90_plus_days': '0',
+          'principal_outstanding': '150.00', 'penalty_outstanding': '0',
+          'total_outstanding': '150.00', 'advance_balance': '0',
+          'open_items': [item],
+        },
+        {
+          'debtor_type': 'OWNER', 'name': 'Mehmet', 'is_former': true,
+          'current_due': '0', 'overdue_1_30_days': '0', 'overdue_31_60_days': '0',
+          'overdue_61_90_days': '0', 'overdue_90_plus_days': '0',
+          'principal_outstanding': '0', 'penalty_outstanding': '0',
+          'total_outstanding': '0', 'advance_balance': '0',
+          'open_items': [],
+          'jointly_liable_total': '150.00',
+          'jointly_liable_open_items': [item],
+        },
+      ],
+      'receipts': [],
+    });
+    await tester.pumpWidget(_app(StatementSelfService(unitId: '14', statement: statement, onChanged: () {})));
+    expect(find.byKey(const Key('designate_9')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('designate_9')));
+    await tester.pump();
+    expect(
+      find.text('Seçilenleri öde · ${formatTry(d('150.00'))}'),
+      findsOneWidget,
+    );
   });
 }
