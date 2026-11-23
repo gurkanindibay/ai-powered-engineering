@@ -319,6 +319,28 @@ class SelectionAndStrictTest(unittest.TestCase):
                 self.assertTrue(selected)
                 self.assertIn(expected_area, {scenario.area for scenario in selected})
 
+    def test_indirect_map_areas_and_layers_exist_in_catalogue(self):
+        catalogue = ms.load_catalogue()
+        known_areas = {scenario.area for scenario in catalogue.scenarios}
+        known_layers = {scenario.layer for scenario in catalogue.scenarios}
+        mapped = set().union(*ms.INDIRECT_CHANGE_AREAS.values())
+        mapped_areas = {
+            value for value in mapped if value != "*" and not value.startswith("@layer:")
+        }
+        mapped_layers = {value.removeprefix("@layer:") for value in mapped if value.startswith("@layer:")}
+        self.assertLessEqual(mapped_areas, known_areas)
+        self.assertLessEqual(mapped_layers, known_layers)
+
+    def test_indirect_map_covers_catalogued_migrations(self):
+        migration_cases = {
+            "backend/migrations/V25__tenant_row_level_security.sql": "tenancy",
+            "backend/migrations/V50__dues_liabilities_liable_person_unique_index.sql": "accrual-persistence",
+            "backend/migrations/V12__financial_and_tenancy_remediation.sql": "dues-ledger",
+        }
+        for path, expected_area in migration_cases.items():
+            with self.subTest(path=path):
+                self.assertIn(expected_area, ms._indirect_areas_for_changed_files({path}))
+
     def test_select_keeps_unrelated_changes_empty_and_runner_changes_broad(self):
         catalogue = ms.load_catalogue()
         unrelated = ms.select(
