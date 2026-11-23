@@ -301,6 +301,42 @@ class SelectionAndStrictTest(unittest.TestCase):
         unmatched = ms.select(catalogue, [], [], [], changed_files={"nonexistent/file.rs"})
         self.assertEqual(len(unmatched), 0)
 
+        migration = "backend/migrations/V50__dues_liabilities_liable_person_unique_index.sql"
+        direct_migration = ms.select(catalogue, [], [], [], changed_files={migration})
+        self.assertTrue(direct_migration)
+        self.assertTrue(all(s.file == migration for s in direct_migration))
+
+    def test_select_maps_high_risk_indirect_changes_to_areas(self):
+        catalogue = ms.load_catalogue()
+        cases = {
+            "backend/tests/db_accrual_persistence_tests.rs": "accrual-persistence",
+            "backend/tests/statement_access_tests.rs": "unit-statements",
+            "backend/migrations/V99__new_tenant_policy.sql": "tenancy",
+        }
+        for changed_file, expected_area in cases.items():
+            with self.subTest(changed_file=changed_file):
+                selected = ms.select(catalogue, [], [], [], changed_files={changed_file})
+                self.assertTrue(selected)
+                self.assertIn(expected_area, {scenario.area for scenario in selected})
+
+    def test_select_keeps_unrelated_changes_empty_and_runner_changes_broad(self):
+        catalogue = ms.load_catalogue()
+        unrelated = ms.select(
+            catalogue, [], [], [], changed_files={"harness/tests/test_unrelated.py"}
+        )
+        self.assertEqual(unrelated, [])
+
+        runner = ms.select(
+            catalogue, [], [], [], changed_files={"scripts/mutation_scenarios.py"}
+        )
+        self.assertEqual(len(runner), len(catalogue.scenarios))
+
+        helper = ms.select(
+            catalogue, [], [], [], changed_files={"flutter/test/ui_test_helpers.dart"}
+        )
+        self.assertTrue(helper)
+        self.assertTrue(all(s.layer == "flutter" for s in helper))
+
     def test_parse_git_output_paths_status_and_diff(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
