@@ -21,6 +21,28 @@ mr = _load("ci_mutation_report")
 
 
 class CiMutationReportTest(unittest.TestCase):
+    def _write_complete_fixture(self, root: Path, outcome: str = "killed") -> tuple[Path, Path]:
+        reports = root / "shards"
+        catalogue = root / "scenarios.toml"
+        catalogue.write_text(
+            '[[scenario]]\nid = "PY-1"\nlayer = "python"\nrisk = "high"\nsuites = ["python-tests"]\n\n'
+            '[[scenario]]\nid = "RS-1"\nlayer = "rust"\nrisk = "high"\nsuites = ["rust-tests"]\n',
+            encoding="utf-8",
+        )
+        for layer, filename in mr.SHARD_FILES.items():
+            shard = reports / f"mutation-shard-{layer}"
+            shard.mkdir(parents=True)
+            rows = []
+            if layer in ("python", "rust"):
+                scenario_id = "PY-1" if layer == "python" else "RS-1"
+                suite = f"{layer}-tests"
+                rows = [{"id": scenario_id, "layer": layer, "risk": "high", "outcome": outcome,
+                         "killed_by": suite if outcome == "killed" else None,
+                         "suites": [{"suite": suite, "status": "failed" if outcome == "killed" else "passed",
+                                     "baseline_status": "passed"}]}]
+            (shard / filename).write_text(json.dumps({"results": rows}), encoding="utf-8")
+        return reports, catalogue
+
     def test_aggregate_reports_combines_layers_and_scores(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -86,42 +108,59 @@ class CiMutationReportTest(unittest.TestCase):
     def test_main_with_nested_artifact_directories_and_strict(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            reports_dir = tmp_path / "shards"
-            shard_py = reports_dir / "mutation-shard-python"
-            shard_rust = reports_dir / "mutation-shard-rust"
-            shard_py.mkdir(parents=True)
-            shard_rust.mkdir(parents=True)
+            reports_dir, catalogue = self._write_complete_fixture(tmp_path)
             out_dir = tmp_path / "out"
-
-            # Passing run (all killed)
-            (shard_py / "mutation_python.json").write_text(
-                json.dumps({"results": [{"id": "PY-1", "layer": "python", "area": "lint", "operator": "op", "risk": "high", "outcome": "killed"}]}), encoding="utf-8"
-            )
-            (shard_rust / "mutation_rust.json").write_text(
-                json.dumps({"results": [{"id": "RS-1", "layer": "rust", "area": "dues", "operator": "op", "risk": "high", "outcome": "killed"}]}), encoding="utf-8"
-            )
-
-            code = mr.main(["--reports-dir", str(reports_dir), "--out", str(out_dir), "--strict"])
+            args = ["--reports-dir", str(reports_dir), "--catalogue", str(catalogue), "--out", str(out_dir), "--strict"]
+            code = mr.main(args)
             self.assertEqual(code, 0)
             self.assertTrue((out_dir / "mutation_summary.json").exists())
             self.assertTrue((out_dir / "mutation_summary.md").exists())
 
             # Failing run with survivor
-            (shard_rust / "mutation_rust.json").write_text(
-                json.dumps({"results": [{"id": "RS-2", "layer": "rust", "area": "dues", "operator": "op", "risk": "high", "outcome": "survived"}]}), encoding="utf-8"
+            (reports_dir / "mutation-shard-rust" / "mutation_rust.json").write_text(
+                json.dumps({"results": [{"id": "RS-1", "layer": "rust", "area": "dues", "operator": "op", "risk": "high", "outcome": "survived", "suites": [{"suite": "rust-tests", "status": "passed", "baseline_status": "passed"}]}]}), encoding="utf-8"
             )
-            code_failing = mr.main(["--reports-dir", str(reports_dir), "--out", str(out_dir), "--strict"])
+            code_failing = mr.main(args)
             self.assertEqual(code_failing, 1)
 
             # A failed clean baseline must also fail the strict nightly report.
-            (shard_rust / "mutation_rust.json").write_text(
+            (reports_dir / "mutation-shard-rust" / "mutation_rust.json").write_text(
                 json.dumps({"results": [{"id": "RS-3", "layer": "rust", "area": "dues", "operator": "op",
                                           "risk": "high", "outcome": "unscored", "suites": [{
-                                              "suite": "rust-unit", "baseline_status": "failed",
+                                              "suite": "rust-tests", "status": "unscored", "baseline_status": "failed",
                                               "baseline_tail": "clean test suite failed"}]}]}), encoding="utf-8"
             )
-            code_unscored = mr.main(["--reports-dir", str(reports_dir), "--out", str(out_dir), "--strict"])
+            code_unscored = mr.main(args)
             self.assertEqual(code_unscored, 1)
+
+    def test_strict_incomplete_evidence_still_writes_reports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports, catalogue = self._write_complete_fixture(root)
+            rust_file = reports / "mutation-shard-rust" / "mutation_rust.json"
+            rust_file.write_text('{not-json', encoding="utf-8")
+            (reports / "mutation-shard-python" / "mutation_python.json").write_text(
+                json.dumps({"results": [
+                    {"id": "PY-1", "layer": "python", "outcome": "killed", "killed_by": "python-tests",
+                     "suites": []},
+                    {"id": "PY-1", "layer": "python", "outcome": "killed", "killed_by": "python-tests",
+                     "suites": [{"suite": "python-tests", "status": "failed", "baseline_status": "passed"}]},
+                    {"id": "EXTRA", "layer": "python", "outcome": "survived"},
+                ]}), encoding="utf-8")
+            (reports / "mutation-shard-db" / "mutation_db.json").unlink()
+            (reports / "mutation-shard-db").rmdir()
+            (reports / "mutation-shard-flutter" / "mutation_flutter.json").unlink()
+            out = root / "out"
+            code = mr.main(["--reports-dir", str(reports), "--catalogue", str(catalogue), "--out", str(out), "--strict"])
+            self.assertEqual(code, 1)
+            self.assertTrue((out / "mutation_summary.json").is_file())
+            self.assertTrue((out / "mutation_summary.md").is_file())
+            summary = json.loads((out / "mutation_summary.json").read_text(encoding="utf-8"))["summary"]
+            diagnostics = "\n".join(summary["incompleteness"])
+            for phrase in ("malformed or unreadable report", "duplicate scenario ID", "unexpected scenario ID",
+                           "missing expected scenario ID", "missing required-suite evidence",
+                           "missing required shard", "missing required payload"):
+                self.assertIn(phrase, diagnostics)
 
 
 if __name__ == "__main__":

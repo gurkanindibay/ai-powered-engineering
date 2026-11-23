@@ -18,6 +18,8 @@ The shard JSON recorded zero scenario-level skips, timeouts, or unviable mutants
 
 The mutation workflow took about 24 minutes, with the Rust shard on the critical path. All four shard jobs completed and uploaded results. The strict aggregator marked the run failed because two mutants survived. Its step exited before publishing the consolidated artifact, so the table above was reconstructed from the four shard JSON files. The [first local assessment](mutation-testing-analysis.md) and this nightly run describe different revisions and suite availability. The older 35/55 score is historical.
 
+The CI aggregator now checks the four named shard payloads against `harness/mutation/scenarios.toml`, including unique expected IDs, matching layers, and one valid baseline/result row for every required suite. Missing shards, malformed reports, duplicate or unexpected IDs, and missing suite evidence are reported as incomplete and fail strict mode. JSON and Markdown summaries are written before strict failure, and the workflow publishes the summary and report artifact with `always()` so survivor and infrastructure failures retain their diagnostics.
+
 ## 1. Kill both capital-dues survivors
 
 [PR #343](https://github.com/gurkanindibay/ai-powered-engineering/pull/343) adds the Rust and database regressions and reports that both targeted mutants were killed. The next complete nightly run can confirm the combined score.
