@@ -78,6 +78,82 @@ def _setup_workspace(root: Path) -> Path:
 
 
 class PublicSafeReportingTests(unittest.TestCase):
+    def test_public_html_uses_safe_classes_for_malformed_record_statuses(self):
+        malicious_status = 'FAIL" onmouseover="alert(1)'
+        scenario = {
+            "id": "SC-01-01-01",
+            "name": "Statement reconciliation",
+            "status": malicious_status,
+            "last_run": None,
+            "recent": [{
+                "status": malicious_status,
+                "started_at": "2026-11-20T12:34:56Z",
+                "commit": "abcdef123456",
+                "failing_step": "",
+            }],
+            "runs": 1,
+            "passed_runs": 0,
+            "linked_tests": [],
+            "feature_file": "EPIC-01/STORY-01-01-statements.feature",
+        }
+        report = {"epics": [{
+            "id": "EPIC-01",
+            "title": "Finance",
+            "status": malicious_status,
+            "stories": [{
+                "id": "STORY-01-01",
+                "title": "Statements",
+                "status": malicious_status,
+                "scenarios": [scenario],
+            }],
+        }]}
+
+        page = ft.render_html(report, "now", "test", public_safe=True)
+
+        self.assertNotIn('class="badge FAIL" onmouseover=', page)
+        self.assertNotIn('class="FAIL" onmouseover=', page)
+        self.assertIn('class="badge unknown"', page)
+        self.assertIn('<i class="unknown"', page)
+
+    def test_public_linked_test_note_omits_sensitive_parameterized_test_id(self):
+        sensitive_test_id = "tests/test_statements.py::test_reconciliation[TR330006100519782134567890]"
+        scenario = {
+            "id": "SC-01-01-02",
+            "name": "Passing linked check",
+            "status": "PASS",
+            "last_run": {
+                "started_at": "2026-11-20T12:34:56Z",
+                "commit": "abcdef123456",
+                "dirty": False,
+                "duration_s": 0.5,
+                "test": sensitive_test_id,
+                "steps": [],
+                "error": "",
+            },
+            "recent": [],
+            "runs": 1,
+            "passed_runs": 1,
+            "linked_tests": [],
+            "feature_file": "EPIC-01/STORY-01-01-statements.feature",
+        }
+        report = {"epics": [{
+            "id": "EPIC-01",
+            "title": "Finance",
+            "status": "PASS",
+            "stories": [{
+                "id": "STORY-01-01",
+                "title": "Statements",
+                "status": "PASS",
+                "scenarios": [scenario],
+            }],
+        }]}
+
+        page = ft.render_html(report, "now", "test", public_safe=True)
+
+        self.assertNotIn(sensitive_test_id, page)
+        self.assertNotIn("TR330006100519782134567890", page)
+        self.assertIn("step details are withheld in this public report", page)
+
     def test_failure_fixture_excludes_sensitive_values_from_all_public_surfaces(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

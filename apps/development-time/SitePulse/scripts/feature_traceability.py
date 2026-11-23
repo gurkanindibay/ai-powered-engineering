@@ -96,6 +96,7 @@ TEST_NAME = re.compile(r"""(?:fn|def)\s+(\w+)|(?:test|testWidgets)\(\s*['"](.+?)
 SCENARIO_ORDER = ["FAIL", "ERROR", "NOT RUN", "DEFECT", "PENDING", "SKIPPED", "PASS"]
 STORY_ORDER = ["FAIL", "ERROR", "MISSING", "NOT RUN", "DEFECT", "PENDING", "SKIPPED", "PASS"]
 FAILING = {"FAIL", "ERROR", "MISSING"}
+STATUS_CLASS = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 BEHAVIOUR_PATHS = ("backend/", "flutter/lib/", "flutter/test/", "e2e/", ".specify/features/")
 MAIN_BRANCHES = {"master", "main", "HEAD", ""}
 IMPACT_MAP = FEATURES / "impact-map.json"
@@ -846,13 +847,19 @@ display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 
 
 def _badge(status: str) -> str:
-    return f'<span class="badge {status.replace(" ", "-")}">{html.escape(status)}</span>'
+    return f'<span class="badge {_status_css_class(status)}">{html.escape(status)}</span>'
+
+
+def _status_css_class(status: object) -> str:
+    """Return a single safe CSS token for a status originating in execution data."""
+    value = status.replace(" ", "-") if isinstance(status, str) else ""
+    return value if STATUS_CLASS.fullmatch(value) else "unknown"
 
 
 def _scenario_html(row: dict, public_safe: bool = False) -> str:
     esc = html.escape
     last = row["last_run"]
-    strip = "".join(f'<i class="{r["status"].replace(" ", "-")}" title="{esc(r["started_at"][:16])} {esc(r["commit"][:7])} '
+    strip = "".join(f'<i class="{_status_css_class(r["status"])}" title="{esc(r["started_at"][:16])} {esc(r["commit"][:7])} '
                     f'{esc(r["status"])}{(" at: " + esc(r["failing_step"])) if (r["failing_step"] and not public_safe) else ""}"></i>'
                     for r in row["recent"])
     when = (f'{esc(last["started_at"][:16].replace("T", " "))} · <code>{esc(last["commit"][:7])}</code>'
@@ -868,6 +875,8 @@ def _scenario_html(row: dict, public_safe: bool = False) -> str:
                            f'{"<pre>" + esc(s["error"]) + "</pre>" if s.get("error") else ""}</td>'
                            f'<td class="num">{s["duration_s"]:.2f}s</td></tr>' for s in last["steps"])
         parts.append(f"<table>{rows}</table>")
+    elif last and public_safe:
+        parts.append('<p class="note">Verified by a linked test; step details are withheld in this public report.</p>')
     elif last:
         parts.append(f'<p class="note">Verified by a linked test, so there is no step detail: <code>{esc(last["test"])}</code></p>')
     else:
@@ -934,7 +943,7 @@ def _matrix_html(report: dict, runs: list[dict], columns: int = 20) -> str:
             body.append(f'<tr><td class="name small" colspan="{len(shown) + 2}">{esc(story["id"])} {esc(story["title"])}</td></tr>')
             for scenario in story["scenarios"]:
                 cells = "".join(
-                    f'<td><i class="cell {(cell or {}).get("status", "")}" title="{esc(run["started_at"][:16])} '
+                    f'<td><i class="cell {_status_css_class((cell or {}).get("status", ""))}" title="{esc(run["started_at"][:16])} '
                     f'{esc((cell or {}).get("status", "not executed"))}"></i></td>'
                     for run, cell in ((run, lookup.get(scenario["id"])) for run, lookup in zip(shown, by_run)))
                 body.append(f'<tr><td class="id">{esc(scenario["id"])}</td><td class="name">{esc(scenario["name"])}</td>{cells}</tr>')
