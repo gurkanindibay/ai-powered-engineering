@@ -42,7 +42,7 @@ After both fixes, expect 58/58 on the existing catalogue with a fresh passing ba
 
 ### Capital-dues database control follow-up
 
-Issue #354 extends the PostgreSQL control with an allowed tenant operational-dues insert and checks both SQLSTATE `23514` and `chk_dues_capital_owner_only` for the rejected tenant capital-dues insert. On the local PostgreSQL service, the clean `rust-db` baseline passed, the targeted ignored integration test passed, and `MUT-DB-002` was killed by `rust-db` on `the_database_rejects_capital_dues_billed_to_a_tenant`. The expanded catalogue contains 60 scenarios after #349; the complete four-shard mutation run is required to confirm the nightly score.
+Issue #354 extends the PostgreSQL control with an allowed tenant operational-dues insert and checks both SQLSTATE `23514` and `chk_dues_capital_owner_only` for the rejected tenant capital-dues insert. On the local PostgreSQL service, the clean `rust-db` baseline passed, the targeted ignored integration test passed, and `MUT-DB-002` was killed by `rust-db` on `the_database_rejects_capital_dues_billed_to_a_tenant`. PR #355 adds two verification-reporting probes; the complete four-shard mutation run records the scenario count and score for its revision.
 
 ## 2. Close gaps in the catalogue
 
