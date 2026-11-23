@@ -164,6 +164,7 @@ jobs:
       - name: Aggregate layer mutation reports
         if: always()
         run: |
+          # Strict aggregation requires all four shards and the full scenario catalogue.
           python3 scripts/ci_mutation_report.py \
             --reports-dir "${{ runner.temp }}/mutation-shards" \
             --out "${{ runner.temp }}/mutation-report" \
