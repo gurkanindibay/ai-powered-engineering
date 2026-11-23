@@ -707,6 +707,16 @@ mod tests {
     }
 
     #[test]
+    fn a_tenant_never_settles_capital_dues_even_when_billed_to_the_tenant() {
+        // The database forbids this row (chk_dues_capital_owner_only); the
+        // ledger must refuse it on its own too, so a legacy or in-memory row
+        // cannot let a tenant pay owner-only capital dues.
+        let capital_tenant = due("a", "100.00", "0.00", 15, DEBTOR_TENANT, EXPENSE_CAPITAL);
+        assert!(!payer_may_settle(&capital_tenant, DEBTOR_TENANT));
+        assert!(!payer_may_settle(&capital_tenant, DEBTOR_OWNER));
+    }
+
+    #[test]
     fn a_negative_settlement_changes_nothing() {
         let mut dues = due(
             "a",
