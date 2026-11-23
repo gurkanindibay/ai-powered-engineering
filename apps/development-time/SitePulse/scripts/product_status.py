@@ -528,12 +528,19 @@ def render_html(snapshots: list[dict], links: dict | None = None) -> str:
     junit = latest.get("junit", {})
     failed_tests = int(junit.get("failures", 0)) + int(junit.get("errors", 0))
     ok = latest["status"] == "PASS"
-    verdict = "All tests passed" if ok else ("No test results" if not junit.get("tests") else
-                                             f"{failed_tests} test{'s' if failed_tests != 1 else ''} failed")
+    failing_scenarios = int(t.get("failing", 0))
+    if ok:
+        verdict = "All tests passed"
+    elif failing_scenarios:
+        verdict = f"{failing_scenarios} failing scenario{'s' if failing_scenarios != 1 else ''}"
+    elif not junit.get("tests"):
+        verdict = "No test results"
+    else:
+        verdict = f"{failed_tests} test{'s' if failed_tests != 1 else ''} failed"
     tiles = "".join([
         _tile("Latest CI run", f'<span class="health {"verified" if ok else "failing"}">'
               f'{HEALTH_ICONS["verified" if ok else "failing"]} {_esc(latest["status"])}</span>',
-              f'{_esc(verdict)}: {int(junit.get("passed", 0))} of {int(junit.get("tests", 0))} tests'),
+              f'{_esc(verdict)} · {int(junit.get("passed", 0))} of {int(junit.get("tests", 0))} tests passed'),
         _tile("Epics verified", f'{t["epics_verified"]}<small>/{t["epics"]}</small>',
               "every scenario passing in CI", run_delta("epics_verified")),
         _tile("Stories specified", f'{t["stories_with_scenarios"]}<small>/{t["stories"]}</small>',
