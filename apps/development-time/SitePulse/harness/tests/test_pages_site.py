@@ -14,14 +14,14 @@ spec.loader.exec_module(pages)
 
 
 class PagesSiteTests(unittest.TestCase):
-    def _report(self, root: Path, status: str = "PASS", secret: str = "PRIVATE_FAILURE_BODY") -> Path:
+    def _report(self, root: Path, status: str = "PASS", sentinel: str = "UNSAFE_PAYLOAD_MARKER") -> Path:
         report = root / "report"
         report.mkdir(parents=True, exist_ok=True)
         (report / "summary.json").write_text(json.dumps({
             "run_id": "20261120T123456Z-aaaaaaa", "task": "master", "commit": "b" * 40,
             "status": status, "junit": {"tests": 3, "passed": 2, "failures": 1, "errors": 0,
-                                          "skipped": 0, "seconds": 2.5, "unparseable": [secret]},
-            "failure_message": secret, "scenario_counts": {"PASS": 2, "FAIL": 1},
+                                          "skipped": 0, "seconds": 2.5, "unparseable": [sentinel]},
+            "failure_message": sentinel, "scenario_counts": {"PASS": 2, "FAIL": 1},
         }), encoding="utf-8")
         snapshot = {
             "schema": 1, "generated_at": "2026-11-20T12:34:56Z", "run_id": "20261120T123456Z-aaaaaaa",
@@ -31,22 +31,22 @@ class PagesSiteTests(unittest.TestCase):
                        "epics": 1, "epics_verified": 0, "epics_failing": 1},
             "epics": [{"id": "EPIC-01", "title": "Safe title", "stories": 1, "stories_with_scenarios": 1,
                        "stories_passing": 0, "scenarios": 1, "automated": 1, "passing": 0, "failing": 1,
-                       "no_result": 0, "planned": 0, "health": "failing", "ignored": secret}],
+                       "no_result": 0, "planned": 0, "health": "failing", "ignored": sentinel}],
             "scenarios": {"SC-01-01-01": {"state": "failing", "name": "Safe scenario", "epic": "EPIC-01",
-                                          "story": "STORY-01-01", "error": secret}},
-            "recent_changes": [{"samples": [secret]}],
+                                          "story": "STORY-01-01", "error": sentinel}},
+            "recent_changes": [{"samples": [sentinel]}],
         }
         (report / "product-status.json").write_text(json.dumps(snapshot), encoding="utf-8")
-        (report / "feature-report.html").write_text(f"<html>{secret}</html>", encoding="utf-8")
-        (report / "test-report.md").write_text(secret, encoding="utf-8")
+        (report / "feature-report.html").write_text(f"<html>{sentinel}</html>", encoding="utf-8")
+        (report / "test-report.md").write_text(sentinel, encoding="utf-8")
         (report / "public-report.json").write_text(json.dumps({
             "schema": 1,
             "gates": [{"name": "E2E suite", "status": "PASS", "duration_seconds": 3.5,
-                       "failure": secret}],
+                       "failure": sentinel}],
             "cases": [{"id": "test_safe", "name": "Safe case", "status": "PASS",
-                       "duration_seconds": 1, "scenario_id": "SC-01-01-01", "failure": secret},
-                      {"id": "bad", "name": "Bad case", "status": "FAIL", "failure": secret}],
-            "raw_xml": secret,
+                       "duration_seconds": 1, "scenario_id": "SC-01-01-01", "failure": sentinel},
+                      {"id": "bad", "name": "Bad case", "status": "FAIL", "failure": sentinel}],
+            "raw_xml": sentinel,
         }), encoding="utf-8")
         return report
 
@@ -72,8 +72,8 @@ class PagesSiteTests(unittest.TestCase):
             self.assertTrue((site / "reports/12345-2/index.html").is_file())
             self.assertIn("reports/12345-2/", (site / "history.html").read_text(encoding="utf-8"))
             all_public = "\n".join(path.read_text(encoding="utf-8") for path in site.rglob("*") if path.is_file())
-            for secret in ("PRIVATE_OLD_HTML", "PRIVATE_OLD_MARKDOWN", "PRIVATE_OLD_SUMMARY", "PRIVATE_FAILURE_BODY"):
-                self.assertNotIn(secret, all_public)
+            for sentinel in ("PRIVATE_OLD_HTML", "PRIVATE_OLD_MARKDOWN", "PRIVATE_OLD_SUMMARY", "UNSAFE_PAYLOAD_MARKER"):
+                self.assertNotIn(sentinel, all_public)
             self.assertNotIn("feature-report.html", [p.name for p in (site / "reports/23456-1").iterdir()])
             public = json.loads((site / "reports/23456-1/public-report.json").read_text(encoding="utf-8"))
             self.assertEqual(public["cases"], [
