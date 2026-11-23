@@ -27,6 +27,7 @@ directory is reported as NO RESULTS); 2 on bad arguments.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -37,6 +38,9 @@ import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+
+PUBLIC_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/()'&+-]{0,119}$")
+PUBLIC_SCENARIO_ID = re.compile(r"^SC-\d{2}-\d{2}-\d{2,}$")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import feature_traceability as ft  # noqa: E402
@@ -109,7 +113,166 @@ def incomplete_suite_count(suites: list[dict]) -> int:
     return sum(1 for suite in suites if suite.get("status") in incomplete_statuses)
 
 
-def collect_inventory(shards: Path, records: list[dict] | None = None) -> dict:
+def _public_duration(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        duration = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(duration) or duration < 0:
+        return None
+    return round(duration, 3)
+
+
+def _safe_public_label(value: object, fallback: str = "") -> str:
+    return value if isinstance(value, str) and PUBLIC_LABEL.fullmatch(value) else fallback
+
+
+def _safe_static_case_name(value: object) -> str:
+    if not isinstance(value, str):
+        return "test case"
+    # Pytest and JUnit commonly append parameter IDs in brackets. Do not publish that suffix.
+    base = value.split("[", 1)[0].strip()
+    return _safe_public_label(base, "test case")[:100]
+
+
+def _public_inventory(suites: object, gates: object, cases: object) -> dict:
+    public_suites = []
+    for suite in suites if isinstance(suites, list) else []:
+        if not isinstance(suite, dict):
+            continue
+        raw_count = suite.get("case_count", 0)
+        try:
+            case_count = max(0, int(raw_count)) if not isinstance(raw_count, bool) else 0
+        except (TypeError, ValueError, OverflowError):
+            case_count = 0
+        missing = suite.get("missing_shards", [])
+        public_suites.append({
+            "suite": _safe_public_label(suite.get("suite"), "unknown"),
+            "gate": _safe_public_label(suite.get("gate"), ""),
+            "runner": _safe_public_label(suite.get("runner"), "unknown"),
+            "producer": _safe_public_label(suite.get("producer"), "unknown"),
+            "status": _safe_public_label(suite.get("status"), "incomplete"),
+            "case_count": case_count,
+            "missing_shards": [_safe_public_label(value, "unknown") for value in missing
+                               if isinstance(value, str)] if isinstance(missing, list) else [],
+        })
+
+    public_gates = []
+    for gate in gates if isinstance(gates, list) else []:
+        if not isinstance(gate, dict):
+            continue
+        exits = gate.get("exit_codes", [])
+        public_gates.append({
+            "gate": _safe_public_label(gate.get("gate"), "unknown"),
+            "status": _safe_public_label(gate.get("status"), "incomplete"),
+            "duration_s": _public_duration(gate.get("duration_s")),
+            "exit_codes": [value for value in exits if isinstance(value, int) and not isinstance(value, bool)]
+            if isinstance(exits, list) else [],
+        })
+
+    public_cases = []
+    for case in cases if isinstance(cases, list) else []:
+        if not isinstance(case, dict):
+            continue
+        raw_scenarios = case.get("scenario_ids", [])
+        public_cases.append({
+            "runner": _safe_public_label(case.get("runner"), "unknown"),
+            "suite": _safe_public_label(case.get("suite"), "unknown"),
+            "producer": _safe_public_label(case.get("producer"), "unknown"),
+            "shard": _safe_public_label(case.get("shard"), "unknown"),
+            "native_id": _safe_static_case_name(case.get("native_id")),
+            "status": _safe_public_label(case.get("status"), "unknown"),
+            "duration_s": _public_duration(case.get("duration_s")),
+            "scenario_ids": [value for value in raw_scenarios
+                             if isinstance(value, str) and PUBLIC_SCENARIO_ID.fullmatch(value)]
+            if isinstance(raw_scenarios, list) else [],
+        })
+    return {"suites": public_suites,
+            "gates": public_gates,
+            "cases": public_cases,
+            "unmapped_cases": [case for case in public_cases if not case.get("scenario_ids")]}
+
+
+def public_report_from_inventory(inventory: dict) -> dict:
+    """Translate the internal collection into Pages schema 1 using public fields only."""
+    status_map = {
+        "passed": "PASS", "collected": "PASS", "success": "PASS", "pass": "PASS",
+        "failed": "FAIL", "collected-with-failures": "FAIL", "failure": "FAIL", "fail": "FAIL",
+        "skipped": "SKIPPED", "cancelled": "SKIPPED", "not-run": "SKIPPED",
+        "error": "ERROR", "incomplete": "INCOMPLETE", "missing": "INCOMPLETE",
+        "mixed-attempts": "INCOMPLETE", "reused": "INCOMPLETE", "unknown": "UNKNOWN",
+    }
+    suite_gate_status: dict[str, list[str]] = defaultdict(list)
+    for suite in inventory.get("suites", []):
+        if not isinstance(suite, dict):
+            continue
+        gate_name = suite.get("gate") or ("gui-e2e" if suite.get("suite") == "e2e" else "")
+        if isinstance(gate_name, str) and gate_name:
+            suite_gate_status[gate_name].append(str(suite.get("status", "unknown")).lower())
+
+    gates = []
+    for gate in inventory.get("gates", []):
+        name = _safe_public_label(gate.get("gate")) if isinstance(gate, dict) else ""
+        if not name:
+            continue
+        states = suite_gate_status.get(name, [])
+        if any(state in {"incomplete", "missing", "mixed-attempts", "reused"} for state in states):
+            public_status = "INCOMPLETE"
+        elif any(state in {"cancelled", "not-run"} for state in states):
+            public_status = "SKIPPED"
+        elif any(state == "collected-with-failures" for state in states):
+            public_status = "FAIL"
+        else:
+            public_status = status_map.get(str(gate.get("status", "unknown")).lower(), "UNKNOWN")
+        public_gate = {"name": name, "status": public_status}
+        duration = _public_duration(gate.get("duration_s"))
+        if duration is not None:
+            public_gate["duration_seconds"] = duration
+        gates.append(public_gate)
+
+    cases = []
+    seen: defaultdict[tuple[str, str, str], int] = defaultdict(int)
+    for case in inventory.get("cases", []):
+        if not isinstance(case, dict):
+            continue
+        runner = _safe_public_label(case.get("runner"), "unknown")
+        suite = _safe_public_label(case.get("suite"), "unknown")
+        name = _safe_static_case_name(case.get("native_id"))
+        identity = (runner, suite, name)
+        seen[identity] += 1
+        ordinal = seen[identity]
+        digest = hashlib.sha256("\0".join(identity).encode("utf-8")).hexdigest()[:16]
+        public_case = {
+            "id": f"case-{digest}-{ordinal}",
+            "name": f"{name} example-{ordinal}",
+            "status": status_map.get(str(case.get("status", "unknown")).lower(), "UNKNOWN"),
+        }
+        duration = _public_duration(case.get("duration_s"))
+        if duration is not None:
+            public_case["duration_seconds"] = duration
+        scenarios = case.get("scenario_ids", [])
+        if isinstance(scenarios, list):
+            scenario_ids = [value for value in scenarios
+                            if isinstance(value, str) and PUBLIC_SCENARIO_ID.fullmatch(value)]
+            if len(scenario_ids) == 1:
+                public_case["scenario_id"] = scenario_ids[0]
+        cases.append(public_case)
+    return {"schema": 1, "gates": gates, "cases": cases}
+
+
+def collect_inventory(shards: Path, records: list[dict] | None = None,
+                      collection: dict | None = None) -> dict:
+    if isinstance(collection, dict):
+        inventory = _public_inventory(collection.get("suites"), collection.get("gates"), collection.get("cases"))
+        has_e2e_cases = any(case.get("runner") == "pytest-playwright" for case in inventory["cases"])
+        if not has_e2e_cases and any(shards.rglob("junit.xml")):
+            legacy = collect_inventory(shards, records)
+            inventory["cases"].extend(legacy["cases"])
+            inventory["unmapped_cases"] = [case for case in inventory["cases"] if not case.get("scenario_ids")]
+        return inventory
+
     records = records or []
     suite_files = list(shards.rglob("suite-collection.json"))
     case_files = list(shards.rglob("case-results.jsonl"))
@@ -117,14 +280,10 @@ def collect_inventory(shards: Path, records: list[dict] | None = None) -> dict:
         try:
             suite_data = json.loads(suite_files[0].read_text(encoding="utf-8"))
             cases = [json.loads(line) for line in case_files[0].read_text(encoding="utf-8").splitlines() if line.strip()]
-            unmapped = [c for c in cases if not c.get("scenario_ids")]
-            return {
-                "suites": suite_data.get("suites", []),
-                "gates": suite_data.get("gates", []),
-                "cases": cases,
-                "unmapped_cases": unmapped
-            }
-        except (OSError, json.JSONDecodeError):
+            if not isinstance(suite_data, dict):
+                raise ValueError("suite collection root is not an object")
+            return _public_inventory(suite_data.get("suites"), suite_data.get("gates"), cases)
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, RecursionError, TypeError):
             pass
 
     scenario_by_test: dict[str, set[str]] = defaultdict(set)
@@ -157,7 +316,7 @@ def collect_inventory(shards: Path, records: list[dict] | None = None) -> dict:
             else:
                 native_id = raw_name
                 parameter_id = None
-            duration_s = float(tc.get("time") or 0)
+            duration_s = _public_duration(tc.get("time") or 0)
             if tc.find("failure") is not None:
                 status = "failed"
             elif tc.find("error") is not None:
@@ -178,7 +337,7 @@ def collect_inventory(shards: Path, records: list[dict] | None = None) -> dict:
                 "native_id": native_id,
                 "parameter_id": parameter_id,
                 "status": status,
-                "duration_s": round(duration_s, 3),
+                "duration_s": duration_s,
                 "scenario_ids": sorted(scenarios)
             })
 
@@ -195,16 +354,11 @@ def collect_inventory(shards: Path, records: list[dict] | None = None) -> dict:
     gates = [{
         "gate": "gui-e2e",
         "status": "failed" if has_failures else "passed",
-        "duration_s": round(sum(c.get("duration_s", 0) for c in cases), 1),
+        "duration_s": round(sum(c.get("duration_s") or 0 for c in cases), 1),
         "exit_codes": [1 if has_failures else 0]
     }] if cases else []
 
-    return {
-        "suites": suites,
-        "gates": gates,
-        "cases": cases,
-        "unmapped_cases": unmapped
-    }
+    return _public_inventory(suites, gates, cases)
 
 
 def attach_outline_examples(report: dict, records: list[dict]) -> None:
@@ -219,9 +373,7 @@ def attach_outline_examples(report: dict, records: list[dict]) -> None:
                 if len(sc_records) > 1:
                     examples = []
                     for i, r in enumerate(sc_records):
-                        name = r.get("name", "")
-                        match = re.search(r"\[(.*)\]", name)
-                        param = match.group(1) if match else r.get("parameter_id") or f"example-{i+1}"
+                        param = f"example-{i+1}"
                         examples.append({
                             "id": param,
                             "parameter_id": param,
@@ -300,7 +452,7 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
         handle.write("\n" + (out / "suite-report.md").read_text(encoding="utf-8"))
 
     run_records = [r for r in records if r.get("run_id") == meta["run_id"]]
-    inventory = collect_inventory(shards, run_records)
+    inventory = collect_inventory(shards, run_records, collection)
     rep = ft.build_report(catalogue, records)
     attach_outline_examples(rep, run_records)
     page = ft.render_html(rep,
@@ -327,6 +479,8 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
                "inventory": {"suites": len(inventory.get("suites", [])),
                              "unmapped_cases": len(inventory.get("unmapped_cases", []))}}
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    (out / "public-report.json").write_text(
+        json.dumps(public_report_from_inventory(inventory), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history(), inventory=inventory)
     (out / "product-status.json").write_text(json.dumps(snapshot, indent=1) + "\n", encoding="utf-8")
     (out / "product-status.html").write_text(
