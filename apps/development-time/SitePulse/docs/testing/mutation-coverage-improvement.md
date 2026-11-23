@@ -40,6 +40,10 @@ python3 scripts/mutation_scenarios.py run --layer db --id MUT-DB-002 --with post
 
 After both fixes, expect 58/58 on the existing catalogue with a fresh passing baseline and all four nightly shards present. Preserve the failure evidence for both kills.
 
+### Capital-dues database control follow-up
+
+Issue #354 extends the PostgreSQL control with an allowed tenant operational-dues insert and checks both SQLSTATE `23514` and `chk_dues_capital_owner_only` for the rejected tenant capital-dues insert. On the local PostgreSQL service, the clean `rust-db` baseline passed, the targeted ignored integration test passed, and `MUT-DB-002` was killed by `rust-db` on `the_database_rejects_capital_dues_billed_to_a_tenant`. The expanded catalogue contains 60 scenarios after #349; the complete four-shard mutation run is required to confirm the nightly score.
+
 ## 2. Close gaps in the catalogue
 
 The 58 mutants cover 16 named areas. All Flutter scenarios target money formatting, input, or decimal decoding. The Python scenarios target linting and traceability. Neither the recently changed statement service nor its Flutter rendering is a mutation target. The catalogue targets two migrations, so PostgreSQL coverage needs particular care even after the current survivor is killed.
