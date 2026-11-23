@@ -238,6 +238,41 @@ async fn state_after_sale() -> AppState {
     state
 }
 
+/// The former owner, current owner, current tenant, and their open items expose
+/// both liable-person grouping and the separate joint-exposure totals.
+async fn state_for_statement_liability_probes() -> AppState {
+    let state = state_after_sale().await;
+    {
+        let mut inner = state.inner.write().await;
+        let today = Utc::now().date_naive();
+        for (due_id, principal, penalty) in [
+            ("due-ben-dec", "600.00", "12.00"),
+            ("due-gul-dec", "700.00", "14.00"),
+            ("due-dan-dec", "300.00", "6.00"),
+        ] {
+            let liability = inner
+                .dues
+                .iter_mut()
+                .find(|liability| liability.id == due_id)
+                .expect("statement probe liability");
+            liability.principal_amount = d(principal);
+            liability.delay_penalty = d(penalty);
+            liability.total_amount = d(principal) + d(penalty);
+            liability.penalty_accrued_through = Some(today);
+        }
+        inner.joint_liability_owners.insert(
+            "due-dan-dec".to_string(),
+            vec![JointLiabilityOwner {
+                person_id: 300,
+                tenant_person_id: Some(201),
+                start_date: today - Days::new(120),
+                end_date: None,
+            }],
+        );
+    }
+    state
+}
+
 /// Unit A-14 after Ben Kaya sold it to Gül Tanrıverdi, with Dan still renting.
 /// Ben's only remaining tie is joint liability for Dan's tenant charge, and his
 /// account role is the resident one — so the role he owes under must come from
@@ -474,6 +509,109 @@ async fn site_staff_still_read_every_section() {
         1,
         "staff keep the tenant correction too: {body}"
     );
+}
+
+#[tokio::test]
+async fn open_items_remain_grouped_under_their_liable_people() {
+    let state = state_for_statement_liability_probes().await;
+    let manager = support::token(
+        &state,
+        "usr-statement-manager",
+        Role::SiteManager,
+        SITE,
+        None,
+    )
+    .await;
+    let (status, body) = call(
+        build_router(state),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&manager),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "manager statement: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let debtors = statement["debtors"].as_array().expect("debtors");
+    let former_owner = debtors
+        .iter()
+        .find(|debtor| debtor["debtor_type"] == "OWNER" && debtor["liable_person_id"] == 102)
+        .expect("former owner's section");
+    let current_owner = debtors
+        .iter()
+        .find(|debtor| debtor["debtor_type"] == "OWNER" && debtor["liable_person_id"] == 300)
+        .expect("current owner's section");
+    let current_tenant = debtors
+        .iter()
+        .find(|debtor| debtor["debtor_type"] == "TENANT" && debtor["liable_person_id"] == 201)
+        .expect("current tenant's section");
+
+    let former_items = former_owner["open_items"].as_array().expect("former items");
+    assert_eq!(former_items.len(), 1, "former owner's exact item: {body}");
+    assert_eq!(former_items[0]["due_id"], "due-ben-dec", "{body}");
+    let current_owner_items = current_owner["open_items"]
+        .as_array()
+        .expect("current owner items");
+    assert_eq!(
+        current_owner_items.len(),
+        1,
+        "current owner's exact item: {body}"
+    );
+    assert_eq!(current_owner_items[0]["due_id"], "due-gul-dec", "{body}");
+    let current_tenant_items = current_tenant["open_items"]
+        .as_array()
+        .expect("current tenant items");
+    assert_eq!(
+        current_tenant_items.len(),
+        1,
+        "current tenant's exact item: {body}"
+    );
+    assert_eq!(current_tenant_items[0]["due_id"], "due-dan-dec", "{body}");
+}
+
+#[tokio::test]
+async fn joint_exposure_is_separate_from_principal_penalty_and_total() {
+    let state = state_for_statement_liability_probes().await;
+    let manager = support::token(
+        &state,
+        "usr-statement-manager",
+        Role::SiteManager,
+        SITE,
+        None,
+    )
+    .await;
+    let (status, body) = call(
+        build_router(state),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&manager),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "manager statement: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let owner = statement["debtors"]
+        .as_array()
+        .expect("debtors")
+        .iter()
+        .find(|debtor| debtor["debtor_type"] == "OWNER" && debtor["liable_person_id"] == 300)
+        .expect("current owner's section");
+
+    assert_eq!(owner["principal_outstanding"], "700.00", "{body}");
+    assert_eq!(owner["penalty_outstanding"], "14.00", "{body}");
+    assert_eq!(owner["total_outstanding"], "714.00", "{body}");
+    assert_eq!(owner["jointly_liable_total"], "306.00", "{body}");
+    let own_items = owner["open_items"].as_array().expect("owner's own items");
+    assert_eq!(own_items.len(), 1, "one owner liability: {body}");
+    assert_eq!(own_items[0]["due_id"], "due-gul-dec", "{body}");
+    let joint_items = owner["jointly_liable_open_items"]
+        .as_array()
+        .expect("joint items");
+    assert_eq!(joint_items.len(), 1, "one joint item: {body}");
+    assert_eq!(joint_items[0]["due_id"], "due-dan-dec", "{body}");
+    assert_eq!(joint_items[0]["principal_outstanding"], "300.00", "{body}");
+    assert_eq!(joint_items[0]["penalty_outstanding"], "6.00", "{body}");
+    assert_eq!(joint_items[0]["total_outstanding"], "306.00", "{body}");
 }
 
 #[tokio::test]
