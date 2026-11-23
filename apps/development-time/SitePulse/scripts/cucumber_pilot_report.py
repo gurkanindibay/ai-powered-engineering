@@ -48,37 +48,47 @@ def _junit_counts(path: Path) -> Counter:
     return counts
 
 
-def _read_executions(path: Path) -> dict[str, dict]:
+def _read_executions(path: Path) -> tuple[dict[str, dict], bool]:
     result: dict[str, dict] = {}
+    invalid_records = False
+    duplicate_cases: set[str] = set()
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip():
             continue
         try:
             row = json.loads(line)
-        except json.JSONDecodeError as error:
-            raise ValueError(f"invalid execution JSON on line {line_number}") from error
+        except json.JSONDecodeError:
+            invalid_records = True
+            continue
         if not isinstance(row, dict):
-            raise ValueError(f"execution record on line {line_number} is not an object")
+            invalid_records = True
+            continue
         scenario = row.get("scenario")
         if not isinstance(scenario, str) or scenario not in {case[0] for case in CASES}:
             continue
         example_row = row.get("example_row")
         if example_row is not None and type(example_row) is not int:
-            raise ValueError(f"invalid example row on line {line_number}")
+            invalid_records = True
+            continue
         if scenario == "SC-07-06-03" and example_row not in (1, 2):
-            raise ValueError(f"missing or invalid outline example row on line {line_number}")
+            invalid_records = True
+            continue
         if scenario != "SC-07-06-03" and example_row is not None:
-            raise ValueError(f"unexpected example row on line {line_number}")
+            invalid_records = True
+            continue
         case = CASE_INDEX.get((scenario, example_row))
         if not case:
             continue
         case_id, label = case
         if case_id in result:
-            raise ValueError(f"duplicate result for {case_id}")
+            invalid_records = True
+            duplicate_cases.add(case_id)
+            continue
         duration = row.get("duration_s")
         if (not isinstance(duration, (int, float)) or isinstance(duration, bool)
                 or not math.isfinite(duration) or duration < 0):
-            raise ValueError(f"invalid duration on line {line_number}")
+            invalid_records = True
+            continue
         result[case_id] = {
             "case_id": case_id,
             "scenario_id": scenario,
@@ -88,7 +98,9 @@ def _read_executions(path: Path) -> dict[str, dict]:
             "duration_s": round(float(duration), 3),
             "comparison_label": "Cucumber comparison; pytest remains authoritative",
         }
-    return result
+    for case_id in duplicate_cases:
+        result.pop(case_id, None)
+    return result, not invalid_records
 
 
 def build(junit: Path, executions: Path, run_id: str, attempt: str,
@@ -102,24 +114,31 @@ def build(junit: Path, executions: Path, run_id: str, attempt: str,
     cases_by_id: dict[str, dict] = {}
     junit_counts: Counter = Counter()
     complete = junit.is_file() and executions.is_file()
-    if complete:
+    if junit.is_file():
         try:
             junit_counts = _junit_counts(junit)
-            cases_by_id = _read_executions(executions)
-            record_counts = Counter(case["status"] for case in cases_by_id.values())
-            complete = (
-                junit_counts["tests"] == len(CASES)
-                and len(cases_by_id) == len(CASES)
-                and record_counts["PASS"] == junit_counts["passed"]
-                and record_counts["FAIL"] == junit_counts["failed"]
-                and record_counts["ERROR"] == junit_counts["errors"]
-                and record_counts["SKIP"] == junit_counts["skipped"]
-            )
-        except (OSError, ValueError, ET.ParseError):
+        except (OSError, ET.ParseError):
+            complete = False
+    if executions.is_file():
+        try:
+            cases_by_id, execution_records_valid = _read_executions(executions)
+            complete = complete and execution_records_valid
+        except OSError:
             complete = False
 
+    if complete:
+        record_counts = Counter(case["status"] for case in cases_by_id.values())
+        complete = (
+            junit_counts["tests"] == len(CASES)
+            and len(cases_by_id) == len(CASES)
+            and record_counts["PASS"] == junit_counts["passed"]
+            and record_counts["FAIL"] == junit_counts["failed"]
+            and record_counts["ERROR"] == junit_counts["errors"]
+            and record_counts["SKIP"] == junit_counts["skipped"]
+        )
+
     if not complete:
-        cases = [{
+        cases = [cases_by_id.get(case_id, {
             "case_id": case_id,
             "scenario_id": scenario,
             "example_id": case_id if row is not None else None,
@@ -127,7 +146,7 @@ def build(junit: Path, executions: Path, run_id: str, attempt: str,
             "status": "NOT_RUN",
             "duration_s": 0.0,
             "comparison_label": "Cucumber comparison; pytest remains authoritative",
-        } for scenario, row, case_id, label in CASES]
+        }) for scenario, row, case_id, label in CASES]
         status = "INCOMPLETE"
     else:
         cases = [cases_by_id[case_id] for _, _, case_id, _ in CASES]

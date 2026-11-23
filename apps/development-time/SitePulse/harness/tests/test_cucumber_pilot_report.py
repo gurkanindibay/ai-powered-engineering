@@ -15,25 +15,25 @@ class CucumberPilotReportTests(unittest.TestCase):
     def write_inputs(self, root: Path):
         junit = root / "junit.xml"
         executions = root / "executions.jsonl"
-        secret = "SENSITIVE-TEST-VALUE-92741"
+        fixture_marker = "fixture-marker-92741"
         junit.write_text(
             "<testsuites tests='5' failures='0' errors='0' skipped='0'>"
-            + "".join(f"<testsuite><testcase name='{secret}-{index}'/></testsuite>" for index in range(5))
+            + "".join(f"<testsuite><testcase name='{fixture_marker}-{index}'/></testsuite>" for index in range(5))
             + "</testsuites>", encoding="utf-8")
         records = []
         for scenario, example_row, _, _ in reporter.CASES:
             records.append(json.dumps({
                 "scenario": scenario, "example_row": example_row, "status": "PASS", "duration_s": 1.25,
-                "example": {"bank_code": secret}, "steps": [{"text": secret, "error": secret}],
-                "error": secret, "transaction_id": secret,
+                "example": {"bank_code": fixture_marker}, "steps": [{"text": fixture_marker, "error": fixture_marker}],
+                "error": fixture_marker, "transaction_id": fixture_marker,
             }))
         executions.write_text("\n".join(records) + "\n", encoding="utf-8")
-        return junit, executions, secret
+        return junit, executions, fixture_marker
 
     def test_emits_five_allowlisted_cases_without_raw_fields(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            junit, executions, secret = self.write_inputs(root)
+            junit, executions, fixture_marker = self.write_inputs(root)
             result = reporter.build(junit, executions, "123456", "1", "a" * 40, "owner/repo")
             serialized = json.dumps(result)
             self.assertEqual(result["status"], "PASS")
@@ -42,7 +42,7 @@ class CucumberPilotReportTests(unittest.TestCase):
             self.assertEqual(result["cases"][-2]["example_id"], "SC-07-06-03-example-1")
             self.assertEqual(result["cases"][-1]["example_id"], "SC-07-06-03-example-2")
             self.assertIn("pytest remains authoritative", serialized)
-            self.assertNotIn(secret, serialized)
+            self.assertNotIn(fixture_marker, serialized)
             self.assertNotIn("steps", serialized)
             self.assertNotIn("transaction_id", serialized)
 
@@ -79,6 +79,20 @@ class CucumberPilotReportTests(unittest.TestCase):
                     result = reporter.build(junit, executions, "123456", "1", "d" * 40, "owner/repo")
                     self.assertEqual(result["status"], "INCOMPLETE")
                     self.assertEqual(result["counts"]["passed"], 0)
+
+    def test_malformed_record_preserves_valid_case_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            junit, executions, _ = self.write_inputs(root)
+            with executions.open("a", encoding="utf-8") as stream:
+                stream.write("{malformed json}\n")
+
+            result = reporter.build(junit, executions, "123456", "1", "e" * 40, "owner/repo")
+
+            self.assertEqual(result["status"], "INCOMPLETE")
+            self.assertEqual(result["counts"]["passed"], 5)
+            self.assertEqual(result["counts"]["not_run"], 0)
+            self.assertTrue(all(case["status"] == "PASS" for case in result["cases"]))
 
     def test_workflow_retains_only_allowlisted_pilot_payload(self):
         workflow = (Path(__file__).resolve().parents[5] / ".github" / "workflows"
