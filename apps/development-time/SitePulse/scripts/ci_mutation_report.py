@@ -30,6 +30,7 @@ def aggregate_reports(json_files: List[Path]) -> Dict[str, Any]:
     total_unviable = sum(1 for r in all_results if r["outcome"] == "unviable")
     total_timeout = sum(1 for r in all_results if r["outcome"] == "timeout")
     total_skipped = sum(1 for r in all_results if r["outcome"] == "skipped")
+    total_unscored = sum(1 for r in all_results if r["outcome"] == "unscored")
 
     scored = total_killed + total_survived
     score = (total_killed / scored) if scored > 0 else None
@@ -41,6 +42,15 @@ def aggregate_reports(json_files: List[Path]) -> Dict[str, Any]:
         layer_dict[r["outcome"]] = layer_dict.get(r["outcome"], 0) + 1
 
     survivors = [r["id"] for r in all_results if r["outcome"] == "survived"]
+    unscored = [r["id"] for r in all_results if r["outcome"] == "unscored"]
+    baseline_failures: Dict[tuple[str, str, str], set[str]] = {}
+    for result in all_results:
+        for suite in result.get("suites", []):
+            baseline_status = suite.get("baseline_status")
+            if baseline_status and baseline_status not in ("passed", "skipped"):
+                key = (str(suite.get("suite", "unknown")), str(baseline_status),
+                       str(suite.get("baseline_tail") or suite.get("tail") or ""))
+                baseline_failures.setdefault(key, set()).add(str(result["id"]))
 
     return {
         "summary": {
@@ -50,8 +60,14 @@ def aggregate_reports(json_files: List[Path]) -> Dict[str, Any]:
             "unviable": total_unviable,
             "timeout": total_timeout,
             "skipped": total_skipped,
+            "unscored": total_unscored,
             "score": score,
             "survivors": survivors,
+            "unscored_ids": unscored,
+            "baseline_failures": [
+                {"suite": suite, "status": status, "diagnostics": diagnostics, "affected_ids": sorted(ids)}
+                for (suite, status, diagnostics), ids in sorted(baseline_failures.items())
+            ],
             "by_layer": by_layer,
         },
         "results": all_results,
@@ -68,8 +84,8 @@ def format_markdown(aggregated: Dict[str, Any]) -> str:
         "",
         f"**Mutation Score**: **{score_str}** ({summary['killed']} killed / {summary['killed'] + summary['survived']} scored)",
         "",
-        "| Layer | Total | Killed | Survived | Unviable | Timeout | Skipped | Score |",
-        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Layer | Total | Killed | Survived | Unscored | Unviable | Timeout | Skipped | Score |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
 
     for layer in ("rust", "flutter", "python", "db"):
@@ -79,16 +95,27 @@ def format_markdown(aggregated: Dict[str, Any]) -> str:
         u = counts.get("unviable", 0)
         t = counts.get("timeout", 0)
         sk = counts.get("skipped", 0)
-        tot = k + s + u + t + sk
+        us = counts.get("unscored", 0)
+        tot = k + s + us + u + t + sk
         denom = k + s
         l_score = f"{k / denom:.0%}" if denom > 0 else "n/a"
-        lines.append(f"| {layer.capitalize()} | {tot} | {k} | {s} | {u} | {t} | {sk} | **{l_score}** |")
+        lines.append(f"| {layer.capitalize()} | {tot} | {k} | {s} | {us} | {u} | {t} | {sk} | **{l_score}** |")
 
     lines.extend([
         "",
-        f"**Totals**: {summary['total_scenarios']} scenarios · {summary['killed']} killed · {summary['survived']} survived · {summary['unviable']} unviable · {summary['timeout']} timeout · {summary['skipped']} skipped",
+        f"**Totals**: {summary['total_scenarios']} scenarios · {summary['killed']} killed · {summary['survived']} survived · {summary['unscored']} unscored · {summary['unviable']} unviable · {summary['timeout']} timeout · {summary['skipped']} skipped",
         "",
     ])
+
+    killed_records = [r for r in aggregated["results"] if r.get("outcome") == "killed" and r.get("killed_test")]
+    if killed_records:
+        lines.extend(["### Detected test cases", "", "| ID | Suite | Failing test or assertion |", "| :--- | :--- | :--- |"])
+        for result in killed_records:
+            lines.append(
+                f"| `{result.get('id', '-')}` | {result.get('killed_by', '-')} | "
+                f"{str(result.get('killed_test', '-')).replace('|', '\\|')} |"
+            )
+        lines.append("")
 
     if summary["survivors"]:
         lines.extend([
@@ -108,6 +135,21 @@ def format_markdown(aggregated: Dict[str, Any]) -> str:
             lines.append(f"| `{r.get('id', '-')}` | {layer} | {area} | {op} | {risk} |")
         lines.append("")
 
+    if summary["baseline_failures"]:
+        lines.extend([
+            "### ⚠️ Failed clean baselines",
+            "",
+            "Clean baseline failures are excluded from scoring; this run fails strict verification even if another suite detected the mutant:",
+            "",
+            "| Failed baseline suite | Affected mutants | Diagnostics |",
+            "| :--- | :--- | :--- |",
+        ])
+        for failure in summary["baseline_failures"]:
+            diagnostic = str(failure["diagnostics"] or "No output was captured.").replace("|", "\\|").replace("\n", "<br>")
+            ids = ", ".join(f"`{scenario_id}`" for scenario_id in failure["affected_ids"])
+            lines.append(f"| {failure['suite']} ({failure['status']}) | {ids} | {diagnostic} |")
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -120,7 +162,7 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit with 1 if any mutant survived, timed out, or failed to compile",
+        help="Exit with 1 if any mutant survived, was unscored, timed out, or failed to compile",
     )
     args = parser.parse_args(argv)
 
@@ -150,7 +192,9 @@ def main(argv: List[str] | None = None) -> int:
         has_survivors = bool(aggregated["summary"]["survivors"])
         has_unviable = aggregated["summary"]["unviable"] > 0
         has_timeout = aggregated["summary"]["timeout"] > 0
-        if has_survivors or has_unviable or has_timeout:
+        has_unscored = aggregated["summary"]["unscored"] > 0
+        has_baseline_failures = bool(aggregated["summary"]["baseline_failures"])
+        if has_survivors or has_unviable or has_timeout or has_unscored or has_baseline_failures:
             return 1
     return 0
 

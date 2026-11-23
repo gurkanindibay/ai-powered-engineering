@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -83,13 +84,15 @@ class ValidateTest(unittest.TestCase):
 
 
 class RunScenarioTest(unittest.TestCase):
-    def _run(self, status: str, **kwargs):
+    def _run(self, status: str, baseline_status: str = "passed", **kwargs):
         tmp, root, catalogue = _sandbox()
         seen = []
 
         def runner(suite, where):
             seen.append((where / "code.py").read_text(encoding="utf-8"))
-            return ms.SuiteResult(suite.name, status)
+            if len(seen) == 1:
+                return ms.SuiteResult(suite.name, baseline_status, tail="clean baseline diagnostic")
+            return ms.SuiteResult(suite.name, status, tail="mutant diagnostic", failure_test="sample::test_positive")
 
         journal = root / "journal.json"
         with tmp:
@@ -100,11 +103,15 @@ class RunScenarioTest(unittest.TestCase):
             self.assertFalse(journal.exists())
         return result, seen, restored
 
-    def test_failing_suite_kills_and_file_is_restored(self):
+    def test_failing_mutant_suite_kills_after_a_passing_baseline_and_file_is_restored(self):
         result, seen, restored = self._run("failed")
         self.assertEqual(result.outcome, "killed")
         self.assertEqual(result.killed_by, "fast")
-        self.assertIn("x >= 0", seen[0])
+        self.assertEqual(result.killed_test, "sample::test_positive")
+        self.assertEqual(len(seen), 2)
+        self.assertIn("x > 0", seen[0])
+        self.assertIn("x >= 0", seen[1])
+        self.assertEqual(result.suites[0].baseline_status, "passed")
         self.assertIn("x > 0", restored)
         self.assertNotIn("x >= 0", restored)
 
@@ -123,16 +130,116 @@ class RunScenarioTest(unittest.TestCase):
             )
         self.assertEqual(result.outcome, "skipped")
 
+    def test_failed_clean_baseline_marks_mutant_unscored_with_diagnostics(self):
+        result, seen, restored = self._run("failed", baseline_status="failed")
+        self.assertEqual(result.outcome, "unscored")
+        self.assertEqual(result.suites[0].status, "unscored")
+        self.assertEqual(result.suites[0].baseline_status, "failed")
+        self.assertEqual(result.suites[0].baseline_tail, "clean baseline diagnostic")
+        self.assertEqual(len(seen), 1, "a broken clean suite must not be run against the mutant")
+        self.assertIn("x > 0", seen[0])
+        self.assertEqual(restored, "def positive(x):\n    return x > 0\n")
+        self.assertIsNone(ms.summarise([result])["score"], "an unscored mutant cannot improve the score")
+
+    def test_missing_capability_does_not_turn_a_passing_baseline_into_unscored(self):
+        expanded = CATALOGUE.replace('suites = ["fast"]', 'suites = ["fast", "db"]')
+        tmp, root, catalogue = _sandbox(catalogue=expanded)
+        calls = 0
+
+        def passing_runner(suite, where):
+            nonlocal calls
+            calls += 1
+            return ms.SuiteResult(suite.name, "passed")
+
+        with tmp:
+            result = ms.run_scenario(
+                catalogue.scenarios[0], catalogue, root=root, runner=passing_runner,
+                journal=root / "journal.json",
+            )
+        self.assertEqual(result.outcome, "survived")
+        self.assertEqual(calls, 2, "only the available suite baseline and mutant are executed")
+        self.assertEqual(result.suites[1].status, "skipped")
+
+    def test_valid_suite_kill_does_not_hide_another_suite_baseline_failure(self):
+        expanded = CATALOGUE.replace(
+            '[suites.db]\ncwd = "."\ncmd = ["true"]\nrequires = ["postgres"]',
+            '[suites.db]\ncwd = "."\ncmd = ["true"]\nrequires = ["postgres"]\n\n'
+            '[suites.second]\ncwd = "."\ncmd = ["true"]',
+        ).replace('suites = ["fast"]', 'suites = ["fast", "second"]')
+        tmp, root, catalogue = _sandbox(catalogue=expanded)
+        calls = []
+
+        def runner(suite, where):
+            calls.append((suite.name, "x >= 0" in (where / "code.py").read_text(encoding="utf-8")))
+            if len(calls) == 1:
+                return ms.SuiteResult(suite.name, "failed", tail="clean baseline failed")
+            if len(calls) == 2:
+                return ms.SuiteResult(suite.name, "passed")
+            return ms.SuiteResult(suite.name, "failed", failure_test="sample::test_positive")
+
+        with tmp:
+            result = ms.run_scenario(
+                catalogue.scenarios[0], catalogue, root=root, runner=runner, journal=root / "journal.json",
+            )
+        summary = ms.summarise([result])
+        self.assertEqual(result.outcome, "killed")
+        self.assertEqual(result.killed_by, "second")
+        self.assertEqual([row.status for row in result.suites], ["unscored", "failed"])
+        self.assertEqual(summary["baseline_failures"][0]["affected_ids"], ["MUT-T-001"])
+        self.assertEqual(summary["score"], 1.0)
+
+    def test_all_suite_baselines_run_before_any_mutation(self):
+        expanded = CATALOGUE.replace(
+            '[suites.db]\ncwd = "."\ncmd = ["true"]\nrequires = ["postgres"]',
+            '[suites.db]\ncwd = "."\ncmd = ["true"]\nrequires = ["postgres"]\n\n'
+            '[suites.second]\ncwd = "."\ncmd = ["true"]',
+        ).replace('suites = ["fast"]', 'suites = ["fast", "second"]')
+        tmp, root, catalogue = _sandbox(catalogue=expanded)
+        seen = []
+
+        def runner(suite, where):
+            is_mutated = "x >= 0" in (where / "code.py").read_text(encoding="utf-8")
+            seen.append((suite.name, is_mutated))
+            return ms.SuiteResult(suite.name, "failed" if is_mutated and suite.name == "fast" else "passed")
+
+        with tmp:
+            result = ms.run_scenario(
+                catalogue.scenarios[0], catalogue, root=root, runner=runner,
+                journal=root / "journal.json",
+            )
+        self.assertEqual(seen, [("fast", False), ("second", False), ("fast", True)])
+        self.assertEqual(result.outcome, "killed")
+        self.assertEqual([suite.status for suite in result.suites], ["failed", "not-run"])
+
     def test_file_is_restored_when_the_runner_raises(self):
         tmp, root, catalogue = _sandbox()
+        calls = 0
 
         def boom(suite, where):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return ms.SuiteResult(suite.name, "passed")
             raise KeyboardInterrupt
 
         with tmp:
             with self.assertRaises(KeyboardInterrupt):
                 ms.run_scenario(catalogue.scenarios[0], catalogue, root=root, runner=boom, journal=root / "j.json")
             self.assertIn("x > 0", (root / "code.py").read_text(encoding="utf-8"))
+
+    def test_run_suite_extracts_failing_test_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            suite = ms.Suite(
+                name="sample", cwd=".",
+                cmd=[sys.executable, "-c", "print('---- sample::test_rule stdout ----'); raise SystemExit(1)"],
+            )
+            result = ms.run_suite(suite, Path(tmp))
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_test, "sample::test_rule")
+
+    def test_failure_identity_parser_ignores_unittest_summary_line(self):
+        self.assertEqual(ms._failure_identifier("FAILED (failures=4, skipped=1)\n"), "")
+        self.assertEqual(ms._failure_identifier("FAIL: sample.TestCase.test_rule\n"), "sample.TestCase.test_rule")
 
     def test_restore_uses_the_journal(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -245,6 +352,74 @@ class SelectionAndStrictTest(unittest.TestCase):
             # Verify strict check logic directly
             has_survivors = bool(summary["survivors"])
             self.assertTrue(has_survivors)
+
+    def test_strict_mode_fails_when_a_mutant_or_clean_baseline_is_unscored(self):
+        catalogue = ms.load_catalogue()
+        scenario = catalogue.scenarios[0]
+        unscored = ms.ScenarioResult(
+            scenario.id, scenario.layer, scenario.area, scenario.operator, scenario.risk,
+            outcome="unscored", suites=[ms.SuiteResult(
+                "rust-unit", "unscored", baseline_status="failed", baseline_tail="baseline failed",
+            )],
+        )
+        killed_with_failed_baseline = ms.ScenarioResult(
+            scenario.id, scenario.layer, scenario.area, scenario.operator, scenario.risk,
+            outcome="killed", killed_by="rust-integration", suites=[ms.SuiteResult(
+                "rust-unit", "unscored", baseline_status="failed", baseline_tail="baseline failed",
+            )],
+        )
+
+        def passing_baseline(suite, root):
+            return ms.SuiteResult(suite.name, "passed")
+
+        with mock.patch.object(ms, "validate", return_value=[]), \
+                mock.patch.object(ms, "_journal_entry", return_value=None), \
+                mock.patch.object(ms, "_git_dirty", return_value=False), \
+                mock.patch.object(ms, "run_suite", side_effect=passing_baseline), \
+                mock.patch.object(ms, "run_scenario", return_value=unscored):
+            self.assertEqual(ms.main(["run", "--id", scenario.id, "--strict"]), 1)
+        with mock.patch.object(ms, "validate", return_value=[]), \
+                mock.patch.object(ms, "_journal_entry", return_value=None), \
+                mock.patch.object(ms, "_git_dirty", return_value=False), \
+                mock.patch.object(ms, "run_suite", side_effect=passing_baseline), \
+                mock.patch.object(ms, "run_scenario", return_value=killed_with_failed_baseline):
+            self.assertEqual(ms.main(["run", "--id", scenario.id, "--strict"]), 1)
+
+    def test_main_runs_one_clean_baseline_per_selected_suite_before_mutants(self):
+        catalogue = ms.load_catalogue()
+        pair = next(
+            (first, second)
+            for first in catalogue.scenarios
+            for second in catalogue.scenarios
+            if first.id != second.id and set(first.suites) & set(second.suites)
+        )
+        chosen = pair
+        expected_suites = {name for scenario in chosen for name in scenario.suites}
+
+        def passing_baseline(suite, root):
+            return ms.SuiteResult(suite.name, "passed")
+
+        def passing_mutant(scenario, *args, **kwargs):
+            return ms.ScenarioResult(
+                scenario.id, scenario.layer, scenario.area, scenario.operator, scenario.risk,
+                outcome="killed",
+            )
+
+        args = ["run", "--json"]
+        for scenario in chosen:
+            args.extend(["--id", scenario.id])
+        with mock.patch.object(ms, "validate", return_value=[]), \
+                mock.patch.object(ms, "_journal_entry", return_value=None), \
+                mock.patch.object(ms, "_git_dirty", return_value=False), \
+                mock.patch.object(ms, "run_suite", side_effect=passing_baseline) as run_suite, \
+                mock.patch.object(ms, "run_scenario", side_effect=passing_mutant) as run_scenario:
+            self.assertEqual(ms.main(args), 0)
+
+        self.assertEqual(run_suite.call_count, len(expected_suites))
+        self.assertEqual(run_scenario.call_count, len(chosen))
+        for call in run_scenario.call_args_list:
+            self.assertEqual(set(call.kwargs["clean_baselines"]), expected_suites)
+            self.assertTrue(all(row.status == "passed" for row in call.kwargs["clean_baselines"].values()))
 
 
 if __name__ == "__main__":

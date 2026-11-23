@@ -43,13 +43,14 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
 import tempfile
 import time
 import tomllib
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -94,9 +95,13 @@ class Scenario:
 @dataclass
 class SuiteResult:
     suite: str
-    status: str  # passed | failed | unviable | timeout | skipped
+    status: str  # passed | failed | unscored | unviable | timeout | skipped | not-run
     seconds: float = 0.0
     tail: str = ""
+    baseline_status: str = ""
+    baseline_seconds: float = 0.0
+    baseline_tail: str = ""
+    failure_test: str = ""
 
 
 @dataclass
@@ -108,6 +113,7 @@ class ScenarioResult:
     risk: str
     outcome: str
     killed_by: str = ""
+    killed_test: str = ""
     seconds: float = 0.0
     suites: list[SuiteResult] = field(default_factory=list)
 
@@ -259,6 +265,22 @@ def _tail(text: str, lines: int = OUTPUT_TAIL) -> str:
     return "\n".join(text.strip().splitlines()[-lines:])
 
 
+def _failure_identifier(output: str) -> str:
+    """Return a test or assertion identity when a runner includes one."""
+    patterns = (
+        r"^---- (.+?) stdout ----$",  # Rust libtest
+        r"^test (.+?) \.\.\. FAILED$",  # Rust libtest without captured panic detail
+        r"^FAILED\s+(\S+::\S+)(?:\s+-\s+|$)",  # pytest
+        r"^(?:FAIL|ERROR):\s*(.+)$",  # unittest
+        r"^\d{2}:\d{2}\s+\+\d+\s+-\d+:\s*(.+?)(?:\s+\[E\])?$",  # Flutter test runner
+    )
+    for pattern in patterns:
+        match = re.search(pattern, output, re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
 Runner = Callable[[Suite, Path], SuiteResult]
 
 
@@ -288,7 +310,7 @@ def run_suite(suite: Suite, root: Path) -> SuiteResult:
     if proc.returncode == 0:
         return SuiteResult(suite.name, "passed", elapsed)
     status = "unviable" if any(m in output for m in UNVIABLE_MARKERS) else "failed"
-    return SuiteResult(suite.name, status, elapsed, _tail(output))
+    return SuiteResult(suite.name, status, elapsed, _tail(output), failure_test=_failure_identifier(output))
 
 
 def _kill_group(proc: subprocess.Popen) -> None:
@@ -341,6 +363,7 @@ def run_scenario(
     all_suites: bool = False,
     runner: Runner = run_suite,
     journal: Path = JOURNAL,
+    clean_baselines: dict[str, SuiteResult] | None = None,
 ) -> ScenarioResult:
     path = root / scenario.file
     original_text = path.read_text(encoding="utf-8")
@@ -350,32 +373,93 @@ def run_scenario(
         scenario.id, scenario.layer, scenario.area, scenario.operator, scenario.risk, outcome="survived"
     )
     started = time.monotonic()
+    baselines: dict[str, SuiteResult] = {}
+    runnable: list[str] = []
+    for name in scenario.suites:
+        suite = catalogue.suites[name]
+        missing = [requirement for requirement in suite.requires if requirement not in capabilities]
+        if missing:
+            baselines[name] = SuiteResult(
+                name, "skipped", tail=f"needs {', '.join(missing)}", baseline_status="skipped"
+            )
+            continue
+        baseline = replace(clean_baselines[name]) if clean_baselines is not None else runner(suite, root)
+        baseline.baseline_status = baseline.status
+        baseline.baseline_seconds = baseline.seconds
+        baseline.baseline_tail = baseline.tail
+        if baseline.status == "passed":
+            runnable.append(name)
+        else:
+            baseline.status = "unscored"
+        baselines[name] = baseline
+
+    if not runnable:
+        result.suites = [baselines[name] for name in scenario.suites]
+        result.outcome = "skipped" if all(row.baseline_status == "skipped" for row in result.suites) else "unscored"
+        result.seconds = round(time.monotonic() - started, 1)
+        return result
+
     _journal_write(journal, path, original_text)
     try:
         path.write_text(original_text.replace(scenario.original, scenario.mutant, 1), encoding="utf-8")
-        ran = 0
-        for name in scenario.suites:
+        mutation_results: dict[str, SuiteResult] = {}
+        for name in runnable:
             suite = catalogue.suites[name]
-            missing = [r for r in suite.requires if r not in capabilities]
-            if missing:
-                result.suites.append(SuiteResult(name, "skipped", tail=f"needs {', '.join(missing)}"))
-                continue
-            ran += 1
             outcome = runner(suite, root)
-            result.suites.append(outcome)
+            baseline = baselines[name]
+            outcome.baseline_status = baseline.baseline_status
+            outcome.baseline_seconds = baseline.baseline_seconds
+            outcome.baseline_tail = baseline.baseline_tail
+            mutation_results[name] = outcome
             if outcome.status in ("failed", "unviable", "timeout") and result.outcome == "survived":
                 result.outcome = {"failed": "killed"}.get(outcome.status, outcome.status)
                 result.killed_by = name if outcome.status == "failed" else ""
+                result.killed_test = outcome.failure_test if outcome.status == "failed" else ""
                 if not all_suites or outcome.status == "unviable":
                     break
-        if ran == 0:
-            result.outcome = "skipped"
+        result.suites = []
+        for name in scenario.suites:
+            baseline = baselines[name]
+            if name in mutation_results:
+                result.suites.append(mutation_results[name])
+            elif baseline.baseline_status == "passed":
+                result.suites.append(SuiteResult(
+                    name, "not-run", baseline_status="passed",
+                    baseline_seconds=baseline.baseline_seconds,
+                    baseline_tail=baseline.baseline_tail,
+                    tail="Mutation suite was not run after an earlier suite ended the scenario.",
+                ))
+            else:
+                result.suites.append(baseline)
+        if result.outcome == "survived" and any(
+            baselines[name].baseline_status not in ("passed", "skipped") for name in scenario.suites
+        ):
+            result.outcome = "unscored"
     finally:
         path.write_text(original_text, encoding="utf-8")
         if journal.exists():
             journal.unlink()
     result.seconds = round(time.monotonic() - started, 1)
     return result
+
+
+def run_clean_baselines(
+    names: Sequence[str],
+    catalogue: Catalogue,
+    capabilities: frozenset[str],
+    root: Path = PROJECT_ROOT,
+    runner: Runner = run_suite,
+) -> dict[str, SuiteResult]:
+    """Run each selected suite once before any mutant changes the source tree."""
+    results: dict[str, SuiteResult] = {}
+    for name in sorted(set(names)):
+        suite = catalogue.suites[name]
+        missing = [requirement for requirement in suite.requires if requirement not in capabilities]
+        if missing:
+            results[name] = SuiteResult(name, "skipped", tail=f"needs {', '.join(missing)}")
+        else:
+            results[name] = runner(suite, root)
+    return results
 
 
 def summarise(results: Sequence[ScenarioResult]) -> dict:
@@ -388,12 +472,23 @@ def summarise(results: Sequence[ScenarioResult]) -> dict:
     for r in results:
         bucket = by_layer.setdefault(r.layer, {})
         bucket[r.outcome] = bucket.get(r.outcome, 0) + 1
+    baseline_failures: dict[tuple[str, str, str], set[str]] = {}
+    for result in results:
+        for suite in result.suites:
+            if suite.baseline_status and suite.baseline_status not in ("passed", "skipped"):
+                key = (suite.suite, suite.baseline_status, suite.baseline_tail)
+                baseline_failures.setdefault(key, set()).add(result.id)
     return {
         "total": len(results),
         "counts": counts,
         "score": round(killed / scored, 3) if scored else None,
         "by_layer": by_layer,
         "survivors": [r.id for r in results if r.outcome == "survived"],
+        "unscored": [r.id for r in results if r.outcome == "unscored"],
+        "baseline_failures": [
+            {"suite": suite, "status": status, "diagnostics": diagnostics, "affected_ids": sorted(ids)}
+            for (suite, status, diagnostics), ids in sorted(baseline_failures.items())
+        ],
     }
 
 
@@ -407,13 +502,14 @@ def markdown_report(results: Sequence[ScenarioResult], catalogue: Catalogue) -> 
         f"Scenarios: {summary['total']} · score: **{score}** · "
         + " · ".join(f"{k}: {v}" for k, v in sorted(summary["counts"].items())),
         "",
-        "| ID | Layer | Area | Operator | Risk | Outcome | Killed by | Seconds |",
-        "|---|---|---|---|---|---|---|---:|",
+        "| ID | Layer | Area | Operator | Risk | Outcome | Killed by | Failure test | Seconds |",
+        "|---|---|---|---|---|---|---|---|---:|",
     ]
     for r in results:
         lines.append(
             f"| {r.id} | {r.layer} | {r.area} | {r.operator} | {r.risk} | "
-            f"{'**SURVIVED**' if r.outcome == 'survived' else r.outcome} | {r.killed_by or '-'} | {r.seconds} |"
+            f"{'**SURVIVED**' if r.outcome == 'survived' else r.outcome} | {r.killed_by or '-'} | "
+            f"{r.killed_test or '-'} | {r.seconds} |"
         )
     survivors = [r for r in results if r.outcome == "survived"]
     if survivors:
@@ -421,6 +517,14 @@ def markdown_report(results: Sequence[ScenarioResult], catalogue: Catalogue) -> 
         for r in survivors:
             s = by_id[r.id]
             lines.append(f"- **{r.id}** `{s.file}` — {s.intent}")
+    if summary["baseline_failures"]:
+        lines += ["", "## Failed clean baselines", ""]
+        for failure in summary["baseline_failures"]:
+            lines.append(
+                f"- `{failure['suite']}` clean baseline {failure['status']} for "
+                f"{', '.join(failure['affected_ids'])}. Diagnostics: "
+                f"{failure['diagnostics'] or 'No output was captured.'}"
+            )
     return "\n".join(lines) + "\n"
 
 
@@ -455,7 +559,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="exit with code 1 if any mutant survives, times out, or fails to compile",
+        help="exit with code 1 if any mutant survives, is unscored, times out, or fails to compile",
     )
     args = parser.parse_args(argv)
 
@@ -491,7 +595,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command in ("baseline", "run"):
             if args.json:
-                print(json.dumps({"summary": {"score": None, "counts": {}, "survivors": [], "by_layer": {}}, "results": []}, indent=2))
+                print(json.dumps({"summary": {"score": None, "counts": {}, "survivors": [],
+                                                "unscored": [], "baseline_failures": [], "by_layer": {}},
+                                  "results": []}, indent=2))
             else:
                 print("no mutation scenarios match changed files")
             return 0
@@ -511,14 +617,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "baseline":
         names = sorted({n for s in chosen for n in s.suites})
-        results = []
-        for name in names:
-            suite = catalogue.suites[name]
-            if any(r not in capabilities for r in suite.requires):
-                results.append(SuiteResult(name, "skipped", tail=f"needs {', '.join(suite.requires)}"))
-                continue
-            results.append(run_suite(suite, PROJECT_ROOT))
-            print(f"{name}: {results[-1].status} ({results[-1].seconds:.0f}s)", file=sys.stderr)
+        baselines = run_clean_baselines(names, catalogue, capabilities, runner=run_suite)
+        results = [baselines[name] for name in names]
+        for result in results:
+            print(f"{result.suite}: {result.status} ({result.seconds:.0f}s)", file=sys.stderr)
         if args.json:
             print(json.dumps([asdict(r) for r in results], indent=2))
         failing = [r for r in results if r.status not in ("passed", "skipped")]
@@ -535,9 +637,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("refusing to mutate files with uncommitted changes:\n  " + "\n  ".join(dirty), file=sys.stderr)
             return 2
 
+    suite_names = sorted({name for scenario in chosen for name in scenario.suites})
+    clean_baselines = run_clean_baselines(suite_names, catalogue, capabilities, runner=run_suite)
+    for baseline in clean_baselines.values():
+        print(f"baseline {baseline.suite}: {baseline.status} ({baseline.seconds:.0f}s)", file=sys.stderr)
+        if baseline.status not in ("passed", "skipped"):
+            print(f"baseline {baseline.suite} {baseline.status}:\n{baseline.tail}", file=sys.stderr)
+
     results: list[ScenarioResult] = []
     for index, scenario in enumerate(chosen, 1):
-        result = run_scenario(scenario, catalogue, capabilities=capabilities, all_suites=args.all_suites)
+        result = run_scenario(
+            scenario, catalogue, capabilities=capabilities, all_suites=args.all_suites,
+            clean_baselines=clean_baselines,
+        )
         results.append(result)
         if not args.json:
             print(f"[{index}/{len(chosen)}] {scenario.id} {result.outcome}"
@@ -559,7 +671,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         has_survivors = bool(summary["survivors"])
         has_unviable = summary["counts"].get("unviable", 0) > 0
         has_timeout = summary["counts"].get("timeout", 0) > 0
-        if has_survivors or has_unviable or has_timeout:
+        has_unscored = summary["counts"].get("unscored", 0) > 0
+        has_baseline_failures = bool(summary["baseline_failures"])
+        if has_survivors or has_unviable or has_timeout or has_unscored or has_baseline_failures:
             return 1
     return 0
 

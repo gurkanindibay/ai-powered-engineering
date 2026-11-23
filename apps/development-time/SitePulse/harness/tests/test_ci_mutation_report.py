@@ -32,7 +32,10 @@ class CiMutationReportTest(unittest.TestCase):
             payload_rust = {
                 "results": [
                     {"id": "MUT-RS-001", "layer": "rust", "area": "dues", "operator": "op", "risk": "high", "outcome": "killed"},
-                    {"id": "MUT-RS-002", "layer": "rust", "area": "dues", "operator": "op", "risk": "high", "outcome": "survived"}
+                    {"id": "MUT-RS-002", "layer": "dues", "area": "dues", "operator": "op", "risk": "high", "outcome": "survived"},
+                    {"id": "MUT-RS-003", "layer": "rust", "area": "dues", "operator": "op", "risk": "high",
+                     "outcome": "unscored", "suites": [{"suite": "rust-unit", "baseline_status": "failed",
+                                                              "baseline_tail": "baseline assertion failed"}]}
                 ]
             }
             (tmp_path / "py.json").write_text(json.dumps(payload_py), encoding="utf-8")
@@ -41,15 +44,44 @@ class CiMutationReportTest(unittest.TestCase):
             aggregated = mr.aggregate_reports([tmp_path / "py.json", tmp_path / "rust.json"])
             summary = aggregated["summary"]
 
-            self.assertEqual(summary["total_scenarios"], 3)
+            self.assertEqual(summary["total_scenarios"], 4)
             self.assertEqual(summary["killed"], 2)
             self.assertEqual(summary["survived"], 1)
+            self.assertEqual(summary["unscored"], 1)
+            self.assertEqual(summary["unscored_ids"], ["MUT-RS-003"])
             self.assertAlmostEqual(summary["score"], 2 / 3)
             self.assertEqual(summary["survivors"], ["MUT-RS-002"])
 
             md = mr.format_markdown(aggregated)
             self.assertIn("67%", md)
             self.assertIn("MUT-RS-002", md)
+            self.assertIn("MUT-RS-003", md)
+            self.assertIn("baseline assertion failed", md)
+
+    def test_strict_run_reports_baseline_failure_even_when_another_suite_kills(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            (reports / "mutation.json").write_text(json.dumps({"results": [{
+                "id": "MUT-RS-004", "layer": "rust", "area": "dues", "operator": "op",
+                "risk": "high", "outcome": "killed", "killed_by": "rust-integration",
+                "killed_test": "statement_access::rejects_tenant",
+                "suites": [
+                    {"suite": "rust-unit", "status": "unscored", "baseline_status": "failed",
+                     "baseline_tail": "clean unit test failed"},
+                    {"suite": "rust-integration", "status": "failed", "baseline_status": "passed",
+                     "failure_test": "statement_access::rejects_tenant"},
+                ],
+            }]}), encoding="utf-8")
+
+            aggregated = mr.aggregate_reports([reports / "mutation.json"])
+            self.assertEqual(aggregated["summary"]["killed"], 1)
+            self.assertEqual(aggregated["summary"]["unscored"], 0)
+            self.assertEqual(aggregated["summary"]["baseline_failures"][0]["affected_ids"], ["MUT-RS-004"])
+            markdown = mr.format_markdown(aggregated)
+            self.assertIn("Failed clean baselines", markdown)
+            self.assertIn("clean unit test failed", markdown)
+            self.assertIn("statement_access::rejects_tenant", markdown)
+            self.assertEqual(mr.main(["--reports-dir", str(reports), "--strict"]), 1)
 
     def test_main_with_nested_artifact_directories_and_strict(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -80,6 +112,16 @@ class CiMutationReportTest(unittest.TestCase):
             )
             code_failing = mr.main(["--reports-dir", str(reports_dir), "--out", str(out_dir), "--strict"])
             self.assertEqual(code_failing, 1)
+
+            # A failed clean baseline must also fail the strict nightly report.
+            (shard_rust / "mutation_rust.json").write_text(
+                json.dumps({"results": [{"id": "RS-3", "layer": "rust", "area": "dues", "operator": "op",
+                                          "risk": "high", "outcome": "unscored", "suites": [{
+                                              "suite": "rust-unit", "baseline_status": "failed",
+                                              "baseline_tail": "clean test suite failed"}]}]}), encoding="utf-8"
+            )
+            code_unscored = mr.main(["--reports-dir", str(reports_dir), "--out", str(out_dir), "--strict"])
+            self.assertEqual(code_unscored, 1)
 
 
 if __name__ == "__main__":
