@@ -14,6 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 import ci_case_results as cases
+import ci_suite_collection as suite_collection
 from harness.loop import verification_gates as gates
 import unittest_json_runner
 
@@ -104,6 +105,34 @@ Ran 4 tests in 0.100s
             parsed = cases.parse_junit(path)
         self.assertEqual([row["native_id"] for row in parsed], ["module::case[param=1]", "module::case[param=2]"])
         self.assertEqual([row["status"] for row in parsed], ["passed", "skipped"])
+
+    def test_missing_required_gate_evidence_is_reported_as_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = suite_collection.collect(root / "suites", root / "e2e", "42", "1", "abc")
+
+        rust_gate = next(gate for gate in result["gates"] if gate["gate"] == "rust-test")
+        rust_suite = next(suite for suite in result["suites"] if suite["suite"] == "rust")
+        self.assertEqual(rust_gate["status"], "missing")
+        self.assertEqual(rust_suite["status"], "missing")
+
+    def test_failed_case_is_counted_as_failed_in_collection_totals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shard = root / "e2e" / "e2e-shard-1-attempt-1"
+            shard.mkdir(parents=True)
+            (shard / "collection.json").write_text(json.dumps({
+                "shard": "1/8", "run_id": "42", "attempt": "1", "commit": "abc",
+                "job_result": "failure",
+            }), encoding="utf-8")
+            (shard / "junit.xml").write_text(
+                '<testsuite tests="1"><testcase classname="suite" name="broken">'
+                '<failure message="expected failure" /></testcase></testsuite>',
+                encoding="utf-8",
+            )
+            result = suite_collection.collect(root / "suites", root / "e2e", "42", "1", "abc")
+
+        self.assertEqual(result["case_totals"], {"passed": 0, "failed": 1, "skipped": 0, "error": 0})
 
 
 class GateCaptureTests(unittest.TestCase):
