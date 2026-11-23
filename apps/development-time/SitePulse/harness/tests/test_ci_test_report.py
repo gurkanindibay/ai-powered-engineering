@@ -21,6 +21,20 @@ def _record(scenario: str, status: str) -> dict:
 
 
 class CiTestReportTest(unittest.TestCase):
+    def test_incomplete_suite_count_includes_mixed_and_reused_evidence(self):
+        suites = [
+            {"status": "collected"},
+            {"status": "collected-with-failures"},
+            {"status": "incomplete"},
+            {"status": "missing"},
+            {"status": "cancelled"},
+            {"status": "mixed-attempts"},
+            {"status": "reused"},
+            {"status": "not-run"},
+        ]
+
+        self.assertEqual(ctr.incomplete_suite_count(suites), 5)
+
     def test_attempt_metadata_selects_latest_artifact_for_history_and_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

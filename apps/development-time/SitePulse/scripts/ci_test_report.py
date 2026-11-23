@@ -103,6 +103,12 @@ def merge_executions(files: list[Path], out: Path) -> tuple[int, int]:
     return count, invalid
 
 
+def incomplete_suite_count(suites: list[dict]) -> int:
+    """Count suites without a complete evidence set for the requested attempt."""
+    incomplete_statuses = {"incomplete", "missing", "cancelled", "mixed-attempts", "reused"}
+    return sum(1 for suite in suites if suite.get("status") in incomplete_statuses)
+
+
 def build(shards: Path, out: Path, task: str | None, history: Path,
           evidence_out: Path | None = None, run_id: str | None = None, attempt: str | None = None,
           suite_artifacts: Path | None = None, producer_status: dict[str, str] | None = None,
@@ -181,7 +187,7 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
                "shards": len(execution_files), "executions": count, "junit": junit,
                "ci_suites": {"case_count": collection["case_count"], "unique_case_count": collection["unique_case_count"],
                              "case_totals": collection["case_totals"],
-                             "incomplete_suites": sum(1 for item in collection["suites"] if item["status"] in ("incomplete", "missing", "cancelled"))},
+                             "incomplete_suites": incomplete_suite_count(collection["suites"])},
                "status": "INCOMPLETE" if invalid_executions else (run["status"] if run else "NO RESULTS"),
                "scenario_counts": run["counts"] if run else {},
                "scenarios_covered": f"{run['executed']}/{run['automated']}" if run else "0/0",
