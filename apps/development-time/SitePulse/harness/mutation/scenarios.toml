@@ -29,6 +29,24 @@ cmd = ["cargo", "test", "--locked", "--test", "db_*", "--", "--ignored", "--test
 timeout = 1800
 requires = ["postgres"]
 
+[suites.rust-db-accrual]
+cwd = "backend"
+cmd = ["cargo", "test", "--locked", "--test", "db_accrual_atomic_tests", "--", "--ignored", "--test-threads=1"]
+timeout = 900
+requires = ["postgres"]
+
+[suites.rust-db-accrual-spelling]
+cwd = "backend"
+cmd = ["cargo", "test", "--locked", "--test", "db_accrual_atomic_tests", "--", "another_spelling_of_an_accrued_month_creates_nothing_in_the_database", "--ignored", "--test-threads=1"]
+timeout = 900
+requires = ["postgres"]
+
+[suites.rust-db-accrual-rollback]
+cwd = "backend"
+cmd = ["cargo", "test", "--locked", "--test", "db_accrual_atomic_tests", "--", "a_failure_partway_through_a_batch_writes_nothing_and_a_rerun_links_every_liability", "--ignored", "--test-threads=1"]
+timeout = 900
+requires = ["postgres"]
+
 [suites.flutter-money]
 cwd = "flutter"
 cmd = ["flutter", "test", "test/money_format_test.dart", "test/design_system_test.dart",
@@ -652,6 +670,33 @@ original = "ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_capital_owner_o
 mutant = "ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_capital_owner_only CHECK (TRUE);"
 intent = "The database accepts capital dues billed to a tenant."
 suites = ["rust-db"]
+
+[[scenario]]
+id = "MUT-DB-003"
+layer = "db"
+area = "accrual-persistence"
+operator = "period-spelling-key"
+risk = "high"
+file = "backend/migrations/V50__dues_liabilities_liable_person_unique_index.sql"
+original = "ON dues_liabilities (unit_id, period_key, expense_type, debtor_type, COALESCE(liable_person_id, 0), COALESCE(source_period, ''))"
+mutant = "ON dues_liabilities (unit_id, period, expense_type, debtor_type, COALESCE(liable_person_id, 0), COALESCE(source_period, ''))"
+intent = "Two spellings of the same billing month can create separate liabilities for one unit."
+suites = ["rust-db-accrual-spelling"]
+
+[[scenario]]
+id = "MUT-DB-004"
+layer = "db"
+area = "accrual-persistence"
+operator = "split-transaction"
+risk = "high"
+file = "backend/src/db/dues_repository.rs"
+original = "let mut due_ids = Vec::with_capacity(batch.dues.len());"
+mutant = '''tx.commit().await?;
+    let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
+    let mut due_ids = Vec::with_capacity(batch.dues.len());'''
+intent = "The period row commits separately, so a later liability failure leaves a partial accrual."
+suites = ["rust-db-accrual-rollback"]
 
 # ------------------------------------------------------------------ Flutter: money parsing and formatting
 

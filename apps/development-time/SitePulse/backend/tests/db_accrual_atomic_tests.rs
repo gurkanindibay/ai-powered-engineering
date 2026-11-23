@@ -252,19 +252,31 @@ async fn a_failure_partway_through_a_batch_writes_nothing_and_a_rerun_links_ever
     let (status, body) = env.accrue("2026-10", "2026-10-15").await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
     assert_eq!(
-        env.int("SELECT count(*) FROM dues_liabilities WHERE period_key = '2026-10'")
-            .await,
+        env.int(&format!(
+            "SELECT count(*) FROM dues_liabilities dl
+             JOIN units u ON u.id = dl.unit_id
+             WHERE u.site_id = {} AND dl.period_key = '2026-10'",
+            env.site
+        ))
+        .await,
         0,
         "no liability in the database"
     );
     assert_eq!(
-        env.int("SELECT count(*) FROM dues_periods WHERE period_key = '2026-10'")
-            .await,
+        env.int(&format!(
+            "SELECT count(*) FROM dues_periods WHERE site_id = {} AND period_key = '2026-10'",
+            env.site
+        ))
+        .await,
         0,
         "no period row"
     );
     assert_eq!(
-        env.int("SELECT count(*) FROM dues_accrual_runs").await,
+        env.int(&format!(
+            "SELECT count(*) FROM dues_accrual_runs WHERE site_id = {} AND period_key = '2026-10'",
+            env.site
+        ))
+        .await,
         0,
         "no run report"
     );
@@ -279,14 +291,45 @@ async fn a_failure_partway_through_a_batch_writes_nothing_and_a_rerun_links_ever
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["period_key"], "2026-10");
     assert_eq!(body["newly_accrued_units_count"], units);
+    let liability_rows = env
+        .int(&format!(
+            "SELECT count(*) FROM dues_liabilities dl
+             JOIN units u ON u.id = dl.unit_id
+             WHERE u.site_id = {} AND dl.period_key = '2026-10'",
+            env.site
+        ))
+        .await;
+    assert_eq!(liability_rows, units, "one liability per tariffed unit");
     assert_eq!(
-        env.int(
-            "SELECT count(*) FROM dues_liabilities dl JOIN dues_periods dp ON dp.id = dl.dues_period_id
-             WHERE dl.period_key = '2026-10' AND dp.period_key = '2026-10'"
-        )
+        env.int(&format!(
+            "SELECT count(*) FROM dues_liabilities dl
+             JOIN units u ON u.id = dl.unit_id
+             JOIN dues_periods dp ON dp.id = dl.dues_period_id
+             WHERE u.site_id = {} AND dl.period_key = '2026-10'
+               AND dp.site_id = {} AND dp.period_key = '2026-10'",
+            env.site, env.site
+        ))
         .await,
         units,
-        "every liability is linked to the period row"
+        "every liability links to this site's canonical period row"
+    );
+    assert_eq!(
+        env.int(&format!(
+            "SELECT count(*) FROM dues_periods WHERE site_id = {} AND period_key = '2026-10'",
+            env.site
+        ))
+        .await,
+        1,
+        "retry leaves exactly one period row"
+    );
+    assert_eq!(
+        env.int(&format!(
+            "SELECT count(*) FROM dues_accrual_runs WHERE site_id = {} AND period_key = '2026-10'",
+            env.site
+        ))
+        .await,
+        1,
+        "retry leaves exactly one run record"
     );
     assert_eq!(env.memory_dues("Ekim 2026").await as i64, units);
     env.drop_db().await;
@@ -300,7 +343,12 @@ async fn another_spelling_of_an_accrued_month_creates_nothing_in_the_database() 
     let (status, body) = env.accrue("2026-10", "2026-10-15").await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let rows = env
-        .int("SELECT count(*) FROM dues_liabilities WHERE period_key = '2026-10'")
+        .int(&format!(
+            "SELECT count(*) FROM dues_liabilities dl
+             JOIN units u ON u.id = dl.unit_id
+             WHERE u.site_id = {} AND dl.period_key = '2026-10'",
+            env.site
+        ))
         .await;
     assert!(rows > 0);
 
@@ -310,14 +358,44 @@ async fn another_spelling_of_an_accrued_month_creates_nothing_in_the_database() 
     assert_eq!(body["period_key"], "2026-10");
     assert_eq!(body["period"], "Ekim 2026");
     assert_eq!(
-        env.int("SELECT count(*) FROM dues_liabilities WHERE period_key = '2026-10'")
-            .await,
+        env.int(&format!(
+            "SELECT count(*) FROM dues_liabilities dl
+             JOIN units u ON u.id = dl.unit_id
+             WHERE u.site_id = {} AND dl.period_key = '2026-10'",
+            env.site
+        ))
+        .await,
         rows
     );
     assert_eq!(
-        env.int("SELECT count(*) FROM dues_periods WHERE period_key = '2026-10'")
-            .await,
+        env.int(&format!(
+            "SELECT count(*) FROM dues_periods WHERE site_id = {} AND period_key = '2026-10'",
+            env.site
+        ))
+        .await,
         1
+    );
+    assert_eq!(
+        env.int(&format!(
+            "SELECT count(*) FROM dues_liabilities dl
+             JOIN units u ON u.id = dl.unit_id
+             JOIN dues_periods dp ON dp.id = dl.dues_period_id
+             WHERE u.site_id = {} AND dl.period_key = '2026-10'
+               AND dp.site_id = {} AND dp.period_key = '2026-10'",
+            env.site, env.site
+        ))
+        .await,
+        rows,
+        "each existing liability remains linked to its sole period row"
+    );
+    assert_eq!(
+        env.int(&format!(
+            "SELECT count(*) FROM dues_accrual_runs WHERE site_id = {} AND period_key = '2026-10'",
+            env.site
+        ))
+        .await,
+        1,
+        "a spelling-only retry does not create another run"
     );
     // The database refuses a second operational liability for the same key.
     let duplicate = env
@@ -407,10 +485,32 @@ async fn two_sites_accrue_in_a_row_each_with_its_own_period_row() {
             body["newly_accrued_units_count"].as_i64().unwrap_or(0) > 0,
             "{body}"
         );
+        let accrued_units = body["newly_accrued_units_count"].as_i64().unwrap_or(0);
+        assert_eq!(
+            env.int(&format!(
+                "SELECT count(*) FROM dues_periods WHERE site_id = {site} AND period_key = '2026-10'"
+            ))
+            .await,
+            1,
+            "site {site} owns one independent period row"
+        );
+        assert_eq!(
+            env.int(&format!(
+                "SELECT count(*) FROM dues_liabilities dl
+                 JOIN units u ON u.id = dl.unit_id
+                 JOIN dues_periods dp ON dp.id = dl.dues_period_id
+                 WHERE u.site_id = {site} AND dl.period_key = '2026-10'
+                   AND dp.site_id = {site} AND dp.period_key = '2026-10'"
+            ))
+            .await,
+            accrued_units,
+            "all site {site} liabilities link to that site's period row"
+        );
     }
     // A later period of the first site, after the second site took its first.
     let (status, body) = env.accrue("2026-11", "2026-11-15").await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    let november_units = body["newly_accrued_units_count"].as_i64().unwrap_or(0);
     assert_eq!(
         env.int(
             "SELECT count(DISTINCT id) FROM dues_periods WHERE period_key IN ('2026-10','2026-11')"
@@ -425,6 +525,19 @@ async fn two_sites_accrue_in_a_row_each_with_its_own_period_row() {
         ))
         .await,
         1
+    );
+    assert_eq!(
+        env.int(&format!(
+            "SELECT count(*) FROM dues_liabilities dl
+             JOIN units u ON u.id = dl.unit_id
+             JOIN dues_periods dp ON dp.id = dl.dues_period_id
+             WHERE u.site_id = {} AND dl.period_key = '2026-11'
+               AND dp.site_id = {} AND dp.period_key = '2026-11'",
+            env.site, env.site
+        ))
+        .await,
+        november_units,
+        "the first site can accrue its own later period after the second site"
     );
     env.drop_db().await;
 }
