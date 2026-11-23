@@ -35,6 +35,90 @@ class CiTestReportTest(unittest.TestCase):
 
         self.assertEqual(ctr.incomplete_suite_count(suites), 5)
 
+    def test_inventory_uses_combined_collection_and_public_allowlist(self):
+        secret = "TR330006100519782134567890"
+        collection = {
+            "suites": [
+                {"suite": "e2e", "runner": "pytest-playwright", "producer": "e2e",
+                 "status": "mixed-attempts", "case_count": 12, "missing_shards": ["4/8"],
+                 "internal": secret},
+                {"suite": "rust", "runner": "cargo", "producer": "rust",
+                 "status": "reused", "case_count": 230, "missing_shards": [], "error": secret},
+            ],
+            "gates": [{"gate": "gui-e2e", "status": "passed", "duration_s": 7.5, "exit_codes": [0]},
+                      {"gate": "rust-test", "status": "incomplete", "duration_s": 7.5,
+                       "exit_codes": [1], "command": secret}],
+            "cases": [
+                {"runner": "cargo", "suite": "rust", "producer": "rust", "shard": "rust-test",
+                 "native_id": "unit::case", "parameter_id": None, "status": "failed",
+                 "duration_s": 0.2, "scenario_ids": [], "detail": secret, "traceback": secret},
+                {"runner": "pytest-playwright", "suite": "e2e", "producer": "e2e", "shard": "1/8",
+                 "native_id": f"tests.test_page::test_page[{secret}]", "parameter_id": secret,
+                 "status": "passed", "duration_s": 0.3, "scenario_ids": ["SC-01-01-01"], "detail": secret},
+            ],
+        }
+
+        inventory = ctr.collect_inventory(Path("/does/not/exist"), collection=collection)
+
+        self.assertEqual([suite["suite"] for suite in inventory["suites"]], ["e2e", "rust"])
+        self.assertEqual([suite["status"] for suite in inventory["suites"]], ["mixed-attempts", "reused"])
+        self.assertEqual([gate["status"] for gate in inventory["gates"]], ["passed", "incomplete"])
+        self.assertEqual([case["native_id"] for case in inventory["unmapped_cases"]], ["unit::case"])
+        self.assertNotIn(secret, json.dumps(inventory))
+
+        public = ctr.public_report_from_inventory(inventory)
+        self.assertEqual(public["schema"], 1)
+        self.assertEqual(set(public["gates"][0]), {"name", "status", "duration_seconds"})
+        self.assertEqual(set(public["cases"][0]), {"id", "name", "status", "duration_seconds"})
+        self.assertNotIn(secret, json.dumps(public))
+        public_e2e = next(case for case in public["cases"] if case.get("scenario_id") == "SC-01-01-01")
+        self.assertEqual(public_e2e["name"], "tests.test_page::test_page example-1")
+        self.assertEqual(public_e2e["scenario_id"], "SC-01-01-01")
+        self.assertNotIn("parameter_id", public_e2e)
+        e2e_gate = next(gate for gate in public["gates"] if gate["name"] == "gui-e2e")
+        self.assertEqual(e2e_gate["status"], "INCOMPLETE")
+
+    def test_outline_examples_use_ordinals_in_public_safe_html(self):
+        secret = "TR330006100519782134567890"
+        scenario = {"id": "SC-01-01-01", "name": "Statements", "status": "PASS", "last_run": None,
+                    "recent": [], "runs": 0, "passed_runs": 0, "linked_tests": [], "feature_file": ""}
+        report = {"epics": [{"id": "EPIC-01", "title": "Finance", "status": "PASS", "stories": [
+            {"id": "STORY-01-01", "title": "Statements", "status": "PASS", "scenarios": [scenario]}]}]}
+        records = [
+            {"scenario": scenario["id"], "name": f"test_statements[{secret}]", "parameter_id": secret,
+             "status": "FAIL", "duration_s": 0.2},
+            {"scenario": scenario["id"], "name": "test_statements[second-sensitive-value]", "parameter_id": "second-sensitive-value",
+             "status": "PASS", "duration_s": 0.3},
+        ]
+
+        ctr.attach_outline_examples(report, records)
+        page = ctr.ft.render_html(report, "now", "test", public_safe=True)
+
+        self.assertNotIn(secret, page)
+        self.assertNotIn("second-sensitive-value", page)
+        self.assertIn("example-1", page)
+        self.assertIn("example-2", page)
+
+    def test_legacy_inventory_ignores_malformed_nonfinite_and_negative_junit_durations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shards = Path(tmp) / "shards"
+            shard = shards / "e2e-shard-1"
+            shard.mkdir(parents=True)
+            (shard / "junit.xml").write_text(
+                '<testsuite><testcase name="bad" time="oops"/>'
+                '<testcase name="nan" time="NaN"/>'
+                '<testcase name="negative" time="-1.5"/>'
+                '<testcase name="valid" time="1.25"/></testsuite>',
+                encoding="utf-8",
+            )
+            (shard / "suite-collection.json").write_text("[]", encoding="utf-8")
+            (shard / "case-results.jsonl").write_text("null\n[]\n{}\n", encoding="utf-8")
+
+            inventory = ctr.collect_inventory(shards)
+
+            self.assertEqual([case["duration_s"] for case in inventory["cases"]],
+                             [None, None, None, 1.25])
+
     def test_attempt_metadata_selects_latest_artifact_for_history_and_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
@@ -55,6 +139,17 @@ class CiTestReportTest(unittest.TestCase):
             self.assertEqual([row["scenario"] for row in records], ["SC-06-06-02"])
             collection = json.loads((out / "suite-collection.json").read_text())
             self.assertEqual(collection["shard_inputs"]["1/8"]["attempt"], "2")
+            e2e_suite = next(suite for suite in json.loads((out / "product-status.json").read_text())
+                             ["inventory"]["suites"] if suite["suite"] == "e2e")
+            self.assertEqual(e2e_suite["status"], "incomplete")
+            self.assertGreater(summary["ci_suites"]["incomplete_suites"], 0)
+            public = json.loads((out / "public-report.json").read_text())
+            self.assertEqual(public["schema"], 1)
+            self.assertTrue(all(set(gate) <= {"name", "status", "duration_seconds"} for gate in public["gates"]))
+            self.assertTrue(all(set(case) <= {"id", "name", "status", "duration_seconds", "scenario_id"}
+                                for case in public["cases"]))
+            gui_gate = next(gate for gate in public["gates"] if gate["name"] == "gui-e2e")
+            self.assertEqual(gui_gate["status"], "INCOMPLETE")
 
     def test_merges_shards_into_report_without_changing_history(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -77,7 +172,8 @@ class CiTestReportTest(unittest.TestCase):
                              (2, 1, 1))
             self.assertEqual(sorted(p.name for p in out.iterdir()),
                              ["case-results.jsonl", "executions.jsonl", "feature-report.html", "product-status.html",
-                              "product-status.json", "suite-collection.json", "suite-report.md", "summary.json", "test-report.md"])
+                              "product-status.json", "public-report.json", "suite-collection.json", "suite-report.md",
+                              "summary.json", "test-report.md"])
             status = json.loads((out / "product-status.json").read_text(encoding="utf-8"))
             self.assertEqual((status["status"], status["scenarios"]["SC-06-06-01"]["state"],
                               status["scenarios"]["SC-06-06-02"]["state"]), ("FAIL", "passing", "failing"))
