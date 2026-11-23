@@ -23,6 +23,18 @@ cwd = "backend"
 cmd = ["cargo", "test", "--locked", "--test", "*"]
 timeout = 1200
 
+[suites.rust-statement-grouping]
+cwd = "backend"
+cmd = ["cargo", "test", "--locked", "--test", "statement_access_tests",
+       "open_items_remain_grouped_under_their_liable_people"]
+timeout = 1200
+
+[suites.rust-statement-totals]
+cwd = "backend"
+cmd = ["cargo", "test", "--locked", "--test", "statement_access_tests",
+       "joint_exposure_is_separate_from_principal_penalty_and_total"]
+timeout = 1200
+
 [suites.rust-db]
 cwd = "backend"
 cmd = ["cargo", "test", "--locked", "--test", "db_*", "--", "--ignored", "--test-threads=1"]
@@ -943,3 +955,27 @@ original = "totals = Counter(row[\"status\"] for row in cases)"
 mutant = "totals = Counter(\"passed\" if row[\"status\"] == \"failed\" else row[\"status\"] for row in cases)"
 intent = "Failed verification cases are counted as passed in the aggregate status totals."
 suites = ["harness"]
+
+[[scenario]]
+id = "MUT-RS-041"
+layer = "rust"
+area = "unit-statements"
+operator = "wrong-key"
+risk = "high"
+file = "backend/src/services/resident_statement.rs"
+original = ".entry(stored.liable_person_id)"
+mutant = ".entry(current_person_id)"
+intent = "A former holder's open dues are grouped under the current occupant instead of the liable person."
+suites = ["rust-statement-grouping"]
+
+[[scenario]]
+id = "MUT-RS-042"
+layer = "rust"
+area = "unit-statements"
+operator = "double-count"
+risk = "high"
+file = "backend/src/services/resident_statement.rs"
+original = "row.total_outstanding += i.total_outstanding;"
+mutant = "row.total_outstanding += i.total_outstanding + row.jointly_liable_total;"
+intent = "A debtor's separately reported joint exposure is counted again in their statement total."
+suites = ["rust-statement-totals"]
