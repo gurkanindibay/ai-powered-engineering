@@ -6,6 +6,8 @@
 
 ---
 
+> The [23 November coverage assessment](mutation-coverage-improvement.md) reports the nightly workflow and current priorities. The sections below describe the original CI design.
+
 ## 1. Executive Summary & Problem Context
 
 SitePulse maintains a curated catalogue of **58 mutation scenarios** defined in [`harness/mutation/scenarios.toml`](../../harness/mutation/scenarios.toml). Each scenario seeds a deliberate, realistic fault (e.g. boundary operator change, removed condition, rounding distortion) into production code across four technical layers: Rust backend, Flutter frontend, Python harness utilities, and PostgreSQL schema/RLS rules.

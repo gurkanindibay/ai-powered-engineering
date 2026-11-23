@@ -2,6 +2,8 @@
 
 **Status** — First run, 20 November 2026 · revision `3c481b2e` (master) plus this change
 
+> The [23 November coverage assessment](mutation-coverage-improvement.md) reports the nightly workflow and current priorities. The observations below describe the original assessment.
+
 ## Why mutation testing
 
 SitePulse reports test *counts* and scenario *traceability*, but neither says whether a test would fail if the code were wrong. The [coverage assessment of 10 November](test-coverage-assessment-2026-11-10.md) records that no line or branch coverage exists, and coverage would not answer the question either: a line can be executed by a test that asserts nothing about it.
