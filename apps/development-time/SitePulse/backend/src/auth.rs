@@ -911,8 +911,8 @@ async fn scope_request(
     let template = req
         .extensions()
         .get::<axum::extract::MatchedPath>()
-        .map(|p| p.as_str())
-        .unwrap_or("");
+        .map(|p| p.as_str().to_string())
+        .unwrap_or_default();
     if template.contains(":unit_id")
         || template.contains("{unit_id}")
         || template.starts_with("/api/v1/units/:id")
@@ -928,9 +928,25 @@ async fn scope_request(
             3
         };
         if let Some(id) = parts.get(idx) {
+            // The statement is a historical record: a former owner or tenant with
+            // an outstanding charge keeps read access to their own liabilities.
+            // Every other unit route keeps the current-relationship rule. The
+            // template is compared exactly so a future `/statement/...` subroute
+            // can never inherit the historical rule.
+            if template == "/api/v1/residents/:unit_id/statement"
+                || template == "/api/v1/residents/{unit_id}/statement"
+            {
+                let access = authorization::statement_unit(state, claims, id)
+                    .await
+                    .map_err(IntoResponse::into_response)?;
+                // The handler builds the statement from a separate state read:
+                // hand it the decision so a historical grant never falls back
+                // to a current holder's section.
+                req.extensions_mut().insert(access);
+            } else if
             // Household and payment-profile changes by residents need the unit's owner;
             // managers are scoped to their site by `check_unit_access`.
-            if matches!(
+            matches!(
                 policy,
                 RoutePolicy::Require(
                     Permission::UnitInviteCoResident | Permission::UnitManageHousehold

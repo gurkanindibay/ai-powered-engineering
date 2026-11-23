@@ -315,6 +315,7 @@ pub async fn get_resident_operating_budget(
 pub async fn get_resident_statement(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<Claims>,
+    axum::Extension(access): axum::Extension<crate::authorization::StatementAccess>,
     Path(unit_id): Path<String>,
 ) -> Result<Json<ResidentStatement>, ApiError> {
     let inner = state.inner.read().await;
@@ -328,12 +329,13 @@ pub async fn get_resident_statement(
         .iter()
         .find(|user| crate::auth::same_id(&user.id, &claims.sub))
         .and_then(|user| user.person_id);
-    let viewer = resident_statement::caller_debtor_role(&claims, unit, viewer_person_id);
-    Ok(Json(resident_statement::build_statement_for_person(
+    let viewer = resident_statement::caller_debtor_role(&inner, &claims, unit, viewer_person_id);
+    Ok(Json(resident_statement::build_statement_for_access(
         &inner,
         unit,
         viewer,
         viewer_person_id,
+        access,
         crate::services::finance_common::site_today(&inner, &unit.site_id),
     )))
 }
@@ -360,7 +362,7 @@ pub async fn create_payment_intent(
             .iter()
             .find(|user| crate::auth::same_id(&user.id, &claims.sub))
             .and_then(|user| user.person_id);
-        resident_statement::caller_debtor_role(&claims, unit, person_id)
+        resident_statement::caller_debtor_role(&inner, &claims, unit, person_id)
     };
     CardPaymentService::new(state)
         .create_intent(&unit_id, req, role, &actor(&claims))

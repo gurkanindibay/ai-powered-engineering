@@ -947,6 +947,285 @@ async fn when_a_tenant_liability_has_an_owner_link_then_owner_sees_only_its_join
 }
 
 #[tokio::test]
+// covers: SC-13-25-07, SC-13-14-09 (Issue #295: unit statement groups open items by liable person)
+async fn when_unit_has_former_and_current_debtors_then_each_receives_distinct_statement_entry() {
+    let state = site_with_two_units().await;
+    let today = today();
+    {
+        let mut inner = state.inner.write().await;
+        let make_user = |id: &str, pid: i64, name: &str, role: Role| User {
+            id: id.to_string(),
+            site_id: SITE.to_string(),
+            full_name: name.to_string(),
+            email: format!("{id}@sitepulse.local"),
+            phone: "05550000000".to_string(),
+            password_hash: None,
+            role,
+            must_change_password: false,
+            auth_provider: AuthProvider::Local,
+            google_sub: None,
+            avatar_url: None,
+            created_at: Utc::now(),
+            person_id: Some(pid),
+        };
+        inner
+            .users
+            .push(make_user("person-101", 101, "Ada Kaya", Role::HomeOwner));
+        inner
+            .users
+            .push(make_user("person-102", 102, "Ben Kaya", Role::HomeOwner));
+        inner.users.push(make_user(
+            "person-201",
+            201,
+            "Dan Yılmaz",
+            Role::HomeResident,
+        ));
+        inner
+            .users
+            .push(make_user("person-203", 203, "Eli Şen", Role::HomeResident));
+
+        let unit = inner.units.iter_mut().find(|u| u.id == "d-14").unwrap();
+        unit.owner_user_id = Some("person-102".to_string());
+        unit.tenant_user_id = Some("person-203".to_string());
+
+        // Ada (former owner): February due
+        inner.dues.push(DuesLiability {
+            id: "due-ada-feb".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Şubat 2027".to_string(),
+            principal_amount: d("800.00"),
+            delay_penalty: d("78.67"),
+            total_amount: d("878.67"),
+            due_date: today - Days::new(60),
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Owner,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: Some(today),
+            grace_days: 0,
+            effective_due_date: None,
+            liable_person_id: Some(101),
+        });
+
+        // Ben (current owner): April due
+        inner.dues.push(DuesLiability {
+            id: "due-ben-apr".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Nisan 2027".to_string(),
+            principal_amount: d("500.00"),
+            delay_penalty: Decimal::ZERO,
+            total_amount: d("500.00"),
+            due_date: today,
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Owner,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: Some(today),
+            grace_days: 0,
+            effective_due_date: None,
+            liable_person_id: Some(102),
+        });
+
+        // Dan (former tenant): February due
+        inner.dues.push(DuesLiability {
+            id: "due-dan-feb".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Şubat 2027".to_string(),
+            principal_amount: d("750.00"),
+            delay_penalty: d("73.75"),
+            total_amount: d("823.75"),
+            due_date: today - Days::new(60),
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: Some(today),
+            grace_days: 0,
+            effective_due_date: None,
+            liable_person_id: Some(201),
+        });
+
+        // Eli (current tenant): April due
+        inner.dues.push(DuesLiability {
+            id: "due-eli-apr".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Nisan 2027".to_string(),
+            principal_amount: d("400.00"),
+            delay_penalty: Decimal::ZERO,
+            total_amount: d("400.00"),
+            due_date: today,
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: Some(today),
+            grace_days: 0,
+            effective_due_date: None,
+            liable_person_id: Some(203),
+        });
+    }
+
+    let inner = state.inner.read().await;
+    let unit = inner.units.iter().find(|u| u.id == "d-14").unwrap();
+    let statement = resident_statement::build_statement(&inner, unit, None, today);
+
+    assert_eq!(statement.debtors.len(), 4);
+
+    let ben = &statement.debtors[0];
+    assert_eq!(ben.debtor_type, "OWNER");
+    assert_eq!(ben.name, "Ben Kaya");
+    assert_eq!(ben.principal_outstanding, d("500.00"));
+    assert_eq!(ben.total_outstanding, d("500.00"));
+    assert_eq!(ben.open_items.len(), 1);
+    assert_eq!(ben.open_items[0].due_id, "due-ben-apr");
+
+    let ada = &statement.debtors[1];
+    assert_eq!(ada.debtor_type, "OWNER");
+    assert_eq!(ada.name, "Ada Kaya");
+    assert_eq!(ada.principal_outstanding, d("800.00"));
+    assert_eq!(ada.penalty_outstanding, d("78.67"));
+    assert_eq!(ada.total_outstanding, d("878.67"));
+    assert_eq!(ada.open_items.len(), 1);
+    assert_eq!(ada.open_items[0].due_id, "due-ada-feb");
+
+    let eli = &statement.debtors[2];
+    assert_eq!(eli.debtor_type, "TENANT");
+    assert_eq!(eli.name, "Eli Şen");
+    assert_eq!(eli.principal_outstanding, d("400.00"));
+    assert_eq!(eli.total_outstanding, d("400.00"));
+    assert_eq!(eli.open_items.len(), 1);
+    assert_eq!(eli.open_items[0].due_id, "due-eli-apr");
+
+    let dan = &statement.debtors[3];
+    assert_eq!(dan.debtor_type, "TENANT");
+    assert_eq!(dan.name, "Dan Yılmaz");
+    assert_eq!(dan.principal_outstanding, d("750.00"));
+    assert_eq!(dan.penalty_outstanding, d("73.75"));
+    assert_eq!(dan.total_outstanding, d("823.75"));
+    assert_eq!(dan.open_items.len(), 1);
+    assert_eq!(dan.open_items[0].due_id, "due-dan-feb");
+
+    // A signed-in current owner sees only their own section, not the predecessor's.
+    let ben_view = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("OWNER"),
+        Some(102),
+        today,
+    );
+    assert_eq!(ben_view.debtors.len(), 1);
+    assert_eq!(ben_view.debtors[0].name, "Ben Kaya");
+    assert!(!ben_view.debtors[0].is_former);
+    assert_eq!(ben_view.debtors[0].open_items[0].due_id, "due-ben-apr");
+
+    // A former owner with outstanding items sees only their own section.
+    let ada_view = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("OWNER"),
+        Some(101),
+        today,
+    );
+    assert_eq!(ada_view.debtors.len(), 1);
+    assert_eq!(ada_view.debtors[0].name, "Ada Kaya");
+    assert!(ada_view.debtors[0].is_former);
+    assert_eq!(ada_view.debtors[0].open_items[0].due_id, "due-ada-feb");
+
+    // A signed-in current tenant sees only their own section, not the predecessor's.
+    let eli_view = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("TENANT"),
+        Some(203),
+        today,
+    );
+    assert_eq!(eli_view.debtors.len(), 1);
+    assert_eq!(eli_view.debtors[0].name, "Eli Şen");
+    assert!(!eli_view.debtors[0].is_former);
+    assert_eq!(eli_view.debtors[0].open_items[0].due_id, "due-eli-apr");
+
+    // A former tenant with outstanding items sees only their own section.
+    let dan_view = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("TENANT"),
+        Some(201),
+        today,
+    );
+    assert_eq!(dan_view.debtors.len(), 1);
+    assert_eq!(dan_view.debtors[0].name, "Dan Yılmaz");
+    assert!(dan_view.debtors[0].is_former);
+    assert_eq!(dan_view.debtors[0].open_items[0].due_id, "due-dan-feb");
+}
+
+#[tokio::test]
+async fn when_former_tenant_has_open_items_and_unit_is_vacant_then_only_former_tenant_entry_is_produced(
+) {
+    let state = site_with_two_units().await;
+    let today = today();
+    {
+        let mut inner = state.inner.write().await;
+        let make_user = |id: &str, pid: i64, name: &str| User {
+            id: id.to_string(),
+            site_id: SITE.to_string(),
+            full_name: name.to_string(),
+            email: format!("{id}@sitepulse.local"),
+            phone: "05550000000".to_string(),
+            password_hash: None,
+            role: Role::HomeResident,
+            must_change_password: false,
+            auth_provider: AuthProvider::Local,
+            google_sub: None,
+            avatar_url: None,
+            created_at: Utc::now(),
+            person_id: Some(pid),
+        };
+        inner.users.push(make_user("person-201", 201, "Dan Yılmaz"));
+
+        let unit = inner.units.iter_mut().find(|u| u.id == "d-14").unwrap();
+        unit.tenant_user_id = None;
+
+        inner.dues.push(DuesLiability {
+            id: "due-dan-vacant".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Şubat 2027".to_string(),
+            principal_amount: d("750.00"),
+            delay_penalty: Decimal::ZERO,
+            total_amount: d("750.00"),
+            due_date: today - Days::new(60),
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: Some(today),
+            grace_days: 0,
+            effective_due_date: None,
+            liable_person_id: Some(201),
+        });
+    }
+
+    let inner = state.inner.read().await;
+    let unit = inner.units.iter().find(|u| u.id == "d-14").unwrap();
+    let tenant_stmt = resident_statement::build_statement_for_person(
+        &inner,
+        unit,
+        Some("TENANT"),
+        Some(201),
+        today,
+    );
+
+    assert_eq!(tenant_stmt.debtors.len(), 1);
+    assert_eq!(tenant_stmt.debtors[0].name, "Dan Yılmaz");
+    assert!(tenant_stmt.debtors[0].is_former);
+    assert_eq!(tenant_stmt.debtors[0].principal_outstanding, d("750.00"));
+}
+
+#[tokio::test]
 // covers: SC-13-12-01
 // Backend coverage: SC-13-05-17 (owner payment, payer/debtor receipt identities, and owner statement balance).
 async fn when_an_owner_pays_a_linked_tenant_liability_then_the_receipt_names_payer_and_debtor() {

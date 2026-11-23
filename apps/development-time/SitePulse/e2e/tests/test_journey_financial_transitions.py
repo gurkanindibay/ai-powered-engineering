@@ -19,6 +19,7 @@ import pytest
 
 from support.journey_attempts import JourneyClock, ledger_invariants, make_viban
 from support.journey_snapshots import (
+    current_section,
     financial_snapshot,
     journey_site,
     money,
@@ -156,7 +157,7 @@ def test_aging_bucket_changes_at_each_day_boundary(
         assert money(bracket["accrued_delay_penalty"]) == D(fee)
 
         statement = api.resident_statement(fixture.manager, a5)
-        debtor = next((d for d in statement["debtors"] if d["debtor_type"] == "TENANT"), None)
+        debtor = current_section(statement, "TENANT", required=False)
         assert debtor is not None, f"Unit {a5} tenant debtor not found in resident statement"
         for name in STATEMENT_BUCKETS:
             assert money(debtor[name]) == (D("1500.00") if name == statement_bucket else ZERO), name

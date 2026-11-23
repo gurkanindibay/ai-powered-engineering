@@ -256,11 +256,8 @@ def test_final_open_debt_stays_with_each_former_and_current_debtor(journey):
 
 
 @pytest.mark.covers("SC-13-25-07")
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="BUG #295: unit statement lists former owner Ada's February charge under successor Ben Kaya",
-)
+@pytest.mark.core
+@pytest.mark.role_manager
 def test_unit_statement_attributes_open_items_to_former_debtors(journey):
     """SC-13-25-07: reading the manager statements including former debtors attributes open charges to their debtor."""
     j = journey().run_through("apr_paid")
@@ -269,7 +266,13 @@ def test_unit_statement_attributes_open_items_to_former_debtors(journey):
     assert "Ada" in debtor_names, (
         f"site A, period Şubat 2027, unit A-01, debtor Ada: statement lists former owner charge under {list(debtor_names.keys())}"
     )
+    assert debtor_names["Ada"]["is_former"] is True, "Ada no longer holds the title, so her section is a former one"
+    assert debtor_names["Ben"]["is_former"] is False, "Ben holds the title, so his section is the current one"
     ada_open = {item["period"]: item for item in debtor_names["Ada"]["open_items"]}
     assert "Şubat 2027" in ada_open, (
         f"site A, period Şubat 2027, unit A-01, debtor Ada: February open item missing from Ada's statement items"
+    )
+    ben_open = {item["period"] for item in debtor_names["Ben"]["open_items"]}
+    assert "Şubat 2027" not in ben_open, (
+        f"site A, period Şubat 2027, unit A-01, debtor Ben: Ada's February item must not appear on the successor's section"
     )

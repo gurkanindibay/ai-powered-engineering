@@ -12,6 +12,8 @@
 //! The verification gate `rust-db-test` (scripts/run_tests.py) runs them; with
 //! `--skip-db` the gate is reported as SKIPPED, never as passed.
 
+use std::sync::OnceLock;
+
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
@@ -125,6 +127,15 @@ impl TestDb {
 }
 
 const MANAGER_PASSWORD: &str = "Tenant-Manager-123";
+
+/// The password of the residents that [`seed_resident`] creates. It is derived
+/// per test process so the seeding never adds a hard-coded credential to the
+/// source: code scanning flags a literal used as a password, and a throwaway
+/// database gives nothing for a stable value to protect.
+fn resident_password() -> &'static str {
+    static PASSWORD: OnceLock<String> = OnceLock::new();
+    PASSWORD.get_or_init(|| format!("Resident-{}", uuid::Uuid::new_v4()))
+}
 
 /// Logs in as the seeded manager of `site` and returns a session-backed token.
 async fn manager_token(app: &Router, site: i64) -> String {
@@ -731,6 +742,139 @@ async fn reconciliation_assignment_is_persisted_for_its_site_only() {
     assert!(
         !matched,
         "an automatically matched item takes no assignment"
+    );
+
+    t.drop_db().await;
+}
+
+/// Seeds a resident login (person + session-backed user) and returns its person id.
+async fn seed_resident(t: &TestDb, site: i64, name: &str, email: &str) -> i64 {
+    let hash = auth::hash_password(resident_password()).expect("hash");
+    let person = t
+        .scalar_i64(&format!(
+            "INSERT INTO persons (full_name, email, person_type) \
+             VALUES ('{name}', '{email}', 'HOME_RESIDENT') RETURNING id"
+        ))
+        .await;
+    t.exec(&format!(
+        "INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password) \
+         VALUES ({site}, {person}, '{email}', '{hash}', 'HOME_RESIDENT', FALSE)"
+    ))
+    .await;
+    person
+}
+
+/// Issue #295: the production SQL behind `statement_unit` is the former-debtor
+/// gate, so it gets its own PostgreSQL coverage: a former tenant and a joint
+/// owner reach their own statement, an unrelated resident does not, and the
+/// grant does not widen to another unit route.
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn statement_access_grants_former_debtors_in_postgresql() {
+    let t = TestDb::create("statement_access").await;
+    let site = t.site_id("begonya-sitesi").await;
+    let unit = t.unit_of(site).await;
+    let other_unit = t
+        .scalar_i64(&format!(
+            "SELECT id FROM units WHERE site_id = {site} AND id <> {unit} ORDER BY id LIMIT 1"
+        ))
+        .await;
+    let former = seed_resident(&t, site, "Eski Kiraci", "former@sitepulse.test").await;
+    let joint = seed_resident(&t, site, "Ortak Malik", "joint@sitepulse.test").await;
+    seed_resident(&t, site, "Ilgisiz Kisi", "stranger@sitepulse.test").await;
+    let tenant_due = t
+        .scalar_i64(&format!(
+            "INSERT INTO dues_liabilities \
+                (unit_id, period, debtor_type, expense_type, liable_person_id, principal_amount, due_date, status) \
+             VALUES ({unit}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {former}, 1016.13, CURRENT_DATE - 30, 'PENDING') \
+             RETURNING id"
+        ))
+        .await;
+    let joint_due = t
+        .scalar_i64(&format!(
+            "INSERT INTO dues_liabilities \
+                (unit_id, period, debtor_type, expense_type, liable_person_id, principal_amount, due_date, status) \
+             VALUES ({unit}, 'Kasim 2026', 'TENANT', 'OPERATIONAL_DUES', {former}, 1016.13, CURRENT_DATE - 10, 'OVERDUE') \
+             RETURNING id"
+        ))
+        .await;
+    t.exec(&format!(
+        "INSERT INTO dues_liability_joint_owners \
+            (site_id, due_id, owner_person_id, tenant_person_id, liable_from, liable_through) \
+         VALUES ({site}, {joint_due}, {joint}, {former}, CURRENT_DATE - 60, CURRENT_DATE + 30)"
+    ))
+    .await;
+
+    let state = t.state().await;
+    let app = build_router(state);
+    let statement_uri = format!("/api/v1/residents/{unit}/statement");
+    let dashboard_uri = format!("/api/v1/residents/{unit}/dashboard");
+
+    for (who, email) in [
+        ("former tenant", "former@sitepulse.test"),
+        ("joint owner", "joint@sitepulse.test"),
+    ] {
+        let token = login(&app, email, resident_password()).await;
+        let (status, body) = call(&app, "GET", &statement_uri, &token, None).await;
+        assert_eq!(status, StatusCode::OK, "{} statement: {}", who, body);
+        let (status, body) = call(&app, "GET", &dashboard_uri, &token, None).await;
+        assert_eq!(
+            status,
+            StatusCode::NOT_FOUND,
+            "{} keeps no other unit access: {}",
+            who,
+            body
+        );
+    }
+
+    // A resident with no charge on the unit keeps the ordinary current-relationship answer.
+    let stranger_token = login(&app, "stranger@sitepulse.test", resident_password()).await;
+    let (status, body) = call(&app, "GET", &statement_uri, &stranger_token, None).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "unrelated resident: {}",
+        body
+    );
+
+    // The grant never crosses a unit boundary: the same former debtor on a
+    // different unit, where they owe nothing, is still refused.
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/residents/{other_unit}/statement"),
+        &login(&app, "former@sitepulse.test", resident_password()).await,
+        None,
+    )
+    .await;
+    assert!(
+        status == StatusCode::NOT_FOUND || status == StatusCode::FORBIDDEN,
+        "another unit's statement: {} {}",
+        status,
+        body
+    );
+
+    // A paid charge is not a collectable one: the historical rule is about what
+    // is still owed, so settling the liabilities closes the statement again.
+    t.exec(&format!(
+        "UPDATE dues_liabilities SET status = 'PAID', paid_principal = principal_amount, \
+                paid_amount = principal_amount \
+         WHERE id IN ({tenant_due}, {joint_due})"
+    ))
+    .await;
+    let (status, body) = call(
+        &app,
+        "GET",
+        &statement_uri,
+        &login(&app, "joint@sitepulse.test", resident_password()).await,
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a settled joint liability closes the statement: {}",
+        body
     );
 
     t.drop_db().await;

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from support.journey_attempts import JourneyManifest, ledger_invariants, site_in_state, teardown_with_evidence
+from support.journey_snapshots import current_section
 
 E2E = Path(__file__).resolve().parents[1]
 D = Decimal
@@ -37,8 +38,7 @@ def test_moving_out_with_debt_keeps_the_debt_and_the_history(request, api, actor
 
         assert api.get_unit_occupancy_state(fixture.manager, unit, fixture.site_id)["occupancy"] == "VACANT"
         statement = api.resident_statement(fixture.manager, unit)
-        debtors = {d["debtor_type"]: d for d in statement["debtors"]}
-        tenant, owner = debtors["TENANT"], debtors["OWNER"]
+        tenant, owner = current_section(statement, "TENANT"), current_section(statement, "OWNER")
         assert D(str(tenant["principal_outstanding"])) == D("4500.00")
         assert D(str(tenant["total_outstanding"])) == D("4500.00") + D(str(tenant["penalty_outstanding"]))
         assert D(str(tenant["advance_balance"])) == D("0.00")  # nothing is paid out
