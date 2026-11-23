@@ -966,7 +966,7 @@ file = "backend/src/services/resident_statement.rs"
 original = ".entry(stored.liable_person_id)"
 mutant = ".entry(current_person_id)"
 intent = "A former holder's open dues are grouped under the current occupant instead of the liable person."
-suites = ["rust-statement-grouping"]
+suites = ["rust-statement-grouping", "rust-integration"]
 
 [[scenario]]
 id = "MUT-RS-042"
@@ -978,4 +978,4 @@ file = "backend/src/services/resident_statement.rs"
 original = "row.total_outstanding += i.total_outstanding;"
 mutant = "row.total_outstanding += i.total_outstanding + row.jointly_liable_total;"
 intent = "A debtor's separately reported joint exposure is counted again in their statement total."
-suites = ["rust-statement-totals"]
+suites = ["rust-statement-totals", "rust-integration"]
