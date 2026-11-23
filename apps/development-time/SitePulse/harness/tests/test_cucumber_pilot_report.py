@@ -1,8 +1,10 @@
 """Tests for the public-safe Cucumber pilot summary exporter."""
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "cucumber_pilot_report.py"
@@ -45,6 +47,62 @@ class CucumberPilotReportTests(unittest.TestCase):
             self.assertNotIn(fixture_marker, serialized)
             self.assertNotIn("steps", serialized)
             self.assertNotIn("transaction_id", serialized)
+
+    def test_pages_schema_adapter_is_comparison_only_and_allowlisted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            junit, executions, fixture_marker = self.write_inputs(root)
+            result = reporter.build(junit, executions, "123456", "1", "a" * 40, "owner/repo")
+
+            public = reporter.public_report_from_result(result)
+
+            self.assertEqual(public["schema"], 1)
+            self.assertEqual(len(public["gates"]), 1)
+            self.assertIn("comparison-only", public["gates"][0]["name"])
+            self.assertIn("pytest remains authoritative", public["gates"][0]["name"])
+            self.assertEqual(public["gates"][0]["status"], "PASS")
+            self.assertEqual([case["id"] for case in public["cases"]], [case[2] for case in reporter.CASES])
+            self.assertEqual(public["cases"][0]["scenario_id"], "SC-10-01-01")
+            self.assertEqual(public["cases"][0]["duration_seconds"], 1.25)
+            self.assertEqual(set(public["cases"][0]), {"id", "name", "status", "duration_seconds", "scenario_id"})
+            self.assertNotIn(fixture_marker, json.dumps(public))
+
+    def test_pages_schema_adapter_preserves_incomplete_statuses(self):
+        result = {
+            "status": "INCOMPLETE",
+            "duration_s": 1.0,
+            "cases": [{
+                "case_id": case_id, "scenario_id": scenario, "label": label,
+                "status": "NOT_RUN", "duration_s": 0.0,
+            } for scenario, _row, case_id, label in reporter.CASES],
+        }
+
+        public = reporter.public_report_from_result(result)
+
+        self.assertEqual(public["gates"][0]["status"], "INCOMPLETE")
+        self.assertTrue(all(case["status"] == "NOT RUN" for case in public["cases"]))
+
+    def test_cli_writes_distinct_allowlisted_public_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            junit, executions, fixture_marker = self.write_inputs(root)
+            output = root / "cucumber-results.json"
+            public_output = root / "public-report.json"
+            with redirect_stdout(io.StringIO()):
+                result = reporter.main([
+                    "--junit", str(junit), "--executions", str(executions),
+                    "--run-id", "123456", "--attempt", "1", "--commit", "a" * 40,
+                    "--repository", "owner/repo", "--out", str(output),
+                    "--public-out", str(public_output),
+                ])
+
+            self.assertEqual(result, 0)
+            safe_summary = json.loads(output.read_text(encoding="utf-8"))
+            public_report = json.loads(public_output.read_text(encoding="utf-8"))
+            self.assertEqual(safe_summary["authority"], "comparison-only")
+            self.assertEqual(public_report["schema"], 1)
+            self.assertNotIn(fixture_marker, output.read_text(encoding="utf-8"))
+            self.assertNotIn(fixture_marker, public_output.read_text(encoding="utf-8"))
 
     def test_incomplete_inputs_are_not_counted_as_passes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -100,6 +158,7 @@ class CucumberPilotReportTests(unittest.TestCase):
         self.assertIn("workflow_dispatch", workflow)
         self.assertIn("cucumber-pilot-results", workflow)
         self.assertIn("cucumber-results.json", workflow)
+        self.assertIn("public-report.json", workflow)
         self.assertNotIn("target/site/serenity", workflow)
         self.assertNotIn("cucumber-pilot-private.log\n          retention-days", workflow)
 

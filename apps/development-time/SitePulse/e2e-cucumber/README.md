@@ -11,11 +11,14 @@ directory. Keep it runnable when touching it, but do not grow it without a migra
 
 The opt-in GitHub Actions workflow is [`sitepulse-cucumber-pilot.yml`](../../../../.github/workflows/sitepulse-cucumber-pilot.yml).
 It produces the allowlisted `cucumber-pilot-results-<run-id>-<attempt>` artifact from JUnit and execution records.
-The safe JSON contains only the five fixed pilot case IDs, example IDs, static labels, statuses,
-durations, and the Actions run link. Every case is labeled comparison-only; pytest remains the
-authority for overlapping scenarios. The private JUnit, execution JSONL, Serenity tree, and runner
-log are not uploaded. A Pages renderer can consume the safe JSON after the shared report schema is
-available; the workflow does not publish Pages itself.
+The artifact contains `cucumber-results.json` (the comparison-only summary) and a separate
+schema-1 `public-report.json` for the shared Pages renderer. Both contain only the five fixed pilot
+case IDs, example IDs where applicable, static labels, normalized statuses, durations, and safe run
+metadata. The gate label states that this is comparison-only and pytest remains authoritative for
+overlapping scenarios. The private JUnit, execution JSONL, Serenity tree, and runner log are not
+uploaded. The Cucumber artifact remains separate from the authoritative inventory; a dedicated
+Pages archive ingestion path must be enabled before it is published. The workflow does not deploy
+Pages itself.
 
 Serenity is generated once by `run_pilot.py` and remains on the ephemeral runner. The current report
 captures screenshots on failed scenarios and embeds detailed test evidence, so it has not passed a

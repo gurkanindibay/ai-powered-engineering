@@ -76,17 +76,20 @@ jobs:
           --commit "${{ github.sha }}"
           --repository "${{ github.repository }}"
           --out "$RUNNER_TEMP/cucumber-results.json"
+          --public-out "$RUNNER_TEMP/cucumber-public-report/public-report.json"
       - name: Retain allowlisted comparison data
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cucumber-pilot-results-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/cucumber-results.json
+          path: |
+            ${{ runner.temp }}/cucumber-results.json
+            ${{ runner.temp }}/cucumber-public-report/public-report.json
           if-no-files-found: error
           retention-days: 30
       - name: Preserve pilot failure status
         if: always() && steps.run_pilot.outcome == 'failure'
         run: exit 1
       # The generated Serenity tree and private log remain on the ephemeral runner. The pilot
-      # contains screenshots, transaction identifiers and test account data; neither is retained
-      # in public-repository Actions artifacts or sent to Pages without a complete safety review.
+      # contains screenshots, transaction identifiers and test account data; only the two
+      # exporter allowlists above are retained. A separate Pages archive path is added later.

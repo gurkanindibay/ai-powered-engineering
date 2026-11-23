@@ -25,6 +25,10 @@ CASES = (
 )
 CASE_INDEX = {(scenario, row): (case_id, label) for scenario, row, case_id, label in CASES}
 SAFE_STATUSES = {"PASS", "FAIL", "SKIP", "ERROR", "NOT_RUN", "INCOMPLETE"}
+PUBLIC_STATUS = {
+    "PASS": "PASS", "FAIL": "FAIL", "SKIP": "SKIPPED", "ERROR": "ERROR",
+    "NOT_RUN": "NOT RUN", "INCOMPLETE": "INCOMPLETE",
+}
 
 
 def _status(value: object) -> str:
@@ -173,7 +177,50 @@ def build(junit: Path, executions: Path, run_id: str, attempt: str,
     }
 
 
-def main() -> int:
+def public_report_from_result(result: dict) -> dict:
+    """Adapt the fixed comparison summary to the Pages schema-1 allowlist."""
+    expected = [(case_id, scenario_id, label) for scenario_id, _row, case_id, label in CASES]
+    rows = result.get("cases")
+    if not isinstance(rows, list) or len(rows) != len(expected):
+        raise ValueError("Cucumber result must contain exactly the five allowlisted cases")
+
+    public_cases = []
+    for row, (case_id, scenario_id, label) in zip(rows, expected, strict=True):
+        if not isinstance(row, dict) or (row.get("case_id"), row.get("scenario_id"), row.get("label")) != (
+                case_id, scenario_id, label):
+            raise ValueError("Cucumber result case does not match the fixed allowlist")
+        raw_status = row.get("status")
+        status = PUBLIC_STATUS.get(raw_status) if isinstance(raw_status, str) else None
+        duration = row.get("duration_s")
+        if (status is None or not isinstance(duration, (int, float)) or isinstance(duration, bool)
+                or not math.isfinite(duration) or duration < 0):
+            raise ValueError("Cucumber result contains an invalid case status or duration")
+        public_cases.append({
+            "id": case_id,
+            "name": label,
+            "status": status,
+            "duration_seconds": round(float(duration), 3),
+            "scenario_id": scenario_id,
+        })
+
+    raw_gate_status = result.get("status")
+    gate_status = PUBLIC_STATUS.get(raw_gate_status) if isinstance(raw_gate_status, str) else None
+    gate_duration = result.get("duration_s")
+    if (gate_status is None or not isinstance(gate_duration, (int, float))
+            or isinstance(gate_duration, bool) or not math.isfinite(gate_duration) or gate_duration < 0):
+        raise ValueError("Cucumber result contains an invalid overall status or duration")
+    return {
+        "schema": 1,
+        "gates": [{
+            "name": "Cucumber comparison-only pilot (pytest remains authoritative)",
+            "status": gate_status,
+            "duration_seconds": round(float(gate_duration), 3),
+        }],
+        "cases": public_cases,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--junit", type=Path, required=True, help="private native JUnit XML input")
     parser.add_argument("--executions", type=Path, required=True, help="private Cucumber JSONL input")
@@ -182,12 +229,17 @@ def main() -> int:
     parser.add_argument("--commit", required=True)
     parser.add_argument("--repository", required=True, help="owner/repository")
     parser.add_argument("--out", type=Path, required=True, help="safe JSON output")
+    parser.add_argument("--public-out", type=Path, help="Pages schema-1 allowlist output (default: sibling public-report.json)")
     parser.add_argument("--json", action="store_true", help="print the safe result summary as JSON")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         report = build(args.junit, args.executions, args.run_id, args.attempt, args.commit, args.repository)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        public_out = args.public_out or args.out.with_name("public-report.json")
+        public_out.parent.mkdir(parents=True, exist_ok=True)
+        public_report = public_report_from_result(report)
+        public_out.write_text(json.dumps(public_report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     except (OSError, ValueError, ET.ParseError) as error:
         print(f"Cucumber result export failed: {error}", file=sys.stderr)
         return 1
