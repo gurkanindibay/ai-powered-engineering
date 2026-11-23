@@ -55,6 +55,10 @@ Add the following eight candidates in order. These are proposed probes with expe
 
 Start with one precise assertion per fault, using exact IDs, decimal amounts, or persisted row counts. Run each new mutant before writing a test to establish whether it already dies. If it survives, add the cheapest assertion that detects the fault. Record the original result, the clean baseline, and the rerun result. Commit one behaving probe per fault. Where two probes are equivalent under the supported inputs, document the equivalence before changing the catalogue. Future regression fixes should contribute a probe when the fault exposes a distinct invariant.
 
+### Verification reporting probe results
+
+For #349, the initial runs used the existing harness suite before adding focused assertions. Both `MUT-PY-007` (missing required gate evidence reported as passed) and `MUT-PY-008` (failed cases included in passed totals) survived. The clean `harness` baseline passed in 16 seconds. After adding assertions in `harness/tests/test_ci_case_results.py`, both mutants were killed by the `harness` suite. The focused case-result tests passed (13 tests); the full harness suite is the final verification gate.
+
 ## 3. Make nightly scores trustworthy and actionable
 
 | Change | Evidence from the current implementation | Acceptance criteria |
