@@ -351,8 +351,12 @@ jobs:
       - name: Restore archive state
         if: steps.head.outputs.current == 'true'
         run: |
-          git fetch origin gh-pages:refs/remotes/origin/gh-pages
-          git worktree add -B pages-state "$RUNNER_TEMP/pages-state" origin/gh-pages
+          if git ls-remote --exit-code origin refs/heads/gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:refs/remotes/origin/gh-pages
+            git worktree add -B pages-state "$RUNNER_TEMP/pages-state" origin/gh-pages
+          else
+            git worktree add --orphan -b pages-state "$RUNNER_TEMP/pages-state"
+          fi
       - name: Build safe Pages site
         if: steps.head.outputs.current == 'true'
         env:

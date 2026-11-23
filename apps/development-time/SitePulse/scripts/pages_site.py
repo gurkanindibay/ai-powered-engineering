@@ -281,7 +281,10 @@ def build(site: Path, report: Path, run_id: str, attempt: str, run_number: int,
             except (OSError, json.JSONDecodeError):
                 continue
     # Remove every prior generated or unknown root file. Only archive JSON is read above.
+    # A `.git` entry (pointer file of a git worktree, or a directory) is repository plumbing, never content.
     for child in list(site.iterdir()):
+        if child.name == ".git":
+            continue
         if child.name == "reports" and child.is_dir() and not child.is_symlink():
             shutil.rmtree(child)
             continue
