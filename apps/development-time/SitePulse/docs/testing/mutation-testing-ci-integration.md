@@ -6,7 +6,7 @@
 
 ---
 
-> The [23 November coverage assessment](mutation-coverage-improvement.md) reports the nightly workflow and current priorities. The observations below describe the original assessment.
+> The [23 November coverage assessment](mutation-coverage-improvement.md) reports the nightly workflow and current priorities. The sections below describe the original CI design.
 
 ## 1. Executive Summary & Problem Context
 

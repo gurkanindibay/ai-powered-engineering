@@ -20,10 +20,12 @@ The mutation workflow took about 24 minutes, with the Rust shard on the critical
 
 ## 1. Kill both capital-dues survivors
 
+[PR #343](https://github.com/gurkanindibay/ai-powered-engineering/pull/343) adds the Rust and database regressions and reports that both targeted mutants were killed. The next complete nightly run can confirm the combined score.
+
 | Mutant | Why the existing assertions miss it | Test and acceptance criteria |
 | --- | --- | --- |
 | `MUT-RS-004` | [The ledger unit test](../../backend/src/services/dues_ledger.rs) denies a tenant paying an **owner** capital liability. The debtor-type comparison already produces that denial. The changed expense-type check matters for an in-memory liability with both `TENANT` and `CAPITAL_DUES`. | Extend the existing unit test with that combination and assert that the ordinary tenant payer is denied. Retain the positive controls for owner capital and tenant operational dues. Baseline passes and the mutant is killed by `rust-unit`. |
-| `MUT-DB-002` | The selected PostgreSQL tests passed when the [V12 check constraint](../../backend/migrations/V12__financial_and_tenancy_remediation.sql) was replaced by an unconditional check. Tests using only application-accepted rows can pass with either constraint. | In a migrated throwaway database, use direct SQL with otherwise valid, distinct fixture rows. Accept owner capital and tenant operational rows, then reject a tenant capital row with SQLSTATE `23514` and constraint name `chk_dues_capital_owner_only`. Use an ignored PostgreSQL test in a `db_*` target so `rust-db` executes it. Baseline passes and the mutant is killed by `rust-db`. |
+| `MUT-DB-002` | The selected PostgreSQL tests passed when the [V12 check constraint](../../backend/migrations/V12__financial_and_tenancy_remediation.sql) was replaced by an unconditional check. Tests using only application-accepted rows can pass with either constraint. | In a migrated throwaway database, use direct SQL with otherwise valid, distinct fixture rows. Accept an owner capital row, then reject a tenant capital row with constraint name `chk_dues_capital_owner_only`. PR #343 covers those cases. An additional tenant operational control and an explicit SQLSTATE `23514` assertion would confirm the allowed tenant path and the error class. Use an ignored PostgreSQL test in a `db_*` target so `rust-db` executes it. Baseline passes and the mutant is killed by `rust-db`. |
 
 Treat the Rust fixture as a defensive test of the in-memory rule and the SQL fixture as a test of the persistence invariant. Keep the explicit payment-on-behalf flow working as covered by [the capital payment feature](../../.specify/features/EPIC-09/STORY-09-06-tenant-pays-capital-on-behalf.feature) and [existing payment integration tests](../../backend/tests/payment_ledger_hardening_tests.rs).
 
@@ -66,4 +68,4 @@ Track **mutation score**, **scored IDs / expected IDs**, and **high-risk survivo
 
 ## Verification and limits
 
-This assessment used CI shard artifacts and a source review. It did not rerun the complete mutation matrix on `b47d5802`. The local catalogue validator passed for 58 scenarios across six suites and the Python harness passed 244 tests. The proposed assertions and workflow changes remain follow-up work.
+This assessment used CI shard artifacts and a source review. It did not rerun the complete mutation matrix on `b47d5802`. The local catalogue validator passed for 58 scenarios across six suites and the Python harness passed 244 tests. PR #343 reports the targeted survivor reruns. The catalogue expansion and workflow changes remain follow-up work.
