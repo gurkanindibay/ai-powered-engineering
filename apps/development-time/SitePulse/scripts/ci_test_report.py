@@ -33,7 +33,7 @@ import re
 import shutil
 import sys
 import xml.etree.ElementTree as ET
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -63,6 +63,128 @@ def merge_executions(files: list[Path], out: Path) -> int:
     lines = [line for path in files for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     out.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
     return len(lines)
+
+
+def collect_inventory(shards: Path, records: list[dict] | None = None) -> dict:
+    records = records or []
+    suite_files = list(shards.rglob("suite-collection.json"))
+    case_files = list(shards.rglob("case-results.jsonl"))
+    if suite_files and case_files:
+        try:
+            suite_data = json.loads(suite_files[0].read_text(encoding="utf-8"))
+            cases = [json.loads(line) for line in case_files[0].read_text(encoding="utf-8").splitlines() if line.strip()]
+            unmapped = [c for c in cases if not c.get("scenario_ids")]
+            return {
+                "suites": suite_data.get("suites", []),
+                "gates": suite_data.get("gates", []),
+                "cases": cases,
+                "unmapped_cases": unmapped
+            }
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    scenario_by_test: dict[str, set[str]] = defaultdict(set)
+    for r in records:
+        test = r.get("test")
+        sc = r.get("scenario")
+        if test and sc:
+            scenario_by_test[test].add(sc)
+            scenario_by_test[test.split("::")[-1]].add(sc)
+            base_test = re.sub(r"\[.*\]$", "", test)
+            scenario_by_test[base_test].add(sc)
+            scenario_by_test[base_test.split("::")[-1]].add(sc)
+
+    cases = []
+    junit_files = sorted(shards.rglob("junit.xml"))
+    for jf in junit_files:
+        try:
+            root = ET.parse(jf).getroot()
+        except (ET.ParseError, OSError):
+            continue
+        testcases = root.findall(".//testcase") if root.tag != "testcase" else [root]
+        shard_name = jf.parent.name
+        for tc in testcases:
+            classname = tc.get("classname", "")
+            raw_name = tc.get("name", "")
+            match = re.match(r"^(.*?)\[(.*)\]$", raw_name)
+            if match:
+                native_id = match.group(1)
+                parameter_id = match.group(2)
+            else:
+                native_id = raw_name
+                parameter_id = None
+            duration_s = float(tc.get("time") or 0)
+            if tc.find("failure") is not None:
+                status = "failed"
+            elif tc.find("error") is not None:
+                status = "error"
+            elif tc.find("skipped") is not None:
+                status = "skipped"
+            else:
+                status = "passed"
+            scenarios = (scenario_by_test.get(f"{classname}::{raw_name}") or
+                         scenario_by_test.get(raw_name) or
+                         scenario_by_test.get(f"{classname}::{native_id}") or
+                         scenario_by_test.get(native_id) or set())
+            cases.append({
+                "runner": "pytest-playwright",
+                "suite": "e2e",
+                "producer": "e2e",
+                "shard": shard_name,
+                "native_id": native_id,
+                "parameter_id": parameter_id,
+                "status": status,
+                "duration_s": round(duration_s, 3),
+                "scenario_ids": sorted(scenarios)
+            })
+
+    unmapped = [c for c in cases if not c.get("scenario_ids")]
+    has_failures = any(c["status"] in ("failed", "error") for c in cases)
+    suites = [{
+        "suite": "e2e",
+        "runner": "pytest-playwright",
+        "producer": "e2e",
+        "status": "collected-with-failures" if has_failures else "collected",
+        "case_count": len(cases),
+        "missing_shards": []
+    }] if cases else []
+    gates = [{
+        "gate": "gui-e2e",
+        "status": "failed" if has_failures else "passed",
+        "duration_s": round(sum(c.get("duration_s", 0) for c in cases), 1),
+        "exit_codes": [1 if has_failures else 0]
+    }] if cases else []
+
+    return {
+        "suites": suites,
+        "gates": gates,
+        "cases": cases,
+        "unmapped_cases": unmapped
+    }
+
+
+def attach_outline_examples(report: dict, records: list[dict]) -> None:
+    records_by_sc: dict[str, list[dict]] = defaultdict(list)
+    for r in records:
+        if r.get("scenario"):
+            records_by_sc[r["scenario"]].append(r)
+    for epic in report.get("epics", []):
+        for story in epic.get("stories", []):
+            for row in story.get("scenarios", []):
+                sc_records = records_by_sc.get(row["id"], [])
+                if len(sc_records) > 1:
+                    examples = []
+                    for i, r in enumerate(sc_records):
+                        name = r.get("name", "")
+                        match = re.search(r"\[(.*)\]", name)
+                        param = match.group(1) if match else r.get("parameter_id") or f"example-{i+1}"
+                        examples.append({
+                            "id": param,
+                            "parameter_id": param,
+                            "status": r.get("status", "PASS"),
+                            "duration_s": r.get("duration_s", 0.0)
+                        })
+                    row["examples"] = examples
 
 
 def build(shards: Path, out: Path, task: str | None, history: Path,
@@ -102,22 +224,32 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
         f"# Test run {meta['run_id']}\n\nNo execution records were produced "
         f"({len(execution_files)} executions.jsonl file(s) found under {shards}).\n")
     (out / "test-report.md").write_text(markdown, encoding="utf-8")
-    page = ft.render_html(ft.build_report(catalogue, records),
+
+    run_records = [r for r in records if r.get("run_id") == meta["run_id"]]
+    inventory = collect_inventory(shards, run_records)
+    rep = ft.build_report(catalogue, records)
+    attach_outline_examples(rep, run_records)
+    page = ft.render_html(rep,
                           datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-                          f"committed history + CI run {meta['run_id']}", ft.build_runs(records, catalogue))
+                          f"committed history + CI run {meta['run_id']}",
+                          ft.build_runs(records, catalogue),
+                          public_safe=True,
+                          inventory=inventory)
     (out / "feature-report.html").write_text(page, encoding="utf-8")
     shutil.rmtree(store_dir, ignore_errors=True)
 
+    clean_junit = {k: v for k, v in junit.items() if k != "unparseable"}
+    clean_junit["unparseable"] = [Path(p).name for p in junit.get("unparseable", [])]
+
     summary = {"run_id": meta["run_id"], "task": meta["task"], "commit": meta["commit"],
-               "shards": len(execution_files), "executions": count, "junit": junit,
+               "shards": len(execution_files), "executions": count, "junit": clean_junit,
                "status": run["status"] if run else "NO RESULTS",
                "scenario_counts": run["counts"] if run else {},
                "scenarios_covered": f"{run['executed']}/{run['automated']}" if run else "0/0",
-               "out": str(out)}
+               "inventory": {"suites": len(inventory.get("suites", [])),
+                             "unmapped_cases": len(inventory.get("unmapped_cases", []))}}
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    # Product status counts this run's results only: an older pass does not make a scenario pass today.
-    run_records = [r for r in records if r.get("run_id") == meta["run_id"]]
-    snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history())
+    snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history(), inventory=inventory)
     (out / "product-status.json").write_text(json.dumps(snapshot, indent=1) + "\n", encoding="utf-8")
     (out / "product-status.html").write_text(
         ps.render_html([snapshot], {"detail": "feature-report.html", "history": "feature-report.html"}),
