@@ -336,6 +336,19 @@ python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py restore   
 python3 apps/development-time/SitePulse/scripts/ci_mutation_report.py --reports-dir /tmp/shards --out /tmp/report
 ```
 
+## 5b-10. Cucumber Pilot Safe Report (`cucumber_pilot_report.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/cucumber_pilot_report.py](file:///apps/development-time/SitePulse/scripts/cucumber_pilot_report.py)
+- **Purpose:** Reconciles the Cucumber pilot's native JUnit case totals with its private execution JSONL, then emits a fixed public-safe summary for the five pilot cases. It includes static labels, distinct outline example IDs, status, duration, comparison-only labels, and Actions run metadata; it never copies step text, failure bodies, example values, or raw JUnit fields. The opt-in workflow retains only this JSON as artifact `cucumber-pilot-results-<run-id>-<attempt>`.
+
+```bash
+python3 apps/development-time/SitePulse/scripts/cucumber_pilot_report.py --help
+python3 apps/development-time/SitePulse/scripts/cucumber_pilot_report.py \
+  --junit /tmp/junit-report.xml --executions /tmp/executions.jsonl \
+  --run-id 1234 --attempt 1 --commit 0123456789abcdef0123456789abcdef01234567 \
+  --repository owner/repository --out /tmp/cucumber-results.json --json
+```
+
 ## 5c. Test Execution & Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)

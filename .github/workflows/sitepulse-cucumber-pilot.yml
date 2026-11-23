@@ -1,0 +1,98 @@
+name: SitePulse Cucumber pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cucumber-pilot:
+    name: Cucumber comparison pilot
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sitepulse_user
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: sitepulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sitepulse_user -d sitepulse"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_USER: sitepulse_user
+      DB_PASS: ci-only-password
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.22.2"
+          cache: npm
+          cache-dependency-path: apps/development-time/SitePulse/e2e-cucumber/package-lock.json
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
+      - name: Configure isolated stack dependencies
+        run: |
+          echo "FLUTTER_ROOT=$(dirname "$(dirname "$(command -v flutter)")")" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Install Cucumber and browser dependencies
+        working-directory: apps/development-time/SitePulse/e2e-cucumber
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run lint:money
+      - name: Run isolated Cucumber and Serenity pilot
+        id: run_pilot
+        working-directory: apps/development-time/SitePulse
+        continue-on-error: true
+        run: |
+          rm -rf e2e-cucumber/target
+          set +e
+          python3 e2e-cucumber/scripts/run_pilot.py > "$RUNNER_TEMP/cucumber-pilot-private.log" 2>&1
+          pilot_exit_code=$?
+          echo "PILOT_EXIT_CODE=$pilot_exit_code" >> "$GITHUB_ENV"
+          exit "$pilot_exit_code"
+      - name: Build safe comparison report
+        if: always()
+        working-directory: apps/development-time/SitePulse
+        run: >-
+          python3 scripts/cucumber_pilot_report.py
+          --junit e2e-cucumber/target/junit-report.xml
+          --executions e2e-cucumber/target/executions.jsonl
+          --run-id "${{ github.run_id }}"
+          --attempt "${{ github.run_attempt }}"
+          --commit "${{ github.sha }}"
+          --repository "${{ github.repository }}"
+          --out "$RUNNER_TEMP/cucumber-pilot-public/cucumber-results.json"
+          --public-out "$RUNNER_TEMP/cucumber-pilot-public/public-report.json"
+          --pilot-exit-code "${PILOT_EXIT_CODE:-1}"
+      - name: Retain allowlisted comparison data
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cucumber-pilot-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cucumber-pilot-public/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve pilot failure status
+        if: always() && steps.run_pilot.outcome == 'failure'
+        run: exit 1
+      # The generated Serenity tree and private log remain on the ephemeral runner. The pilot
+      # contains screenshots, transaction identifiers and test account data; only the two
+      # exporter allowlists above are retained. A separate Pages archive path is added later.
