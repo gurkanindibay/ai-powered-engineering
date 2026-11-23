@@ -32,7 +32,7 @@ def build(report: Path, site: Path, run_id: str, attempt: str) -> dict:
     page = page_path.read_text(encoding="utf-8")
     archived_page = add_history_link(page, "../../history.html")
     (destination / "index.html").write_text(archived_page, encoding="utf-8")
-    for name in ("test-report.md", "summary.json", "product-status.json"):
+    for name in ("summary.json", "product-status.json"):
         source = report / name
         if source.is_file():
             shutil.copyfile(source, destination / name)

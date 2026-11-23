@@ -85,7 +85,8 @@ def epic_health(row: dict) -> str:
 
 
 def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: dict | None = None,
-                   history: dict | None = None, now: datetime | None = None) -> dict:
+                   history: dict | None = None, now: datetime | None = None,
+                   inventory: dict | None = None) -> dict:
     """The product status of one run. `run_records` are the execution records of that run only."""
     summary = summary or {}
     now = now or datetime.now(timezone.utc)
@@ -123,11 +124,53 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
     totals["epics_verified"] = sum(row["health"] == "verified" for row in epics)
     totals["epics_failing"] = sum(row["health"] == "failing" for row in epics)
     history = history or {"points": [], "changes": []}
+
+    inventory = inventory or {}
+    suites = [
+        {
+            "suite": s.get("suite", ""),
+            "runner": s.get("runner", ""),
+            "producer": s.get("producer", ""),
+            "status": s.get("status", "collected"),
+            "case_count": int(s.get("case_count", 0)),
+            "missing_shards": list(s.get("missing_shards", []))
+        } for s in inventory.get("suites", [])
+    ]
+    gates = [
+        {
+            "gate": g.get("gate", ""),
+            "status": g.get("status", "passed"),
+            "duration_s": g.get("duration_s"),
+            "exit_codes": list(g.get("exit_codes", []))
+        } for g in inventory.get("gates", [])
+    ]
+    unmapped = [
+        {
+            "runner": c.get("runner", ""),
+            "suite": c.get("suite", ""),
+            "native_id": c.get("native_id", ""),
+            "parameter_id": c.get("parameter_id"),
+            "status": c.get("status", "passed"),
+            "duration_s": c.get("duration_s")
+        } for c in inventory.get("unmapped_cases", [])
+    ]
+    if not suites and summary.get("junit", {}).get("tests"):
+        suites = [{
+            "suite": "e2e",
+            "runner": "pytest-playwright",
+            "producer": "e2e",
+            "status": "collected",
+            "case_count": int(summary["junit"]["tests"]),
+            "missing_shards": []
+        }]
+    inv_data = {"suites": suites, "gates": gates, "unmapped_cases": unmapped}
+
     return {"schema": SCHEMA, "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "run_id": summary.get("run_id", ""), "commit": summary.get("commit", ""),
             "task": summary.get("task", ""), "status": summary.get("status", "NO RESULTS"),
             "junit": summary.get("junit", {}), "totals": totals, "epics": epics, "scenarios": scenarios,
-            "catalogue_history": history["points"], "recent_changes": history["changes"]}
+            "catalogue_history": history["points"], "recent_changes": history["changes"],
+            "inventory": inv_data}
 
 
 def snapshot_from_summary(summary: dict) -> dict | None:
@@ -136,9 +179,20 @@ def snapshot_from_summary(summary: dict) -> dict | None:
     if not m:
         return None
     y, mo, d, h, mi, s = m.groups()
+    junit = summary.get("junit", {})
+    tests = int(junit.get("tests", 0)) if isinstance(junit, dict) else 0
+    suites = [{
+        "suite": "e2e",
+        "runner": "pytest-playwright",
+        "producer": "e2e",
+        "status": "collected",
+        "case_count": tests,
+        "missing_shards": []
+    }] if tests else []
     return {"schema": 0, "generated_at": f"{y}-{mo}-{d}T{h}:{mi}:{s}Z", "run_id": summary.get("run_id", ""),
             "commit": summary.get("commit", ""), "task": summary.get("task", ""),
-            "status": summary.get("status", "UNKNOWN"), "junit": summary.get("junit", {})}
+            "status": summary.get("status", "UNKNOWN"), "junit": junit,
+            "inventory": {"suites": suites, "gates": [], "unmapped_cases": []}}
 
 
 # ---------------------------------------------------------------- catalogue history (git)
@@ -396,6 +450,65 @@ def _trend_table(days: list[dict]) -> str:
             f'</thead><tbody>{rows}</tbody></table></div></details>')
 
 
+def _inventory_html(latest: dict) -> str:
+    inventory = latest.get("inventory", {})
+    if not inventory:
+        return ""
+    suites = inventory.get("suites", [])
+    gates = inventory.get("gates", [])
+    unmapped = inventory.get("unmapped_cases", [])
+    blocks = []
+    if suites:
+        rows = "".join(
+            f'<tr><td><b>{_esc(s["suite"])}</b></td><td>{_esc(s.get("runner", "-"))}</td>'
+            f'<td>{_esc(s.get("producer", "-"))}</td>'
+            f'<td><span class="health {_esc(s.get("status", "collected").lower())}">{_esc(s.get("status", "collected"))}</span></td>'
+            f'<td class="num">{s.get("case_count", 0)}</td>'
+            f'<td>{_esc(", ".join(s.get("missing_shards", [])) or "—")}</td></tr>' for s in suites)
+        blocks.append(
+            f'<h3>Suites</h3><div class="scroll"><table><thead><tr><th>Suite</th><th>Runner</th>'
+            f'<th>Producer</th><th>Status</th><th class="num">Cases</th><th>Missing shards</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table></div>'
+        )
+    if gates:
+        rows = "".join(
+            (f'<tr><td><code>{_esc(g["gate"])}</code></td>'
+             f'<td><span class="health {_esc(g.get("status", "passed").lower())}">{_esc(g.get("status", "passed"))}</span></td>'
+             f'<td class="num">{round(float(g["duration_s"]), 1)}s</td>' if g.get("duration_s") is not None else
+             f'<tr><td><code>{_esc(g["gate"])}</code></td>'
+             f'<td><span class="health {_esc(g.get("status", "passed").lower())}">{_esc(g.get("status", "passed"))}</span></td>'
+             f'<td class="num">—</td>')
+            + f'<td>{_esc(", ".join(str(x) for x in g.get("exit_codes", [])) or "0")}</td></tr>' for g in gates)
+        blocks.append(
+            f'<h3>Gates</h3><div class="scroll"><table><thead><tr><th>Gate</th><th>Status</th>'
+            f'<th class="num">Duration</th><th>Exit codes</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table></div>'
+        )
+    if unmapped:
+        rows = "".join(
+            (f'<tr><td>{_esc(c.get("suite", "-"))}</td><td>{_esc(c.get("runner", "-"))}</td>'
+             f'<td><code>{_esc(c.get("native_id", "-"))}</code></td>'
+             f'<td>{_esc(c.get("parameter_id") or "—")}</td>'
+             f'<td><span class="health {_esc(c.get("status", "passed").lower())}">{_esc(c.get("status", "passed"))}</span></td>'
+             f'<td class="num">{round(float(c["duration_s"]), 2)}s</td></tr>') if c.get("duration_s") is not None else
+            (f'<tr><td>{_esc(c.get("suite", "-"))}</td><td>{_esc(c.get("runner", "-"))}</td>'
+             f'<td><code>{_esc(c.get("native_id", "-"))}</code></td>'
+             f'<td>{_esc(c.get("parameter_id") or "—")}</td>'
+             f'<td><span class="health {_esc(c.get("status", "passed").lower())}">{_esc(c.get("status", "passed"))}</span></td>'
+             f'<td class="num">—</td></tr>')
+            for c in unmapped)
+        blocks.append(
+            f'<h3>Unmapped test cases ({len(unmapped)})</h3><div class="scroll"><table><thead><tr>'
+            f'<th>Suite</th><th>Runner</th><th>Test ID</th><th>Parameter / example</th><th>Status</th>'
+            f'<th class="num">Duration</th></tr></thead><tbody>{rows}</tbody></table></div>'
+        )
+    elif suites or gates:
+        blocks.append('<p class="muted">All executed tests are mapped to acceptance scenarios.</p>')
+    if not blocks:
+        return ""
+    return f'<section id="inventory"><h2>Test inventory</h2><p class="lede">Suites, gates, and unmapped test cases for this run.</p>{"".join(blocks)}</section>'
+
+
 def render_html(snapshots: list[dict], links: dict | None = None) -> str:
     """The dashboard. `snapshots` are oldest first; the newest one with epics drives the page."""
     links = {"detail": "latest.html", "history": "history.html", **(links or {})}
@@ -465,6 +578,8 @@ def render_html(snapshots: list[dict], links: dict | None = None) -> str:
 <p class="foot">"Automated, no CI result" scenarios are covered by a test that the browser (e2e) run does not
 report on, such as Rust or Flutter unit tests, or were skipped. They count as automated, not as passing.</p>
 </section>
+
+{_inventory_html(latest)}
 
 <section><h2>Needs attention</h2><div class="notes">{_attention(latest)}</div></section>
 
@@ -643,6 +758,18 @@ def load_site_snapshots(site: Path) -> list[dict]:
         except (OSError, json.JSONDecodeError):
             snap = None
         if isinstance(snap, dict) and snap.get("generated_at"):
+            if "inventory" not in snap:
+                junit = snap.get("junit", {})
+                tests = int(junit.get("tests", 0)) if isinstance(junit, dict) else 0
+                suites = [{
+                    "suite": "e2e",
+                    "runner": "pytest-playwright",
+                    "producer": "e2e",
+                    "status": "collected",
+                    "case_count": tests,
+                    "missing_shards": []
+                }] if tests else []
+                snap["inventory"] = {"suites": suites, "gates": [], "unmapped_cases": []}
             snapshots.append({**snap, "href": f"reports/{folder.name}/"})
     return sorted(snapshots, key=lambda s: (s["generated_at"], s["href"]))
 

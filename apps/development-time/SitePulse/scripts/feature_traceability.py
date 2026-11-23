@@ -96,6 +96,7 @@ TEST_NAME = re.compile(r"""(?:fn|def)\s+(\w+)|(?:test|testWidgets)\(\s*['"](.+?)
 SCENARIO_ORDER = ["FAIL", "ERROR", "NOT RUN", "DEFECT", "PENDING", "SKIPPED", "PASS"]
 STORY_ORDER = ["FAIL", "ERROR", "MISSING", "NOT RUN", "DEFECT", "PENDING", "SKIPPED", "PASS"]
 FAILING = {"FAIL", "ERROR", "MISSING"}
+STATUS_CLASS = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 BEHAVIOUR_PATHS = ("backend/", "flutter/lib/", "flutter/test/", "e2e/", ".specify/features/")
 MAIN_BRANCHES = {"master", "main", "HEAD", ""}
 IMPACT_MAP = FEATURES / "impact-map.json"
@@ -846,31 +847,50 @@ display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 
 
 def _badge(status: str) -> str:
-    return f'<span class="badge {status.replace(" ", "-")}">{html.escape(status)}</span>'
+    return f'<span class="badge {_status_css_class(status)}">{html.escape(status)}</span>'
 
 
-def _scenario_html(row: dict) -> str:
+def _status_css_class(status: object) -> str:
+    """Return a single safe CSS token for a status originating in execution data."""
+    value = status.replace(" ", "-") if isinstance(status, str) else ""
+    return value if STATUS_CLASS.fullmatch(value) else "unknown"
+
+
+def _scenario_html(row: dict, public_safe: bool = False) -> str:
     esc = html.escape
     last = row["last_run"]
-    strip = "".join(f'<i class="{r["status"].replace(" ", "-")}" title="{esc(r["started_at"][:16])} {esc(r["commit"])} '
-                    f'{esc(r["status"])}{" at: " + esc(r["failing_step"]) if r["failing_step"] else ""}"></i>'
+    strip = "".join(f'<i class="{_status_css_class(r["status"])}" title="{esc(r["started_at"][:16])} {esc(r["commit"][:7])} '
+                    f'{esc(r["status"])}{(" at: " + esc(r["failing_step"])) if (r["failing_step"] and not public_safe) else ""}"></i>'
                     for r in row["recent"])
     when = (f'{esc(last["started_at"][:16].replace("T", " "))} · <code>{esc(last["commit"][:7])}</code>'
             f'{"*" if last.get("dirty") else ""} · {last["duration_s"]:.1f}s') if last else "never run"
     rate = f'{row["passed_runs"]}/{row["runs"]} passed' if row["runs"] else ""
     parts = []
     if last and last["steps"]:
-        rows = "".join(f'<tr><td>{_badge(s["status"])}</td><td><span class="kw">{esc(s["keyword"])}</span> {esc(s["text"])}'
-                       f'{"<pre>" + esc(s["error"]) + "</pre>" if s.get("error") else ""}</td>'
-                       f'<td class="num">{s["duration_s"]:.2f}s</td></tr>' for s in last["steps"])
+        if public_safe:
+            rows = "".join(f'<tr><td>{_badge(s["status"])}</td><td><span class="kw">{esc(s["keyword"])}</span></td>'
+                           f'<td class="num">{s["duration_s"]:.2f}s</td></tr>' for s in last["steps"])
+        else:
+            rows = "".join(f'<tr><td>{_badge(s["status"])}</td><td><span class="kw">{esc(s["keyword"])}</span> {esc(s["text"])}'
+                           f'{"<pre>" + esc(s["error"]) + "</pre>" if s.get("error") else ""}</td>'
+                           f'<td class="num">{s["duration_s"]:.2f}s</td></tr>' for s in last["steps"])
         parts.append(f"<table>{rows}</table>")
+    elif last and public_safe:
+        parts.append('<p class="note">Verified by a linked test; step details are withheld in this public report.</p>')
     elif last:
         parts.append(f'<p class="note">Verified by a linked test, so there is no step detail: <code>{esc(last["test"])}</code></p>')
     else:
         parts.append(f'<p class="note">{"Specified, not automated yet." if row["status"] == "PENDING" else "No execution recorded."}'
                      f' Source: <code>{esc(row["feature_file"])}</code></p>')
-    if last and last.get("error") and not any(s.get("error") for s in last["steps"]):
+    if not public_safe and last and last.get("error") and not any(s.get("error") for s in last["steps"]):
         parts.append(f'<pre>{esc(last["error"])}</pre>')
+    if row.get("examples") and len(row["examples"]) > 1:
+        ex_rows = "".join(f'<tr><td><code>{esc(ex.get("parameter_id") or ex.get("id") or "-")}</code></td>'
+                          f'<td>{_badge(ex["status"])}</td>'
+                          f'<td class="num">{ex.get("duration_s", 0):.2f}s</td></tr>' for ex in row["examples"])
+        parts.append(f'<div class="outline-examples"><span class="small"><b>Outline examples:</b></span>'
+                     f'<table><thead><tr><th>Example</th><th>Status</th><th class="num">Duration</th></tr></thead>'
+                     f'<tbody>{ex_rows}</tbody></table></div>')
     if row["linked_tests"]:
         links = "".join(f'<tr><td>linked test</td><td><code>{esc(l["file"])}:{l["line"]}</code> {esc(l["test"])}</td></tr>'
                         for l in row["linked_tests"])
@@ -881,7 +901,7 @@ def _scenario_html(row: dict) -> str:
             f'</summary><div class="body">{"".join(parts)}</div></details>')
 
 
-def _run_html(run: dict, is_open: bool) -> str:
+def _run_html(run: dict, is_open: bool, public_safe: bool = False) -> str:
     esc = html.escape
     badges = "".join(f'<span class="badge {s.replace(" ", "-")}">{run["counts"][s]} {s}</span>'
                      for s in SCENARIO_ORDER if s in run["counts"])
@@ -896,7 +916,7 @@ def _run_html(run: dict, is_open: bool) -> str:
                 inventory_badges += f'<span class="chg {css_class}">{sign}{amount} {kind}</span>'
     rows = "".join(
         f'<tr><td><span class="id">{esc(row["id"])}</span></td><td>{_badge(row["status"])}</td>'
-        f'<td>{esc(row["name"])}{" <span class=small>failed at: " + esc(row["failing_step"]) + "</span>" if row["failing_step"] else ""}</td>'
+        f'<td>{esc(row["name"])}{(" <span class=small>failed at: " + esc(row["failing_step"]) + "</span>") if (row["failing_step"] and not public_safe) else ""}</td>'
         f'<td>{"<span class=\"chg " + row["change"] + "\">" + row["change"] + "</span>" if row["change"] else ""}</td>'
         f'<td class="num">{row["duration_s"]:.1f}s</td></tr>' for row in run["scenarios"])
     missing = (f'<p class="note">Not executed in this run ({len(run["not_executed"])}): '
@@ -923,7 +943,7 @@ def _matrix_html(report: dict, runs: list[dict], columns: int = 20) -> str:
             body.append(f'<tr><td class="name small" colspan="{len(shown) + 2}">{esc(story["id"])} {esc(story["title"])}</td></tr>')
             for scenario in story["scenarios"]:
                 cells = "".join(
-                    f'<td><i class="cell {(cell or {}).get("status", "")}" title="{esc(run["started_at"][:16])} '
+                    f'<td><i class="cell {_status_css_class((cell or {}).get("status", ""))}" title="{esc(run["started_at"][:16])} '
                     f'{esc((cell or {}).get("status", "not executed"))}"></i></td>'
                     for run, cell in ((run, lookup.get(scenario["id"])) for run, lookup in zip(shown, by_run)))
                 body.append(f'<tr><td class="id">{esc(scenario["id"])}</td><td class="name">{esc(scenario["name"])}</td>{cells}</tr>')
@@ -933,7 +953,8 @@ def _matrix_html(report: dict, runs: list[dict], columns: int = 20) -> str:
             f'<div class="legend">{legend}</div></div>')
 
 
-def render_html(report: dict, generated_at: str, store: str, runs: list[dict] | None = None) -> str:
+def render_html(report: dict, generated_at: str, store: str, runs: list[dict] | None = None,
+                public_safe: bool = False, inventory: dict | None = None) -> str:
     """The dashboard as one self-contained page: no scripts, no external resources."""
     runs = runs or []
     esc = html.escape
@@ -956,10 +977,60 @@ def render_html(report: dict, generated_at: str, store: str, runs: list[dict] | 
         dashboard = (
             '<h2>Recent runs</h2><p class="hint">Showing the latest five runs. Green +N badges mark scenarios or tests '
             'added since the previous run; red -N badges mark removals. "Regressed" and "fixed" compare scenario status.</p>'
-            + "".join(_run_html(run, index == 0) for index, run in enumerate(recent_runs))
+            + "".join(_run_html(run, index == 0, public_safe=public_safe) for index, run in enumerate(recent_runs))
             + '<h2>Scenarios by recent run</h2><p class="hint">Each column is one of the latest runs, oldest to newest; hover a cell for details.</p>'
             + _matrix_html(report, recent_runs) + '<h2>By feature</h2>'
             '<p class="hint">Latest status of every story and scenario, with the steps of its last execution.</p>')
+    inventory_html = ""
+    if inventory:
+        suites = inventory.get("suites", [])
+        gates = inventory.get("gates", [])
+        unmapped = inventory.get("unmapped_cases", [])
+        inv_parts = []
+        if suites:
+            suite_rows = "".join(
+                f'<tr><td><b>{esc(s["suite"])}</b></td><td>{esc(s.get("runner", "-"))}</td>'
+                f'<td>{esc(s.get("producer", "-"))}</td><td>{_badge(s.get("status", "collected"))}</td>'
+                f'<td class="num">{s.get("case_count", 0)}</td>'
+                f'<td>{esc(", ".join(s.get("missing_shards", [])) or "—")}</td></tr>' for s in suites)
+            inv_parts.append(
+                f'<h3>Suites</h3><table><thead><tr><th>Suite</th><th>Runner</th><th>Producer</th><th>Status</th>'
+                f'<th class="num">Cases</th><th>Missing shards</th></tr></thead><tbody>{suite_rows}</tbody></table>'
+            )
+        if gates:
+            gate_rows = "".join(
+                f'<tr><td><code>{esc(g["gate"])}</code></td><td>{_badge(g.get("status", "passed"))}</td>'
+                f'<td class="num">{round(float(g["duration_s"]), 1)}s</td>' if g.get("duration_s") is not None else
+                f'<tr><td><code>{esc(g["gate"])}</code></td><td>{_badge(g.get("status", "passed"))}</td><td class="num">—</td>'
+                + f'<td>{esc(", ".join(str(x) for x in g.get("exit_codes", [])) or "0")}</td></tr>' for g in gates)
+            inv_parts.append(
+                f'<h3>Gates</h3><table><thead><tr><th>Gate</th><th>Status</th><th class="num">Duration</th>'
+                f'<th>Exit codes</th></tr></thead><tbody>{gate_rows}</tbody></table>'
+            )
+        if unmapped:
+            unmapped_rows = "".join(
+                f'<tr><td>{esc(c.get("suite", "-"))}</td><td>{esc(c.get("runner", "-"))}</td>'
+                f'<td><code>{esc(c.get("native_id", "-"))}</code></td>'
+                f'<td>{esc(c.get("parameter_id") or "—")}</td>'
+                f'<td>{_badge(c.get("status", "passed"))}</td>'
+                f'<td class="num">{round(float(c["duration_s"]), 2)}s</td></tr>' if c.get("duration_s") is not None else
+                f'<tr><td>{esc(c.get("suite", "-"))}</td><td>{esc(c.get("runner", "-"))}</td>'
+                f'<td><code>{esc(c.get("native_id", "-"))}</code></td>'
+                f'<td>{esc(c.get("parameter_id") or "—")}</td>'
+                f'<td>{_badge(c.get("status", "passed"))}</td><td class="num">—</td></tr>'
+                for c in unmapped)
+            inv_parts.append(
+                f'<h3>Unmapped test cases ({len(unmapped)})</h3><table><thead><tr><th>Suite</th><th>Runner</th>'
+                f'<th>Test ID</th><th>Parameter / example</th><th>Status</th><th class="num">Duration</th></tr></thead>'
+                f'<tbody>{unmapped_rows}</tbody></table>'
+            )
+        elif suites or gates:
+            inv_parts.append('<p class="note">All executed tests are mapped to acceptance scenarios.</p>')
+        if inv_parts:
+            inventory_html = (
+                f'<h2>Test inventory</h2><p class="hint">Suites, gates, and unmapped test cases for this run.</p>'
+                f'{"".join(inv_parts)}'
+            )
     blocks = []
     for epic in sorted(report["epics"], key=lambda e: e["status"] == "NOT MIGRATED"):  # epics with results first
         if epic["status"] == "NOT MIGRATED":
@@ -970,7 +1041,7 @@ def render_html(report: dict, generated_at: str, store: str, runs: list[dict] | 
         stories = "".join(
             f'<details class="story" open><summary><span class="id">{esc(s["id"])}</span>{_badge(s["status"])}'
             f'<span class="title">{esc(s["title"])}</span><span class="small">{len(s["scenarios"])} scenarios</span></summary>'
-            f'{"".join(_scenario_html(row) for row in s["scenarios"])}</details>' for s in epic["stories"])
+            f'{"".join(_scenario_html(row, public_safe=public_safe) for row in s["scenarios"])}</details>' for s in epic["stories"])
         blocks.append(f'<details class="epic" open><summary><span class="id">{esc(epic["id"])}</span>{_badge(epic["status"])}'
                       f'<span class="title">{esc(epic["title"])}</span></summary>{stories}</details>')
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -978,7 +1049,7 @@ def render_html(report: dict, generated_at: str, store: str, runs: list[dict] | 
             f'<style>{HTML_STYLE}</style></head><body><main><h1>Feature test report</h1>'
             f'<div class="meta">Generated {esc(generated_at)} from {esc(store)}. Each bar is one recorded run, oldest to '
             f'newest; hover for its date and commit. A * after a commit means the tree had uncommitted changes.</div>'
-            f'<div class="tiles">{tiles}</div>{dashboard}{"".join(blocks)}</main></body></html>')
+            f'<div class="tiles">{tiles}</div>{inventory_html}{dashboard}{"".join(blocks)}</main></body></html>')
 
 
 # ---------------------------------------------------------------- cli
