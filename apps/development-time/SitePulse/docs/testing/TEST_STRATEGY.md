@@ -265,9 +265,9 @@ There are no active xfail markers. `e2e/pytest.ini` keeps `xfail_strict = true` 
 | `@pytest.mark.xfail` / `expectedFailure` | e2e, harness | 0 | n/a | No active markers |
 | `#[ignore = "needs PostgreSQL"]` | 8 `db_*` files | 66 | Run by `rust-db-test --ignored` | Good |
 | `#[ignore = "needs PostgreSQL… run by the rust-db-test gate"]` | `sale_clearance_tests.rs` | 2 | **Never run**: file missing from the gate's `--test` list | Bug: the message is false |
-| `#[ignore = "visual review helper"]` | `payments_phase2_tests.rs` `sample_receipt_pdf` | 1 | Never run, by design | Move to `examples/` or a bin |
+| `#[ignore = "visual review helper"]` | `payments_phase2_tests.rs` `sample_receipt_pdf` | 0 | Moved to `examples/sample_receipt_pdf.rs` (#369) | Resolved |
 | `#![cfg(feature = "e2e")]` | `e2e_clock_tests.rs`, `e2e_clock_reset_tests.rs` | 3 | **Never run**: only `run_tests.py --area` passes `--features e2e` | Add to `rust-test` |
-| `SITEPULSE_PG_TESTS=1` early return | `accrual_corrections`, `finance_store_pg` | 2 | Run by the opt-in DB commands; also report a silent PASS in `rust-test` | Make it `#[ignore]` so the PASS isn't counted twice |
+| `SITEPULSE_PG_TESTS=1` early return | `accrual_corrections`, `finance_store_pg` | 0 | Replaced with `#[ignore = "needs PostgreSQL"]` and added to `rust-db-test` (#369) | Resolved |
 | `pytest.skip` when `GOOGLE_CLIENT_ID` is unset | `test_p2_edge.py` Google redirect | 1 | **Always skipped**: CI never sets it | Stub the provider or mark it pending |
 | `skipUnless` / `skipIf` | harness, engineering harness | 6 | Run (CI meets the conditions) | Good |
 | Gherkin `@pending` | `.specify/features` | 30 scenarios | Deselected | See mis-coverage |

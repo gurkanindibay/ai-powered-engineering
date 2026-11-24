@@ -274,7 +274,7 @@ def _write_gate_artifacts_impl(name: str, specs: Sequence[CommandSpec], results:
         payload: dict[str, object] | None = None
         if cargo_argv:
             native_runner = "cargo"
-            suite = "money-fixtures" if "financial_fixtures" in cargo_argv else "rust-db-test" if "--ignored" in cargo_argv or "SITEPULSE_PG_TESTS=1" in argv else name
+            suite = "money-fixtures" if "financial_fixtures" in cargo_argv else "rust-db-test" if "--ignored" in cargo_argv else name
             try:
                 cases = ci_case_results.parse_cargo(text, suite)
             except Exception as exc:
