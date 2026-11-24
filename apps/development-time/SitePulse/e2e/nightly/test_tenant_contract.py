@@ -502,6 +502,16 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         "period_start": "2026-10-01", "period_end": "2026-10-31",
         "total_cost": "104.29", "due_date": "2026-11-15",
     })
+    heat_path = "/api/v1/heat-share/periods/" + str(heat_period["id"])
+    assert_write_is_site_scoped(
+        api, heat_path + "/readings", second, first,
+        {"readings": [{
+            "unit_id": str(ids["unit"]), "previous_reading": "0.00", "current_reading": "5.00",
+        }]}, success={200}, method="PUT",
+    )
+    assert_write_is_site_scoped(
+        api, heat_path + "/approve", second, first, {}, success={200},
+    )
     agenda_item_id = str(meeting["agenda"][0]["id"])
     assert_write_is_site_scoped(
         api, "/api/v1/assembly/meetings/" + str(meeting["id"]) + "/attendance",
