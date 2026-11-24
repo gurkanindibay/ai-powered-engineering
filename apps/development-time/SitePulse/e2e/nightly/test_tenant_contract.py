@@ -628,8 +628,8 @@ def test_reconciliation_queue_decisions_are_site_scoped(api, two_sites):
         body={
             "site_id": ids["site"],
             "content": "\n".join((
-                f"2026-11-19;TR000000000000000000000000;REF-{marker}-ASSIGN;5.00",
-                f"2026-11-19;TR000000000000000000000000;REF-{marker}-REJECT;6.00",
+                f"2026-11-19;TR330006100519786457841326;REF-{marker}-ASSIGN;5.00",
+                f"2026-11-19;TR330006100519786457841326;REF-{marker}-REJECT;6.00",
             )),
             "format": "CSV",
         },
@@ -659,7 +659,14 @@ def test_reconciliation_queue_decisions_are_site_scoped(api, two_sites):
 
 def test_person_login_lifecycle_is_site_scoped(api, two_sites):
     first, second, ids = two_sites
-    path = f"/api/v1/site-admin/persons/{ids['person']}/login?site_id={ids['site']}"
+    person = api.call(
+        "POST", f"/api/v1/site-admin/persons?site_id={ids['site']}", second.token,
+        body={"card": {
+            "full_name": "Nightly Login Lifecycle", "phone": "+90 532 123 00 00",
+            "email": "nightly-login-lifecycle@example.test",
+        }, "confirm_distinct": True},
+    )
+    path = f"/api/v1/site-admin/persons/{person['card']['person_id']}/login?site_id={ids['site']}"
     foreign_open, _ = get_response(api, path, first.token, method="POST")
     assert foreign_open in {403, 404}, f"Foreign POST {path} returned {foreign_open}"
     owner_open, _ = get_response(api, path, second.token, method="POST")
@@ -669,6 +676,118 @@ def test_person_login_lifecycle_is_site_scoped(api, two_sites):
     assert foreign_remove in {403, 404}, f"Foreign DELETE {path} returned {foreign_remove}"
     owner_remove, _ = get_response(api, path, second.token, method="DELETE")
     assert owner_remove == 204, f"Same-site DELETE {path} returned {owner_remove}"
+
+
+def test_person_merge_is_site_scoped(api, two_sites):
+    first, second, ids = two_sites
+    query = f"?site_id={ids['site']}"
+    source = api.call(
+        "POST", "/api/v1/site-admin/persons" + query, second.token,
+        body={"card": {"full_name": "Nightly Merge Source", "phone": "+90 532 123 45 67"},
+              "confirm_distinct": True},
+    )
+    target = api.call(
+        "POST", "/api/v1/site-admin/persons" + query, second.token,
+        body={"card": {"full_name": "Nightly Merge Target", "phone": "+90 532 765 43 21"},
+              "confirm_distinct": True},
+    )
+    path = f"/api/v1/site-admin/persons/{source['card']['person_id']}/merge{query}"
+    body = {"target_person_id": str(target["card"]["person_id"])}
+    foreign_status, _ = get_response(api, path, first.token, method="POST", body=body)
+    assert foreign_status in {403, 404}, f"Foreign POST {path} returned {foreign_status}"
+    api.call("POST", "/api/v1/auth/step-up", second.token, body={"password": "Nightly-Manager-2026!"})
+    owner_status, _ = get_response(api, path, second.token, method="POST", body=body)
+    assert owner_status == 200, f"Same-site POST {path} returned {owner_status}"
+
+
+def test_occupancy_transition_is_site_scoped(api, two_sites):
+    first, second, ids = two_sites
+    new_units = api.create_units(second, "A", unit_number=2)
+    unit_id = str(new_units[0]["id"])
+    path = f"/api/v1/site-admin/units/{unit_id}/occupancy-transitions?site_id={ids['site']}"
+    body = {
+        "command": "TENANT_MOVE_IN", "effective_date": date.today().isoformat(),
+        "full_name": "Nightly Scoped Tenant", "email": "nightly-scoped-tenant@example.test",
+        "phone": "+90 532 111 22 33",
+    }
+    foreign_status, _ = get_response(api, path, first.token, method="POST", body=body)
+    assert foreign_status in {403, 404}, f"Foreign POST {path} returned {foreign_status}"
+    owner_status, _ = get_response(api, path, second.token, method="POST", body=body)
+    assert owner_status == 200, f"Same-site POST {path} returned {owner_status}"
+
+
+def test_autopay_mandate_lifecycle_is_site_scoped(api, stack, two_sites):
+    first, second, ids = two_sites
+    method_id = stack.sql(
+        "INSERT INTO saved_payment_methods "
+        "(site_id, unit_id, debtor_type, owner_ref, provider, token_ref, brand, last4, "
+        "exp_month, exp_year, status, created_at) "
+        f"VALUES ({int(ids['site'])}, {int(ids['unit'])}, 'OWNER', 'person-{ids['person']}', "
+        f"'SANDBOX', 'nightly-autopay-scope-{ids['site']}', 'VISA', '4242', 12, 2032, 'ACTIVE', NOW()) "
+        "RETURNING id;"
+    ).splitlines()[0]
+    stack.restart_backend()
+    unit_path = f"/api/v1/residents/{ids['unit']}/autopay/mandates"
+    body = {"payment_method_id": int(method_id), "debtor_type": "OWNER", "max_amount": "100.00"}
+    foreign_create, _ = get_response(api, unit_path, first.token, method="POST", body=body)
+    assert foreign_create in {403, 404}, f"Foreign POST {unit_path} returned {foreign_create}"
+    owner_create, owner_response = get_response(api, unit_path, second.token, method="POST", body=body)
+    assert owner_create == 201, f"Same-site POST {unit_path} returned {owner_create}"
+    mandate_id = json.loads(owner_response)["id"]
+
+    cancel_path = f"{unit_path}/{mandate_id}/cancel"
+    foreign_cancel, _ = get_response(api, cancel_path, first.token, method="POST")
+    assert foreign_cancel in {403, 404}, f"Foreign POST {cancel_path} returned {foreign_cancel}"
+    owner_cancel, _ = get_response(api, cancel_path, second.token, method="POST")
+    assert owner_cancel == 200, f"Same-site POST {cancel_path} returned {owner_cancel}"
+
+
+def test_support_grant_lifecycle_requires_platform_scope(api, stack, actors, two_sites):
+    first, second, ids = two_sites
+    admin = api.login(**actors["saas"])
+    approver_email = "nightly-support-approver@example.test"
+    stack.sql(
+        "INSERT INTO users (email, password_hash, role, is_active, must_change_password) "
+        "SELECT 'nightly-support-approver@example.test', password_hash, 'SAAS_ADMIN', TRUE, FALSE "
+        "FROM users WHERE email = 'admin@sitepulse.io';"
+    )
+    stack.restart_backend()
+    approver = api.login(approver_email, actors["saas"]["password"])
+    for session, password in ((admin, actors["saas"]["password"]), (approver, actors["saas"]["password"])):
+        api.call("POST", "/api/v1/auth/step-up", session.token, body={"password": password})
+
+    grant_body = {
+        "site_id": ids["site"], "operator_user_id": str(admin.user["id"]),
+        "permissions": ["SITE_MANAGE", "PERSON_READ", "AUDIT_LOG_READ", "UNIT_READ"],
+        "reason": "Nightly tenant scope grant", "minutes": 5,
+    }
+    create_path = "/api/v1/support/grants"
+    foreign_create, _ = get_response(api, create_path, second.token, method="POST", body=grant_body)
+    assert foreign_create == 403, f"Site manager POST {create_path} returned {foreign_create}"
+    owner_create, response = get_response(api, create_path, admin.token, method="POST", body=grant_body)
+    assert owner_create == 200, f"Platform admin POST {create_path} returned {owner_create}"
+    grant_id = json.loads(response)["id"]
+
+    action_body = {"id": grant_id}
+    for action in ("approve", "revoke"):
+        path = f"/api/v1/support/grants/{action}"
+        foreign_status, _ = get_response(api, path, second.token, method="POST", body=action_body)
+        assert foreign_status == 403, f"Site manager POST {path} returned {foreign_status}"
+        owner_status, _ = get_response(api, path, approver.token, method="POST", body=action_body)
+        assert owner_status == 200, f"Platform approver POST {path} returned {owner_status}"
+
+
+def test_inter_ledger_transfer_is_site_scoped(api, two_sites):
+    first, second, ids = two_sites
+    path = "/api/v1/payments/inter-ledger-transfer"
+    body = {
+        "site_id": ids["site"], "unit_id": ids["unit"], "amount": "1.00",
+        "source_debtor": "OWNER", "target_debtor": "TENANT",
+    }
+    foreign_status, _ = get_response(api, path, first.token, method="POST", body=body)
+    assert foreign_status in {403, 404}, f"Foreign POST {path} returned {foreign_status}"
+    owner_status, _ = get_response(api, path, second.token, method="POST", body=body)
+    assert owner_status == 200, f"Same-site POST {path} returned {owner_status}"
 
 
 def test_additional_tenant_resource_reads_require_membership(api, stack, actors, two_sites):
