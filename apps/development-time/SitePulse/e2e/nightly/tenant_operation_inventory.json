@@ -247,7 +247,9 @@
       "applicability": "tenant_reference",
       "reason": "CreateAnnouncementRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::create_announcement (Require(AnnouncementBroadcast))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -601,7 +603,9 @@
       "applicability": "tenant_reference",
       "reason": "CreateCapitalProjectRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::create_capital_project (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -729,7 +733,9 @@
       "applicability": "tenant_reference",
       "reason": "AccrueDuesPeriodRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::accrue_monthly_dues (Require(LedgerManageAll))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -755,7 +761,9 @@
       "applicability": "tenant_reference",
       "reason": "CreateDuesPeriodRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::create_dues_period (Require(LedgerManageAll))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -1057,7 +1065,9 @@
       "applicability": "tenant_reference",
       "reason": "UpsertLeaseRequest supplies a unit ID.",
       "evidence": "backend/src/app.rs: handlers::upsert_lease (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1111,7 +1121,9 @@
       "applicability": "tenant_reference",
       "reason": "SiteQuery accepts a site selector.",
       "evidence": "backend/src/app.rs: handlers::create_operating_budget (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
