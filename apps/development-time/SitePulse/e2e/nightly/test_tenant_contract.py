@@ -139,6 +139,13 @@ def assert_read_is_site_scoped(api, paths, template, path, owner, foreign):
         assert not foreign_body.startswith(b"%PDF"), "Foreign receipt response contains a PDF"
 
 
+def assert_write_is_site_scoped(api, path: str, owner, foreign, body, *, success: set[int]) -> None:
+    owner_status, _ = get_response(api, path, owner.token, method="POST", body=body)
+    assert owner_status in success, f"Same-site POST {path} returned {owner_status}"
+    foreign_status, _ = get_response(api, path, foreign.token, method="POST", body=body)
+    assert foreign_status in {403, 404}, f"Foreign POST {path} returned {foreign_status}"
+
+
 @pytest.fixture
 def two_sites(api, actors):
     platform = api.login(**actors["saas"])
@@ -280,6 +287,35 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
             caller_status, _ = get_response(api, caller_path, first.token)
             assert caller_status in {403, 404}, f"Foreign GET {template} with caller site returned {caller_status}"
         denies.append(template)
+    query_site = f"site_id={ids['site']}"
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/units?{query_site}", second, first,
+        {"block_name": "A", "unit_number": 2}, success={201},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/persons?{query_site}", second, first,
+        {"card": {"full_name": "Nightly Tenant Scope Person"}}, success={201},
+    )
+    bank_account = {
+        "bank_code": "KUVEYT_TURK", "iban": TEST_BANK_IBAN,
+        "account_holder": "Nightly authorization site",
+    }
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/bank-account/{ids['site']}", second, first,
+        bank_account, success={200},
+    )
+    api.create_units(second, "B", unit_number=1)
+    api.create_units(second, "B", unit_number=2)
+    api.register_home_owner(second, "B", 1, "Nightly Scoped Owner", "nightly-scoped-owner@example.test")
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/home-owners?{query_site}", second, first,
+        {
+            "block": "B", "unit_no": 2, "floor": 1,
+            "owner_full_name": "Nightly Foreign Owner",
+            "email": "nightly-foreign-owner@example.test",
+            "phone": "+90 532 000 00 00", "is_resident": True, "monthly_dues": "0.00",
+        }, success={201},
+    )
     site_query = urlencode({"site_id": ids["site"]})
     for template in SITE_QUERY_READ_CASES:
         assert_read_is_site_scoped(api, paths, template, f"{template}?{site_query}", second, first)
