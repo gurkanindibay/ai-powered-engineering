@@ -193,27 +193,27 @@
       "stories_with_scenarios": 116
     },
     {
-      "automated": 435,
+      "automated": 437,
       "date": "2026-11-24",
       "epics": 13,
-      "scenarios": 467,
+      "scenarios": 469,
       "stories": 116,
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "6b5b9ee9b5696799826d8a23e5a862d6de55106d",
+  "commit": "e16e72c2cba46cb82239b29bb27be7ae9fd2de96",
   "epics": [
     {
-      "automated": 9,
+      "automated": 10,
       "failing": 0,
-      "health": "verified",
+      "health": "in_progress",
       "id": "EPIC-01",
-      "no_result": 0,
+      "no_result": 1,
       "passing": 9,
       "planned": 0,
-      "scenarios": 9,
+      "scenarios": 10,
       "stories": 6,
-      "stories_passing": 6,
+      "stories_passing": 5,
       "stories_with_scenarios": 6,
       "title": "Resident Dues Management & Financial Transparency"
     },
@@ -274,14 +274,14 @@
       "title": "EPIC-05"
     },
     {
-      "automated": 21,
+      "automated": 22,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-06",
-      "no_result": 4,
+      "no_result": 5,
       "passing": 17,
       "planned": 3,
-      "scenarios": 24,
+      "scenarios": 25,
       "stories": 6,
       "stories_passing": 1,
       "stories_with_scenarios": 6,
@@ -386,18 +386,18 @@
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-24T12:51:51Z",
+  "generated_at": "2026-11-24T13:46:35Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
     "passed": 308,
-    "seconds": 3047.3,
+    "seconds": 3542.0,
     "skipped": 1,
     "tests": 309
   },
   "recent_changes": [],
-  "run_id": "20261124T125150Z-6b5b9ee",
+  "run_id": "20261124T134634Z-e16e72c",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -439,6 +439,12 @@
       "epic": "EPIC-01",
       "name": "Action buttons meet touch target size and unapproved features are hidden",
       "state": "passing",
+      "story": "STORY-01-04"
+    },
+    "SC-01-04-04": {
+      "epic": "EPIC-01",
+      "name": "Resident issue form text controls have accessible names",
+      "state": "no_result",
       "story": "STORY-01-04"
     },
     "SC-01-05-01": {
@@ -835,6 +841,12 @@
       "epic": "EPIC-06",
       "name": "Email and password sign-in opens the role dashboard",
       "state": "passing",
+      "story": "STORY-06-05"
+    },
+    "SC-06-05-04": {
+      "epic": "EPIC-06",
+      "name": "Sign-in role choices have accessible names",
+      "state": "no_result",
       "story": "STORY-06-05"
     },
     "SC-06-06-01": {
@@ -3205,17 +3217,17 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 435,
+    "automated": 437,
     "epics": 13,
     "epics_failing": 0,
-    "epics_verified": 2,
+    "epics_verified": 1,
     "failing": 0,
-    "no_result": 208,
+    "no_result": 210,
     "passing": 227,
     "planned": 32,
-    "scenarios": 467,
+    "scenarios": 469,
     "stories": 116,
-    "stories_passing": 35,
+    "stories_passing": 34,
     "stories_with_scenarios": 116
   }
 }
