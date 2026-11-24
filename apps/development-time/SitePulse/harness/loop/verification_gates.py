@@ -21,12 +21,13 @@ import os
 import re
 import shutil
 import subprocess
-import time
 import sys
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Sequence
 
+# scripts/ is needed by record-evidence and task verifications via harness_cli; keep sys.path insert
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
