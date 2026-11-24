@@ -2066,7 +2066,9 @@
       "applicability": "tenant_reference",
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::import_persons (Require(PersonManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
