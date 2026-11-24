@@ -20,7 +20,7 @@ def _a14(stack) -> str:
 @pytest.mark.covers("SC-09-03-02")
 def test_resident_statement_ages_overdue_dues_with_the_penalty(login_as, page, stack):
     stack.sql(f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type) "
-              f"VALUES ({int(_a14(stack))}, 'Eylül 2026', 1400.00, CURRENT_DATE - 45, 'PENDING', 'OWNER', 'OPERATIONAL_DUES');")
+              f"VALUES ({int(_a14(stack))}, 'Eylül 2026', 1400.00, DATE '{stack.fixture_today}' - 45, 'PENDING', 'OWNER', 'OPERATIONAL_DUES');")
     stack.restart_backend()
     login_as("homeowner")
     ResidentHome(page).wait()
@@ -112,8 +112,8 @@ def test_interim_operating_budget_becomes_the_legal_basis_of_accrued_dues(login_
     assert status == "INTERIM"
 
     manager = api.login(**actors["manager"])
-    due = stack.sql("SELECT (CURRENT_DATE + 10)::text;")
-    period_key = stack.sql("SELECT to_char(CURRENT_DATE + 10, 'YYYY-MM');")  # a canonical month (STORY-07-08)
+    due = stack.sql(f"SELECT (DATE '{stack.fixture_today}' + 10)::text;")
+    period_key = stack.sql(f"SELECT to_char(DATE '{stack.fixture_today}' + 10, 'YYYY-MM');")  # a canonical month (STORY-07-08)
     api.accrue_period(manager, period_key, None, due)
     row = stack.sql("SELECT count(*) || '|' || count(*) FILTER (WHERE operating_budget_id = "
                     f"{int(budget_id)}) FROM dues_liabilities WHERE period_key = '{period_key}';")

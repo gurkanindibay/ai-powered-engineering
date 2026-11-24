@@ -59,7 +59,10 @@ class E2EClock:
         return self.api.call("POST", "/__e2e/clock", body={"action": "tick"}, timeout=timeout)
 
     def clear(self) -> dict:
-        """Return the backend process to the system clock."""
+        """Release a test's own date: return the backend to the run's frozen fixture instant."""
+        if self.api.stack is not None:
+            self.api.stack.e2e_clock_override = None
+            return self.set_instant(self.api.stack.fixture_instant_text)
         return self.api.call("POST", "/__e2e/clock", body={"action": "clear"})
 
 
@@ -386,7 +389,7 @@ class Builders:
         person_sql = f"{int(person_id)}" if person_id else "NULL"
         liability_id = self.stack.sql(
             "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, liable_person_id) "
-            f"VALUES ({int(unit_id)}, '{period}', {principal}, CURRENT_DATE - {int(days_overdue)}, 'PENDING', '{debtor_type}', {person_sql}) "
+            f"VALUES ({int(unit_id)}, '{period}', {principal}, DATE '{self.stack.fixture_today}' - {int(days_overdue)}, 'PENDING', '{debtor_type}', {person_sql}) "
             "RETURNING id;").splitlines()[0]
         self.stack.restart_backend()
         return {"unit_id": unit_id, "liability_id": liability_id, "principal": principal}
@@ -409,7 +412,7 @@ class Builders:
             "INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, "
             "occupancy_id, principal_amount, due_date, status) "
             f"VALUES ({int(unit_id)}, '{period}', 'TENANT', 'OPERATIONAL_DUES', {int(person_id)}, "
-            f"{int(occupancy_id)}, {amount}, CURRENT_DATE - 5, 'PENDING') RETURNING id;").splitlines()[0]
+            f"{int(occupancy_id)}, {amount}, DATE '{self.stack.fixture_today}' - 5, 'PENDING') RETURNING id;").splitlines()[0]
         self.stack.restart_backend()
         return {"liability_id": liability_id, "occupancy_id": occupancy_id, "person_id": person_id}
 

@@ -67,7 +67,7 @@ def october_dues_b3_paid(api, actors, builders):
 def test_overdue_filter_lists_every_overdue_flat(login_as, page, api, october_dues_b3_paid, stack):
     api.record_manual_payment(october_dues_b3_paid, "1", Decimal("1400.00"), "Mehmet Öz", payer_role="OWNER")
     overdue_units = set(stack.sql(
-        "SELECT unit_id FROM dues_liabilities WHERE due_date < CURRENT_DATE "
+        f"SELECT unit_id FROM dues_liabilities WHERE due_date < DATE '{stack.fixture_today}' "
         "AND paid_amount < principal_amount + delay_penalty;").split())
     login_as("manager")
     ManagerCockpit(page).wait()
