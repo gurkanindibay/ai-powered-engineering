@@ -4,7 +4,7 @@
     "environment-mutations": 24,
     "fixed-sleep-calls": 29,
     "scenario-over-cap-tests": 14,
-    "unwrap-only-tests": 4,
+    "unwrap-only-tests": 3,
     "utc-now-backend-test-reads": 84,
     "wait-only-gui-tests": 5,
     "weak-only-tests": 9

@@ -1375,31 +1375,3 @@ async fn when_a_receipt_pdf_is_rendered_and_verified_then_the_public_check_discl
     .await;
     assert!(!bad.valid);
 }
-
-/// Writes a sample receipt to `$SITEPULSE_SAMPLE_PDF` for visual review:
-/// `SITEPULSE_SAMPLE_PDF=/tmp/r.pdf cargo test --test payments_phase2_tests sample -- --ignored`
-#[tokio::test]
-#[ignore = "visual review helper"]
-async fn sample_receipt_pdf() {
-    let state = owner_owing("1800.00").await;
-    {
-        let mut inner = state.inner.write().await;
-        let site = inner.sites.iter_mut().find(|s| s.id == SITE).unwrap();
-        site.tax_id = Some("1234567890".into());
-        site.tax_office = Some("Kadıköy".into());
-    }
-    let receipt = PaymentTrackingService::new(state)
-        .record_and_allocate_payment(RecordManualPaymentRequest {
-            site_id: Some(SITE.into()),
-            unit_id: "d-14".into(),
-            amount: d("2000.00"),
-            payer_name: "Şükrü Işıkoğlu".into(),
-            payer_role: DebtorType::Owner,
-            payment_channel: PaymentChannel::CreditCard,
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-    let pdf = receipt_document::render_receipt_pdf(&receipt, "A Blok D:14").unwrap();
-    std::fs::write(std::env::var("SITEPULSE_SAMPLE_PDF").unwrap(), pdf).unwrap();
-}
