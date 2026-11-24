@@ -704,20 +704,25 @@ pub async fn commit_accrual_batch(
         liable_person_ids.push(created_liable_pid);
     }
     let accrued = due_ids.iter().flatten().count() as i32;
-    tx.execute(
-        r#"
-        INSERT INTO dues_accrual_runs (site_id, period_key, source, accrued_count, skipped_units)
-        VALUES ($1, $2, $3, $4, $5)
-        "#,
-        &[
-            &site,
-            &batch.period_key,
-            &batch.source,
-            &accrued,
-            &batch.skipped,
-        ],
-    )
-    .await?;
+    // A concurrent retry that found all of its liabilities already present is a
+    // true no-op. Keep its transaction from creating a second run record, while
+    // retaining reports for empty batches that explicitly skipped units.
+    if accrued > 0 || !batch.skipped.is_empty() {
+        tx.execute(
+            r#"
+            INSERT INTO dues_accrual_runs (site_id, period_key, source, accrued_count, skipped_units)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+            &[
+                &site,
+                &batch.period_key,
+                &batch.source,
+                &accrued,
+                &batch.skipped,
+            ],
+        )
+        .await?;
+    }
     tx.commit().await?;
     Ok(CommittedAccrual {
         period_id,
