@@ -73,7 +73,7 @@ def actors() -> dict:
 
 @pytest.fixture(scope="session")
 def api(stack) -> Api:
-    return Api()
+    return Api(stack=stack)
 
 
 @pytest.fixture

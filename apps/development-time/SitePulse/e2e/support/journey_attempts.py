@@ -648,10 +648,10 @@ def teardown_sites(stack: E2EStack, manifest: JourneyManifest, *, restart: bool 
         sql = "BEGIN; SET LOCAL sitepulse.allow_ledger_purge = 'on'; DO $$ BEGIN " + " ".join(statements) + " END $$; COMMIT;"
         stack.sql(sql)
     if restart and manifest.site_ids:
-        stack.restart_backend()
+        stack.restart_backend(preserve_e2e_clock=False)
     elif manifest.site_ids:
         # Without a restart the backend process survives, so release its frozen fixture date.
-        Api().clock.clear()
+        Api(stack=stack).clock.clear()
     manifest.teardown_completed = True
     manifest.save()
     manifest.release_lock()

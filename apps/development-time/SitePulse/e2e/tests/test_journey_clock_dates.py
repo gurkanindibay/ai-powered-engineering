@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from support.journey_attempts import JourneyManifest, teardown_sites
+from support.journey_attempts import JourneyManifest, site_in_state, teardown_sites, teardown_with_evidence
 from support.journey_snapshots import current_section
 from support.journey_occupancy import (
     OccupancyJourney,
@@ -102,6 +102,51 @@ def item(j: OccupancyJourney, unit_number: int, period: str = PERIOD) -> dict:
 
 def outstanding(entry: dict) -> tuple[Decimal, Decimal]:
     return D(str(entry["principal_outstanding"])), D(str(entry["penalty_outstanding"]))
+
+
+@pytest.mark.covers("SC-13-02-12")
+@pytest.mark.edge
+@pytest.mark.role_manager
+def test_e2e_clock_survives_backend_restart(request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    try:
+        fixture = site_in_state("F5", api=api, stack=stack, saas=saas, manifest=manifest)
+        before_statement = api.resident_statement(fixture.manager, fixture.unit_ids[4])
+        before = [
+            (
+                debtor["debtor_type"],
+                item["period"],
+                item["principal_outstanding"],
+                item["penalty_outstanding"],
+            )
+            for debtor in before_statement["debtors"]
+            for item in debtor["open_items"]
+        ]
+        assert before
+
+        stack.restart_backend()
+
+        after_statement = api.resident_statement(fixture.manager, fixture.unit_ids[4])
+        after = [
+            (
+                debtor["debtor_type"],
+                item["period"],
+                item["principal_outstanding"],
+                item["penalty_outstanding"],
+            )
+            for debtor in after_statement["debtors"]
+            for item in debtor["open_items"]
+        ]
+        assert after == before
+    except BaseException as failure:
+        teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
+    else:
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
 
 
 @pytest.mark.covers("SC-13-04-10")
