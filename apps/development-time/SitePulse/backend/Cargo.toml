@@ -69,4 +69,5 @@ name = "generate-openapi"
 path = "src/bin/generate_openapi.rs"
 
 [dev-dependencies]
+proptest = "1"
 tower = { version = "0.5", features = ["util"] }

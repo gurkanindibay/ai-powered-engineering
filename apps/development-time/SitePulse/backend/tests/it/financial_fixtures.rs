@@ -14,6 +14,21 @@ use sitepulse_backend::services::DuesCalculationService;
 struct Fixture {
     penalty_cases: Vec<PenaltyCase>,
     allocation_cases: Vec<AllocationCase>,
+    liability_decision_table: Vec<LiabilityDecisionCase>,
+}
+
+#[derive(Deserialize)]
+struct LiabilityDecisionCase {
+    case_id: String,
+    occupancy: String,
+    expense_type: String,
+    payer_role: String,
+    settles_owner_capital_dues: bool,
+    settles_tenant_joint_liability: bool,
+    expected_liable_party: String,
+    expected_joint_owner_liability: bool,
+    expected_payer_may_settle: bool,
+    expected_rent_offset: bool,
 }
 
 #[derive(Deserialize)]
@@ -162,6 +177,90 @@ fn allocation_cases_match_the_fixture() {
                 d.id
             );
         }
+    }
+}
+
+#[test]
+fn liability_decision_table_matches_the_fixture() {
+    use sitepulse_backend::domain::unit_state::Occupancy;
+    let f = fixture();
+    assert!(
+        !f.liability_decision_table.is_empty(),
+        "liability_decision_table must not be empty"
+    );
+    for c in f.liability_decision_table {
+        let occupancy = match c.occupancy.as_str() {
+            "OWNER_OCCUPIED" => Occupancy::OwnerOccupied,
+            "TENANT_OCCUPIED" => Occupancy::TenantOccupied,
+            "VACANT" => Occupancy::Vacant,
+            other => panic!("{}: unknown occupancy {}", c.case_id, other),
+        };
+        let expense_type = ExpenseType::from_str_loose(&c.expense_type);
+        let payer_role = DebtorType::from_str_loose(&c.payer_role);
+
+        // 1. Accrued debtor type: capital dues always belong to OWNER; operational
+        //    dues belong to TENANT only when the unit is TENANT_OCCUPIED.
+        let liable_party = if expense_type == ExpenseType::CapitalDues {
+            DebtorType::Owner
+        } else if occupancy == Occupancy::TenantOccupied {
+            DebtorType::Tenant
+        } else {
+            DebtorType::Owner
+        };
+        assert_eq!(
+            liable_party.as_str(),
+            c.expected_liable_party,
+            "{}: liable_party",
+            c.case_id
+        );
+
+        // 2. KMK 22 joint owner liability applies to tenant operational dues.
+        let joint_owner_liability =
+            occupancy == Occupancy::TenantOccupied && expense_type == ExpenseType::OperationalDues;
+        assert_eq!(
+            joint_owner_liability, c.expected_joint_owner_liability,
+            "{}: joint_owner_liability",
+            c.case_id
+        );
+
+        // 3. Settlement eligibility via dues_ledger::payer_may_settle + explicit opt-ins
+        //    (matching payment_tracking_service::record_payment).
+        let due = liability(
+            &c.case_id,
+            Decimal::new(10000, 2),
+            Decimal::ZERO,
+            NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
+            liable_party.as_str(),
+            expense_type.as_str(),
+        );
+        let on_behalf_of_owner = payer_role == DebtorType::Tenant && c.settles_owner_capital_dues;
+        let on_behalf_of_tenant =
+            payer_role == DebtorType::Owner && c.settles_tenant_joint_liability;
+        let may_settle = if on_behalf_of_owner {
+            dues_ledger::payer_may_settle(&due, DebtorType::Owner.as_str())
+                && due.expense_type == ExpenseType::CapitalDues
+        } else if on_behalf_of_tenant {
+            dues_ledger::payer_may_settle(&due, DebtorType::Tenant.as_str())
+                && due.expense_type == ExpenseType::OperationalDues
+                || dues_ledger::payer_may_settle(&due, payer_role.as_str())
+        } else {
+            dues_ledger::payer_may_settle(&due, payer_role.as_str())
+        };
+        assert_eq!(
+            may_settle, c.expected_payer_may_settle,
+            "{}: payer_may_settle",
+            c.case_id
+        );
+
+        // 4. Rent-offset eligibility.
+        let rent_offset = on_behalf_of_owner
+            && due.debtor_type == DebtorType::Owner
+            && due.expense_type == ExpenseType::CapitalDues;
+        assert_eq!(
+            rent_offset, c.expected_rent_offset,
+            "{}: rent_offset",
+            c.case_id
+        );
     }
 }
 
