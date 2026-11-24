@@ -40,6 +40,7 @@ is journalled before each mutation so ``restore`` can undo an interrupted run.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import os
@@ -257,8 +258,52 @@ def select(
         chosen = [s for s in chosen if s.area in areas]
     if changed_files is not None:
         changed_set = set(changed_files)
-        chosen = [s for s in chosen if s.file in changed_set]
+        direct_files = {s.file for s in catalogue.scenarios}
+        indirect_inputs = changed_set - direct_files
+        indirect_areas = _indirect_areas_for_changed_files(indirect_inputs)
+        chosen = [
+            s for s in chosen
+            if s.file in changed_set
+            or "*" in indirect_areas
+            or s.area in indirect_areas
+            or f"@layer:{s.layer}" in indirect_areas
+        ]
     return chosen
+
+
+# These inputs exercise behaviour represented by the listed mutation areas but
+# do not themselves contain a mutant. Keep the map explicit: unrelated tests
+# and tooling must not silently turn into a full mutation run.
+INDIRECT_CHANGE_AREAS: dict[str, frozenset[str]] = {
+    "backend/tests/db_accrual_*": frozenset({"accrual-persistence"}),
+    "backend/tests/db_tenant_*": frozenset({"tenancy"}),
+    "backend/tests/db_occupancy_*": frozenset({"proration", "unit-state"}),
+    "backend/tests/db_person_*": frozenset({"identifiers", "tenancy"}),
+    "backend/tests/db_unit_person_*": frozenset({"identifiers", "tenancy"}),
+    "backend/tests/db_advance_exit_*": frozenset({"allocation", "proration"}),
+    "backend/tests/statement_*": frozenset({"unit-statements", "statement-sections"}),
+    "backend/tests/payment_*": frozenset({"dues-ledger", "late-fee", "double-entry"}),
+    "backend/tests/payments_*": frozenset({"dues-ledger", "late-fee", "double-entry"}),
+    "backend/src/services/finance_common.rs": frozenset({"dues-ledger", "late-fee", "accrual-persistence"}),
+    "backend/migrations/V*__*tenant*": frozenset({"tenancy"}),
+    "backend/migrations/V*__*dues*": frozenset({"dues-ledger", "accrual-persistence"}),
+    "backend/migrations/V*__*financial*": frozenset({"dues-ledger", "accrual-persistence"}),
+    "flutter/test/ui_test_helpers.dart": frozenset({"@layer:flutter"}),
+    "flutter/test/support/*": frozenset({"@layer:flutter"}),
+    "scripts/mutation_scenarios.py": frozenset({"*"}),
+    "harness/mutation/*": frozenset({"*"}),
+}
+
+
+def _indirect_areas_for_changed_files(changed_files: set[str]) -> set[str]:
+    areas: set[str] = set()
+    for path in changed_files:
+        for pattern, mapped_areas in INDIRECT_CHANGE_AREAS.items():
+            if fnmatch.fnmatchcase(path, pattern):
+                areas.update(mapped_areas)
+    if "*" in areas:
+        return {"*"}
+    return areas
 
 
 def _tail(text: str, lines: int = OUTPUT_TAIL) -> str:
