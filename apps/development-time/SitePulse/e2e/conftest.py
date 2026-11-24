@@ -86,6 +86,11 @@ def fresh_data(stack):
     """Every test starts from the seed; a reset takes about a second."""
     stack.reset()
     yield
+    violations = stack.sql("SELECT count(*) FROM v_integrity_violations;").strip()
+    assert violations == "0", (
+        "ledger integrity invariant failed after E2E/API test: "
+        f"v_integrity_violations contains {violations} row(s)"
+    )
 
 
 @pytest.fixture(scope="session")
