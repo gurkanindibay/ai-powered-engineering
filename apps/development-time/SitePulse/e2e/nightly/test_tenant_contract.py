@@ -453,6 +453,24 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
             "phone": "+90 532 000 00 00", "is_resident": True, "monthly_dues": "0.00",
         }, success={201},
     )
+    scoped_owner = next(
+        owner for owner in api.call(
+            "GET", f"/api/v1/site-admin/home-owners?{query_site}", second.token,
+        ) if owner["owner_full_name"] == "Nightly Scoped Owner"
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/home-owners/{scoped_owner['unit_id']}?{query_site}",
+        second, first, None, success={204}, method="DELETE",
+    )
+    scoped_type = next(
+        item for item in api.call(
+            "GET", f"/api/v1/site-admin/house-types?{query_site}", second.token,
+        ) if item["type_name"] == "Nightly Scoped Type"
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/house-types/{scoped_type['id']}?{query_site}",
+        second, first, None, success={204}, method="DELETE",
+    )
     owner_query = urlencode({"site_id": ids["site"]})
     owner_path = "/api/v1/site-admin/home-owners/" + str(ids["unit"])
     assert_write_is_site_scoped(
