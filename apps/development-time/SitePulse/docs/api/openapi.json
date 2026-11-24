@@ -1,6 +1,32 @@
 {
   "components": {
     "schemas": {
+      "AssignReconciliationMatchRequest": {
+        "properties": {
+          "debtor_role": {
+            "description": "Which debtor of the unit paid the transfer.",
+            "enum": [
+              "OWNER",
+              "TENANT"
+            ],
+            "type": "string"
+          },
+          "site_id": {
+            "description": "Site that owns the statement item.",
+            "type": "string"
+          },
+          "unit_id": {
+            "description": "Unit the item is assigned to; must belong to site_id.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "site_id",
+          "unit_id",
+          "debtor_role"
+        ],
+        "type": "object"
+      },
       "BankStatementParseRequest": {
         "properties": {
           "content": {
@@ -145,6 +171,21 @@
           "year",
           "title",
           "total_amount"
+        ],
+        "type": "object"
+      },
+      "CreatePersonRequest": {
+        "description": "Create a role-free person card.",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/NewPerson"
+          },
+          "confirm_distinct": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "card"
         ],
         "type": "object"
       },
@@ -306,6 +347,40 @@
         ],
         "type": "object"
       },
+      "NewPerson": {
+        "description": "Person fields accepted when creating a role-free card.",
+        "properties": {
+          "email": {
+            "description": "Contact email, if known.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "full_name": {
+            "description": "The person's display name.",
+            "type": "string"
+          },
+          "national_id": {
+            "description": "National identity number, if known.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "description": "Contact phone number, if known.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "full_name"
+        ],
+        "type": "object"
+      },
       "PaymentReceipt": {
         "properties": {
           "amount": {
@@ -345,6 +420,109 @@
           "unit_id",
           "amount",
           "verification_token"
+        ],
+        "type": "object"
+      },
+      "PersonCard": {
+        "description": "A concise person card for directory and picker results.",
+        "properties": {
+          "allowed_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "login": {
+            "$ref": "#/components/schemas/PersonLoginState"
+          },
+          "masked_national_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "person_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/PersonRole"
+            },
+            "type": "array"
+          },
+          "unit_labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "person_id",
+          "full_name",
+          "roles",
+          "unit_labels",
+          "login",
+          "version",
+          "allowed_actions"
+        ],
+        "type": "object"
+      },
+      "PersonCardResponse": {
+        "description": "Full person card response, including the person's unit history.",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/PersonCard"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/PersonUnitRelation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "card",
+          "units"
+        ],
+        "type": "object"
+      },
+      "PersonEligibility": {
+        "description": "Whether a person can be used for a requested role in a unit.",
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          },
+          "code": {
+            "description": "Stable reason code when the person is not eligible.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "allowed"
         ],
         "type": "object"
       },
@@ -393,6 +571,228 @@
         ],
         "type": "object"
       },
+      "PersonLoginState": {
+        "description": "Login state visible to a site manager.",
+        "enum": [
+          "NONE",
+          "PENDING",
+          "ACTIVE"
+        ],
+        "type": "string"
+      },
+      "PersonMutationResponse": {
+        "description": "Result returned after creating or editing a person card.",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/PersonCard"
+          }
+        },
+        "required": [
+          "card"
+        ],
+        "type": "object"
+      },
+      "PersonRef": {
+        "description": "A reference to an existing person card or a draft card to create atomically.",
+        "oneOf": [
+          {
+            "description": "Link an existing person card.",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "existing"
+                ],
+                "type": "string"
+              },
+              "person_id": {
+                "format": "int64",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "person_id",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Create a new card and use it for the requested action.",
+            "properties": {
+              "card": {
+                "$ref": "#/components/schemas/NewPerson"
+              },
+              "confirm_distinct": {
+                "type": "boolean"
+              },
+              "kind": {
+                "enum": [
+                  "new"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "card",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "PersonRole": {
+        "description": "Roles currently associated with a person card.",
+        "enum": [
+          "OWNER",
+          "OCCUPANT_OWNER",
+          "TENANT",
+          "MEMBER",
+          "PRIMARY_CONTACT"
+        ],
+        "type": "string"
+      },
+      "PersonSearchContext": {
+        "description": "Supported contexts for picker eligibility checks.",
+        "enum": [
+          "owner",
+          "tenant",
+          "household",
+          "primary_contact",
+          "registration"
+        ],
+        "type": "string"
+      },
+      "PersonSearchItem": {
+        "description": "A card result plus its role eligibility for the supplied search context.",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/PersonCard"
+          },
+          "eligibility": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PersonEligibility"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "card"
+        ],
+        "type": "object"
+      },
+      "PersonSearchQuery": {
+        "description": "Query parameters for a scoped person picker search.",
+        "properties": {
+          "context": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PersonSearchContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "page": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "q": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "PersonSearchResponse": {
+        "description": "Paged scoped person search results.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PersonSearchItem"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "page_size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "type": "object"
+      },
+      "PersonUnitRelation": {
+        "description": "One historical or active role held by the person in a unit.",
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "end_date": {
+            "format": "date",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "relation": {
+            "$ref": "#/components/schemas/PersonRole"
+          },
+          "start_date": {
+            "format": "date",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit_id": {
+            "type": "string"
+          },
+          "unit_label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit_id",
+          "unit_label",
+          "relation",
+          "active"
+        ],
+        "type": "object"
+      },
       "ProfileResponse": {
         "properties": {
           "email": {
@@ -429,6 +829,88 @@
           "name",
           "role",
           "site_id"
+        ],
+        "type": "object"
+      },
+      "ReconciliationMatch": {
+        "properties": {
+          "assigned_debtor_role": {
+            "enum": [
+              "OWNER",
+              "TENANT"
+            ],
+            "type": "string"
+          },
+          "assigned_unit_id": {
+            "description": "Unit a manager assigned an unmatched item to.",
+            "type": "string"
+          },
+          "match_id": {
+            "type": "string"
+          },
+          "matched_due_id": {
+            "type": "string"
+          },
+          "matched_unit_id": {
+            "description": "Unit found by an automatic matching rule.",
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "site_id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PENDING_APPROVAL",
+              "APPROVED",
+              "UNMATCHED",
+              "REJECTED",
+              "ALREADY_PROCESSED"
+            ],
+            "type": "string"
+          },
+          "status_code": {
+            "type": "string"
+          },
+          "transaction": {
+            "properties": {
+              "amount": {
+                "type": "string"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "date": {
+                "format": "date",
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "reference_no": {
+                "type": "string"
+              },
+              "sender_iban": {
+                "type": "string"
+              },
+              "sender_name": {
+                "type": "string"
+              },
+              "transaction_id": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "match_id",
+          "site_id",
+          "transaction",
+          "status",
+          "status_code"
         ],
         "type": "object"
       },
@@ -650,6 +1132,37 @@
           "type": "object"
         },
         "type": "array"
+      },
+      "UpdatePersonRequest": {
+        "description": "Update contact details using optimistic version checking.",
+        "properties": {
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "full_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
       },
       "VirtualIbanAllocation": {
         "properties": {
@@ -1249,7 +1762,7 @@
     },
     "/api/v1/accounting/expenses/{id}/approve": {
       "post": {
-        "description": "POST accounting expenses :id approve\n\n**Authorization Policy**: Requires explicit permission `ExpenseApprove`.",
+        "description": "POST accounting expenses {id} approve\n\n**Authorization Policy**: Requires explicit permission `ExpenseApprove`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -1328,7 +1841,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST accounting expenses :id approve",
+        "summary": "POST accounting expenses {id} approve",
         "tags": [
           "Accounting & General Ledger"
         ]
@@ -1336,7 +1849,7 @@
     },
     "/api/v1/accounting/expenses/{id}/payments": {
       "post": {
-        "description": "POST accounting expenses :id payments\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "description": "POST accounting expenses {id} payments\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -1415,7 +1928,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST accounting expenses :id payments",
+        "summary": "POST accounting expenses {id} payments",
         "tags": [
           "Accounting & General Ledger"
         ]
@@ -1423,7 +1936,7 @@
     },
     "/api/v1/accounting/expenses/{id}/reject": {
       "post": {
-        "description": "POST accounting expenses :id reject\n\n**Authorization Policy**: Requires explicit permission `ExpenseApprove`.",
+        "description": "POST accounting expenses {id} reject\n\n**Authorization Policy**: Requires explicit permission `ExpenseApprove`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -1502,7 +2015,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST accounting expenses :id reject",
+        "summary": "POST accounting expenses {id} reject",
         "tags": [
           "Accounting & General Ledger"
         ]
@@ -1926,6 +2439,377 @@
         ]
       }
     },
+    "/api/v1/accrual-corrections": {
+      "get": {
+        "description": "GET accrual-corrections\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET accrual-corrections",
+        "tags": [
+          "System & Diagnostics"
+        ]
+      },
+      "post": {
+        "description": "POST accrual-corrections\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST accrual-corrections",
+        "tags": [
+          "System & Diagnostics"
+        ]
+      }
+    },
+    "/api/v1/accrual-corrections/{id}/decide": {
+      "post": {
+        "description": "POST accrual-corrections {id} decide\n\n**Authorization Policy**: Requires explicit permission `AdjustmentApprove`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `id`",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST accrual-corrections {id} decide",
+        "tags": [
+          "System & Diagnostics"
+        ]
+      }
+    },
+    "/api/v1/accrual-schedule": {
+      "get": {
+        "description": "GET accrual-schedule\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET accrual-schedule",
+        "tags": [
+          "System & Diagnostics"
+        ]
+      },
+      "put": {
+        "description": "PUT accrual-schedule\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT accrual-schedule",
+        "tags": [
+          "System & Diagnostics"
+        ]
+      }
+    },
     "/api/v1/adjustments": {
       "get": {
         "description": "GET adjustments\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
@@ -2070,7 +2954,7 @@
     },
     "/api/v1/adjustments/{id}/decide": {
       "post": {
-        "description": "POST adjustments :id decide\n\n**Authorization Policy**: Requires explicit permission `AdjustmentApprove`.",
+        "description": "POST adjustments {id} decide\n\n**Authorization Policy**: Requires explicit permission `AdjustmentApprove`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -2149,7 +3033,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST adjustments :id decide",
+        "summary": "POST adjustments {id} decide",
         "tags": [
           "System & Diagnostics"
         ]
@@ -2222,9 +3106,86 @@
         ]
       }
     },
+    "/api/v1/announcements": {
+      "post": {
+        "description": "POST announcements\n\n**Authorization Policy**: Requires explicit permission `AnnouncementBroadcast`.",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST announcements",
+        "tags": [
+          "System & Diagnostics"
+        ]
+      }
+    },
     "/api/v1/assembly/agenda-items/{id}/close": {
       "post": {
-        "description": "POST assembly agenda-items :id close\n\n**Authorization Policy**: Requires explicit permission `GovernanceManage`.",
+        "description": "POST assembly agenda-items {id} close\n\n**Authorization Policy**: Requires explicit permission `GovernanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -2303,7 +3264,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST assembly agenda-items :id close",
+        "summary": "POST assembly agenda-items {id} close",
         "tags": [
           "Assembly & Governance"
         ]
@@ -2311,7 +3272,7 @@
     },
     "/api/v1/assembly/agenda-items/{id}/votes": {
       "post": {
-        "description": "POST assembly agenda-items :id votes\n\n**Authorization Policy**: Requires explicit permission `GovernanceManage`.",
+        "description": "POST assembly agenda-items {id} votes\n\n**Authorization Policy**: Requires explicit permission `GovernanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -2390,7 +3351,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST assembly agenda-items :id votes",
+        "summary": "POST assembly agenda-items {id} votes",
         "tags": [
           "Assembly & Governance"
         ]
@@ -2682,7 +3643,7 @@
     },
     "/api/v1/assembly/meetings/{id}": {
       "get": {
-        "description": "GET assembly meetings :id\n\n**Authorization Policy**: Requires explicit permission `GovernanceManage`.",
+        "description": "GET assembly meetings {id}\n\n**Authorization Policy**: Requires explicit permission `GovernanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -2751,7 +3712,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET assembly meetings :id",
+        "summary": "GET assembly meetings {id}",
         "tags": [
           "Assembly & Governance"
         ]
@@ -2759,7 +3720,7 @@
     },
     "/api/v1/assembly/meetings/{id}/attendance": {
       "post": {
-        "description": "POST assembly meetings :id attendance\n\n**Authorization Policy**: Requires explicit permission `GovernanceManage`.",
+        "description": "POST assembly meetings {id} attendance\n\n**Authorization Policy**: Requires explicit permission `GovernanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -2838,7 +3799,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST assembly meetings :id attendance",
+        "summary": "POST assembly meetings {id} attendance",
         "tags": [
           "Assembly & Governance"
         ]
@@ -4111,7 +5072,7 @@
     },
     "/api/v1/bank-matching/feeds/{id}/sync": {
       "post": {
-        "description": "POST bank-matching feeds :id sync\n\n**Authorization Policy**: Requires explicit permission `ReconciliationConfirm`.",
+        "description": "POST bank-matching feeds {id} sync\n\n**Authorization Policy**: Requires explicit permission `ReconciliationConfirm`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -4190,7 +5151,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST bank-matching feeds :id sync",
+        "summary": "POST bank-matching feeds {id} sync",
         "tags": [
           "Banking & Reconciliation"
         ]
@@ -4792,6 +5753,180 @@
         ]
       }
     },
+    "/api/v1/bank/statements/reconciliation-queue/{match_id}/assign": {
+      "post": {
+        "description": "POST bank statements reconciliation-queue {match_id} assign\n\n**Authorization Policy**: Requires explicit permission `ReconciliationConfirm`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `match_id`",
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignReconciliationMatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationMatch"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST bank statements reconciliation-queue {match_id} assign",
+        "tags": [
+          "Banking & Reconciliation"
+        ]
+      }
+    },
+    "/api/v1/bank/statements/reconciliation-queue/{match_id}/reject": {
+      "post": {
+        "description": "POST bank statements reconciliation-queue {match_id} reject\n\n**Authorization Policy**: Requires explicit permission `ReconciliationConfirm`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `match_id`",
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST bank statements reconciliation-queue {match_id} reject",
+        "tags": [
+          "Banking & Reconciliation"
+        ]
+      }
+    },
     "/api/v1/bank/webhook/incoming-transfer": {
       "post": {
         "description": "POST bank webhook incoming-transfer\n\n**Authorization Policy**: Public endpoint (no credentials required).",
@@ -4989,7 +6124,7 @@
     },
     "/api/v1/capital-projects/{id}": {
       "get": {
-        "description": "GET capital-projects :id\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET capital-projects {id}\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5058,7 +6193,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET capital-projects :id",
+        "summary": "GET capital-projects {id}",
         "tags": [
           "Capital Expenditures"
         ]
@@ -5066,7 +6201,7 @@
     },
     "/api/v1/capital-projects/{id}/accrue-installment": {
       "post": {
-        "description": "POST capital-projects :id accrue-installment\n\n**Authorization Policy**: Requires explicit permission `LedgerManageAll`.",
+        "description": "POST capital-projects {id} accrue-installment\n\n**Authorization Policy**: Requires explicit permission `LedgerManageAll`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5145,7 +6280,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST capital-projects :id accrue-installment",
+        "summary": "POST capital-projects {id} accrue-installment",
         "tags": [
           "Capital Expenditures"
         ]
@@ -5153,7 +6288,7 @@
     },
     "/api/v1/capital-projects/{id}/disbursements": {
       "get": {
-        "description": "GET capital-projects :id disbursements\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "GET capital-projects {id} disbursements\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5222,13 +6357,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET capital-projects :id disbursements",
+        "summary": "GET capital-projects {id} disbursements",
         "tags": [
           "Capital Expenditures"
         ]
       },
       "post": {
-        "description": "POST capital-projects :id disbursements\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "POST capital-projects {id} disbursements\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5307,7 +6442,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST capital-projects :id disbursements",
+        "summary": "POST capital-projects {id} disbursements",
         "tags": [
           "Capital Expenditures"
         ]
@@ -5315,7 +6450,7 @@
     },
     "/api/v1/capital-projects/{id}/installments": {
       "get": {
-        "description": "GET capital-projects :id installments\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET capital-projects {id} installments\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5384,7 +6519,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET capital-projects :id installments",
+        "summary": "GET capital-projects {id} installments",
         "tags": [
           "Capital Expenditures"
         ]
@@ -5392,7 +6527,7 @@
     },
     "/api/v1/capital-projects/{id}/unit-shares": {
       "get": {
-        "description": "GET capital-projects :id unit-shares\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET capital-projects {id} unit-shares\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5461,7 +6596,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET capital-projects :id unit-shares",
+        "summary": "GET capital-projects {id} unit-shares",
         "tags": [
           "Capital Expenditures"
         ]
@@ -5611,7 +6746,7 @@
     },
     "/api/v1/collections/cases/{id}": {
       "get": {
-        "description": "GET collections cases :id\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
+        "description": "GET collections cases {id}\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5680,7 +6815,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET collections cases :id",
+        "summary": "GET collections cases {id}",
         "tags": [
           "Collections & Legal"
         ]
@@ -5688,7 +6823,7 @@
     },
     "/api/v1/collections/cases/{id}/advance": {
       "post": {
-        "description": "POST collections cases :id advance\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "description": "POST collections cases {id} advance\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5767,7 +6902,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST collections cases :id advance",
+        "summary": "POST collections cases {id} advance",
         "tags": [
           "Collections & Legal"
         ]
@@ -5775,7 +6910,7 @@
     },
     "/api/v1/collections/cases/{id}/evidence-pack": {
       "get": {
-        "description": "GET collections cases :id evidence-pack\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
+        "description": "GET collections cases {id} evidence-pack\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5844,7 +6979,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET collections cases :id evidence-pack",
+        "summary": "GET collections cases {id} evidence-pack",
         "tags": [
           "Collections & Legal"
         ]
@@ -5852,7 +6987,7 @@
     },
     "/api/v1/collections/cases/{id}/lawyer-access": {
       "post": {
-        "description": "POST collections cases :id lawyer-access\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "description": "POST collections cases {id} lawyer-access\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -5931,9 +7066,76 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST collections cases :id lawyer-access",
+        "summary": "POST collections cases {id} lawyer-access",
         "tags": [
           "Collections & Legal"
+        ]
+      }
+    },
+    "/api/v1/dues/accrual-runs": {
+      "get": {
+        "description": "GET dues accrual-runs\n\n**Authorization Policy**: Requires explicit permission `LedgerManageAll`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET dues accrual-runs",
+        "tags": [
+          "Dues & Ledger"
         ]
       }
     },
@@ -6009,6 +7211,93 @@
           }
         ],
         "summary": "POST dues accrue-period",
+        "tags": [
+          "Dues & Ledger"
+        ]
+      }
+    },
+    "/api/v1/dues/period-reopen-requests/{request_id}/decide": {
+      "post": {
+        "description": "POST dues period-reopen-requests {request_id} decide\n\n**Authorization Policy**: Requires explicit permission `LedgerManageAll`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `request_id`",
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST dues period-reopen-requests {request_id} decide",
         "tags": [
           "Dues & Ledger"
         ]
@@ -6156,6 +7445,257 @@
         ]
       }
     },
+    "/api/v1/dues/periods/{period_id}/close": {
+      "post": {
+        "description": "POST dues periods {period_id} close\n\n**Authorization Policy**: Requires explicit permission `LedgerManageAll`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `period_id`",
+            "in": "path",
+            "name": "period_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST dues periods {period_id} close",
+        "tags": [
+          "Dues & Ledger"
+        ]
+      }
+    },
+    "/api/v1/dues/periods/{period_id}/reopen": {
+      "post": {
+        "description": "POST dues periods {period_id} reopen\n\n**Authorization Policy**: Requires explicit permission `LedgerManageAll`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `period_id`",
+            "in": "path",
+            "name": "period_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST dues periods {period_id} reopen",
+        "tags": [
+          "Dues & Ledger"
+        ]
+      }
+    },
+    "/api/v1/dues/periods/{period_id}/summary": {
+      "get": {
+        "description": "GET dues periods {period_id} summary\n\n**Authorization Policy**: Requires explicit permission `LedgerManageAll`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `period_id`",
+            "in": "path",
+            "name": "period_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET dues periods {period_id} summary",
+        "tags": [
+          "Dues & Ledger"
+        ]
+      }
+    },
     "/api/v1/dunning/actions": {
       "get": {
         "description": "GET dunning actions\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
@@ -6225,7 +7765,7 @@
     },
     "/api/v1/dunning/notice-letter/{due_id}": {
       "get": {
-        "description": "GET dunning notice-letter :due_id\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "description": "GET dunning notice-letter {due_id}\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `due_id`",
@@ -6294,7 +7834,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET dunning notice-letter :due_id",
+        "summary": "GET dunning notice-letter {due_id}",
         "tags": [
           "Notifications & Dunning"
         ]
@@ -6706,7 +8246,7 @@
     },
     "/api/v1/heat-share/periods/{id}": {
       "get": {
-        "description": "GET heat-share periods :id\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
+        "description": "GET heat-share periods {id}\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -6775,7 +8315,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET heat-share periods :id",
+        "summary": "GET heat-share periods {id}",
         "tags": [
           "Heat-Share Billing"
         ]
@@ -6783,7 +8323,7 @@
     },
     "/api/v1/heat-share/periods/{id}/approve": {
       "post": {
-        "description": "POST heat-share periods :id approve\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "description": "POST heat-share periods {id} approve\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -6862,7 +8402,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST heat-share periods :id approve",
+        "summary": "POST heat-share periods {id} approve",
         "tags": [
           "Heat-Share Billing"
         ]
@@ -6870,7 +8410,7 @@
     },
     "/api/v1/heat-share/periods/{id}/readings": {
       "put": {
-        "description": "PUT heat-share periods :id readings\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "description": "PUT heat-share periods {id} readings\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -6949,7 +8489,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT heat-share periods :id readings",
+        "summary": "PUT heat-share periods {id} readings",
         "tags": [
           "Heat-Share Billing"
         ]
@@ -6957,7 +8497,7 @@
     },
     "/api/v1/home-residents/invite-link/{unit_id}": {
       "get": {
-        "description": "GET home-residents invite-link :unit_id\n\n**Authorization Policy**: Requires explicit permission `UnitInviteCoResident`.",
+        "description": "GET home-residents invite-link {unit_id}\n\n**Authorization Policy**: Requires explicit permission `UnitInviteCoResident`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -7026,7 +8566,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET home-residents invite-link :unit_id",
+        "summary": "GET home-residents invite-link {unit_id}",
         "tags": [
           "Resident Portal"
         ]
@@ -7034,7 +8574,7 @@
     },
     "/api/v1/home-residents/members/{unit_id}": {
       "get": {
-        "description": "GET home-residents members :unit_id\n\n**Authorization Policy**: Requires any of the permissions: `UnitManageHousehold, PersonManage`.",
+        "description": "GET home-residents members {unit_id}\n\n**Authorization Policy**: Requires any of the permissions: `UnitManageHousehold, PersonManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -7103,13 +8643,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET home-residents members :unit_id",
+        "summary": "GET home-residents members {unit_id}",
         "tags": [
           "Resident Portal"
         ]
       },
       "post": {
-        "description": "POST home-residents members :unit_id\n\n**Authorization Policy**: Requires any of the permissions: `UnitManageHousehold, PersonManage`.",
+        "description": "POST home-residents members {unit_id}\n\n**Authorization Policy**: Requires any of the permissions: `UnitManageHousehold, PersonManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -7188,7 +8728,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST home-residents members :unit_id",
+        "summary": "POST home-residents members {unit_id}",
         "tags": [
           "Resident Portal"
         ]
@@ -7196,7 +8736,7 @@
     },
     "/api/v1/home-residents/members/{unit_id}/{resident_id}": {
       "delete": {
-        "description": "DELETE home-residents members :unit_id :resident_id\n\n**Authorization Policy**: Requires any of the permissions: `UnitManageHousehold, PersonManage`.",
+        "description": "DELETE home-residents members {unit_id} {resident_id}\n\n**Authorization Policy**: Requires any of the permissions: `UnitManageHousehold, PersonManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -7274,13 +8814,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE home-residents members :unit_id :resident_id",
+        "summary": "DELETE home-residents members {unit_id} {resident_id}",
         "tags": [
           "Resident Portal"
         ]
       },
       "put": {
-        "description": "PUT home-residents members :unit_id :resident_id\n\n**Authorization Policy**: Requires any of the permissions: `UnitManageHousehold, PersonManage`.",
+        "description": "PUT home-residents members {unit_id} {resident_id}\n\n**Authorization Policy**: Requires any of the permissions: `UnitManageHousehold, PersonManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -7368,7 +8908,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT home-residents members :unit_id :resident_id",
+        "summary": "PUT home-residents members {unit_id} {resident_id}",
         "tags": [
           "Resident Portal"
         ]
@@ -8075,6 +9615,73 @@
         "summary": "POST kvkk retention purge",
         "tags": [
           "KVKK & Privacy"
+        ]
+      }
+    },
+    "/api/v1/late-fees/reconciliation": {
+      "get": {
+        "description": "GET late-fees reconciliation\n\n**Authorization Policy**: Requires explicit permission `FinanceRead`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET late-fees reconciliation",
+        "tags": [
+          "System & Diagnostics"
         ]
       }
     },
@@ -8906,7 +10513,7 @@
     },
     "/api/v1/operating-budgets/{id}": {
       "delete": {
-        "description": "DELETE operating-budgets :id\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "DELETE operating-budgets {id}\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -8975,13 +10582,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE operating-budgets :id",
+        "summary": "DELETE operating-budgets {id}",
         "tags": [
           "Operating Budgets"
         ]
       },
       "get": {
-        "description": "GET operating-budgets :id\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "GET operating-budgets {id}\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -9050,7 +10657,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET operating-budgets :id",
+        "summary": "GET operating-budgets {id}",
         "tags": [
           "Operating Budgets"
         ]
@@ -9058,7 +10665,7 @@
     },
     "/api/v1/operating-budgets/{id}/approve": {
       "post": {
-        "description": "POST operating-budgets :id approve\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "POST operating-budgets {id} approve\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -9137,7 +10744,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST operating-budgets :id approve",
+        "summary": "POST operating-budgets {id} approve",
         "tags": [
           "Operating Budgets"
         ]
@@ -9145,7 +10752,7 @@
     },
     "/api/v1/operating-budgets/{id}/finalize": {
       "post": {
-        "description": "POST operating-budgets :id finalize\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "POST operating-budgets {id} finalize\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -9224,7 +10831,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST operating-budgets :id finalize",
+        "summary": "POST operating-budgets {id} finalize",
         "tags": [
           "Operating Budgets"
         ]
@@ -9232,7 +10839,7 @@
     },
     "/api/v1/operating-budgets/{id}/issue-interim": {
       "post": {
-        "description": "POST operating-budgets :id issue-interim\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "POST operating-budgets {id} issue-interim\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -9311,7 +10918,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST operating-budgets :id issue-interim",
+        "summary": "POST operating-budgets {id} issue-interim",
         "tags": [
           "Operating Budgets"
         ]
@@ -9319,7 +10926,7 @@
     },
     "/api/v1/operating-budgets/{id}/objections": {
       "post": {
-        "description": "POST operating-budgets :id objections\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "POST operating-budgets {id} objections\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -9398,7 +11005,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST operating-budgets :id objections",
+        "summary": "POST operating-budgets {id} objections",
         "tags": [
           "Operating Budgets"
         ]
@@ -9406,7 +11013,7 @@
     },
     "/api/v1/operating-budgets/{id}/objections/{objection_id}/resolve": {
       "post": {
-        "description": "POST operating-budgets :id objections :objection_id resolve\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "POST operating-budgets {id} objections {objection_id} resolve\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -9494,7 +11101,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST operating-budgets :id objections :objection_id resolve",
+        "summary": "POST operating-budgets {id} objections {objection_id} resolve",
         "tags": [
           "Operating Budgets"
         ]
@@ -9502,7 +11109,7 @@
     },
     "/api/v1/operating-budgets/{id}/reject": {
       "post": {
-        "description": "POST operating-budgets :id reject\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "POST operating-budgets {id} reject\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -9581,7 +11188,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST operating-budgets :id reject",
+        "summary": "POST operating-budgets {id} reject",
         "tags": [
           "Operating Budgets"
         ]
@@ -9589,7 +11196,7 @@
     },
     "/api/v1/operating-budgets/{id}/service": {
       "post": {
-        "description": "POST operating-budgets :id service\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "POST operating-budgets {id} service\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -9668,7 +11275,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST operating-budgets :id service",
+        "summary": "POST operating-budgets {id} service",
         "tags": [
           "Operating Budgets"
         ]
@@ -9895,7 +11502,7 @@
     },
     "/api/v1/payment-plans/{id}/cancel": {
       "post": {
-        "description": "POST payment-plans :id cancel\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "description": "POST payment-plans {id} cancel\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -9974,7 +11581,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST payment-plans :id cancel",
+        "summary": "POST payment-plans {id} cancel",
         "tags": [
           "System & Diagnostics"
         ]
@@ -9982,7 +11589,7 @@
     },
     "/api/v1/payment-provider/sandbox/checkout/{reference}": {
       "get": {
-        "description": "GET payment-provider sandbox checkout :reference\n\n**Authorization Policy**: Public endpoint (no credentials required).",
+        "description": "GET payment-provider sandbox checkout {reference}\n\n**Authorization Policy**: Public endpoint (no credentials required).",
         "parameters": [
           {
             "description": "Identifier parameter `reference`",
@@ -10027,7 +11634,7 @@
           }
         },
         "security": [],
-        "summary": "GET payment-provider sandbox checkout :reference",
+        "summary": "GET payment-provider sandbox checkout {reference}",
         "tags": [
           "Payments & Receipts"
         ]
@@ -10035,7 +11642,7 @@
     },
     "/api/v1/payment-provider/sandbox/checkout/{reference}/complete": {
       "post": {
-        "description": "POST payment-provider sandbox checkout :reference complete\n\n**Authorization Policy**: Public endpoint (no credentials required).",
+        "description": "POST payment-provider sandbox checkout {reference} complete\n\n**Authorization Policy**: Public endpoint (no credentials required).",
         "parameters": [
           {
             "description": "Identifier parameter `reference`",
@@ -10090,7 +11697,7 @@
           }
         },
         "security": [],
-        "summary": "POST payment-provider sandbox checkout :reference complete",
+        "summary": "POST payment-provider sandbox checkout {reference} complete",
         "tags": [
           "Payments & Receipts"
         ]
@@ -10516,7 +12123,7 @@
     },
     "/api/v1/payments/receipts/{id}": {
       "get": {
-        "description": "GET payments receipts :id\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET payments receipts {id}\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -10585,7 +12192,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET payments receipts :id",
+        "summary": "GET payments receipts {id}",
         "tags": [
           "Payments & Receipts"
         ]
@@ -10593,7 +12200,7 @@
     },
     "/api/v1/payments/receipts/{id}/pdf": {
       "get": {
-        "description": "GET payments receipts :id pdf\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET payments receipts {id} pdf\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -10662,7 +12269,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET payments receipts :id pdf",
+        "summary": "GET payments receipts {id} pdf",
         "tags": [
           "Payments & Receipts"
         ]
@@ -10670,7 +12277,7 @@
     },
     "/api/v1/payments/receipts/{id}/rent-deduction-certificate": {
       "get": {
-        "description": "GET payments receipts :id rent-deduction-certificate\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET payments receipts {id} rent-deduction-certificate\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -10739,7 +12346,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET payments receipts :id rent-deduction-certificate",
+        "summary": "GET payments receipts {id} rent-deduction-certificate",
         "tags": [
           "Payments & Receipts"
         ]
@@ -11045,7 +12652,7 @@
     },
     "/api/v1/portfolio/companies/{id}/summary": {
       "get": {
-        "description": "GET portfolio companies :id summary\n\n**Authorization Policy**: Requires explicit permission `PortfolioRead`.",
+        "description": "GET portfolio companies {id} summary\n\n**Authorization Policy**: Requires explicit permission `PortfolioRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -11114,7 +12721,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET portfolio companies :id summary",
+        "summary": "GET portfolio companies {id} summary",
         "tags": [
           "SaaS Administration"
         ]
@@ -11208,7 +12815,7 @@
     },
     "/api/v1/registration/approve/{id}": {
       "post": {
-        "description": "POST registration approve :id\n\n**Authorization Policy**: Requires explicit permission `ResidentApprove`.",
+        "description": "POST registration approve {id}\n\n**Authorization Policy**: Requires explicit permission `ResidentApprove`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -11287,7 +12894,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST registration approve :id",
+        "summary": "POST registration approve {id}",
         "tags": [
           "Registration & Onboarding"
         ]
@@ -11429,7 +13036,7 @@
     },
     "/api/v1/registration/reject/{id}": {
       "post": {
-        "description": "POST registration reject :id\n\n**Authorization Policy**: Requires explicit permission `ResidentApprove`.",
+        "description": "POST registration reject {id}\n\n**Authorization Policy**: Requires explicit permission `ResidentApprove`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -11508,7 +13115,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST registration reject :id",
+        "summary": "POST registration reject {id}",
         "tags": [
           "Registration & Onboarding"
         ]
@@ -11516,7 +13123,7 @@
     },
     "/api/v1/registration/submit/{slug}": {
       "post": {
-        "description": "POST registration submit :slug\n\n**Authorization Policy**: Public endpoint (no credentials required).",
+        "description": "POST registration submit {slug}\n\n**Authorization Policy**: Public endpoint (no credentials required).",
         "parameters": [
           {
             "description": "Identifier parameter `slug`",
@@ -11571,7 +13178,7 @@
           }
         },
         "security": [],
-        "summary": "POST registration submit :slug",
+        "summary": "POST registration submit {slug}",
         "tags": [
           "Registration & Onboarding"
         ]
@@ -11646,7 +13253,7 @@
     },
     "/api/v1/resident-requests/disputes/{id}/resolve": {
       "post": {
-        "description": "POST resident-requests disputes :id resolve\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "description": "POST resident-requests disputes {id} resolve\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -11725,7 +13332,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST resident-requests disputes :id resolve",
+        "summary": "POST resident-requests disputes {id} resolve",
         "tags": [
           "Resident Requests"
         ]
@@ -11800,7 +13407,7 @@
     },
     "/api/v1/resident-requests/virman/{id}/decide": {
       "post": {
-        "description": "POST resident-requests virman :id decide\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "description": "POST resident-requests virman {id} decide\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -11879,7 +13486,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST resident-requests virman :id decide",
+        "summary": "POST resident-requests virman {id} decide",
         "tags": [
           "Resident Requests"
         ]
@@ -11887,7 +13494,7 @@
     },
     "/api/v1/residents/{unit_id}/autopay": {
       "get": {
-        "description": "GET residents :unit_id autopay\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
+        "description": "GET residents {unit_id} autopay\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -11956,7 +13563,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET residents :unit_id autopay",
+        "summary": "GET residents {unit_id} autopay",
         "tags": [
           "Resident Portal"
         ]
@@ -11964,7 +13571,7 @@
     },
     "/api/v1/residents/{unit_id}/autopay/mandates": {
       "post": {
-        "description": "POST residents :unit_id autopay mandates\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
+        "description": "POST residents {unit_id} autopay mandates\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12043,7 +13650,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST residents :unit_id autopay mandates",
+        "summary": "POST residents {unit_id} autopay mandates",
         "tags": [
           "Resident Portal"
         ]
@@ -12051,7 +13658,7 @@
     },
     "/api/v1/residents/{unit_id}/autopay/mandates/{mandate_id}/cancel": {
       "post": {
-        "description": "POST residents :unit_id autopay mandates :mandate_id cancel\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
+        "description": "POST residents {unit_id} autopay mandates {mandate_id} cancel\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12139,7 +13746,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST residents :unit_id autopay mandates :mandate_id cancel",
+        "summary": "POST residents {unit_id} autopay mandates {mandate_id} cancel",
         "tags": [
           "Resident Portal"
         ]
@@ -12147,7 +13754,7 @@
     },
     "/api/v1/residents/{unit_id}/dashboard": {
       "get": {
-        "description": "GET residents :unit_id dashboard\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET residents {unit_id} dashboard\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12164,7 +13771,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResidentDashboard"
+                  "type": "object"
                 }
               }
             },
@@ -12216,7 +13823,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET residents :unit_id dashboard",
+        "summary": "GET residents {unit_id} dashboard",
         "tags": [
           "Resident Portal"
         ]
@@ -12224,7 +13831,7 @@
     },
     "/api/v1/residents/{unit_id}/disputes": {
       "get": {
-        "description": "GET residents :unit_id disputes\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET residents {unit_id} disputes\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12293,13 +13900,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET residents :unit_id disputes",
+        "summary": "GET residents {unit_id} disputes",
         "tags": [
           "Resident Portal"
         ]
       },
       "post": {
-        "description": "POST residents :unit_id disputes\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "POST residents {unit_id} disputes\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12378,7 +13985,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST residents :unit_id disputes",
+        "summary": "POST residents {unit_id} disputes",
         "tags": [
           "Resident Portal"
         ]
@@ -12386,7 +13993,7 @@
     },
     "/api/v1/residents/{unit_id}/matching-criteria": {
       "get": {
-        "description": "GET residents :unit_id matching-criteria\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET residents {unit_id} matching-criteria\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12455,7 +14062,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET residents :unit_id matching-criteria",
+        "summary": "GET residents {unit_id} matching-criteria",
         "tags": [
           "Resident Portal"
         ]
@@ -12463,7 +14070,7 @@
     },
     "/api/v1/residents/{unit_id}/matching-criteria/ibans": {
       "post": {
-        "description": "POST residents :unit_id matching-criteria ibans\n\n**Authorization Policy**: Requires explicit permission `UnitPaymentProfileManage`.",
+        "description": "POST residents {unit_id} matching-criteria ibans\n\n**Authorization Policy**: Requires explicit permission `UnitPaymentProfileManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12542,7 +14149,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST residents :unit_id matching-criteria ibans",
+        "summary": "POST residents {unit_id} matching-criteria ibans",
         "tags": [
           "Resident Portal"
         ]
@@ -12550,7 +14157,7 @@
     },
     "/api/v1/residents/{unit_id}/matching-criteria/ibans/{sender_iban}": {
       "delete": {
-        "description": "DELETE residents :unit_id matching-criteria ibans :sender_iban\n\n**Authorization Policy**: Requires explicit permission `UnitPaymentProfileManage`.",
+        "description": "DELETE residents {unit_id} matching-criteria ibans {sender_iban}\n\n**Authorization Policy**: Requires explicit permission `UnitPaymentProfileManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12628,7 +14235,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE residents :unit_id matching-criteria ibans :sender_iban",
+        "summary": "DELETE residents {unit_id} matching-criteria ibans {sender_iban}",
         "tags": [
           "Resident Portal"
         ]
@@ -12636,7 +14243,7 @@
     },
     "/api/v1/residents/{unit_id}/matching-criteria/payer-names": {
       "put": {
-        "description": "PUT residents :unit_id matching-criteria payer-names\n\n**Authorization Policy**: Requires explicit permission `UnitPaymentProfileManage`.",
+        "description": "PUT residents {unit_id} matching-criteria payer-names\n\n**Authorization Policy**: Requires explicit permission `UnitPaymentProfileManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12715,7 +14322,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT residents :unit_id matching-criteria payer-names",
+        "summary": "PUT residents {unit_id} matching-criteria payer-names",
         "tags": [
           "Resident Portal"
         ]
@@ -12723,7 +14330,7 @@
     },
     "/api/v1/residents/{unit_id}/operating-budget": {
       "get": {
-        "description": "GET residents :unit_id operating-budget\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET residents {unit_id} operating-budget\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12792,7 +14399,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET residents :unit_id operating-budget",
+        "summary": "GET residents {unit_id} operating-budget",
         "tags": [
           "Resident Portal"
         ]
@@ -12800,7 +14407,7 @@
     },
     "/api/v1/residents/{unit_id}/payment-intents": {
       "post": {
-        "description": "POST residents :unit_id payment-intents\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
+        "description": "POST residents {unit_id} payment-intents\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12879,7 +14486,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST residents :unit_id payment-intents",
+        "summary": "POST residents {unit_id} payment-intents",
         "tags": [
           "Resident Portal"
         ]
@@ -12887,7 +14494,7 @@
     },
     "/api/v1/residents/{unit_id}/payment-intents/{intent_id}": {
       "get": {
-        "description": "GET residents :unit_id payment-intents :intent_id\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
+        "description": "GET residents {unit_id} payment-intents {intent_id}\n\n**Authorization Policy**: Requires explicit permission `UnitPay`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -12965,7 +14572,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET residents :unit_id payment-intents :intent_id",
+        "summary": "GET residents {unit_id} payment-intents {intent_id}",
         "tags": [
           "Resident Portal"
         ]
@@ -12973,7 +14580,7 @@
     },
     "/api/v1/residents/{unit_id}/payment-plans": {
       "get": {
-        "description": "GET residents :unit_id payment-plans\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET residents {unit_id} payment-plans\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -13042,7 +14649,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET residents :unit_id payment-plans",
+        "summary": "GET residents {unit_id} payment-plans",
         "tags": [
           "Resident Portal"
         ]
@@ -13050,7 +14657,7 @@
     },
     "/api/v1/residents/{unit_id}/statement": {
       "get": {
-        "description": "GET residents :unit_id statement\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET residents {unit_id} statement\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -13119,7 +14726,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET residents :unit_id statement",
+        "summary": "GET residents {unit_id} statement",
         "tags": [
           "Resident Portal"
         ]
@@ -13127,7 +14734,7 @@
     },
     "/api/v1/residents/{unit_id}/virman-requests": {
       "get": {
-        "description": "GET residents :unit_id virman-requests\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET residents {unit_id} virman-requests\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -13196,13 +14803,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET residents :unit_id virman-requests",
+        "summary": "GET residents {unit_id} virman-requests",
         "tags": [
           "Resident Portal"
         ]
       },
       "post": {
-        "description": "POST residents :unit_id virman-requests\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "POST residents {unit_id} virman-requests\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `unit_id`",
@@ -13281,7 +14888,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST residents :unit_id virman-requests",
+        "summary": "POST residents {unit_id} virman-requests",
         "tags": [
           "Resident Portal"
         ]
@@ -13573,7 +15180,7 @@
     },
     "/api/v1/saas/companies/{id}/fee-invoices": {
       "get": {
-        "description": "GET saas companies :id fee-invoices\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
+        "description": "GET saas companies {id} fee-invoices\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -13642,13 +15249,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET saas companies :id fee-invoices",
+        "summary": "GET saas companies {id} fee-invoices",
         "tags": [
           "SaaS Administration"
         ]
       },
       "post": {
-        "description": "POST saas companies :id fee-invoices\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
+        "description": "POST saas companies {id} fee-invoices\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -13727,7 +15334,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST saas companies :id fee-invoices",
+        "summary": "POST saas companies {id} fee-invoices",
         "tags": [
           "SaaS Administration"
         ]
@@ -13735,7 +15342,7 @@
     },
     "/api/v1/saas/companies/{id}/members": {
       "post": {
-        "description": "POST saas companies :id members\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
+        "description": "POST saas companies {id} members\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -13814,7 +15421,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST saas companies :id members",
+        "summary": "POST saas companies {id} members",
         "tags": [
           "SaaS Administration"
         ]
@@ -13822,7 +15429,7 @@
     },
     "/api/v1/saas/companies/{id}/sites": {
       "post": {
-        "description": "POST saas companies :id sites\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
+        "description": "POST saas companies {id} sites\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -13901,7 +15508,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST saas companies :id sites",
+        "summary": "POST saas companies {id} sites",
         "tags": [
           "SaaS Administration"
         ]
@@ -13909,7 +15516,7 @@
     },
     "/api/v1/saas/companies/{id}/summary": {
       "get": {
-        "description": "GET saas companies :id summary\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
+        "description": "GET saas companies {id} summary\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -13978,7 +15585,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET saas companies :id summary",
+        "summary": "GET saas companies {id} summary",
         "tags": [
           "SaaS Administration"
         ]
@@ -14205,7 +15812,7 @@
     },
     "/api/v1/saas/sites/{id}": {
       "delete": {
-        "description": "DELETE saas sites :id\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
+        "description": "DELETE saas sites {id}\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -14274,13 +15881,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE saas sites :id",
+        "summary": "DELETE saas sites {id}",
         "tags": [
           "SaaS Administration"
         ]
       },
       "put": {
-        "description": "PUT saas sites :id\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
+        "description": "PUT saas sites {id}\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -14359,7 +15966,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT saas sites :id",
+        "summary": "PUT saas sites {id}",
         "tags": [
           "SaaS Administration"
         ]
@@ -14367,7 +15974,7 @@
     },
     "/api/v1/saas/sites/{id}/reset-admin-password": {
       "post": {
-        "description": "POST saas sites :id reset-admin-password\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
+        "description": "POST saas sites {id} reset-admin-password\n\n**Authorization Policy**: Requires explicit permission `TenantManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -14446,7 +16053,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST saas sites :id reset-admin-password",
+        "summary": "POST saas sites {id} reset-admin-password",
         "tags": [
           "SaaS Administration"
         ]
@@ -14519,9 +16126,163 @@
         ]
       }
     },
+    "/api/v1/site-admin/advance-exit-settlements": {
+      "get": {
+        "description": "GET site-admin advance-exit-settlements\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET site-admin advance-exit-settlements",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/advance-exit-settlements/{id}/decide": {
+      "post": {
+        "description": "POST site-admin advance-exit-settlements {id} decide\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `id`",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST site-admin advance-exit-settlements {id} decide",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
     "/api/v1/site-admin/bank-account/{site_id}": {
       "get": {
-        "description": "GET site-admin bank-account :site_id\n\n**Authorization Policy**: Requires explicit permission `BankAccountManage`.",
+        "description": "GET site-admin bank-account {site_id}\n\n**Authorization Policy**: Requires explicit permission `BankAccountManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `site_id`",
@@ -14590,13 +16351,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET site-admin bank-account :site_id",
+        "summary": "GET site-admin bank-account {site_id}",
         "tags": [
           "Site Administration"
         ]
       },
       "post": {
-        "description": "POST site-admin bank-account :site_id\n\n**Authorization Policy**: Requires explicit permission `BankAccountManage`.",
+        "description": "POST site-admin bank-account {site_id}\n\n**Authorization Policy**: Requires explicit permission `BankAccountManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `site_id`",
@@ -14675,7 +16436,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST site-admin bank-account :site_id",
+        "summary": "POST site-admin bank-account {site_id}",
         "tags": [
           "Site Administration"
         ]
@@ -15010,7 +16771,7 @@
     },
     "/api/v1/site-admin/home-owners/{id}": {
       "delete": {
-        "description": "DELETE site-admin home-owners :id\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "description": "DELETE site-admin home-owners {id}\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -15079,13 +16840,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE site-admin home-owners :id",
+        "summary": "DELETE site-admin home-owners {id}",
         "tags": [
           "Site Administration"
         ]
       },
       "put": {
-        "description": "PUT site-admin home-owners :id\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "description": "PUT site-admin home-owners {id}\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -15164,7 +16925,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT site-admin home-owners :id",
+        "summary": "PUT site-admin home-owners {id}",
         "tags": [
           "Site Administration"
         ]
@@ -15172,7 +16933,7 @@
     },
     "/api/v1/site-admin/home-owners/{id}/resend-activation": {
       "post": {
-        "description": "POST site-admin home-owners :id resend-activation\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "description": "POST site-admin home-owners {id} resend-activation\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -15251,7 +17012,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST site-admin home-owners :id resend-activation",
+        "summary": "POST site-admin home-owners {id} resend-activation",
         "tags": [
           "Site Administration"
         ]
@@ -15401,7 +17162,7 @@
     },
     "/api/v1/site-admin/house-types/{id}": {
       "delete": {
-        "description": "DELETE site-admin house-types :id\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "description": "DELETE site-admin house-types {id}\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -15470,7 +17231,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE site-admin house-types :id",
+        "summary": "DELETE site-admin house-types {id}",
         "tags": [
           "Site Administration"
         ]
@@ -15605,6 +17366,81 @@
           }
         ],
         "summary": "GET site-admin persons",
+        "tags": [
+          "Site Administration"
+        ]
+      },
+      "post": {
+        "description": "POST site-admin persons\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePersonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST site-admin persons",
         "tags": [
           "Site Administration"
         ]
@@ -15831,9 +17667,76 @@
         ]
       }
     },
+    "/api/v1/site-admin/persons/search": {
+      "get": {
+        "description": "GET site-admin persons search\n\n**Authorization Policy**: Requires explicit permission `PersonRead`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET site-admin persons search",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
     "/api/v1/site-admin/persons/{person_id}": {
       "get": {
-        "description": "GET site-admin persons :person_id\n\n**Authorization Policy**: Requires explicit permission `PersonRead`.",
+        "description": "GET site-admin persons {person_id}\n\n**Authorization Policy**: Requires explicit permission `PersonRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `person_id`",
@@ -15902,7 +17805,418 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET site-admin persons :person_id",
+        "summary": "GET site-admin persons {person_id}",
+        "tags": [
+          "Site Administration"
+        ]
+      },
+      "patch": {
+        "description": "PATCH site-admin persons {person_id}\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `person_id`",
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePersonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PATCH site-admin persons {person_id}",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/persons/{person_id}/card": {
+      "get": {
+        "description": "GET site-admin persons {person_id} card\n\n**Authorization Policy**: Requires explicit permission `PersonRead`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `person_id`",
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET site-admin persons {person_id} card",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/persons/{person_id}/login": {
+      "delete": {
+        "description": "DELETE site-admin persons {person_id} login\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `person_id`",
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource deleted or removed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "DELETE site-admin persons {person_id} login",
+        "tags": [
+          "Site Administration"
+        ]
+      },
+      "post": {
+        "description": "POST site-admin persons {person_id} login\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `person_id`",
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST site-admin persons {person_id} login",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/persons/{person_id}/merge": {
+      "post": {
+        "description": "POST site-admin persons {person_id} merge\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `person_id`",
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST site-admin persons {person_id} merge",
         "tags": [
           "Site Administration"
         ]
@@ -15910,7 +18224,7 @@
     },
     "/api/v1/site-admin/persons/{person_id}/national-id": {
       "put": {
-        "description": "PUT site-admin persons :person_id national-id\n\n**Authorization Policy**: Requires explicit permission `PersonIdentityManage`.",
+        "description": "PUT site-admin persons {person_id} national-id\n\n**Authorization Policy**: Requires explicit permission `PersonIdentityManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `person_id`",
@@ -15989,7 +18303,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT site-admin persons :person_id national-id",
+        "summary": "PUT site-admin persons {person_id} national-id",
         "tags": [
           "Site Administration"
         ]
@@ -15997,7 +18311,7 @@
     },
     "/api/v1/site-admin/persons/{person_id}/preferences": {
       "put": {
-        "description": "PUT site-admin persons :person_id preferences\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "description": "PUT site-admin persons {person_id} preferences\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `person_id`",
@@ -16076,7 +18390,149 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT site-admin persons :person_id preferences",
+        "summary": "PUT site-admin persons {person_id} preferences",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/proration-policy": {
+      "get": {
+        "description": "GET site-admin proration-policy\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET site-admin proration-policy",
+        "tags": [
+          "Site Administration"
+        ]
+      },
+      "put": {
+        "description": "PUT site-admin proration-policy\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT site-admin proration-policy",
         "tags": [
           "Site Administration"
         ]
@@ -16159,9 +18615,76 @@
         ]
       }
     },
-    "/api/v1/site-admin/units/{id}/move-in": {
+    "/api/v1/site-admin/seller-pays-overrides": {
+      "get": {
+        "description": "GET site-admin seller-pays-overrides\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET site-admin seller-pays-overrides",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/seller-pays-overrides/{id}/decide": {
       "post": {
-        "description": "POST site-admin units :id move-in\n\n**Authorization Policy**: Requires explicit permission `OccupancyManage`.",
+        "description": "POST site-admin seller-pays-overrides {id} decide\n\n**Authorization Policy**: Requires explicit permission `FinanceManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -16240,7 +18763,236 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST site-admin units :id move-in",
+        "summary": "POST site-admin seller-pays-overrides {id} decide",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/units": {
+      "get": {
+        "description": "GET site-admin units\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET site-admin units",
+        "tags": [
+          "Site Administration"
+        ]
+      },
+      "post": {
+        "description": "POST site-admin units\n\n**Authorization Policy**: Requires explicit permission `SiteManage`.",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST site-admin units",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/units/{id}/move-in": {
+      "post": {
+        "description": "POST site-admin units {id} move-in\n\n**Authorization Policy**: Requires explicit permission `OccupancyManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `id`",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST site-admin units {id} move-in",
         "tags": [
           "Site Administration"
         ]
@@ -16248,7 +19000,7 @@
     },
     "/api/v1/site-admin/units/{id}/move-out": {
       "post": {
-        "description": "POST site-admin units :id move-out\n\n**Authorization Policy**: Requires explicit permission `OccupancyManage`.",
+        "description": "POST site-admin units {id} move-out\n\n**Authorization Policy**: Requires explicit permission `OccupancyManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -16327,7 +19079,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST site-admin units :id move-out",
+        "summary": "POST site-admin units {id} move-out",
         "tags": [
           "Site Administration"
         ]
@@ -16335,7 +19087,7 @@
     },
     "/api/v1/site-admin/units/{id}/occupancy-history": {
       "get": {
-        "description": "GET site-admin units :id occupancy-history\n\n**Authorization Policy**: Requires explicit permission `PersonRead`.",
+        "description": "GET site-admin units {id} occupancy-history\n\n**Authorization Policy**: Requires explicit permission `PersonRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -16404,15 +19156,92 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET site-admin units :id occupancy-history",
+        "summary": "GET site-admin units {id} occupancy-history",
         "tags": [
           "Site Administration"
         ]
       }
     },
-    "/api/v1/site-admin/units/{id}/transfer-ownership": {
+    "/api/v1/site-admin/units/{id}/occupancy-state": {
+      "get": {
+        "description": "GET site-admin units {id} occupancy-state\n\n**Authorization Policy**: Requires explicit permission `PersonRead`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `id`",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET site-admin units {id} occupancy-state",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/units/{id}/occupancy-transitions": {
       "post": {
-        "description": "POST site-admin units :id transfer-ownership\n\n**Authorization Policy**: Requires explicit permission `OccupancyManage`.",
+        "description": "POST site-admin units {id} occupancy-transitions\n\n**Authorization Policy**: Requires explicit permission `OccupancyManage`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -16491,7 +19320,432 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST site-admin units :id transfer-ownership",
+        "summary": "POST site-admin units {id} occupancy-transitions",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/units/{id}/responsible-contact": {
+      "put": {
+        "description": "PUT site-admin units {id} responsible-contact\n\n**Authorization Policy**: Requires explicit permission `PersonManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `id`",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT site-admin units {id} responsible-contact",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/units/{id}/transfer-ownership": {
+      "post": {
+        "description": "POST site-admin units {id} transfer-ownership\n\n**Authorization Policy**: Requires explicit permission `OccupancyManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `id`",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST site-admin units {id} transfer-ownership",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/units/{unit_id}/advance-exit-settlements": {
+      "post": {
+        "description": "POST site-admin units {unit_id} advance-exit-settlements\n\n**Authorization Policy**: Requires any of the permissions: `OccupancyManage, FinanceManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `unit_id`",
+            "in": "path",
+            "name": "unit_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST site-admin units {unit_id} advance-exit-settlements",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/units/{unit_id}/sale-clearance": {
+      "get": {
+        "description": "GET site-admin units {unit_id} sale-clearance\n\n**Authorization Policy**: Requires any of the permissions: `OccupancyManage, FinanceManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `unit_id`",
+            "in": "path",
+            "name": "unit_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET site-admin units {unit_id} sale-clearance",
+        "tags": [
+          "Site Administration"
+        ]
+      }
+    },
+    "/api/v1/site-admin/units/{unit_id}/seller-pays-overrides": {
+      "post": {
+        "description": "POST site-admin units {unit_id} seller-pays-overrides\n\n**Authorization Policy**: Requires any of the permissions: `OccupancyManage, FinanceManage`.",
+        "parameters": [
+          {
+            "description": "Identifier parameter `unit_id`",
+            "in": "path",
+            "name": "unit_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource created or action processed successfully."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required or JWT expired."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden - caller lacks the required role or permission, or accesses another tenant's site."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST site-admin units {unit_id} seller-pays-overrides",
         "tags": [
           "Site Administration"
         ]
@@ -16889,7 +20143,7 @@
     },
     "/api/v1/system/delete-site-cascade/{site_id}": {
       "post": {
-        "description": "POST system delete-site-cascade :site_id\n\n**Authorization Policy**: Development / diagnostic utility (disabled in production).",
+        "description": "POST system delete-site-cascade {site_id}\n\n**Authorization Policy**: Development / diagnostic utility (disabled in production).",
         "parameters": [
           {
             "description": "Identifier parameter `site_id`",
@@ -16944,7 +20198,7 @@
           }
         },
         "security": [],
-        "summary": "POST system delete-site-cascade :site_id",
+        "summary": "POST system delete-site-cascade {site_id}",
         "tags": [
           "System & Diagnostics"
         ]
@@ -17058,7 +20312,7 @@
     },
     "/api/v1/system/purge-site/{site_id}": {
       "post": {
-        "description": "POST system purge-site :site_id\n\n**Authorization Policy**: Development / diagnostic utility (disabled in production).",
+        "description": "POST system purge-site {site_id}\n\n**Authorization Policy**: Development / diagnostic utility (disabled in production).",
         "parameters": [
           {
             "description": "Identifier parameter `site_id`",
@@ -17113,7 +20367,7 @@
           }
         },
         "security": [],
-        "summary": "POST system purge-site :site_id",
+        "summary": "POST system purge-site {site_id}",
         "tags": [
           "System & Diagnostics"
         ]
@@ -17578,7 +20832,7 @@
     },
     "/api/v1/units/{id}/virtual-iban": {
       "get": {
-        "description": "GET units :id virtual-iban\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "GET units {id} virtual-iban\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -17647,13 +20901,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET units :id virtual-iban",
+        "summary": "GET units {id} virtual-iban",
         "tags": [
           "Banking & Reconciliation"
         ]
       },
       "post": {
-        "description": "POST units :id virtual-iban\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
+        "description": "POST units {id} virtual-iban\n\n**Authorization Policy**: Requires explicit permission `UnitRead`.",
         "parameters": [
           {
             "description": "Identifier parameter `id`",
@@ -17732,7 +20986,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST units :id virtual-iban",
+        "summary": "POST units {id} virtual-iban",
         "tags": [
           "Banking & Reconciliation"
         ]

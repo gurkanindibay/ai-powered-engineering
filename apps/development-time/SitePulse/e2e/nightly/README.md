@@ -27,13 +27,15 @@ maximum latency. This run uses deterministic synthetic data and reports a
 point-in-time smoke measurement. Production SLOs use the observation windows
 in the matrix.
 
-The authorization suite checks six reviewed resource routes and uses the live
-OpenAPI document to ensure each route remains part of the API. It provides
-same-site success controls before checking cross-site denial. The nightly job
-also runs the multi-resource cross-site scenarios in
-`tests/test_journey_tenant_isolation.py`. These fixtures are not exhaustive
-coverage of every tenant-bearing operation; the broader OpenAPI operation
-inventory remains outstanding.
+The static tenant operation inventory classifies all 275 generated OpenAPI
+operations against the Rust route table. The nightly runtime contract checks
+42 tenant-reference reads with same-site success controls before cross-site
+denial, and 36 implicit-scope reads with distinct second-site data visible only
+to that site's manager. It also runs the multi-resource scenarios in
+`tests/test_journey_tenant_isolation.py`. The inventory currently maps runtime
+test evidence for 82 of 209 tenant-applicable operations; the others remain
+visible as uncovered rows. Classification completeness does not mean an
+operation has a runtime fixture.
 
 ## Local runs
 

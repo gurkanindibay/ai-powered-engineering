@@ -99,6 +99,9 @@ jobs:
       - name: Install axe-core
         if: matrix.name == 'accessibility'
         run: npm install --prefix "$RUNNER_TEMP/sitepulse-axe" --ignore-scripts --no-audit --no-fund axe-core@4.10.3
+      - name: Validate tenant operation inventory
+        if: matrix.name == 'tenant-authorization'
+        run: python3 scripts/tenant_operation_inventory.py
       - name: Run nightly tests
         working-directory: apps/development-time/SitePulse/e2e
         env:

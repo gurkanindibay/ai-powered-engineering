@@ -151,6 +151,7 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
   - `tenant_isolation_lint.py` rules: `unscoped-site-input` (a handler takes a `site_id`-bearing Query/Json without `TenantScope`), `unscoped-object-path` (a route's path id is not middleware-attributable and the handler takes no scope, e.g. `/capital-projects/:id`; both `.route(..)` and table-style `post "/p" => handlers::x` routes are parsed, and an unparseable router fails the rule; an `AuthzContext` handler must call `ctx.require(..)`, pin via `TenantScope` or state `// tenant-scope: checked in <Service::fn>`), `guessed-tenant` (`unwrap_or_else(|| "1".to_string())`, hard-coded `"site-..."`), `unbound-tenant-transaction` (a service transaction without `tx_bind_tenant`), `rls-coverage` (a tenant-keyed table without `sp_enable_tenant_rls`). Run against the pre-guardrail commit it reports 83 findings (35 unscoped handlers, 7 object paths, 6 guessed tenants, 4 unbound transactions, 31 tables without RLS).
   - `lock_scope_lint.py` rules: `write-guard-across-io` / `read-guard-across-io` (an `inner` guard alive at a database, pool, HTTP or I/O-service `.await`; opt out with `// lock-scope: allow <reason>`). It matches a whole statement, so an `.await` on a continuation line is still found. It reported 16 sites in total (10 on the pre-guardrail commit, plus 6 that the line-based first version missed), all now fixed.
   - Gates `tenant-lint` and `lock-lint` in `run_tests.py`. Self-tests: `harness/tests/test_tenant_isolation_lint.py`.
+  - `tenant_operation_inventory.py` checks every generated OpenAPI operation against the Rust route table and requires an explicit applicability classification. This inventory gate tracks completeness, while nightly tenant fixtures provide runtime authorization evidence.
   - The database half of the guardrail is tested by `backend/tests/db_tenant_isolation_tests.rs` (gate `rust-db-test`, needs `DB_PASS`): RLS hides and refuses foreign rows in a bound transaction, GETs leave the ledger untouched, accrual offsets are booked with receipts and allocations, listings never cross sites, and ledger reads return 503 when PostgreSQL is gone.
 
 ### Quick Usage Examples:
@@ -159,6 +160,7 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 ./scripts/tenant_isolation_lint.py --json    # gate tenant-lint
 ./scripts/lock_scope_lint.py --json          # gate lock-lint
 ./scripts/tenant_isolation_lint.py --backend /path/to/other/checkout/backend
+(cd apps/development-time/SitePulse && python3 scripts/tenant_operation_inventory.py --json)
 (cd apps/development-time/SitePulse/backend && DB_PASS=... cargo test --test db_tenant_isolation_tests -- --ignored --test-threads=1)
 ```
 
