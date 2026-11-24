@@ -2166,7 +2166,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::select_responsible_contact (Require(PersonManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",

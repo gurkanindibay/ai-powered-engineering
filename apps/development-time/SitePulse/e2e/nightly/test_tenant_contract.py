@@ -112,9 +112,14 @@ IMPLICIT_READ_CASES = {
 # second-site data to distinguish. All tenant-specific rows accept managers.
 
 
-def get_response(api, path: str, token: str, *, method: str = "GET") -> tuple[int, bytes]:
-    """Return raw responses for JSON and binary API routes, including POST controls."""
-    request = Request(api.base + path, headers={"Authorization": f"Bearer {token}"}, method=method)
+def get_response(api, path: str, token: str, *, method: str = "GET", body=None) -> tuple[int, bytes]:
+    """Return raw responses for JSON and binary API routes with any HTTP method."""
+    headers = {"Authorization": f"Bearer {token}"}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode()
+        headers["Content-Type"] = "application/json"
+    request = Request(api.base + path, data=data, headers=headers, method=method)
     try:
         with urlopen(request, timeout=30) as response:
             return response.status, response.read()
@@ -198,6 +203,21 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
             foreign_post_status, _ = get_response(api, path, first.token, method="POST")
             assert foreign_post_status in {403, 404}, (
                 f"Foreign POST {template} returned {foreign_post_status}"
+            )
+        if template == "/api/v1/site-admin/units/{id}/occupancy-state":
+            contact_path = f"/api/v1/site-admin/units/{ids['unit']}/responsible-contact"
+            body = {"person_id": int(ids["person"])}
+            owner_put_status, _ = get_response(
+                api, contact_path, second.token, method="PUT", body=body,
+            )
+            assert owner_put_status == 200, (
+                f"Same-site PUT /api/v1/site-admin/units/{{id}}/responsible-contact returned {owner_put_status}"
+            )
+            foreign_put_status, _ = get_response(
+                api, contact_path, first.token, method="PUT", body=body,
+            )
+            assert foreign_put_status in {403, 404}, (
+                f"Foreign PUT /api/v1/site-admin/units/{{id}}/responsible-contact returned {foreign_put_status}"
             )
         if include_site:
             caller_path = path + "?" + urlencode({"site_id": first.user["site_id"]})
