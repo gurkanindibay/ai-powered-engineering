@@ -1415,7 +1415,9 @@
       "applicability": "tenant_reference",
       "reason": "InterLedgerTransferRequest supplies a unit and can supply a site ID.",
       "evidence": "backend/src/app.rs: handlers::inter_ledger_transfer (Require(LedgerManageAll))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_inter_ledger_transfer_is_site_scoped"
+      ]
     },
     {
       "method": "POST",
@@ -1643,7 +1645,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::create_mandate (Require(UnitPay))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_autopay_mandate_lifecycle_is_site_scoped"
+      ]
     },
     {
       "method": "POST",
@@ -1651,7 +1655,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameters unit_id, mandate_id.",
       "evidence": "backend/src/app.rs: handlers::cancel_mandate (Require(UnitPay))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_autopay_mandate_lifecycle_is_site_scoped"
+      ]
     },
     {
       "method": "GET",
@@ -2202,7 +2208,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter person_id.",
       "evidence": "backend/src/app.rs: handlers::merge_person (Require(PersonManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_person_merge_is_site_scoped"
+      ]
     },
     {
       "method": "PUT",
@@ -2340,7 +2348,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::apply_occupancy_transition (Require(OccupancyManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_occupancy_transition_is_site_scoped"
+      ]
     },
     {
       "method": "PUT",
@@ -2398,7 +2408,9 @@
       "applicability": "tenant_reference",
       "reason": "GrantRequest supplies the target site and operator IDs.",
       "evidence": "backend/src/app.rs: authorization::request_grant (Require(SupportAccess))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_support_grant_lifecycle_requires_platform_scope"
+      ]
     },
     {
       "method": "POST",
@@ -2406,7 +2418,9 @@
       "applicability": "tenant_reference",
       "reason": "GrantAction identifies a site-bound support grant.",
       "evidence": "backend/src/app.rs: authorization::approve_grant (Require(SupportAccess))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_support_grant_lifecycle_requires_platform_scope"
+      ]
     },
     {
       "method": "POST",
@@ -2414,7 +2428,9 @@
       "applicability": "tenant_reference",
       "reason": "GrantAction identifies a site-bound support grant.",
       "evidence": "backend/src/app.rs: authorization::revoke_grant (Require(SupportAccess))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_support_grant_lifecycle_requires_platform_scope"
+      ]
     },
     {
       "method": "POST",
