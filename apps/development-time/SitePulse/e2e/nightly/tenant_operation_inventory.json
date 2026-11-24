@@ -908,7 +908,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::approve_heat_period (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "PUT",
@@ -916,7 +918,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::record_heat_readings (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
