@@ -219,7 +219,7 @@ def two_sites(api, actors):
     }
 
 
-def test_tenant_resources_require_membership(api, two_sites, record_property):
+def test_tenant_resources_require_membership(api, stack, two_sites, record_property):
     first, second, ids = two_sites
     paths = api.call("GET", "/api/v1/openapi.json")["paths"]
     denies = []
@@ -324,6 +324,14 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         {"type_name": "Nightly Scoped Type", "dues_amount": "100.00"}, success={201},
     )
     assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/units/{ids['unit']}/move-in?{query_site}", second, first,
+        {
+            "role": "TENANT", "full_name": "Nightly Scoped Tenant",
+            "phone": "+90 532 111 22 44", "email": "nightly-scoped-tenant@example.test",
+            "start_date": date.today().isoformat(),
+        }, success={200},
+    )
+    assert_write_is_site_scoped(
         api, f"/api/v1/site-admin/proration-policy?{query_site}", second, first,
         {"proration_enabled": True}, success={200}, method="PUT",
     )
@@ -334,6 +342,15 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
     assert_write_is_site_scoped(
         api, f"/api/v1/site-admin/persons/duplicate-check?{query_site}", second, first,
         {"full_name": "Nightly Duplicate Scope Probe"}, success={200},
+    )
+    role_user_id = stack.sql(
+        "SELECT id FROM users WHERE email='second-owner@example.test' "
+        f"AND site_id={int(ids['site'])};"
+    ).strip()
+    assert role_user_id, "The second site's owner login must exist"
+    assert_write_is_site_scoped(
+        api, "/api/v1/site-admin/roles", second, first,
+        {"user_id": role_user_id, "role": "HOME_OWNER"}, success={200},
     )
     assert_write_is_site_scoped(
         api, f"/api/v1/site-admin/persons/import?{query_site}", second, first,
@@ -371,6 +388,44 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
             "decided_on": date.today().isoformat(), "title": "Nightly linked budget decision",
             "text": "Tenant scope check", "linked_budget_id": str(ids["budget"]),
         }, success={201},
+    )
+    virman_path = "/api/v1/residents/" + str(ids["unit"]) + "/virman-requests"
+    virman_body = {"source_debtor": "OWNER", "amount": "1.00", "note": "Nightly scope virman"}
+    virman_status, virman_response = get_response(
+        api, virman_path, second.token, method="POST", body=virman_body,
+    )
+    assert virman_status == 201, f"Same-site POST {virman_path} returned {virman_status}"
+    foreign_virman_status, _ = get_response(
+        api, virman_path, first.token, method="POST", body=virman_body,
+    )
+    assert foreign_virman_status in {403, 404}, (
+        f"Foreign POST {virman_path} returned {foreign_virman_status}"
+    )
+    virman_id = json.loads(virman_response)["id"]
+    assert_write_is_site_scoped(
+        api, f"/api/v1/resident-requests/virman/{virman_id}/decide", second, first,
+        {"approve": False, "note": "Nightly scope rejection"}, success={200},
+    )
+    exit_path = "/api/v1/site-admin/units/" + str(ids["unit"]) + "/advance-exit-settlements"
+    exit_body = {
+        "request_key": "nightly-cross-site-exit", "kind": "PAYOUT",
+        "source_debtor": "OWNER", "beneficiary_name": "Nightly Beneficiary",
+        "beneficiary_person_id": str(ids["person"]), "amount": "1.00",
+    }
+    exit_status, exit_response = get_response(
+        api, exit_path, second.token, method="POST", body=exit_body,
+    )
+    assert exit_status == 201, f"Same-site POST {exit_path} returned {exit_status}"
+    foreign_exit_status, _ = get_response(
+        api, exit_path, first.token, method="POST", body=exit_body,
+    )
+    assert foreign_exit_status in {403, 404}, (
+        f"Foreign POST {exit_path} returned {foreign_exit_status}"
+    )
+    exit_id = json.loads(exit_response)["id"]
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/advance-exit-settlements/{exit_id}/decide",
+        second, first, {"approve": False, "note": "Nightly scope rejection"}, success={200},
     )
     assert_write_is_site_scoped(
         api, "/api/v1/payments/record", second, first,
@@ -510,6 +565,20 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
     for template in SITE_QUERY_READ_CASES:
         assert_read_is_site_scoped(api, paths, template, f"{template}?{site_query}", second, first)
         denies.append(template)
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/units/{ids['unit']}/transfer-ownership",
+        second, first,
+        {
+            "site_id": ids["site"], "unit_id": str(ids["unit"]),
+            "new_owner": {"kind": "new", "card": {
+                "full_name": "Nightly Scoped Buyer",
+                "phone": "+90 532 111 22 55",
+                "email": "nightly-scoped-buyer@example.test",
+            }},
+            "new_owner_name": "Nightly Scoped Buyer",
+            "transfer_date": date.today().isoformat(),
+        }, success={200},
+    )
     record_property("authorization_contract", ", ".join(denies))
 
 
@@ -570,6 +639,13 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         api, "/api/v1/assembly/agenda-items/" + agenda_item_id + "/close",
         second, first, {"decision_text": "Nightly tenant-scope decision"}, success={200},
     )
+    feed = api.call("POST", "/api/v1/bank-matching/feeds", second.token, body={
+        "provider": "SANDBOX", "account_iban": "TR330006100519786457841326",
+    })
+    assert_write_is_site_scoped(
+        api, f"/api/v1/bank-matching/feeds/{feed['id']}/sync", second, first,
+        None, success={200},
+    )
     arrangements = [
         ("/api/v1/assembly/meetings/{id}", str(meeting["id"])),
         ("/api/v1/heat-share/periods/{id}", str(heat_period["id"])),
@@ -578,6 +654,23 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
 
     due_id, _ = arrange_open_due(api, stack, ids)
     arrangements.append(("/api/v1/dunning/notice-letter/{due_id}", due_id))
+    dispute_path = "/api/v1/residents/" + str(ids["unit"]) + "/disputes"
+    dispute_body = {"due_id": due_id, "reason": "Nightly tenant-scope dispute"}
+    dispute_status, dispute_response = get_response(
+        api, dispute_path, second.token, method="POST", body=dispute_body,
+    )
+    assert dispute_status == 201, f"Same-site POST {dispute_path} returned {dispute_status}"
+    foreign_dispute_status, _ = get_response(
+        api, dispute_path, first.token, method="POST", body=dispute_body,
+    )
+    assert foreign_dispute_status in {403, 404}, (
+        f"Foreign POST {dispute_path} returned {foreign_dispute_status}"
+    )
+    dispute_id = json.loads(dispute_response)["id"]
+    assert_write_is_site_scoped(
+        api, f"/api/v1/resident-requests/disputes/{dispute_id}/resolve", second, first,
+        {"accept": False, "note": "Nightly scope rejection"}, success={200},
+    )
     case_body = {
         "unit_id": str(ids["unit"]), "debtor_type": "OWNER", "due_ids": [due_id],
         "note": "Nightly tenant authorization collection case",

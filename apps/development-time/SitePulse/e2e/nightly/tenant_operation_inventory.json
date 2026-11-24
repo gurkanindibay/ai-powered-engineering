@@ -507,7 +507,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::sync_bank_feed (Require(ReconciliationConfirm))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -1553,7 +1555,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::resolve_dispute (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1571,7 +1575,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::decide_virman_request (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1625,7 +1631,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::create_dispute (Require(UnitRead))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1732,7 +1740,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::create_virman_request (Require(UnitRead))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1878,7 +1888,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::decide_advance_exit_settlement (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -2182,7 +2194,9 @@
       "applicability": "tenant_reference",
       "reason": "RoleAssignment supplies a user ID scoped to the caller's site.",
       "evidence": "backend/src/app.rs: authorization::assign_role (Require(RoleGrant))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -2228,7 +2242,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::move_in_resident (Require(OccupancyManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -2284,7 +2300,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::transfer_unit_ownership (Require(OccupancyManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -2292,7 +2310,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::create_advance_exit_settlement (RequireAny(&[OccupancyManage, FinanceManage]))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
