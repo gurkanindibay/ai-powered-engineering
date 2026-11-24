@@ -1,6 +1,6 @@
 # SitePulse GUI Test Plan (Scenario Catalogue)
 
-> **Narrowed by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** Keep using its GUI-id catalogue (§3) and API data builders (§4). Its phase logs and xfail statuses (§6–§12) are historical; current status lives in `.specify/features` and the strategy.
+> **Catalogue only.** The scenario IDs, steps and selector names below are retained for traceability. Historical execution notes have been removed. Current test status is reported by CI and the [SitePulse Test Strategy](TEST_STRATEGY.md). The current browser suite has no xfail markers.
 
 Status: Phase 0 output of [GUI_AUTOMATION_PLAN.md](GUI_AUTOMATION_PLAN.md). Built from `.specify/requirements/EPIC-01..10` at master `8d0d1d3`.
 Scope: the Flutter web client driven in a real browser (Playwright), against the real Rust backend and PostgreSQL.
@@ -17,7 +17,7 @@ Scope: the Flutter web client driven in a real browser (Playwright), against the
 - **UI** is the result of a label/key search of `flutter/lib` on 2026-11-07, **not yet confirmed in a running app**:
   - ✅ the id or label exists
   - ◐ something close exists but the wording or flow differs from the story
-  - ❌ not found. Phase 1 confirms it; if it's really missing, it's a product gap. The test is written and marked `xfail(reason="UI gap")`, never skipped silently.
+  - This item was a historical product gap; check current feature scenarios and CI results for its status.
 - **DB check** means after the UI asserts, the test also reads the value back with `scripts/db_verify.py query-json` or the API and compares it as an exact `Decimal`.
 
 ## 2. Test data and actors
@@ -221,14 +221,14 @@ EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered b
 | — | 13-10 | — | — | — | **Partial:** Backend isolation automated; GUI isolation scenario (SC-13-10-08) is pending separate GUI issue. | | |
 | — | 13-06, 13-08 | — | — | — | **Partial:** Lifecycle chain (13-06) and manager session states (13-08) specified in .specify/features/EPIC-13; GUI automation pending. | | |
 | GUI-13-04 | 13-26 | Manager | P0 | zero-site to April final | Onboard two sites, create 88 units through manager commands, run four periods, then inspect both managers' unit statements, unit counts and site cash (`SC-13-26-02`). | Site A and Site B journey builders; unit workspace, account statement and payment stream | ✅ |
-| GUI-13-05 | 13-01 | Manager | P1 | F0 | Open dashboard, collection, cash, units and people pages of an empty site → zero dashboard, empty-state message on every page (`SC-13-01-01`, strict xfail #283) | `cockpit_*`, `segment_tab_*`, `people_search_input` | ✅ |
+| GUI-13-05 | 13-01 | Manager | P1 | F0 | Open dashboard, collection, cash, units and people pages of an empty site → zero dashboard, empty-state message on every page (`SC-13-01-01`) | `cockpit_*`, `segment_tab_*`, `people_search_input` | ✅ |
 | GUI-13-06 | 13-01 | Manager | P1 | F1 | Open units and people pages of a site with units but no people → 7 unassigned units, no owners or residents (`SC-13-01-04`) | `add_resident_btn`, `people_search_input` | ✅ |
-| GUI-13-07 | 13-01 | Manager | P1 | F1 | Register two owners and a tenant on empty units → units and directory show them, no liability exists (`SC-13-01-05`, strict xfail #286) | `module_new_resident_*`, `module_confirm_move_in_btn` | ✅ |
+| GUI-13-07 | 13-01 | Manager | P1 | F1 | Register two owners and a tenant on empty units → units and directory show them, no liability exists (`SC-13-01-05`) | `module_new_resident_*`, `module_confirm_move_in_btn` | ✅ |
 | GUI-13-08 | 13-01 | Manager, home owner | P1 | F2 | People without a period → collection page offers the first accrual, owner dashboard balance 0.00 (`SC-13-01-06`) | `btn_open_accrual_dialog`, `hero_balance_amount` | ✅ |
 | GUI-13-09 | 13-01 | Manager | P1 | F3 | Accrue the same period again after residents exist → duplicate blocked, no liability (`SC-13-01-11`) | `btn_open_accrual_dialog`, `snackbar_accrual_result` | ✅ |
 | GUI-13-10 | 13-01 | Manager | P1 | F0 | Grow the site from F0 to F2 through the screens: add "A Blok" with 7 units and its tariffs → F1 (7 vacant units, A-6 "Large flat", no people or liabilities), then the owners and tenants → F2 (units page, people directory and each workspace agree) (`SC-13-01-12`) | `btn_add_block`, `block_form_*`, `btn_save_block_units`, `add_resident_btn`, `module_*`, `workspace_identity` | ✅ |
 | GUI-13-11 | 13-02 | Manager | P0 | F4 | Single accrual period → total 8800.00, five overdue debtors with their amounts (`SC-13-02-01`) | `cockpit_*`, `aging_*` | ✅ |
-| GUI-13-12 | 13-02 | Resident | P1 | F4 | Tenant dashboard equals the admin unit statement (`SC-13-02-02`, strict xfail #284) | `hero_balance_amount`, `statement_total_tenant` | ✅ |
+| GUI-13-12 | 13-02 | Resident | P1 | F4 | Tenant dashboard equals the admin unit statement (`SC-13-02-02`) | `hero_balance_amount`, `statement_total_tenant` | ✅ |
 | GUI-13-13 | 13-02 | Manager | P0 | F5 | Multiple periods → per-unit balances and site total, advance of A-6 (`SC-13-02-04`) | `aging_*`, `workspace_action_statement_*` | ✅ |
 
 ## 4. API data builders (`e2e/support/api.py`), confirmed against `backend/src/app.rs`
@@ -250,229 +250,6 @@ Each builder calls real backend endpoints (no direct SQL writes), returns the id
 
 **Dates and money.** The KMK delay penalty is computed from the real clock, and the backend has no way to fix the date. The story's "10 days → ₺23,33" therefore only holds on one day. Money assertions read the expected value from `GET /api/v1/residents/:unit_id/dashboard` (`totalDue`, `penalty`) and compare the screen to it as an exact `Decimal`. The fixed values (₺1.400,00 principal and the 5% monthly rate) are still asserted as constants. A date-control test hook in the backend would allow asserting the story's exact numbers; this is a suggested follow-up, not a blocker.
 
-## 5. Coverage summary
-| Epic | Stories | Covered by GUI | …of which partial | Excluded |
-|---|---|---|---|---|
-| EPIC-01 | 6 | 4 (01-03, 01-04, 01-05, 01-06) | — | 2 (01-01, 01-02 domain) |
-| EPIC-02 | 5 | 5 | 02-04 (message), 02-05 (UI not found) | — |
-| EPIC-03 | 7 | 6 | — | 1 (03-05 API) |
-| EPIC-04 | 7 | 7 | 04-03 (API arrange) | — |
-| EPIC-05 | 6 | — | — | 6 |
-| EPIC-06 | 5 | 5 | 06-03 (button only) | — |
-| EPIC-07 | 7 | 7 | — | — |
-| EPIC-08 | 10 | 10 | 08-06 to 08-10 (planned, UI not built) | — |
-| EPIC-09 | 7 | 7 | 09-03 (wording) | — |
-| EPIC-10 | 7 | 7 | 10-06 tenant (UI not found) | — |
-| **Total** | **67** | **58** | **11** | **9** |
+## Current status
 
-**Scenarios:** 89 (P0: 23, P1: 50, P2: 16) including cross-cutting. Story traceability was checked by script: all 67 `STORY-*` ids in `.specify/requirements` map to a scenario or a written exclusion.
-
-**Product gaps confirmed in Phase 1** (code and API checked; tests are written as `xfail(reason="UI gap")`):
-- GUI-02-06: payment reminder / direct message (STORY-02-04)
-- GUI-02-07: announcement creation, which has no API either (STORY-02-05)
-- GUI-10-11: tenant capital badge and banner (STORY-10-06, tenant half)
-- STORY-04-03: public self-registration form (API only)
-
-GUI-01-03 (account movements) was a false alarm: the section exists.
-
-## 6. Phase 1 results (2026-11-07)
-1. ✅ `testId()` helper (`lib/testing/test_id.dart`) and E2E semantics bootstrap in `main.dart`, active only with `--dart-define=E2E=true`.
-2. ✅ All 161 existing `Key`s mirrored as `testId`s, plus 17 new ids: login tabs, email, password and submit for all three roles; Google button; theme toggle; hero label, amount, overdue badge and pay button; logout. The remaining `NEW:` ids are added screen by screen as each scenario is implemented.
-3. ✅ Probe (`e2e/probe_semantics.py`) in real Chrome: ids are rendered as `flt-semantics-identifier`, and UI login as manager and homeowner reaches the dashboards with no page errors.
-4. ✅ Builder endpoints confirmed (Section 4). Still open: seed passwords for `mehmet.oz@begonya.com` and the SaaS bootstrap password; the probe uses only the manager and homeowner.
-5. Clipboard scenarios (GUI-03-02, 04-01, 07-01) need the Playwright `clipboard-read` permission in Chromium. On Firefox and WebKit they fall back to checking the toast only.
-
-## 7. Implemented tests (Phase 2, 2026-11-07)
-Run with `scripts/gui_e2e.py run -m smoke`. Each test carries `@pytest.mark.gui_id("<id>")`.
-
-| Scenario | Test | Result |
-|---|---|---|
-| GUI-06-01 | `test_epic06_auth.py::test_manager_login_reaches_cockpit` | pass |
-| GUI-06-02 | `test_epic06_auth.py::test_homeowner_login_reaches_dashboard` | pass |
-| GUI-06-03 | `test_epic06_auth.py::test_wrong_password_shows_error_and_stays_on_login` | pass |
-| GUI-06-06 | `test_epic06_auth.py::test_saas_admin_must_change_bootstrap_password` | pass |
-| GUI-06-08 | `test_epic06_auth.py::test_logout_returns_to_login_screen` | pass (header logout button) |
-| GUI-01-01 | `test_epic01_resident_dues.py::test_overdue_balance_matches_backend_total` | pass |
-| GUI-01-02 | `test_epic01_resident_dues.py::test_no_dues_shows_zero_balance_without_overdue_badge` | pass |
-| GUI-07-01 | `test_epic01_resident_dues.py::test_virtual_iban_shown_and_copied` | pass (clipboard checked in Chromium) |
-| GUI-02-03 | `test_epic02_manager.py::test_manager_adds_owner_resident` | pass (DB check on persons + units) |
-| GUI-10-01 | `test_epic02_manager.py::test_capital_segment_offers_project_creation` | pass |
-| GUI-03-01 | `test_epic03_saas.py::test_portfolio_lists_every_site` | pass |
-| GUI-03-01 | `test_epic03_saas.py::test_portfolio_stats_agree_with_site_list` | **xfail: backend bug** (placeholder stats) |
-
-Ids added in Phase 2: `btn_header_logout`, `virtual_iban_text`, `btn_copy_iban`, `btn_cockpit_house_types`, `btn_cockpit_add_resident`, `add_resident_{unit,name,email,phone}_field`, `btn_save_new_resident`, `change_password_{current,new,confirm}`, `btn_submit_change_password`.
-
-## 8. Phase 3: P0 complete (2026-11-07)
-All 21 P0 scenarios are automated: `scripts/gui_e2e.py run -m smoke` gives **19 passed, 4 strict xfail** (about 3 minutes including stack start). Stable on the last two consecutive runs (an earlier run exposed a race in `fill()` on prefilled fields; it now verifies the field value and retries). Every xfail names a confirmed product defect; it turns into a failure (XPASS) as soon as the defect is fixed, so the marker must then be removed.
-
-| Scenario | Test | Result |
-|---|---|---|
-| GUI-03-02 | `test_epic03_saas.py::test_onboarding_a_site_issues_working_manager_credentials` | pass (DB: slug, SITE_MANAGER with `must_change_password`, blocks; the shown password logs in) |
-| GUI-04-02 | `test_epic04_invitations.py::test_pending_registrations_are_listed_for_the_manager` | **xfail: gap**, the client never loads `/registration/pending` |
-| GUI-04-03 | `test_epic04_invitations.py::test_approving_a_registration_creates_an_active_account` | **xfail: gap**, same cause |
-| GUI-07-03 | `test_epic07_bank.py::test_statement_upload_matches_known_sender_and_flags_unknown` | pass (generated Kuveyt Türk .xlsx: 1 matched ₺1400.00, 1 unmatched ₺250.00) |
-| GUI-07-03 | `test_epic07_bank.py::test_confirming_matched_rows_records_the_payment` | **xfail: bug**, confirmation is client-only |
-| GUI-07-10 | `test_epic07_bank.py::test_period_accrual_charges_every_unit_once` | pass (N liabilities, duplicate blocked, count unchanged) |
-| GUI-08-01 | `test_epic08_occupancy.py::test_tenant_move_in` | pass (active TENANT occupancy, `units.tenant_person_id`) |
-| GUI-08-04 | `test_epic08_occupancy.py::test_tenant_move_out_keeps_history_and_debt` | pass (occupancy closed, `exit_balance` 1500.00, liability and person kept) |
-| GUI-09-01 | `test_epic09_payments.py::test_payment_stream_role_filter_shows_only_tenant_payments` | pass (role filter; ids equal the API's TENANT entries). The UI has no period filter, so that part of the scenario is not testable |
-| GUI-10-02 | `SC-10-01-01` in `.specify/features/EPIC-10/STORY-10-01-capital-project-creation.feature` | pass (unit shares sum exactly to ₺500.000,00; unit 14's share is exact) |
-| GUI-10-04 | `SC-10-02-01` in `.specify/features/EPIC-10/STORY-10-02-installment-scheduling.feature` | pass (OWNER / CAPITAL_DUES rows only, installment marked accrued) |
-| GUI-X-01 | conftest `page_guard` | applies to every test |
-
-New builders: `Api.change_password`, `submit_registration`, `move_in`, `create_period`, `accrue_period`, `record_manual_payment`, `payment_stream`; `Builders.tenant_debt` (SQL arrange). `support/bank_files.py` generates statement files in code, so there are no binary fixtures in git.
-
-New ids: `btn_open_add_site`, `add_site_{name,city,address,admin_name,admin_email,admin_phone}_field`, `site_credentials_password`, `btn_close_site_credentials`, `approval_credentials_password`, `btn_close_approval_dialog`, `pending_count_badge`, `pending_card_<id>`, `btn_approve_<id>`, `btn_reject_<id>`, `btn_open_accrual_dialog`, `accrual_dialog_period`, `btn_confirm_period_accrual`, `snackbar_accrual_result`, `btn_open_bank_import`, `btn_import_pick_file`, `import_summary_{matched,unmatched}`, `btn_confirm_matched_import`, `filter_{role,channel}_chip`, `filter_{role,channel}_option_<v>`, `payment_entry_<id>_<role>`, `radio_allocation_{by_land_share,equal}`, `chip_installments_<n>`, `installment_accrued_<n>`, `unit_share_<block>_<unit>`, `move_in_{name,email,phone}_field`, `btn_confirm_move_in`, `btn_confirm_move_out`. `testId()` gained an optional `label` for widgets that keep their text out of the semantics tree (`SelectableText`).
-
-**Findings from Phase 3** (in addition to the four in GUI_AUTOMATION_PLAN.md):
-5. **Approval queue never loads (gap, STORY-04-04/05).** No client code calls `GET /api/v1/registration/pending`. The badge stays at 0 whatever is submitted.
-6. **Statement confirmation is not persisted (bug, STORY-07-02).** "Eşleşenleri Onayla & Kaydet" changes only in-memory client state. After a reload the payment is gone, and no `payment_entries` or `paid_amount` change is written.
-7. **Operational dues are charged to TENANT on owner-occupied units.** `accrue-period` writes `debtor_type = TENANT` for units with no tenant. It also stores today's date as `due_date` instead of the period's (2026-10-15), while the dialog shows a hard-coded "₺1.400,00" and "15.10.2026".
-8. **Accrual dialog with no period.** When the site has no dues period, "Toplu Aidat Tahakkuku" still opens, shows an empty period and offers to accrue.
-9. **Unit-share API placeholders.** `GET /capital-projects/:id/unit-shares` returns the block id as `block` ("1") and placeholder owners (`person-2`, the same phone for every unit). The project's "Kat Malikleri" tab shows them. This is the same block-id issue as finding 2.
-10. **Inconsistent money formatting (GUI-X-06).** The import summary and the capital views print `₺1400.00` / `₺285714.29` (`toStringAsFixed` or `toString`), not the Turkish `₺1.400,00` used elsewhere.
-11. **Unreproduced:** once, on a long-lived exploration stack, the first `accrue-installment` call returned 400 "db error" (nothing was logged) and an identical retry succeeded. It has not happened on a clean stack. The service also reads every site's units (`inner.units`, no site filter) and inserts the per-unit rows without a transaction, so a mid-way failure would leave a partial accrual.
-
-## 9. Phase 3: P1 complete (2026-11-07, after merging master `a10646a`)
-All 46 P1 scenarios are automated. `scripts/gui_e2e.py run -m core` gives **26 passed, 28 strict xfail** (about 7½ minutes); the P0 smoke suite is unchanged at 19 passed, 4 strict xfail. Each new xfail was re-run with `--runxfail` to confirm it fails on the assertion its reason names, not on a test error. Shared xfail reasons live in `e2e/support/known_issues.py`.
-
-| Epic | Scenarios automated | Passing | Strict xfail (defect or gap) |
-|---|---|---|---|
-| EPIC-06 | 06-05 (×2 roles), 06-07, 06-08, 06-09, 06-10 | all | — |
-| EPIC-03 | 03-03, 03-04, 03-05, 03-06, 03-07, 03-08 | 03-03, 03-04, 03-06, 03-07, 03-08 | 03-05 |
-| EPIC-02 | 02-02, 02-05, 02-06, 02-07, 02-08 | 02-05 (no history), 02-08 (save, negative amount) | 02-02, 02-05 (refused delete), 02-06, 02-07, 02-08 (>2 decimals) |
-| EPIC-01 | 01-03, 01-04 | — | 01-03, 01-04 |
-| EPIC-04 | 04-01, 04-04, 04-05, 04-06 | 04-06 (link shown and copied) | 04-01, 04-04, 04-05, 04-06 (site/unit/token) |
-| EPIC-07 | 07-02, 07-04, 07-07, 07-08, 07-09 | 07-02 | 07-04, 07-07, 07-08, 07-09 |
-| EPIC-08 | 08-02, 08-05, 08-06 | 08-05, 08-06 (new owner) | 08-02 (×2), 08-06 (previous owner's period) |
-| EPIC-10 | 10-03, 10-06, 10-11 | 10-03 | 10-06, 10-11 |
-| Cross-cutting | X-04 (×2 roles) | all | — |
-
-Second pass (the remaining ten):
-
-| Scenario | Test | Result |
-|---|---|---|
-| GUI-07-05 | `test_epic07_bank.py::test_unmatched_row_is_assigned_to_a_unit_by_hand` | pass (UI flow) |
-| GUI-07-05 | `…::test_manual_assignment_records_the_payment` | **xfail: bug**, assignment is client-only |
-| GUI-07-05 | `…::test_confirming_matched_rows_keeps_the_unmatched_ones` | **xfail: bug**, unmatched rows dropped |
-| GUI-08-03 | `test_epic08_occupancy.py::test_household_members_are_added` | pass (API lists both members) |
-| GUI-08-03 | `…::test_household_members_survive_a_backend_restart` | **xfail: bug**, memory only |
-| GUI-09-02 / 09-04 | `test_epic09_receipts.py::test_receipt_shows_number_and_penalty_principal_advance_split` | pass (TAH number, penalty → principal → advance equals the API, sums to the total) |
-| GUI-09-04 | `…::test_homeowner_receipt_shows_the_issued_receipt_number` | **xfail: bug** |
-| GUI-09-03 | `…::test_tenant_statement_lists_operational_items_only` | **xfail: gap** |
-| GUI-10-05 | `SC-10-05-01` in `.specify/features/EPIC-10/STORY-10-05-contractor-disbursements.feature` | pass (disbursed 1000, reserve 3000, DB row) |
-| GUI-10-07 | `…::test_owner_fast_payment_raises_the_projects_collected_amount` | pass (collected 4000, DB paid 4000) |
-| GUI-10-09 | `…::test_virman_dialog_offers_real_units_and_advances` | **xfail: bug**, hard-coded units |
-| GUI-10-10 | `…::test_owner_dashboard_shows_capital_dues_separately` | **xfail: gap** |
-| GUI-X-02 | `test_cross_cutting.py::test_theme_choice_on_login_screen_holds_after_login` | pass |
-
-New builders: `Api.create_site`, `webhook_transfer` (signed with the E2E webhook secret), `move_out`; `Builders.foreign_site_unit` (SQL arrange). New page objects: `ProfileSheet`, SaaS card actions (edit, delete, reset password). `AddResidentForm.save()` now dismisses the "Sakin Kaydedildi!" confirmation.
-
-New ids: `btn_open_profile`, `role_path_{manager_cockpit,my_flat}`, `profile_change_password_{current,new,confirm}`, `btn_submit_profile_change_password`, `btn_reset_admin_password_<id>`, `btn_delete_site_<id>`, `site_delete_locked_<id>`, `site_card_name_<id>`, `btn_ack_delete_blocked`, `btn_confirmation_{confirm,cancel}` (shared confirmation page and sheet), `btn_edit_house_type_<type>`, `house_type_{name,amount}_field`, `btn_save_house_type`, `house_type_error`, `dues_filter_<ALL|PAID|OVERDUE>`, `ledger_row_<n>`, `resident_action_<receipts|invite|requests|announcements>`, `invite_link_text`, `invite_security_notice`, `btn_copy_invite_link`, `btn_close_resident_provisioned`, `checkout_option_{card,virtual_iban}`, `checkout_fast_note`, `hero_advance_pill`, `snackbar_import_error`, `history_item_<id>`.
-
-**Findings from the P1 pass** (continuing the numbering of §8):
-12. **Period accrual breaks the next ledger insert.** `accrue-period` writes `dues_liabilities` rows with explicit ids and leaves the identity sequence behind (ids 1 and 2 exist, next sequence value 1). The next identity insert, such as `accrue-installment`, fails with 400 "db error" until the sequence passes the existing ids. This explains finding 11, which is now reproduced.
-13. **FAST webhook ignores the KMK penalty.** Paying the full total (₺1.423,33) leaves ₺23,33 open. Overpaying ₺2.860,67 shows an advance of ₺1.460,67, which is the payment minus the principal only. This contradicts the penalty → principal → advance order (STORY-09-02).
-14. **Bank account never loaded, so the format guard is off.** The client only posts the bank account; it never reads it. An MT940 `.sta` is accepted for the Kuveyt Türk EXCEL account.
-15. **Site edit not saved, but shown as saved.** `PUT /saas/sites/1` answers 400, `updateSite` returns true anyway, and the card shows the new name. Nothing is stored.
-16. **Refused delete still removes the card.** Deleting a unit with ledger history gets a 400 from the backend, but the card disappears.
-17. **Overdue filter loses flats.** With both units overdue the badge says "Geciken (2)" but one card is listed, "Tümü" shows 1 of 2, the total is wrong, and the days-overdue figure disagrees with the due date.
-18. **Client-only flows:** `rejectRegistration` makes no API call, and the unit invite link is built in the client (slug `sitemiz`, unit id instead of number "A Blok Blok D:2", a token the backend never issued).
-19. **No overdraw guard on disbursements.** A ₺120.000,00 contractor disbursement is recorded with ₺0 collected.
-20. **Ownership history incomplete.** A transfer writes a `unit_ownerships` row for the new owner only; the previous owner's period is not recorded, and the seed creates no initial ownership rows.
-21. **Validation gaps:** house type amounts with more than two decimals are accepted; account movements lump principal and penalty into one row without a thousands separator.
-22. **`must_change_password` not enforced server-side.** The SaaS admin could create a site through the API while still on the bootstrap password.
-23. **UI gaps:** managers have no site invite link (only home users have "Davet Linki"), and the "Duyurular" tile shows a hard-coded "3 Yeni" badge.
-
-24. **Manual unit assignment not persisted.** Assigning an unmatched statement row to a unit clears it on screen but writes no payment. Confirming the matched rows of an import also silently drops its unmatched rows from "🏦 Eşleşmeyenler".
-25. **Household members are memory-only.** They are kept in backend memory (no `occupancy_members` or `persons` row, `resident_id` "0", a placeholder e-mail when none is given) and are lost on restart.
-26. **Homeowner receipt number is wrong.** It shows the bank transaction id instead of the issued receipt number (`DKN-…`/`TAH-…`). Receipt amounts are printed unformatted (`₺2000`, `₺53.67`). "Paylaş / PDF" only shows a toast; no file is produced.
-27. **Virman dialog is hard-coded.** It offers units `d-14` "Mevcut Avans: ₺3.000,00" and `d-1` regardless of the site's units and balances.
-28. **No tenant statement (ekstre)** in the UI or the API.
-29. **No owner capital breakdown.** The owner's dashboard folds capital dues into one balance, with no capital line or project detail.
-
-E2E-only test hooks added: the theme toggles carry `theme:dark` / `theme:light` labels, since the page is canvas-rendered. `fill()` now focuses the field before looking for its `<input>`, because Flutter creates the input only on focus.
-
-## 10. Phase 3: P2 complete (2026-11-07)
-All 16 P2 scenarios are automated in `e2e/tests/test_p2_edge.py` (marker `edge`): **8 passed, 8 strict xfail**. Every xfail was run with `--runxfail` and fails on the assertion its reason names.
-
-| Scenario | Result |
-|---|---|
-| GUI-06-04 empty password → error banner, no `/auth/login` request | pass |
-| GUI-06-11 Google sign-in reaches the provider | **xfail: gap**, simulated login, no OAuth redirect |
-| GUI-01-05 offline banner, balance kept | **xfail: gap**, no offline banner; `isOffline` is unused |
-| GUI-01-06 penalty detail (days, amount) | **xfail: bug**, detail says "0 Gün Gecikme" for a 10-day-old debt |
-| GUI-02-04 resident added to an occupied unit → warning, cancel leaves the unit unchanged | pass |
-| GUI-04-07 co-resident joins via a unit invite | **xfail: bug**, "unit 2 has no active occupancy session" |
-| GUI-04-08 empty approval queue | pass (trivially, given finding 5) |
-| GUI-07-06 payer-name alias auto-matches | **xfail: bug**, the stored alias is ignored by matching |
-| GUI-08-07 residents module search by name and unit | pass |
-| GUI-08-08 remove the tenant only | pass (owner kept, occupancy closed) |
-| GUI-09-05 / GUI-10-08 tenant pays capital: on-behalf owner + TBK 314 note | pass |
-| GUI-09-06 aging buckets + penalty = grand total | pass |
-| GUI-09-06 aging total = open ledger | **xfail: bug**, partial payments ignored (₺42.000 shown, ₺41.000 open) |
-| GUI-09-07 virman from a real unit's advance | **xfail: bug**, hard-coded units (finding 27) |
-| GUI-X-05 reload never leaves a broken screen | pass (the session is not persisted: reload returns to login) |
-| GUI-X-06 Turkish money format everywhere | **xfail: bug** (finding 10) |
-
-New ids: `hero_detail_button`, `penalty_days`, `penalty_formula`, `aging_bucket_{current,1_30,31_60,60_plus}`, `aging_total_penalty`, `aging_grand_total`, `receipt_on_behalf`, `receipt_rent_offset_note`, `btn_edit_payer_names`, `payer_name_input`, `btn_add_payer_name`, `btn_save_payer_names`, `btn_dues_more_actions`, `menu_item_virman`.
-
-**Findings from P2:**
-30. **Penalty detail shows 0 days.** The detail dialog says "0 Gün Gecikme" for a debt that is 10 days overdue.
-31. **Debt aging ignores partial payments.**
-32. **Payer-name aliases are ignored.** They are saved (`unit_payer_names`) but never used when a statement is matched.
-33. **Owner-occupied units can't take co-residents.** They have no `unit_occupancies` row, so unit-invite registration fails ("no active occupancy session").
-34. **Google sign-in is simulated, and there's no offline banner.**
-35. **The session is not persisted.** A browser reload always returns to the login screen. The test accepts this as the current design; the stories do not say otherwise.
-
-**Correction (found by the coverage gap report, `GUI_COVERAGE_GAPS.md`):** GUI-02-01 had no test although §8 counted all P0 as automated. It now has three tests in `test_epic02_manager.py`: one passing smoke test, plus strict xfails for finding 36.
-36. **Cockpit totals are wrong after a payment, and kuruş are lost.** The cockpit drops paid flats from its totals ("₺0 / ₺1400", "%0" instead of ₺1.400 / ₺2.800, %50) and rounds amounts to whole lira (`toStringAsFixed(0)`).
-
-37. **Remove-tenant lookup mixes unit and person ids.** `update_home_owner` looks the unit up with `id = $1 OR owner_person_id = $1 OR tenant_person_id = $1`, mixing unit and person ids, and silently falls back to in-memory state when the lookup fails. The response is 200 with a unit id that differs from the database, and the tenant is not removed. It is intermittent (seen only in full-suite runs); GUI-08-08 is a non-strict xfail.
-
-Phase 4 (gate, lint, traceability) is done; see GUI_AUTOMATION_PLAN.md. Per-story GUI status: `COMPLETION_STATUS.md`, section "GUI end-to-end coverage".
-
-## 11. UX/UI remediation (2026-11-07, `docs/ux/UX_UI_EVALUATION_REPORT.md`)
-
-The UI changes from the UX report changed what some tests look for. The suite was updated with them:
-
-| Change in the app | Test change |
-|---|---|
-| Logout moved from the app bar into the profile sheet and now asks for confirmation (`btn_logout` → `btn_confirm_logout` / `btn_confirm_cancel`); `btn_header_logout` is gone | `Shell.logout()` goes avatar → profile → confirm. New: `test_logout_asks_for_confirmation_and_cancel_keeps_the_session` (GUI-06-08) |
-| "Profil & Yetki" is no longer a navigation tab; destinations carry `nav_<home\|dues\|residents\|my_flat\|sites>` ids and render as a rail from 840 dp | `Shell.nav()` clicks `nav_<key>`; `nav_tab_count()` counts `nav_*`. GUI-06-10 expects 3 tabs (cockpit) and 2 (own flat) |
-| Theme toggle moved from the app bar to the profile sheet (`btn_profile_toggle_theme`, still labelled `theme:dark`/`theme:light`); the theme follows the system until chosen and the choice is saved | GUI-X-02 reads the label from the profile sheet |
-| URL per role and tab (`Router`, hash URLs): `/resident/home`, `/manager/dues`, `/manager/my-flat/home`, `/admin/sites` | New GUI-X-07 `test_each_tab_has_a_url_and_browser_back_returns_to_it` |
-| Real browser offline/online events drive an inline `offline_banner` | GUI-01-05 strict xfail removed (finding 34, offline part, fixed) |
-| One `MoneyFormatter` (`Decimal`, `₺1.423,33`) for every amount, including the import summary, capital views, cockpit and receipts | GUI-X-06 and GUI-02-01 "keeps kuruş" strict xfails removed (findings 10 and the rounding half of 36 fixed). The parsers in `pages/manager.py`, `test_epic02/07/09/10` and `test_p2_edge.py` now read the Turkish format through `support.money.last_amount` |
-| Login tab labels lost their emoji prefixes | none (tests use ids) |
-
-Still open from §8–§10: the cockpit's paid-flat totals (36, first half), the lump ledger row (GUI-01-03), and every other strict xfail. Their reasons are unchanged.
-
-## 12. Per-role user journeys (2026-11-11)
-
-**Why the suite missed the forced password change bug.** A user with a temporary password reached a dashboard where every call was refused, so "the admin can enter but sees nothing". The suite still passed, for four reasons:
-1. **The tests checked a widget, not an outcome.** GUI-06-06 waited for `banner_must_change_password`, changed the password, and waited for the banner to go. It never checked that the admin's sites appeared, before or after. GUI-03-03 used an empty new site, where "no unit cards" looks the same as "nothing loaded".
-2. **Refused calls passed silently.** `page_guard` failed only on 5xx and recorded 4xx. A dashboard full of 403 `PASSWORD_CHANGE_REQUIRED` answers passed.
-3. **No real first sign-in.** `E2EStack.reset()` sets `must_change_password=false` for every seeded user, including the bootstrap admin. Only GUI-06-06 set it back, and GUI-03-03 used a freshly created empty site.
-4. **The suite was organised by epic, not by user.** There were actors and tests for the manager, the owner and the SaaS admin only. **The home resident and the auditor had no GUI test at all.**
-
-**Changes.**
-- `e2e/tests/journeys/`: one journey per role (GUI-J-01 … J-05), built on `support/journey.py` (`Journey.step`, `NetworkLog`) and `pages/onboarding.py` (`ForcePasswordChange`).
-- `page_guard` (GUI-X-01) now fails any test that gets a 403 `PASSWORD_CHANGE_REQUIRED`.
-- `pages/login.py` knows `resident` and `auditor`; they use the home-user form, and the server decides the role.
-- `gui_traceability.py` accepts `GUI-J-nn` ids.
-
-**Verified:** all five journeys pass on the fixed client. Run against the pre-fix client (`e217514`), **all five fail at step 1**, and the guard reports the refused calls (`/saas/sites`, `/site-admin/home-owners`, `/accounting/expenses`).
-
-**Client defects the journeys found (fixed).** Each had been there on every normal sign-in and was hidden by reason 2:
-
-| Defect | Fix |
-|---|---|
-| `DashboardScreen` asked for the site manager's directory (`GET /site-admin/home-owners`) for owners, residents and auditors: 403 | `fetchHomeOwners` returns early unless `canReadSiteDirectory` (site manager) |
-| Residents asked for the owner's household list (`GET /home-residents/members/:unit`): 403 | `fetchResidentDashboard` loads members only when `canManageHousehold` (owner, manager) |
-| The auditor's desk asked for `GET /site-admin/overview` (SITE_MANAGE): 403 | `fetchSiteManagerOverview` is for the site manager only |
-| Residents were offered "Sakin Davet", which the server refuses (STORY-04-07: only the owner invites) | The invite action is shown to owners only |
-| The role checks during sign-in read the previous session's role | `_loadRoleData` sets the session role first |
-
-Flutter unit tests: `test/role_scoped_fetch_test.dart`.
-
+This file is the GUI scenario and selector catalogue. Use `.specify/features/` and CI reports for current coverage and execution status.

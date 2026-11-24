@@ -44,6 +44,8 @@ def validate_policy(value: dict) -> dict:
     required = {"schema_version", "image", "bridge", "network", "limits", "role_paths", "protected_paths", "gates", "acceptance", "preferences"}
     if set(value) != required:
         raise HarnessError(f"Policy fields must be {sorted(required)}")
+    if isinstance(value["role_paths"], dict) and "coordinator" not in value["role_paths"]:
+        value = {**value, "role_paths": {**value["role_paths"], "coordinator": []}}
     image = value["image"]
     if not isinstance(image, str) or not re.fullmatch(r"(?:[^\s,]+@)?sha256:[0-9a-f]{64}", image):
         raise HarnessError("Container image must be pinned by sha256 digest")
@@ -111,6 +113,7 @@ def validate_policy(value: dict) -> dict:
 
 
 ROLE_ARTIFACTS = {
+    "coordinator": ("work_plan", "coordination_risks"),
     "product_owner": ("scope", "acceptance_criteria", "exclusions"),
     "business_analyst": ("domain_rules", "contracts", "edge_cases"),
     "architect": ("design", "risks"),
@@ -118,6 +121,7 @@ ROLE_ARTIFACTS = {
 }
 DEVELOPER_ARTIFACTS = ("changes", "tests")
 ARTIFACT_TYPES = {
+    "work_plan": list, "coordination_risks": list,
     "scope": str, "acceptance_criteria": list, "exclusions": list, "domain_rules": list,
     "contracts": dict, "edge_cases": list, "design": str, "risks": list, "criteria": dict,
     "verdict": str, "residual_risks": list, "changes": list, "tests": list,
@@ -151,7 +155,7 @@ def validate_result(result: dict, envelope: dict) -> dict:
     if result["status"] == "completed":
         if result["issues"] or not fields <= set(result["artifacts"]):
             raise HarnessError("Completed result has unresolved issues or missing role artifacts")
-        if any(not result["artifacts"][field] for field in fields - {"exclusions", "residual_risks", "risks"}):
+        if any(not result["artifacts"][field] for field in fields - {"exclusions", "residual_risks", "risks", "coordination_risks"}):
             raise HarnessError("Required role artifacts must not be empty")
         types = ARTIFACT_TYPES
         for field in fields:

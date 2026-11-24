@@ -8,9 +8,10 @@ import re
 from typing import Any
 
 TIERS = ("low", "medium", "high", "critical")
-ROLES = ("product_owner", "business_analyst", "architect", "backend_developer",
+ROLES = ("coordinator", "product_owner", "business_analyst", "architect", "backend_developer",
          "frontend_developer", "developer", "tester")
 PROMPTS = {
+    "coordinator": "Act as the engineering manager for this run. Turn the accepted objective and criteria into an ordered work plan for the specialist agents in this harness; identify dependencies, handoff needs, integration checkpoints and escalation risks. Keep work within the existing stage plan and accepted scope. Do not implement code, change criteria, or claim to dispatch agents or change the controller DAG. The harness owns dispatch, status tracking, integration and verification.",
     "product_owner": "Define scope, exclusions and measurable acceptance criteria. Report unresolved business decisions.",
     "business_analyst": "Define domain rules, edge cases, versioned API/schema contracts and error semantics. Respect accepted scope.",
     "architect": "Review architecture, security, persistence and concurrency risks. Specify compatibility and migration strategy.",

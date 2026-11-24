@@ -9,7 +9,9 @@ Use `scripts/development_harness.py` for persistent runs. The architecture and s
 
 ## Roles and routing
 
-The five default responsibilities are Product Owner (scope/criteria), Business Analyst (domain/contracts), Backend Developer, Frontend Developer and independent Tester. High/critical work adds Architect. Select backend/frontend scope to omit unnecessary implementation roles; low-risk mechanical work can use Developer + Tester.
+The Coordinator is the engineering manager for each run. It converts the accepted objective into an ordered work plan for the harness roles, calls out dependencies, handoff checkpoints and escalation risks, and keeps recommendations within accepted scope. The controller remains responsible for sequential dispatch, status tracking, integration and trusted verification; the Coordinator cannot create or reorder stages dynamically. Include `coordinator` first in `--roles` when a run needs that planning pass.
+
+The default responsibilities are Product Owner (scope/criteria), Business Analyst (domain/contracts), Backend Developer, Frontend Developer and independent Tester. High/critical work adds Architect. Select backend/frontend scope to omit unnecessary implementation roles; low-risk mechanical work can use Developer + Tester.
 
 Risk floors cannot be lowered by `--complexity`: financial/concurrency/destructive persistence is CRITICAL; auth/schema/cross-service/broad changes are HIGH; routine API/UI behavior is MEDIUM. File-count estimates are secondary. The capability registry supplies eligible model identities, options, role/tier benchmark qualifications and decimal pricing. The harness refreshes live capabilities before dispatch and does not silently substitute a requested target.
 
