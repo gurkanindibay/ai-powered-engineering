@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -13,7 +14,6 @@ import pytest
 # Static, reviewed cases with a known resource type and a positive same-site
 # control. Validate each route against the server's generated OpenAPI contract.
 READ_CASES = (
-    ("/api/v1/home-residents/invite-link/{unit_id}", "unit_id", "unit", False),
     ("/api/v1/home-residents/members/{unit_id}", "unit_id", "unit", False),
     ("/api/v1/residents/{unit_id}/autopay", "unit_id", "unit", False),
     ("/api/v1/residents/{unit_id}/dashboard", "unit_id", "unit", False),
@@ -204,6 +204,7 @@ def two_sites(api, actors):
     )
     project = api.create_capital_project(
         second, "Nightly authorization project", Decimal("60.00"), basis="EQUAL_PER_UNIT",
+        first_due=(date.today() - timedelta(days=1)).isoformat(),
     )
     people = api.call("GET", f"/api/v1/site-admin/persons?site_id={site_id}", second.token)
     person = next(item["person_id"] for item in people["items"] if item["full_name"] == "Nightly Owner")
@@ -376,6 +377,10 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
         }, success={200},
     )
     assert_write_is_site_scoped(
+        api, "/api/v1/bank/statements/confirm-reconciliation", second, first,
+        {"site_id": ids["site"], "match_ids": [], "matches": []}, success={200},
+    )
+    assert_write_is_site_scoped(
         api, "/api/v1/bank/remembered-ibans", second, first,
         {
             "site_id": ids["site"], "unit_id": str(ids["unit"]),
@@ -501,6 +506,10 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
         {"sender_iban": sender_iban, "label": "Nightly scoped payer"}, success={200},
     )
     assert_write_is_site_scoped(
+        api, "/api/v1/residents/" + str(ids["unit"]) + "/matching-criteria/payer-names",
+        second, first, {"payer_names": ["Nightly scoped payer"]}, success={200}, method="PUT",
+    )
+    assert_write_is_site_scoped(
         api, matching_path + "/" + sender_iban, second, first, None,
         success={200}, method="DELETE",
     )
@@ -582,6 +591,86 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
     record_property("authorization_contract", ", ".join(denies))
 
 
+def test_registration_decisions_are_site_scoped(api, stack, two_sites):
+    first, second, ids = two_sites
+    reject_id = "nightly-registration-reject-scope"
+    approve_id = "nightly-registration-approve-scope"
+    site = int(ids["site"])
+    stack.sql(
+        "INSERT INTO pending_registrations "
+        "(request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident) "
+        f"VALUES ('{reject_id}', {site}, 'A Blok', 1, 1, 'Nightly Reject', "
+        "'nightly-reject@example.test', '', TRUE), "
+        f"('{approve_id}', {site}, 'A Blok', 1, 1, 'Nightly Approve', "
+        "'nightly-approve@example.test', '', TRUE);"
+    )
+
+    reject_path = f"/api/v1/registration/reject/{reject_id}"
+    foreign_reject, _ = get_response(api, reject_path, first.token, method="POST")
+    assert foreign_reject in {403, 404}, f"Foreign POST {reject_path} returned {foreign_reject}"
+    owner_reject, _ = get_response(api, reject_path, second.token, method="POST")
+    assert owner_reject == 200, f"Same-site POST {reject_path} returned {owner_reject}"
+
+    approve_path = f"/api/v1/registration/approve/{approve_id}"
+    foreign_approve, _ = get_response(api, approve_path, first.token, method="POST")
+    assert foreign_approve in {403, 404}, f"Foreign POST {approve_path} returned {foreign_approve}"
+    owner_approve, _ = get_response(api, approve_path, second.token, method="POST")
+    # The fixture already occupies unit A-1, so the domain rejects approval
+    # after authorization and tenant ownership have both been verified.
+    assert owner_approve == 409, f"Same-site POST {approve_path} returned {owner_approve}"
+
+
+def test_reconciliation_queue_decisions_are_site_scoped(api, two_sites):
+    first, second, ids = two_sites
+    marker = "NIGHTLY-RECON-SCOPE"
+    api.call(
+        "POST", "/api/v1/bank/statements/parse", second.token,
+        body={
+            "site_id": ids["site"],
+            "content": "\n".join((
+                f"2026-11-19;TR000000000000000000000000;REF-{marker}-ASSIGN;5.00",
+                f"2026-11-19;TR000000000000000000000000;REF-{marker}-REJECT;6.00",
+            )),
+            "format": "CSV",
+        },
+    )
+    queue = api.call(
+        "GET", f"/api/v1/bank/statements/reconciliation-queue?site_id={ids['site']}", second.token,
+    )
+    assignment = next(item for item in queue if marker + "-ASSIGN" in str(item.get("transaction", {})))
+    rejection = next(item for item in queue if marker + "-REJECT" in str(item.get("transaction", {})))
+
+    assign_path = f"/api/v1/bank/statements/reconciliation-queue/{assignment['match_id']}/assign"
+    assign_body = {"site_id": ids["site"], "unit_id": ids["unit"], "debtor_role": "OWNER"}
+    foreign_assign_body = {**assign_body, "site_id": str(first.user["site_id"])}
+    foreign_assign, _ = get_response(api, assign_path, first.token, method="POST", body=foreign_assign_body)
+    assert foreign_assign in {403, 404}, f"Foreign POST {assign_path} returned {foreign_assign}"
+    owner_assign, _ = get_response(api, assign_path, second.token, method="POST", body=assign_body)
+    assert owner_assign == 200, f"Same-site POST {assign_path} returned {owner_assign}"
+
+    reject_path = f"/api/v1/bank/statements/reconciliation-queue/{rejection['match_id']}/reject"
+    reject_body = {"site_id": ids["site"], "reason": marker}
+    foreign_reject_body = {**reject_body, "site_id": str(first.user["site_id"])}
+    foreign_reject, _ = get_response(api, reject_path, first.token, method="POST", body=foreign_reject_body)
+    assert foreign_reject in {403, 404}, f"Foreign POST {reject_path} returned {foreign_reject}"
+    owner_reject, _ = get_response(api, reject_path, second.token, method="POST", body=reject_body)
+    assert owner_reject == 200, f"Same-site POST {reject_path} returned {owner_reject}"
+
+
+def test_person_login_lifecycle_is_site_scoped(api, two_sites):
+    first, second, ids = two_sites
+    path = f"/api/v1/site-admin/persons/{ids['person']}/login?site_id={ids['site']}"
+    foreign_open, _ = get_response(api, path, first.token, method="POST")
+    assert foreign_open in {403, 404}, f"Foreign POST {path} returned {foreign_open}"
+    owner_open, _ = get_response(api, path, second.token, method="POST")
+    assert owner_open == 200, f"Same-site POST {path} returned {owner_open}"
+
+    foreign_remove, _ = get_response(api, path, first.token, method="DELETE")
+    assert foreign_remove in {403, 404}, f"Foreign DELETE {path} returned {foreign_remove}"
+    owner_remove, _ = get_response(api, path, second.token, method="DELETE")
+    assert owner_remove == 204, f"Same-site DELETE {path} returned {owner_remove}"
+
+
 def test_additional_tenant_resource_reads_require_membership(api, stack, actors, two_sites):
     """Exercise resource reads that need domain-specific nightly arrangements."""
     first, second, ids = two_sites
@@ -652,7 +741,115 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         ("/api/v1/payments/receipts/{id}/rent-deduction-certificate", str(ids["receipt"])),
     ]
 
+    api.close_period(second, ids["period"])
+    reopen_body = {"reason": "Nightly tenant-scope reopen"}
+    reopen_path = f"/api/v1/dues/periods/{ids['period']}/reopen"
+    reopen_status, reopen_response = get_response(
+        api, reopen_path, second.token, method="POST", body=reopen_body,
+    )
+    assert reopen_status == 201, f"Same-site POST {reopen_path} returned {reopen_status}"
+    foreign_reopen_status, _ = get_response(
+        api, reopen_path, first.token, method="POST", body=reopen_body,
+    )
+    assert foreign_reopen_status in {403, 404}, (
+        f"Foreign POST {reopen_path} returned {foreign_reopen_status}"
+    )
+    reopen_id = json.loads(reopen_response)["id"]
+    assert_write_is_site_scoped(
+        api, f"/api/v1/dues/period-reopen-requests/{reopen_id}/decide",
+        second, first, {"approve": False, "decision_note": "Nightly rejection"},
+        success={200},
+    )
     due_id, _ = arrange_open_due(api, stack, ids)
+    vendor = api.call(
+        "POST", "/api/v1/accounting/vendors", second.token,
+        body={"name": "Nightly Expense Vendor", "tax_id": "0010180009"},
+    )
+    expense_base = {
+        "vendor_id": vendor["id"], "invoice_date": date.today().isoformat(),
+        "category": "CLEANING", "net_amount": "31.27",
+    }
+    payable_expense = api.call(
+        "POST", "/api/v1/accounting/expenses", second.token,
+        body={**expense_base, "invoice_number": "NIGHTLY-EXPENSE-PAYABLE"},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/accounting/expenses/{payable_expense['id']}/approve",
+        second, first, None, success={200},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/accounting/expenses/{payable_expense['id']}/payments",
+        second, first,
+        {"amount": "31.27", "paid_on": date.today().isoformat(),
+         "method": "BANK_TRANSFER", "reference": "NIGHTLY-PAYMENT"},
+        success={200},
+    )
+    rejected_expense = api.call(
+        "POST", "/api/v1/accounting/expenses", second.token,
+        body={**expense_base, "invoice_number": "NIGHTLY-EXPENSE-REJECT"},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/accounting/expenses/{rejected_expense['id']}/reject",
+        second, first, {"reason": "Nightly scope rejection"}, success={200},
+    )
+    budget_query = "?site_id=" + str(ids["site"])
+    budget_path = "/api/v1/operating-budgets/" + str(ids["budget"])
+    assert_write_is_site_scoped(
+        api, budget_path + "/issue-interim" + budget_query, second, first,
+        {"issued_on": (date.today() - timedelta(days=25)).isoformat()}, success={200},
+    )
+    assert_write_is_site_scoped(
+        api, budget_path + "/approve" + budget_query, second, first,
+        {
+            "assembly_decision_ref": "NIGHTLY-APPROVAL-01",
+            "assembly_decision_date": (date.today() - timedelta(days=20)).isoformat(),
+        }, success={200},
+    )
+    service_date = date.today() - timedelta(days=10)
+    assert_write_is_site_scoped(
+        api, budget_path + "/service" + budget_query, second, first,
+        {
+            "unit_id": str(ids["unit"]), "recipient_name": "Nightly Owner",
+            "method": "E_NOTIFICATION", "served_on": service_date.isoformat(),
+        }, success={200},
+    )
+    assert_write_is_site_scoped(
+        api, budget_path + "/objections" + budget_query, second, first,
+        {
+            "unit_id": str(ids["unit"]), "objector_name": "Nightly Owner",
+            "filed_on": (date.today() - timedelta(days=5)).isoformat(),
+            "reason": "Nightly scoped budget objection",
+        }, success={201},
+    )
+    budget = api.call("GET", budget_path + budget_query, second.token)
+    objection_id = budget["objections"][-1]["id"]
+    assert_write_is_site_scoped(
+        api, budget_path + "/objections/" + str(objection_id) + "/resolve" + budget_query,
+        second, first, {"status": "DISMISSED", "resolution_note": "Nightly resolution"},
+        success={200},
+    )
+    assert_write_is_site_scoped(
+        api, budget_path + "/finalize" + budget_query, second, first, None,
+        success={200},
+    )
+    rejected_budget = api.call("POST", "/api/v1/operating-budgets", second.token, body={
+        "fiscal_year": 2027, "lines": [
+            {"category": "CLEANING", "annual_amount": "1200.00", "allocation_key": "EQUAL"},
+        ],
+    })
+    assert_write_is_site_scoped(
+        api, f"/api/v1/operating-budgets/{rejected_budget['id']}/reject{budget_query}",
+        second, first, {"reason": "Nightly scoped rejection"}, success={200},
+    )
+    deleted_budget = api.call("POST", "/api/v1/operating-budgets", second.token, body={
+        "fiscal_year": 2028, "lines": [
+            {"category": "CLEANING", "annual_amount": "1200.00", "allocation_key": "EQUAL"},
+        ],
+    })
+    assert_write_is_site_scoped(
+        api, f"/api/v1/operating-budgets/{deleted_budget['id']}{budget_query}",
+        second, first, None, success={204}, method="DELETE",
+    )
     arrangements.append(("/api/v1/dunning/notice-letter/{due_id}", due_id))
     dispute_path = "/api/v1/residents/" + str(ids["unit"]) + "/disputes"
     dispute_body = {"due_id": due_id, "reason": "Nightly tenant-scope dispute"}
@@ -687,10 +884,55 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     )
     case = json.loads(case_response)
     assert_write_is_site_scoped(
-        api, "/api/v1/adjustments", second, first,
-        {"due_id": due_id, "kind": "PRINCIPAL_WRITE_OFF", "amount": "1.00",
-         "reason": "Nightly adjustment scope"},
-        success={201},
+        api, f"/api/v1/collections/cases/{case['id']}/advance", second, first,
+        {
+            "to_status": "LAWYER_ASSIGNED", "lawyer_name": "Nightly Scope Counsel",
+            "lawyer_contact": "nightly-lawyer@example.test",
+        }, success={200},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/collections/cases/{case['id']}/lawyer-access",
+        second, first, None, success={200},
+    )
+    adjustment_body = {
+        "due_id": due_id, "kind": "PRINCIPAL_WRITE_OFF",
+        "amount": "1.00", "reason": "Nightly adjustment scope",
+    }
+    adjustment_status, adjustment_response = get_response(
+        api, "/api/v1/adjustments", second.token, method="POST", body=adjustment_body,
+    )
+    assert adjustment_status == 201, f"Same-site POST /api/v1/adjustments returned {adjustment_status}"
+    foreign_adjustment_status, _ = get_response(
+        api, "/api/v1/adjustments", first.token, method="POST", body=adjustment_body,
+    )
+    assert foreign_adjustment_status in {403, 404}, (
+        f"Foreign POST /api/v1/adjustments returned {foreign_adjustment_status}"
+    )
+    adjustment_id = json.loads(adjustment_response)["id"]
+    assert_write_is_site_scoped(
+        api, f"/api/v1/adjustments/{adjustment_id}/decide", second, first,
+        {"approve": False, "note": "Nightly scope rejection"}, success={200},
+    )
+    correction_body = {
+        "due_id": due_id, "kind": "CREDIT_NOTE", "amount": "1.00",
+        "reason": "Nightly scope correction",
+    }
+    correction_status, correction_response = get_response(
+        api, "/api/v1/accrual-corrections", second.token, method="POST", body=correction_body,
+    )
+    assert correction_status == 201, (
+        f"Same-site POST /api/v1/accrual-corrections returned {correction_status}"
+    )
+    foreign_correction_status, _ = get_response(
+        api, "/api/v1/accrual-corrections", first.token, method="POST", body=correction_body,
+    )
+    assert foreign_correction_status in {403, 404}, (
+        f"Foreign POST /api/v1/accrual-corrections returned {foreign_correction_status}"
+    )
+    correction_id = json.loads(correction_response)["id"]
+    assert_write_is_site_scoped(
+        api, f"/api/v1/accrual-corrections/{correction_id}/decide", second, first,
+        {"approve": False, "note": "Nightly scope rejection"}, success={200},
     )
     arrangements.extend((
         ("/api/v1/collections/cases/{id}", str(case["id"])),
@@ -723,6 +965,12 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     first_owner = api.login(**actors["homeowner"])
     second_owner_unit = str(second_owner.user["unit_id"])
     first_owner_unit = str(first_owner.user["unit_id"])
+    invite_template = "/api/v1/home-residents/invite-link/{unit_id}"
+    assert "get" in paths.get(invite_template, {}), f"GET {invite_template} is missing from generated OpenAPI"
+    assert_read_is_site_scoped(
+        api, paths, invite_template,
+        invite_template.format(unit_id=second_owner_unit), second_owner, first_owner,
+    )
     second_intent = api.call(
         "POST", f"/api/v1/residents/{second_owner_unit}/payment-intents", second_owner.token,
         body={"amount": "1.00"},
@@ -730,6 +978,13 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     first_intent = api.call(
         "POST", f"/api/v1/residents/{first_owner_unit}/payment-intents", first_owner.token,
         body={"amount": "1.00"},
+    )
+    foreign_intent_status, _ = get_response(
+        api, f"/api/v1/residents/{second_owner_unit}/payment-intents", first_owner.token,
+        method="POST", body={"amount": "1.00"},
+    )
+    assert foreign_intent_status in {403, 404}, (
+        f"Foreign POST /api/v1/residents/{{unit_id}}/payment-intents returned {foreign_intent_status}"
     )
     template = "/api/v1/residents/{unit_id}/payment-intents/{intent_id}"
     assert "get" in paths.get(template, {}), f"GET {template} is missing from generated OpenAPI"
@@ -919,9 +1174,28 @@ def arrange_implicit_read(api, stack, manager, ids, arrangement: str | None) -> 
         post(f"/residents/{unit}/disputes", {"due_id": due, "reason": marker})
         return "reason", marker
     if arrangement == "payment-plan":
+        cancel_due = stack.sql(f"""
+            INSERT INTO dues_liabilities (
+                unit_id, period, period_key, dues_period_id, debtor_type, expense_type,
+                liable_person_id, principal_amount, due_date, effective_due_date, status, created_at
+            )
+            SELECT u.id, p.period_name, p.period_key, p.id, 'OWNER', 'CAPITAL_DUES',
+                   u.owner_person_id, 50.00, p.due_date, p.due_date, 'PENDING', p.due_date
+              FROM units u JOIN dues_periods p ON p.site_id = u.site_id
+             WHERE u.site_id = {int(ids["site"])}
+               AND u.id = {int(ids["unit"])}
+               AND p.id = {int(ids["period"])}
+            RETURNING id;
+        """).splitlines()[0]
+        api.clock.set_date(as_of)
         post("/payment-plans", {
             "unit_id": unit, "debtor_type": "OWNER", "due_ids": [due], "installment_count": 2,
             "first_due_date": (as_of + timedelta(days=14)).isoformat(), "approved_by": reviewer, "note": marker,
+        })
+        post("/payment-plans", {
+            "unit_id": unit, "debtor_type": "OWNER", "due_ids": [cancel_due], "installment_count": 2,
+            "first_due_date": (as_of + timedelta(days=14)).isoformat(), "approved_by": reviewer,
+            "note": marker + " cancellation",
         })
         return "note", marker
     raise AssertionError(f"Unknown implicit-read arrangement: {arrangement}")
@@ -933,13 +1207,38 @@ def test_implicit_reads_follow_manager_site(api, stack, two_sites, path, arrange
     paths = api.call("GET", "/api/v1/openapi.json")["paths"]
     assert "get" in paths.get(path, {}), f"GET {path} is missing from generated OpenAPI"
     field, marker = arrange_implicit_read(api, stack, second, ids, arrangement)
+    if arrangement == "seller-override":
+        overrides = api.call("GET", "/api/v1/site-admin/seller-pays-overrides", second.token)
+        override = next(row for row in overrides if row["reason"] == marker)
+        override_path = f"/api/v1/site-admin/seller-pays-overrides/{override['id']}/decide"
+        assert_write_is_site_scoped(
+            api, override_path, second, first,
+            {"approve": False, "note": "Nightly scoped rejection"}, success={200},
+        )
+        create_path = f"/api/v1/site-admin/units/{ids['unit']}/seller-pays-overrides"
+        foreign_status, _ = get_response(
+            api, create_path, first.token, method="POST",
+            body={
+                "buyer_person_id": override["buyer_person_id"],
+                "transfer_date": "2026-11-20", "reason": marker,
+            },
+        )
+        assert foreign_status in {403, 404}, (
+            f"Foreign POST {create_path} returned {foreign_status}"
+        )
 
     owner_status, owner_body = get_response(api, path, second.token)
     assert owner_status == 200, f"Second-site GET {path} returned {owner_status}"
     assert marker in field_values(json.loads(owner_body), field), f"GET {path} did not return the seeded {field}"
     if arrangement == "payment-plan":
-        plan = next(item for item in json.loads(owner_body) if item.get("note") == marker)
+        plans = json.loads(owner_body)
+        plan = next(item for item in plans if item.get("note") == marker)
         plan_id = plan["id"]
+        cancel_plan = next(item for item in plans if item.get("note") == marker + " cancellation")
+        assert_write_is_site_scoped(
+            api, f"/api/v1/payment-plans/{cancel_plan['id']}/cancel", second, first,
+            None, success={200},
+        )
         as_of = (date.fromisoformat(plan["first_due_date"]) + timedelta(days=90)).isoformat()
         run_path = "/api/v1/payment-plans/run"
         assert "post" in paths.get(run_path, {}), f"POST {run_path} is missing from generated OpenAPI"
@@ -985,11 +1284,19 @@ def test_implicit_writes_follow_manager_site(api, two_sites, method, path, body_
 
     owner_status, owner_body = get_response(api, path, second.token, method=method, body=body)
     assert owner_status == 200, f"Second-site {method} {path} returned {owner_status}"
-    assert json.loads(owner_body)["site_id"] == str(second.user["site_id"])
+    owner_result = json.loads(owner_body)
+    if path == "/api/v1/autopay/run":
+        assert owner_result["as_of"] == body["as_of"]
+    else:
+        assert owner_result["site_id"] == str(second.user["site_id"])
 
     foreign_status, foreign_body = get_response(api, path, first.token, method=method, body=body)
     assert foreign_status == 200, f"First-site {method} {path} returned {foreign_status}"
-    assert json.loads(foreign_body)["site_id"] == str(first.user["site_id"])
+    foreign_result = json.loads(foreign_body)
+    if path == "/api/v1/autopay/run":
+        assert foreign_result["as_of"] == body["as_of"]
+    else:
+        assert foreign_result["site_id"] == str(first.user["site_id"])
 
 
 def test_bank_matching_suggestions_follow_manager_site(api, two_sites):
