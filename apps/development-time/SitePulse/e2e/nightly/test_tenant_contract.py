@@ -417,6 +417,16 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         {"site_id": ids["site"], "title": "Nightly Tenant Scope Announcement", "body": "Site scoped."},
         success={201},
     )
+    sender_iban = "TR110006200000000123456789"
+    matching_path = "/api/v1/residents/" + str(ids["unit"]) + "/matching-criteria/ibans"
+    assert_write_is_site_scoped(
+        api, matching_path, second, first,
+        {"sender_iban": sender_iban, "label": "Nightly scoped payer"}, success={200},
+    )
+    assert_write_is_site_scoped(
+        api, matching_path + "/" + sender_iban, second, first, None,
+        success={200}, method="DELETE",
+    )
     api.create_units(second, "B", unit_number=1)
     api.create_units(second, "B", unit_number=2)
     api.register_home_owner(second, "B", 1, "Nightly Scoped Owner", "nightly-scoped-owner@example.test")
