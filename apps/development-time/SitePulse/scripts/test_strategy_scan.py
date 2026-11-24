@@ -185,7 +185,9 @@ def scan(repo: Path) -> dict:
         except SyntaxError:
             return
         for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test"):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not node.name.startswith("test") and not (suite == "api-system" and node.name.startswith("check_")):
                 continue
             decos = [ast.unparse(d) for d in node.decorator_list]
             parent_decos = []
@@ -197,6 +199,7 @@ def scan(repo: Path) -> dict:
             asserts = [n for n in ast.walk(node) if isinstance(n, ast.Assert)]
             calls = [n for n in ast.walk(node) if isinstance(n, ast.Call) and PY_ASSERT_CALL.match(py_call_name(n) or "")]
             withs = [n for n in ast.walk(node) if isinstance(n, ast.With) and "raises" in ast.unparse(n.items[0].context_expr)]
+            compares = [n for n in ast.walk(node) if isinstance(n, ast.Compare)] if suite == "api-system" else []
             weak = sum(py_weak(a) for a in asserts)
             waits = [n for n in ast.walk(node) if isinstance(n, ast.Call) and re.match(r"^(wait|wait_for\w*|run_suite)$", py_call_name(n) or "")]
             swallow = sum(1 for n in ast.walk(node) if isinstance(n, ast.ExceptHandler) and all(isinstance(s, ast.Pass) for s in n.body))
@@ -218,7 +221,7 @@ def scan(repo: Path) -> dict:
             tests.append(dict(
                 lang="python", file=rel(path), line=node.lineno, name=node.name, in_src=False,
                 markers=marks, run=run, run_note=note,
-                n_assert=len(asserts) + len(calls) + len(withs), n_unwrap=0, weak=weak,
+                n_assert=len(asserts) + len(calls) + len(withs) + len(compares), n_unwrap=0, weak=weak,
                 sleep=bool(SLEEP.search(src)), swallow=swallow, should_panic_unchecked=False,
                 loc=src.count("\n") + 1, cond_only=cond_only, end=getattr(node, "end_lineno", node.lineno),
                 deco_line=min([d.lineno for d in node.decorator_list] or [node.lineno]),
@@ -240,6 +243,9 @@ def scan(repo: Path) -> dict:
         py_scan(p, "gui-e2e")
     for p in sorted((REPO / "tests").rglob("test_*.py")):
         py_scan(p, "engineering-harness-ci")
+    api_check = SP / "scripts/api_system_check.py"
+    if api_check.exists():
+        py_scan(api_check, "api-system")
 
     # pytest-bdd scenarios automated by step definitions (test_features.py) are 'gherkin' mode
 
