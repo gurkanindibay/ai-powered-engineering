@@ -30,6 +30,7 @@ class FakeStack:
         self.db_name = "sitepulse_e2e_test"
         self.statements: list[str] = []
         self.restarts = 0
+        self.restart_clock_preservation: list[bool] = []
 
     def sql(self, statement: str) -> str:
         self.statements.append(statement)
@@ -37,8 +38,9 @@ class FakeStack:
             return "1\n2\n3\n4\n5\n6\n7"
         return ""
 
-    def restart_backend(self) -> None:
+    def restart_backend(self, *, preserve_e2e_clock: bool = True) -> None:
         self.restarts += 1
+        self.restart_clock_preservation.append(preserve_e2e_clock)
 
 
 class JourneyAttemptTests(unittest.TestCase):
@@ -71,6 +73,31 @@ class JourneyAttemptTests(unittest.TestCase):
         stack.remember_e2e_clock({"action": "clear"})
 
         self.assertIsNone(stack.e2e_clock_override)
+
+    def test_teardown_restart_does_not_restore_e2e_clock(self) -> None:
+        class FakeBackend:
+            base = "http://127.0.0.1:8180"
+
+            def restart(self) -> None:
+                self.restarted = True
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = JourneyManifest.create(Path(directory), "run", "shard", "attempt")
+            manifest.record("site_ids", 41)
+            stack = E2EStack.__new__(E2EStack)
+            stack.backend = FakeBackend()
+            stack.e2e_clock_override = None
+            stack.remember_e2e_clock({"action": "set_date", "date": "2026-11-19"})
+            statements: list[str] = []
+            stack.sql = lambda statement: statements.append(statement)
+
+            with patch("support.stack.asc.http") as http:
+                teardown_sites(stack, manifest)
+
+            self.assertTrue(stack.backend.restarted)
+            self.assertEqual(len(statements), 1)
+            self.assertIsNone(stack.e2e_clock_override)
+            http.assert_not_called()
 
     def test_clock_client_uses_e2e_control_endpoint_and_enforces_monotonic_advance(self) -> None:
         api = Api("http://127.0.0.1")

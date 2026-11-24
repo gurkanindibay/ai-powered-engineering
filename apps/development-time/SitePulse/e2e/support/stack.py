@@ -185,8 +185,10 @@ class E2EStack:
         self.backend.start()
         self.sql("UPDATE users SET must_change_password=false;")
 
-    def restart_backend(self) -> None:
+    def restart_backend(self, *, preserve_e2e_clock: bool = True) -> None:
         """Reload backend memory after an Arrange step wrote SQL directly."""
+        if not preserve_e2e_clock:
+            self.e2e_clock_override = None
         self.backend.restart()
         if self.e2e_clock_override is not None:
             status, body = asc.http(
@@ -208,6 +210,7 @@ class E2EStack:
         elif action in {"set_date", "advance_to"}:
             date = command.get("date")
             if isinstance(date, str):
+                # Both backend commands normalize dates through e2e_clock::midnight_utc.
                 self.e2e_clock_override = {
                     "action": "set_instant",
                     "at": f"{date}T00:00:00Z",
