@@ -33,7 +33,7 @@ def expected_suites() -> list[dict[str, object]]:
 def expected_gates() -> dict[str, list[str]]:
     """Mirror CI's group partition so absent gate artifacts are visible in reports."""
     return {
-        "lint": ["harness-selftest", "persistence-lint", "rust-standards-lint", "tenant-lint", "lock-lint",
+        "lint": ["harness-selftest", "persistence-lint", "rust-standards-lint", "test-quality-lint", "tenant-lint", "lock-lint",
                  "testid-lint", "feature-traceability", "ui-style-lint", "flutter-reuse", "logging-standards-lint", "security-lint"],
         "rust": ["rust-build", "rust-clippy", "rust-test", "schema-integrity", "rust-db-test", "api-system"],
         "flutter": ["money-fixtures", "flutter-analyze", "flutter-test"],

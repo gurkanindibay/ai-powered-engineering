@@ -255,6 +255,17 @@ python3 apps/development-time/SitePulse/scripts/e2e_shard.py --json plan --shard
 
 The full catalogue and the promotion procedure are in the [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) skill. Shared Flutter components that the rules point to live in `flutter/lib/ui/design_system/` (`SpPageHeader`, `SpTone`, `SpMetricValue`/`SpIconMetric`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `SpMoneyFormField`/`MoneyInput`, `SpIbanCopyRow`/`spCopyToClipboard`), `ui/components/sp_dialog_pages.dart` (`showSpSelection<T>`), `ui/residents/resident_directory.dart` (`ResidentSummary`, `matchesResidentFilters`, `ResidentOccupancyStats`) and `domain/formatting/json_decimal.dart` (`readDecimal`).
 
+## 5b-3d. Test Quality Lint (`test_quality_lint.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/test_quality_lint.py](file:///apps/development-time/SitePulse/scripts/test_quality_lint.py) (symlinked to `scripts/test_quality_lint.py`)
+- **Purpose:** Ratchets weak `is_err()` assertions, unwrap-only and weak-only tests, wait-only GUI tests, fixed sleeps, environment mutation and `Utc::now()` reads in backend tests. The committed `test_quality_baseline.json` allows existing findings but rejects increased counts, new tests over the three-scenario claim limit, or increased claims in already over-limit tests. Gate `test-quality-lint` runs in the `lint` group and `run_tests.py`.
+
+```bash
+./scripts/test_quality_lint.py
+./scripts/test_quality_lint.py --json
+./scripts/test_quality_lint.py --update-baseline  # record an intentionally reviewed baseline change
+```
+
 ## 5b-4. GUI Traceability (`gui_traceability.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/gui_traceability.py](file:///apps/development-time/SitePulse/scripts/gui_traceability.py) (symlinked to `scripts/gui_traceability.py`)

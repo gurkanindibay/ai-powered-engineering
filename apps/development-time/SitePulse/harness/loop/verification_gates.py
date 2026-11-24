@@ -189,6 +189,8 @@ GATES: Dict[str, List[CommandSpec]] = {
     "harness-selftest": [CommandSpec(["python3", "scripts/unittest_json_runner.py", "-s", "harness/tests"], ".", 300)],
     "schema-integrity": [CommandSpec(["python3", "scripts/schema_integrity_check.py", "--json"], ".", 600)],
     "persistence-lint": [CommandSpec(["python3", "scripts/memory_persistence_lint.py", "--json"], ".", 120)],
+    # Ratchet weak assertions, fixed sleeps, environment mutation and test clock reads.
+    "test-quality-lint": [CommandSpec(["python3", "scripts/test_quality_lint.py", "--json"], ".", 120)],
     "api-system": [CommandSpec(["python3", "scripts/api_system_check.py", "--json"], ".", 900)],
     # Every widget Key in flutter/lib/ui must have the same id as a GUI automation testId.
     "testid-lint": [CommandSpec(["python3", "scripts/testid_lint.py", "--json"], ".", 120)],
