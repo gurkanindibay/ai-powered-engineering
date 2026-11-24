@@ -159,6 +159,72 @@ class RunScenarioTest(unittest.TestCase):
         self.assertEqual(result.outcome, "survived")
         self.assertEqual(calls, 2, "only the available suite baseline and mutant are executed")
         self.assertEqual(result.suites[1].status, "skipped")
+        self.assertEqual(result.suites[1].baseline_status, "skipped")
+        self.assertEqual(ms.summarise([result])["counts"], {"survived": 1})
+
+    def test_unresolved_rust_mutant_runs_postgres_fallback_and_keeps_test_identity(self):
+        expanded = CATALOGUE.replace('layer = "python"', 'layer = "rust"').replace(
+            'suites = ["fast"]', 'suites = ["fast", "db"]'
+        )
+        tmp, root, catalogue = _sandbox(catalogue=expanded)
+        clean_baselines = {
+            "fast": ms.SuiteResult("fast", "passed"),
+            "db": ms.SuiteResult("db", "passed"),
+        }
+        calls = []
+
+        def runner(suite, where):
+            calls.append(suite.name)
+            if suite.name == "db":
+                return ms.SuiteResult(
+                    "db", "failed", failure_test="db_accrual_tests::fallback_detects_mutant"
+                )
+            return ms.SuiteResult("fast", "passed")
+
+        with tmp:
+            result = ms.run_scenario(
+                catalogue.scenarios[0], catalogue, root=root,
+                capabilities=frozenset({"postgres"}), clean_baselines=clean_baselines,
+                runner=runner, journal=root / "journal.json",
+            )
+
+        summary = ms.summarise([result])
+        self.assertEqual(calls, ["fast", "db"])
+        self.assertEqual(result.outcome, "killed")
+        self.assertEqual(result.killed_by, "db")
+        self.assertEqual(result.killed_test, "db_accrual_tests::fallback_detects_mutant")
+        self.assertEqual([row.status for row in result.suites], ["passed", "failed"])
+        self.assertEqual(summary["counts"], {"killed": 1})
+
+    def test_earlier_kill_records_postgres_fallback_as_not_run(self):
+        expanded = CATALOGUE.replace('layer = "python"', 'layer = "rust"').replace(
+            'suites = ["fast"]', 'suites = ["fast", "db"]'
+        )
+        tmp, root, catalogue = _sandbox(catalogue=expanded)
+        clean_baselines = {
+            "fast": ms.SuiteResult("fast", "passed"),
+            "db": ms.SuiteResult("db", "passed"),
+        }
+        calls = []
+
+        def runner(suite, where):
+            calls.append(suite.name)
+            return ms.SuiteResult("fast", "failed", failure_test="fast_tests::catches_mutant")
+
+        with tmp:
+            result = ms.run_scenario(
+                catalogue.scenarios[0], catalogue, root=root,
+                capabilities=frozenset({"postgres"}), clean_baselines=clean_baselines,
+                runner=runner, journal=root / "journal.json",
+            )
+
+        self.assertEqual(calls, ["fast"])
+        self.assertEqual(result.outcome, "killed")
+        self.assertEqual(result.killed_by, "fast")
+        self.assertEqual(result.killed_test, "fast_tests::catches_mutant")
+        self.assertEqual([row.status for row in result.suites], ["failed", "not-run"])
+        self.assertEqual(result.suites[1].baseline_status, "passed")
+        self.assertEqual(ms.summarise([result])["counts"], {"killed": 1})
 
     def test_valid_suite_kill_does_not_hide_another_suite_baseline_failure(self):
         expanded = CATALOGUE.replace(
@@ -478,6 +544,35 @@ class SelectionAndStrictTest(unittest.TestCase):
         for call in run_scenario.call_args_list:
             self.assertEqual(set(call.kwargs["clean_baselines"]), expected_suites)
             self.assertTrue(all(row.status == "passed" for row in call.kwargs["clean_baselines"].values()))
+
+
+class MutationWorkflowTest(unittest.TestCase):
+    def test_rust_mutation_shard_has_postgres_fallback_capability(self):
+        catalogue = ms.load_catalogue()
+        rust_fallbacks = [
+            scenario for scenario in catalogue.scenarios
+            if scenario.layer == "rust"
+            and any("postgres" in catalogue.suites[name].requires for name in scenario.suites)
+        ]
+        self.assertTrue(rust_fallbacks, "the catalogue must include Rust cases with a PostgreSQL fallback")
+        self.assertTrue(
+            any(
+                any("postgres" in catalogue.suites[name].requires for name in scenario.suites[1:])
+                for scenario in rust_fallbacks
+            ),
+            "at least one Rust fallback must follow an earlier suite",
+        )
+
+        workflow_path = PROJECT_ROOT.parents[2] / ".github" / "workflows" / "mutation-testing.yml"
+        workflow = workflow_path.read_text(encoding="utf-8")
+        rust_job = workflow.split("  mutate-rust:\n", maxsplit=1)[1].split(
+            "\n  mutate-db:\n", maxsplit=1
+        )[0]
+
+        self.assertIn("services:\n      postgres:", rust_job)
+        self.assertIn("POSTGRES_PASSWORD: ci-only-password", rust_job)
+        self.assertIn("DB_PASS: ci-only-password", rust_job)
+        self.assertIn("python3 scripts/mutation_scenarios.py run --layer rust --with postgres", rust_job)
 
 
 if __name__ == "__main__":
