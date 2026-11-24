@@ -539,7 +539,9 @@
       "applicability": "tenant_reference",
       "reason": "RememberSenderIbanRequest supplies a site and unit.",
       "evidence": "backend/src/app.rs: handlers::remember_sender_iban (Require(ReconciliationConfirm))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
