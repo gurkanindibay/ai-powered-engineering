@@ -468,6 +468,7 @@ impl CapitalProjectService {
         );
         let now = Utc::now();
         let mut charged_units_count = unit_shares.len() as i64;
+        let mut persisted_dues = Vec::new();
 
         // Persist the accrual under the project's tenant so row-level security
         // applies to both the project and its generated liabilities.
@@ -513,8 +514,9 @@ impl CapitalProjectService {
                     crate::services::sale_clearance_service::approved_seller_for_unit(&tx, u_id)
                         .await
                         .map_err(|e| capital_db_error("seller lookup", &e))?;
-                tx.execute(
-                    r#"
+                let due_row = tx
+                    .query_one(
+                        r#"
                         INSERT INTO dues_liabilities (
                             unit_id, period, debtor_type, expense_type,
                             principal_amount, due_date, status, delay_penalty,
@@ -526,21 +528,42 @@ impl CapitalProjectService {
                             $5, $6, $7, $8, COALESCE($9::bigint,
                                 (SELECT owner_person_id FROM units WHERE id = $1))
                         )
+                    RETURNING id, liable_person_id
                     "#,
-                    &[
-                        &u_id,
-                        &period_name,
-                        &share,
-                        &installment.due_date,
-                        &p_id,
-                        &installment_number,
-                        &installment_id,
-                        &now,
-                        &seller,
-                    ],
-                )
-                .await
-                .map_err(|e| capital_db_error("liability insertion", &e))?;
+                        &[
+                            &u_id,
+                            &period_name,
+                            &share,
+                            &installment.due_date,
+                            &p_id,
+                            &installment_number,
+                            &installment_id,
+                            &now,
+                            &seller,
+                        ],
+                    )
+                    .await
+                    .map_err(|e| capital_db_error("liability insertion", &e))?;
+                let due_id: i64 = due_row.get("id");
+                let liable_person_id: Option<i64> = due_row.get("liable_person_id");
+                persisted_dues.push(DuesLiability {
+                    id: due_id.to_string(),
+                    unit_id: u_id.to_string(),
+                    period: period_name.clone(),
+                    principal_amount: share,
+                    delay_penalty: Decimal::ZERO,
+                    total_amount: share,
+                    due_date: installment.due_date,
+                    status: DebtStatus::Pending,
+                    paid_principal: Decimal::ZERO,
+                    paid_penalty: Decimal::ZERO,
+                    debtor_type: DebtorType::Owner,
+                    expense_type: ExpenseType::CapitalDues,
+                    penalty_accrued_through: None,
+                    grace_days: 0,
+                    effective_due_date: None,
+                    liable_person_id,
+                });
             }
             tx.execute(
                 "UPDATE capital_project_installments SET is_accrued = TRUE, accrued_at = $1 WHERE project_id = $2 AND installment_number = $3",
@@ -556,44 +579,48 @@ impl CapitalProjectService {
         // Also update memory state
         {
             let mut inner = self.state.inner.write().await;
-            let mut next_due = inner
-                .dues
-                .iter()
-                .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
-                .max()
-                .unwrap_or(0);
-            for (unit, share) in &unit_shares {
-                next_due += 1;
-                let due_id = next_due.to_string();
-                let liable_person_id = unit.owner_user_id.as_deref().and_then(|id| {
-                    inner
-                        .users
-                        .iter()
-                        .find(|u| u.id == id)
-                        .and_then(|u| u.person_id)
-                        .or_else(|| {
-                            id.strip_prefix("person-")
-                                .and_then(|s| s.parse::<i64>().ok())
-                        })
-                });
-                inner.dues.push(DuesLiability {
-                    id: due_id,
-                    unit_id: unit.id.clone(),
-                    period: period_name.clone(),
-                    principal_amount: *share,
-                    delay_penalty: Decimal::ZERO,
-                    total_amount: *share,
-                    due_date: installment.due_date,
-                    status: DebtStatus::Pending,
-                    paid_principal: Decimal::ZERO,
-                    paid_penalty: Decimal::ZERO,
-                    debtor_type: DebtorType::Owner,
-                    expense_type: ExpenseType::CapitalDues,
-                    penalty_accrued_through: None,
-                    grace_days: 0,
-                    effective_due_date: None,
-                    liable_person_id,
-                });
+            if persisted_dues.is_empty() {
+                let mut next_due = inner
+                    .dues
+                    .iter()
+                    .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
+                    .max()
+                    .unwrap_or(0);
+                for (unit, share) in &unit_shares {
+                    next_due += 1;
+                    let due_id = next_due.to_string();
+                    let liable_person_id = unit.owner_user_id.as_deref().and_then(|id| {
+                        inner
+                            .users
+                            .iter()
+                            .find(|u| u.id == id)
+                            .and_then(|u| u.person_id)
+                            .or_else(|| {
+                                id.strip_prefix("person-")
+                                    .and_then(|s| s.parse::<i64>().ok())
+                            })
+                    });
+                    inner.dues.push(DuesLiability {
+                        id: due_id,
+                        unit_id: unit.id.clone(),
+                        period: period_name.clone(),
+                        principal_amount: *share,
+                        delay_penalty: Decimal::ZERO,
+                        total_amount: *share,
+                        due_date: installment.due_date,
+                        status: DebtStatus::Pending,
+                        paid_principal: Decimal::ZERO,
+                        paid_penalty: Decimal::ZERO,
+                        debtor_type: DebtorType::Owner,
+                        expense_type: ExpenseType::CapitalDues,
+                        penalty_accrued_through: None,
+                        grace_days: 0,
+                        effective_due_date: None,
+                        liable_person_id,
+                    });
+                }
+            } else {
+                inner.dues.extend(persisted_dues);
             }
 
             if let Some(inst) = inner

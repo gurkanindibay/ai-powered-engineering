@@ -403,9 +403,8 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
         api, decision_path, second.token, method="POST", body=decision_body,
     )
     assert decision_status == 201, f"Same-site POST {decision_path} returned {decision_status}"
-    # This route creates a decision in the caller's current site. A foreign
-    # caller may create its own decision, but must not attach the other site's
-    # budget or receive a duplicate/conflict from that site's request.
+    # This route creates a decision in the caller's current site, so use a
+    # distinct request for each caller and verify their stored site scopes.
     foreign_decision_body = {
         "decided_on": date.today().isoformat(), "title": "Nightly foreign-site decision",
         "text": "Caller-site scope check",
@@ -455,9 +454,23 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
         f"Foreign POST {exit_path} returned {foreign_exit_status}"
     )
     exit_id = json.loads(exit_response)["id"]
-    assert_write_is_site_scoped(
-        api, f"/api/v1/site-admin/advance-exit-settlements/{exit_id}/decide",
-        second, first, {"approve": False, "note": "Nightly scope rejection"}, success={200},
+    exit_decision_path = f"/api/v1/site-admin/advance-exit-settlements/{exit_id}/decide"
+    exit_decision_body = {"approve": False, "note": "Nightly scope rejection"}
+    same_site_decision_status, same_site_decision_body = get_response(
+        api, exit_decision_path, second.token, method="POST", body=exit_decision_body,
+    )
+    assert same_site_decision_status == 403, (
+        f"Same-site decision should enforce four-eyes approval, got "
+        f"{same_site_decision_status}: {same_site_decision_body[:300]}"
+    )
+    assert b"different person" in same_site_decision_body.lower(), (
+        "Same-site decision was rejected for a reason other than the four-eyes control"
+    )
+    foreign_decision_status, _ = get_response(
+        api, exit_decision_path, first.token, method="POST", body=exit_decision_body,
+    )
+    assert foreign_decision_status in {403, 404}, (
+        f"Foreign POST {exit_decision_path} returned {foreign_decision_status}"
     )
     assert_write_is_site_scoped(
         api, "/api/v1/payments/record", second, first,
@@ -872,11 +885,20 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         }, success={201},
     )
     heat_path = "/api/v1/heat-share/periods/" + str(heat_period["id"])
+    heat_readings = {
+        "readings": [
+            {
+                "unit_id": str(unit["id"]),
+                "previous_reading": "0.00",
+                "current_reading": "5.00",
+            }
+            for unit in api.get_units(second, site_id=ids["site"])
+        ],
+    }
+    assert heat_readings["readings"], "Heat-share approval fixture needs at least one site unit"
     assert_write_is_site_scoped(
-        api, heat_path + "/readings", second, first,
-        {"readings": [{
-            "unit_id": str(ids["unit"]), "previous_reading": "0.00", "current_reading": "5.00",
-        }]}, success={200}, method="PUT",
+        api, heat_path + "/readings", second, first, heat_readings,
+        success={200}, method="PUT",
     )
     assert_write_is_site_scoped(
         api, heat_path + "/approve", second, first, {}, success={200},
