@@ -259,6 +259,19 @@ class TestProjectData(unittest.TestCase):
         report = RtmValidator().validate()
         self.assertTrue(report["passed"], report["issues"])
 
+    def test_harness_cli_subprocess_invocation(self):
+        import subprocess
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        res = subprocess.run(
+            [sys.executable, "harness/harness_cli.py", "--help"],
+            cwd=str(PROJECT_ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("SitePulse Harness CLI", res.stdout)
+
 
 class TestPersistenceLint(unittest.TestCase):
     """The persistence lint enforces repository boundaries and result handling."""
