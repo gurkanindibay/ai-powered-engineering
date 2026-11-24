@@ -621,6 +621,10 @@ def arrange_implicit_read(api, stack, manager, ids, arrangement: str | None) -> 
         return "retention_months", "137"
     if arrangement == "privacy":
         post("/kvkk/privacy-notices", {"title": marker, "body": marker})
+        api.call("PUT", "/api/v1/kvkk/me/consents", manager.token, body={
+            "consents": [{"channel": "EMAIL", "granted": False}],
+        })
+        api.call("POST", "/api/v1/kvkk/me/acknowledge", manager.token)
         return "title", marker
     if arrangement == "lease":
         post("/leases", {
@@ -701,6 +705,10 @@ def test_implicit_reads_follow_manager_site(api, stack, two_sites, path, arrange
     assert marker in field_values(json.loads(owner_body), field), f"GET {path} did not return the seeded {field}"
     if arrangement == "approval-policy":
         assert Decimal(json.loads(owner_body)["manager_limit"]) == Decimal("4321.00")
+    if arrangement == "privacy":
+        own_privacy = json.loads(owner_body)
+        assert own_privacy["acknowledged"] is True
+        assert next(c for c in own_privacy["consents"] if c["channel"] == "EMAIL")["granted"] is False
 
     foreign_status, foreign_body = get_response(api, path, first.token)
     assert foreign_status == 200, f"First-site GET {path} returned {foreign_status}"
@@ -710,3 +718,7 @@ def test_implicit_reads_follow_manager_site(api, stack, two_sites, path, arrange
     assert marker not in first_values, f"GET {path} returned the other site's {field}"
     if arrangement == "approval-policy":
         assert Decimal(json.loads(foreign_body)["manager_limit"]) != Decimal("4321.00")
+    if arrangement == "privacy":
+        foreign_privacy = json.loads(foreign_body)
+        assert foreign_privacy["acknowledged"] is False
+        assert next(c for c in foreign_privacy["consents"] if c["channel"] == "EMAIL")["granted"] is True
