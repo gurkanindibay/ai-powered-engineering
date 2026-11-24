@@ -1072,7 +1072,7 @@ mod tests {
 
     #[test]
     fn webhook_signature() {
-        let secret = generate_temporary_password("");
+        let secret = uuid::Uuid::new_v4().to_string();
         let body = br#"{"amount":"10.00"}"#;
         let sig = sign_webhook_body(&secret, body);
         assert!(verify_webhook_signature_with_secret(
