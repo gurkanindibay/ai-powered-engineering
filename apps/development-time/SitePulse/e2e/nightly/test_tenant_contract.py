@@ -204,7 +204,7 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
     record_property("authorization_contract", ", ".join(denies))
 
 
-def test_additional_tenant_resource_reads_require_membership(api, stack, two_sites):
+def test_additional_tenant_resource_reads_require_membership(api, stack, actors, two_sites):
     """Exercise resource reads that need domain-specific nightly arrangements."""
     first, second, ids = two_sites
     paths = api.call("GET", "/api/v1/openapi.json")["paths"]
@@ -235,6 +235,51 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, two_sit
         ("/api/v1/collections/cases/{id}", str(case["id"])),
         ("/api/v1/collections/cases/{id}/evidence-pack", str(case["id"])),
     ))
+
+    platform = api.login(**actors["saas"])
+    company = api.call("POST", "/api/v1/saas/companies", platform.token, body={
+        "name": "Nightly tenant authorization company",
+        "tax_id": "9912384721", "tax_office": "Nightly",
+    })
+    api.call("POST", f"/api/v1/saas/companies/{company['id']}/sites", platform.token, body={
+        "site_id": ids["site"], "monthly_fee": "100.00",
+    })
+    api.call("POST", f"/api/v1/saas/companies/{company['id']}/members", platform.token, body={
+        "user_ref": str(second.user["id"]),
+    })
+    arrangements.append(("/api/v1/portfolio/companies/{id}/summary", str(company["id"])))
+
+    api.create_units(second, "A", unit_number=2)
+    api.register_home_owner(second, "A", 2, "Nightly Payment Owner", "nightly-payment-owner@example.test")
+    stack.sql(
+        "UPDATE users SET password_hash = (SELECT password_hash FROM users WHERE id = "
+        f"{int(second.user['id'])}), must_change_password = FALSE "
+        "WHERE email = 'nightly-payment-owner@example.test' "
+        f"AND site_id = {int(ids['site'])};"
+    )
+    stack.restart_backend()
+    second_owner = api.login("nightly-payment-owner@example.test", actors["manager"]["password"])
+    first_owner = api.login(**actors["homeowner"])
+    second_owner_unit = str(second_owner.user["unit_id"])
+    first_owner_unit = str(first_owner.user["unit_id"])
+    second_intent = api.call(
+        "POST", f"/api/v1/residents/{second_owner_unit}/payment-intents", second_owner.token,
+        body={"amount": "1.00"},
+    )
+    first_intent = api.call(
+        "POST", f"/api/v1/residents/{first_owner_unit}/payment-intents", first_owner.token,
+        body={"amount": "1.00"},
+    )
+    template = "/api/v1/residents/{unit_id}/payment-intents/{intent_id}"
+    assert "get" in paths.get(template, {}), f"GET {template} is missing from generated OpenAPI"
+    path = template.format(unit_id=second_owner_unit, intent_id=second_intent["id"])
+    assert_read_is_site_scoped(api, paths, template, path, second_owner, first_owner)
+    first_status, _ = get_response(
+        api,
+        template.format(unit_id=first_owner_unit, intent_id=first_intent["id"]),
+        first_owner.token,
+    )
+    assert first_status == 200, f"Same-site GET {template} returned {first_status}"
 
     for template, resource_id in arrangements:
         assert "get" in paths.get(template, {}), f"GET {template} is missing from generated OpenAPI"

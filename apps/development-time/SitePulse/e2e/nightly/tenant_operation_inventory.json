@@ -50,9 +50,9 @@
     {
       "method": "GET",
       "path": "/api/v1/accounting/chart",
-      "applicability": "implicit_tenant_scope",
-      "reason": "The operation derives its site or account scope from the authenticated caller.",
-      "evidence": "backend/src/app.rs: handlers::chart_of_accounts (Require(FinanceRead))",
+      "applicability": "outside_scope",
+      "reason": "The account chart is a shared catalog constant, not tenant-specific data.",
+      "evidence": "backend/src/handlers/payments_phase3.rs: handlers::chart_of_accounts (shared catalog)",
       "runtime_tests": []
     },
     {
@@ -1377,7 +1377,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::portfolio_summary (Require(PortfolioRead))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1587,7 +1589,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameters unit_id, intent_id.",
       "evidence": "backend/src/app.rs: handlers::get_payment_intent (Require(UnitPay))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
