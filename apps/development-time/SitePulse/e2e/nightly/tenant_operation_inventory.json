@@ -299,7 +299,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::get_meeting (Require(GovernanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -665,7 +667,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::get_case (Require(FinanceRead))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -681,7 +685,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::evidence_pack (Require(FinanceRead))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -780,7 +786,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter due_id.",
       "evidence": "backend/src/app.rs: handlers::dunning_notice_letter (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -840,7 +848,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::get_heat_period (Require(FinanceRead))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -864,7 +874,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::generate_unit_invite_link (Require(UnitInviteCoResident))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1317,7 +1329,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::rent_deduction_certificate (Require(UnitRead))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -1467,7 +1481,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::autopay_overview (Require(UnitPay))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",

@@ -13,7 +13,9 @@ import pytest
 # Static, reviewed cases with a known resource type and a positive same-site
 # control. Validate each route against the server's generated OpenAPI contract.
 READ_CASES = (
+    ("/api/v1/home-residents/invite-link/{unit_id}", "unit_id", "unit", False),
     ("/api/v1/home-residents/members/{unit_id}", "unit_id", "unit", False),
+    ("/api/v1/residents/{unit_id}/autopay", "unit_id", "unit", False),
     ("/api/v1/residents/{unit_id}/dashboard", "unit_id", "unit", False),
     ("/api/v1/residents/{unit_id}/disputes", "unit_id", "unit", False),
     ("/api/v1/residents/{unit_id}/matching-criteria", "unit_id", "unit", False),
@@ -200,6 +202,44 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         assert_read_is_site_scoped(api, paths, template, f"{template}?{site_query}", second, first)
         denies.append(template)
     record_property("authorization_contract", ", ".join(denies))
+
+
+def test_additional_tenant_resource_reads_require_membership(api, stack, two_sites):
+    """Exercise resource reads that need domain-specific nightly arrangements."""
+    first, second, ids = two_sites
+    paths = api.call("GET", "/api/v1/openapi.json")["paths"]
+
+    meeting = api.call("POST", "/api/v1/assembly/meetings", second.token, body={
+        "scheduled_at": "2026-11-20T10:00:00Z",
+        "location": "Nightly tenant authorization meeting",
+        "agenda": [{"title": "Authorization contract"}],
+    })
+    heat_period = api.call("POST", "/api/v1/heat-share/periods", second.token, body={
+        "label": "Nightly tenant authorization heat period",
+        "period_start": "2026-10-01", "period_end": "2026-10-31",
+        "total_cost": "104.29", "due_date": "2026-11-15",
+    })
+    arrangements = [
+        ("/api/v1/assembly/meetings/{id}", str(meeting["id"])),
+        ("/api/v1/heat-share/periods/{id}", str(heat_period["id"])),
+        ("/api/v1/payments/receipts/{id}/rent-deduction-certificate", str(ids["receipt"])),
+    ]
+
+    due_id, _ = arrange_open_due(api, stack, ids)
+    arrangements.append(("/api/v1/dunning/notice-letter/{due_id}", due_id))
+    case = api.call("POST", "/api/v1/collections/cases", second.token, body={
+        "unit_id": str(ids["unit"]), "debtor_type": "OWNER", "due_ids": [due_id],
+        "note": "Nightly tenant authorization collection case",
+    })
+    arrangements.extend((
+        ("/api/v1/collections/cases/{id}", str(case["id"])),
+        ("/api/v1/collections/cases/{id}/evidence-pack", str(case["id"])),
+    ))
+
+    for template, resource_id in arrangements:
+        assert "get" in paths.get(template, {}), f"GET {template} is missing from generated OpenAPI"
+        path = template.format(id=resource_id, due_id=resource_id)
+        assert_read_is_site_scoped(api, paths, template, path, second, first)
 
 
 def field_values(document, field: str) -> set[str]:
