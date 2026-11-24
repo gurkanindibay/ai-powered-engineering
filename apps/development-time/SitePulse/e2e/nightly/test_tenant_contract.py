@@ -112,9 +112,9 @@ IMPLICIT_READ_CASES = {
 # second-site data to distinguish. All tenant-specific rows accept managers.
 
 
-def get_response(api, path: str, token: str) -> tuple[int, bytes]:
-    """Keep receipt PDFs binary so the owner control can verify the document."""
-    request = Request(api.base + path, headers={"Authorization": f"Bearer {token}"})
+def get_response(api, path: str, token: str, *, method: str = "GET") -> tuple[int, bytes]:
+    """Return raw responses for JSON and binary API routes, including POST controls."""
+    request = Request(api.base + path, headers={"Authorization": f"Bearer {token}"}, method=method)
     try:
         with urlopen(request, timeout=30) as response:
             return response.status, response.read()
@@ -192,6 +192,13 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         path = template.format(**{parameter: ids[resource]})
         owner_path = path + ("?" + urlencode({"site_id": ids["site"]}) if include_site else "")
         assert_read_is_site_scoped(api, paths, template, owner_path, second, first)
+        if template == "/api/v1/units/{id}/virtual-iban":
+            owner_post_status, _ = get_response(api, path, second.token, method="POST")
+            assert owner_post_status == 200, f"Same-site POST {template} returned {owner_post_status}"
+            foreign_post_status, _ = get_response(api, path, first.token, method="POST")
+            assert foreign_post_status in {403, 404}, (
+                f"Foreign POST {template} returned {foreign_post_status}"
+            )
         if include_site:
             caller_path = path + "?" + urlencode({"site_id": first.user["site_id"]})
             caller_status, _ = get_response(api, caller_path, first.token)
