@@ -223,7 +223,9 @@
       "applicability": "tenant_reference",
       "reason": "RequestAdjustmentRequest supplies a liability ID.",
       "evidence": "backend/src/app.rs: handlers::request_adjustment (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -285,7 +287,9 @@
       "applicability": "tenant_reference",
       "reason": "RecordDecisionRequest can link a site budget by ID.",
       "evidence": "backend/src/app.rs: handlers::record_decision (Require(GovernanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -687,7 +691,9 @@
       "applicability": "tenant_reference",
       "reason": "OpenCaseRequest supplies a unit and liability IDs.",
       "evidence": "backend/src/app.rs: handlers::open_case (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
