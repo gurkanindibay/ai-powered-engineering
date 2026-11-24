@@ -46,6 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import feature_traceability as ft  # noqa: E402
 import product_status as ps  # noqa: E402
 import ci_suite_collection as sc  # noqa: E402
+import ci_coverage_report as cov  # noqa: E402
 
 
 def junit_totals(files: list[Path]) -> dict:
@@ -195,7 +196,7 @@ def _public_inventory(suites: object, gates: object, cases: object) -> dict:
             "unmapped_cases": [case for case in public_cases if not case.get("scenario_ids")]}
 
 
-def public_report_from_inventory(inventory: dict) -> dict:
+def public_report_from_inventory(inventory: dict, coverage: dict | None = None) -> dict:
     """Translate the internal collection into Pages schema 1 using public fields only."""
     status_map = {
         "passed": "PASS", "collected": "PASS", "success": "PASS", "pass": "PASS",
@@ -259,7 +260,10 @@ def public_report_from_inventory(inventory: dict) -> dict:
             if len(scenario_ids) == 1:
                 public_case["scenario_id"] = scenario_ids[0]
         cases.append(public_case)
-    return {"schema": 1, "gates": gates, "cases": cases}
+    report = {"schema": 1, "gates": gates, "cases": cases}
+    if coverage is not None:
+        report["coverage"] = coverage
+    return report
 
 
 def collect_inventory(shards: Path, records: list[dict] | None = None,
@@ -386,7 +390,8 @@ def attach_outline_examples(report: dict, records: list[dict]) -> None:
 def build(shards: Path, out: Path, task: str | None, history: Path,
           evidence_out: Path | None = None, run_id: str | None = None, attempt: str | None = None,
           suite_artifacts: Path | None = None, producer_status: dict[str, str] | None = None,
-          commit_override: str | None = None) -> dict:
+          commit_override: str | None = None, coverage_base_ref: str | None = None,
+          require_diff_cover: bool = False) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     meta = ft.run_metadata(trigger="ci", task=task)
     collection = sc.collect(suite_artifacts or Path("."), shards,
@@ -467,6 +472,22 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
     clean_junit = {k: v for k, v in junit.items() if k != "unparseable"}
     clean_junit["unparseable"] = [Path(p).name for p in junit.get("unparseable", [])]
 
+    coverage = None
+    cov_root = suite_artifacts if suite_artifacts and suite_artifacts.is_dir() else None
+    has_cov_files = bool(cov_root and any(
+        cov_root.rglob(pat) for pat in ("rust-summary.json", "rust.lcov", "flutter.lcov", "lcov.info", "python.json", "python.lcov")
+    ))
+    if coverage_base_ref or has_cov_files:
+        coverage = cov.build_coverage(
+            cov_root or shards,
+            out,
+            base_ref=coverage_base_ref,
+            repo_root=Path(__file__).resolve().parents[4],
+            require_diff_cover=require_diff_cover,
+        )
+        with (out / "test-report.md").open("a", encoding="utf-8") as handle:
+            handle.write("\n" + (out / "coverage-report.md").read_text(encoding="utf-8"))
+
     summary = {"run_id": meta["run_id"], "actions_run_id": str(run_id or ""),
                "attempt": str(attempt or ""), "task": meta["task"], "commit": commit_override or meta["commit"],
                "shards": len(execution_files), "executions": count, "junit": clean_junit,
@@ -478,9 +499,13 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
                "scenarios_covered": f"{run['executed']}/{run['automated']}" if run else "0/0",
                "inventory": {"suites": len(inventory.get("suites", [])),
                              "unmapped_cases": len(inventory.get("unmapped_cases", []))}}
+    if coverage is not None:
+        summary["coverage"] = coverage
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     (out / "public-report.json").write_text(
-        json.dumps(public_report_from_inventory(inventory), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        json.dumps(public_report_from_inventory(inventory, coverage=coverage), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history(), inventory=inventory)
     (out / "product-status.json").write_text(json.dumps(snapshot, indent=1) + "\n", encoding="utf-8")
     (out / "product-status.html").write_text(
@@ -489,7 +514,7 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
     return summary
 
 
-def step_summary(summary: dict, markdown: str) -> str:
+def step_summary(summary: dict, markdown: str, coverage_md: str = "") -> str:
     j = summary["junit"]
     counts = ", ".join(f"{n} {s}" for s, n in sorted(summary["scenario_counts"].items())) or "none"
     head = ["## E2E test report", "",
@@ -497,8 +522,10 @@ def step_summary(summary: dict, markdown: str) -> str:
             f"| {j['tests']} | {j['passed']} | {j['failures']} | {j['errors']} | {j['skipped']} | "
             f"{j['seconds']:.0f}s | {summary['shards']} |", "",
             f"**Result:** {summary['status']} ({counts}); scenarios covered: {summary['scenarios_covered']}. "
-            "Full report and HTML dashboard: artifact `e2e-test-report`.", "",
-            "<details><summary>Executed tests</summary>", ""]
+            "Full report and HTML dashboard: artifact `e2e-test-report`.", ""]
+    if coverage_md:
+        head.extend([coverage_md.rstrip(), ""])
+    head.extend(["<details><summary>Executed tests</summary>", ""])
     body = re.sub(r"(?m)^(#+) ", lambda m: "##" + m.group(1) + " ", markdown)
     return "\n".join(head) + "\n" + body + "\n</details>\n"
 
@@ -517,6 +544,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--suite-artifacts", type=Path, help="downloaded per-suite producer artifacts")
     parser.add_argument("--commit", help="CI commit SHA for report identity")
     parser.add_argument("--producer-status", help="JSON object mapping lint/rust/flutter/e2e to job state")
+    parser.add_argument("--coverage-base-ref", default=os.environ.get("SITEPULSE_COVERAGE_BASE_REF"),
+                        help="base git ref for diff-cover changed-lines coverage")
+    parser.add_argument("--require-diff-cover", action="store_true",
+                        help="fail if diff-cover is not installed when --coverage-base-ref is set")
     parser.add_argument("--no-summary", action="store_true", help="do not append to $GITHUB_STEP_SUMMARY")
     parser.add_argument("--json", action="store_true", help="print the stats as JSON")
     args = parser.parse_args(argv)
@@ -531,11 +562,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"invalid --producer-status JSON: {exc}")
     summary = build(args.shards, args.out, args.task, args.history,
                     args.evidence_out, args.run_id, args.attempt,
-                    args.suite_artifacts, producer_status, args.commit)
+                    args.suite_artifacts, producer_status, args.commit,
+                    args.coverage_base_ref, args.require_diff_cover)
     target = os.environ.get("GITHUB_STEP_SUMMARY")
     if target and not args.no_summary:
+        cov_md_path = args.out / "coverage-report.md"
+        cov_md = cov_md_path.read_text(encoding="utf-8") if cov_md_path.is_file() else ""
         with open(target, "a", encoding="utf-8") as handle:
-            handle.write(step_summary(summary, (args.out / "test-report.md").read_text(encoding="utf-8")))
+            handle.write(step_summary(summary, (args.out / "test-report.md").read_text(encoding="utf-8"), cov_md))
     if args.json:
         print(json.dumps(summary, indent=2))
     else:
