@@ -147,8 +147,8 @@ def assert_read_is_site_scoped(api, paths, template, path, owner, foreign):
 def assert_write_is_site_scoped(
     api, path: str, owner, foreign, body, *, success: set[int], method: str = "POST",
 ) -> None:
-    owner_status, _ = get_response(api, path, owner.token, method=method, body=body)
-    assert owner_status in success, f"Same-site {method} {path} returned {owner_status}"
+    owner_status, owner_body = get_response(api, path, owner.token, method=method, body=body)
+    assert owner_status in success, f"Same-site {method} {path} returned {owner_status}: {owner_body[:300]}"
     foreign_status, _ = get_response(api, path, foreign.token, method=method, body=body)
     assert foreign_status in {403, 404}, f"Foreign {method} {path} returned {foreign_status}"
 
@@ -204,7 +204,7 @@ def two_sites(api, actors):
     )
     project = api.create_capital_project(
         second, "Nightly authorization project", Decimal("60.00"), basis="EQUAL_PER_UNIT",
-        first_due=(date.today() - timedelta(days=1)).isoformat(),
+        first_due="2026-09-15",
     )
     people = api.call("GET", f"/api/v1/site-admin/persons?site_id={site_id}", second.token)
     person = next(item["person_id"] for item in people["items"] if item["full_name"] == "Nightly Owner")
@@ -240,7 +240,7 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
             member_body = {
                 "person": {"kind": "new", "card": {
                     "full_name": "Nightly Additional Resident",
-                    "phone": "+90 532 000 00 00",
+                    "phone": "+90 533 123 45 67",
                     "email": "nightly-additional-resident@example.test",
                 }},
                 "relationship": "OTHER",
@@ -249,7 +249,8 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
                 api, members_path, second.token, method="POST", body=member_body,
             )
             assert owner_member_status == 201, (
-                f"Same-site POST /api/v1/home-residents/members/{{unit_id}} returned {owner_member_status}"
+                f"Same-site POST /api/v1/home-residents/members/{{unit_id}} returned "
+                f"{owner_member_status}: {owner_member_raw[:300]}"
             )
             foreign_member_status, _ = get_response(
                 api, members_path, first.token, method="POST", body=member_body,
@@ -263,7 +264,7 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
             )
             update_body = {
                 "full_name": "Nightly Updated Resident",
-                "phone": "+90 532 000 00 01",
+                "phone": "+90 533 123 45 68",
                 "email": "nightly-additional-resident@example.test",
                 "relationship": "OTHER",
             }
@@ -631,7 +632,7 @@ def test_reconciliation_queue_decisions_are_site_scoped(api, two_sites):
                 f"2026-11-19;TR330006100519786457841326;REF-{marker}-ASSIGN;5.00",
                 f"2026-11-19;TR330006100519786457841326;REF-{marker}-REJECT;6.00",
             )),
-            "format": "CSV",
+            "format": "EXCEL",
         },
     )
     queue = api.call(
@@ -1306,6 +1307,7 @@ def arrange_implicit_read(api, stack, manager, ids, arrangement: str | None) -> 
                AND p.id = {int(ids["period"])}
             RETURNING id;
         """).splitlines()[0]
+        stack.restart_backend()
         api.clock.set_date(as_of)
         post("/payment-plans", {
             "unit_id": unit, "debtor_type": "OWNER", "due_ids": [due], "installment_count": 2,
@@ -1330,8 +1332,16 @@ def test_implicit_reads_follow_manager_site(api, stack, two_sites, path, arrange
         overrides = api.call("GET", "/api/v1/site-admin/seller-pays-overrides", second.token)
         override = next(row for row in overrides if row["reason"] == marker)
         override_path = f"/api/v1/site-admin/seller-pays-overrides/{override['id']}/decide"
+        reviewer_email = f"nightly-seller-reviewer-{ids['site']}@example.test"
+        stack.sql(
+            "INSERT INTO users (site_id, email, password_hash, role, is_active, must_change_password) "
+            f"SELECT site_id, '{reviewer_email}', password_hash, 'SITE_MANAGER', TRUE, FALSE "
+            f"FROM users WHERE id = {int(second.user['id'])};"
+        )
+        stack.restart_backend()
+        reviewer = api.login(reviewer_email, "Nightly-Manager-2026!")
         assert_write_is_site_scoped(
-            api, override_path, second, first,
+            api, override_path, reviewer, first,
             {"approve": False, "note": "Nightly scoped rejection"}, success={200},
         )
         create_path = f"/api/v1/site-admin/units/{ids['unit']}/seller-pays-overrides"
