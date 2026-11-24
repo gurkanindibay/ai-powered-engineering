@@ -3,6 +3,7 @@
 A record is produced for
 * every Gherkin scenario run through pytest-bdd (binding "gherkin", with one entry per step),
 * every plain pytest test that declares `@pytest.mark.covers("SC-xx-yy-nn")` (binding "linked"), and
+* suite wrapper scenario associations (binding "suite"), and
 * every other test (binding "unlinked": no scenario yet, attributed to its epic through its GUI id).
 
 Every test also gets an `epic_NN` marker (from its `GUI-NN-…` id or `@EPIC-NN` tag), which is what
@@ -83,8 +84,8 @@ def epics_of(item) -> list[str]:
     """
     found = {f"EPIC-{m.group(1)}" for marker in item.iter_markers("gui_id") if marker.args
              for m in [EPIC_OF_GUI.match(str(marker.args[0]))] if m}
-    found |= {f"EPIC-{m.group(1)}" for marker in item.iter_markers("covers") for arg in marker.args
-              for m in [SCENARIO_ID.match(str(arg))] if m}
+    found |= {f"EPIC-{m.group(1)}" for kind in ("covers", "suite_covers")
+              for marker in item.iter_markers(kind) for arg in marker.args for m in [SCENARIO_ID.match(str(arg))] if m}
     scenario = getattr(getattr(item, "obj", None), "__scenario__", None)
     if scenario is not None:
         found |= {t for t in _tags(scenario) if re.fullmatch(r"EPIC-\d{2}", t)}
@@ -186,9 +187,11 @@ def _targets(item) -> list[dict]:
                 t["example_id"] = f"{sid}[{outline['example_row']}]"
             targets.append(t)
         return targets
-    ids = sorted({str(m.args[0]) for m in item.iter_markers("covers") if m.args})
-    linked = [{"scenario": sid, "name": item.name, "binding": "linked", "layer": "gui", "feature_file": ""}
-              for sid in ids if SCENARIO_ID.match(sid)]
+    linked = []
+    for marker, binding in (("covers", "linked"), ("suite_covers", "suite")):
+        ids = sorted({str(m.args[0]) for m in item.iter_markers(marker) if m.args})
+        linked.extend({"scenario": sid, "name": item.name, "binding": binding, "layer": "gui", "feature_file": ""}
+                      for sid in ids if SCENARIO_ID.match(sid))
     return linked or [{"scenario": "", "name": item.name, "binding": "unlinked", "layer": "gui", "feature_file": ""}]
 
 

@@ -1,5 +1,6 @@
 """EPIC-06 Identity & authentication (GUI_TEST_PLAN.md §3)."""
 import pytest
+from playwright.sync_api import expect
 
 from pages import ManagerCockpit, ResidentHome, SaasAdmin, Shell
 from support.api import ApiError
@@ -13,7 +14,7 @@ from support.flutter import by_id, input_value, nav_tab_count
 @pytest.mark.gui_id("GUI-06-01")
 def test_manager_login_reaches_cockpit(login_as, page):
     login_as("manager")
-    ManagerCockpit(page).wait()
+    expect(by_id(page, "btn_open_unified_dues_center")).to_be_visible(timeout=20_000)
 
 
 @pytest.mark.smoke
@@ -22,7 +23,7 @@ def test_manager_login_reaches_cockpit(login_as, page):
 @pytest.mark.gui_id("GUI-06-02")
 def test_homeowner_login_reaches_dashboard(login_as, page):
     login_as("homeowner")
-    ResidentHome(page).wait()
+    expect(by_id(page, "hero_balance_amount")).to_be_visible(timeout=20_000)
 
 
 @pytest.mark.smoke

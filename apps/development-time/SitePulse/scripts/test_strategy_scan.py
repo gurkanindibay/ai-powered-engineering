@@ -21,28 +21,41 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 DEFAULT_REPO = Path(__file__).resolve().parents[4]
+WRAPPER = "e2e/tests/test_linked_backend_suites.py"
+API_CHECK = "scripts/api_system_check.py"
+WEAK_FLAGS = {
+    "no-assertion", "weak-assertions-only", "only-unwrap (passes if nothing panics)",
+    "wait-only (no explicit assertion)",
+}
+RUNS_IN_CI = {"ci", "ci-db-gate", "conditional"}
 
 
 
-
-def scan(repo: Path) -> dict:
-    """Return {"tests": [...], "scenarios": [...], "db_gate_files": [...], "opt_in": [...]}."""
+def inventory(repo: Path, sitepulse: Path | None = None) -> dict:
+    """Discover named tests, their source ranges and their CI selections."""
     REPO = repo.resolve()
-    SP = REPO / "apps/development-time/SitePulse"
-    if str(SP / "scripts") not in sys.path:
-        sys.path.insert(0, str(SP / "scripts"))
-    import feature_traceability as ft  # noqa: E402
+    SP = sitepulse or REPO / "apps/development-time/SitePulse"
     tests = []
 
     def rel(p):
         return p.relative_to(REPO).as_posix()
 
     # ---- CI facts (from harness/loop/verification_gates.py) -------------------------------------
-    GATES_SRC = (SP / "harness/loop/verification_gates.py").read_text()
-    db_block = GATES_SRC.split('"rust-db-test"', 1)[1].split('"flutter-analyze"', 1)[0]
+    gates = SP / "harness/loop/verification_gates.py"
+    GATES_SRC = gates.read_text() if gates.exists() else ""
+    db_block = GATES_SRC.partition('"rust-db-test"')[2].partition('"flutter-analyze"')[0]
     DB_GATE_FILES = set(re.findall(r'"--test", "(\w+)"', db_block.split("--ignored")[0]))
-    FEATURE_GATED = {(f, t) for f, ts in re.findall(r'"--features", "(\w+)",((?:\s*"--test", "\w+",?)+)', GATES_SRC) for t in re.findall(r'"--test", "(\w+)"', ts)}
-    WORKFLOWS = "\n".join(p.read_text(errors="replace") for p in (REPO / ".github/workflows").glob("*.yml"))
+    FEATURE_GATED = {
+        (feature, target)
+        for feature, commands in re.findall(
+            r'"--features", "([\w-]+)",((?:\s*"--test", "\w+",?)+)', GATES_SRC
+        )
+        for target in re.findall(r'"--test", "(\w+)"', commands)
+    }
+    workflows = REPO / ".github/workflows"
+    WORKFLOWS = "\n".join(p.read_text(errors="replace") for p in workflows.glob("*.yml"))
+    nightly_workflow = workflows / "sitepulse-nightly.yml"
+    nightly = nightly_workflow.read_text() if nightly_workflow.exists() else ""
     OPT_IN = set(re.findall(r'"--test", "\w+",\s*"(\w+)", "--", "--exact"', db_block))
 
 
@@ -58,9 +71,7 @@ def scan(repo: Path) -> dict:
                     continue
                 if c == in_str:
                     in_str = None
-            elif c in "\"'" and not (c == "'" and open_c == "{"):  # Rust lifetimes use '
-                in_str = c
-            elif c == '"' :
+            elif c == '"' or (c == "'" and open_c != "{"):
                 in_str = c
             elif c == open_c:
                 depth += 1
@@ -83,28 +94,41 @@ def scan(repo: Path) -> dict:
 
 
     def rust_scan(path):
+        attributes_to_function = re.compile(
+            r"\s*(?:(?:#\[[^\]]*\]|//[^\n]*)\s*)*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)"
+        )
         text = path.read_text(errors="replace")
-        file_cfg = re.search(r'#!\[cfg\(feature\s*=\s*"(\w+)"\)\]', text)
+        lines = text.splitlines(keepends=True)
+        file_cfg = re.search(r'#!\[cfg\(feature\s*=\s*"([\w-]+)"\)\]', text)
         for m in re.finditer(r"#\[(tokio::test|test|sqlx::test|actix_rt::test)[^\]]*\]", text):
-            # attribute block: go back to collect sibling attrs/comments, forward to fn
-            head_start = text.rfind("\n\n", 0, m.start())
-            fn = re.compile(r"(?:pub\s+)?(?:async\s+)?fn\s+(\w+)").search(text, m.end())
+            # Sibling attributes can precede or follow the test attribute.
+            start_line = text.count("\n", 0, m.start()) + 1
+            for previous in reversed(lines[:start_line - 1]):
+                if not re.match(r"^\s*(?:#\[|//)", previous):
+                    break
+                start_line -= 1
+            head_start = sum(map(len, lines[:start_line - 1]))
+            fn = attributes_to_function.match(text, m.end())
             if not fn:
                 continue
-            attrs = text[head_start:fn.start()] + text[m.start():fn.start()]
+            name_start = fn.start(1)
+            attrs = text[head_start:name_start]
+            cfg = file_cfg or re.search(r'#\[cfg\(feature\s*=\s*"([\w-]+)"\)\]', attrs)
             body_open = text.find("{", fn.end())
             body_close = match_brace(text, body_open)
             body = text[body_open:body_close + 1]
-            line = text.count("\n", 0, fn.start()) + 1
+            line = text.count("\n", 0, name_start) + 1
             ignore = re.search(r'#\[ignore(?:\s*=\s*"([^"]*)")?\]', attrs)
             should_panic = re.search(r"#\[should_panic(\([^)]*\))?\]", attrs)
             name = fn.group(1)
             stem = path.stem
             in_src = "/src/" in rel(path)
-            if file_cfg and (file_cfg.group(1), stem) in FEATURE_GATED:
-                run, run_note = "ci", f"rust-test with --features {file_cfg.group(1)}"
-            elif file_cfg:
-                run = "never-in-ci" ; run_note = f"file compiled only with --features {file_cfg.group(1)}; no CI gate passes it"
+            if cfg and (cfg.group(1), stem) in FEATURE_GATED and not ignore:
+                run, run_note = "ci", f"rust-test with --features {cfg.group(1)}"
+            elif cfg and (cfg.group(1), stem) not in FEATURE_GATED:
+                run, run_note = "never-in-ci", f"requires --features {cfg.group(1)}; no CI gate passes it"
+            elif cfg:
+                run, run_note = "never-in-ci", f"#[ignore]; no CI gate runs the ignored {cfg.group(1)} cases"
             elif ignore:
                 if stem in DB_GATE_FILES:
                     run, run_note = "ci-db-gate", "#[ignore], run by rust-db-test --ignored"
@@ -112,7 +136,11 @@ def scan(repo: Path) -> dict:
                     run, run_note = "never-in-ci", f"#[ignore] and {stem}.rs is not in the rust-db-test --test list"
             else:
                 run, run_note = "ci", "rust-test"
-            env_guard = re.search(r'env::var\("(SITEPULSE_\w+)"\)[^\n]*\n\s*(?:println|eprintln)!\("SKIP', body)
+            env_guard = re.search(
+                r'env::var(?:_os)?\(\s*"([A-Z][A-Z0-9_]*)"\s*\)'
+                r'[^;{}]*(?:\{[^{};]*(?:println!\("SKIP|eprintln!\("SKIP|return\s*;))',
+                body,
+            )
             if env_guard:
                 if name in OPT_IN:
                     run, run_note = "ci-db-gate", f"env-guarded ({env_guard.group(1)}); opt-in command in rust-db-test; reports PASS without running in rust-test"
@@ -121,13 +149,13 @@ def scan(repo: Path) -> dict:
             asserts = RS_ASSERT.findall(body)
             tests.append(dict(
                 lang="rust", file=rel(path), line=line, name=name, in_src=in_src,
-                markers=[x for x in [ignore and f"ignore: {ignore.group(1) or ''}".strip(), should_panic and ("should_panic" + (should_panic.group(1) or "")), file_cfg and f"cfg(feature={file_cfg.group(1)})"] if x],
+                markers=[x for x in [ignore and f"ignore: {ignore.group(1) or ''}".strip(), should_panic and ("should_panic" + (should_panic.group(1) or "")), cfg and f"cfg(feature={cfg.group(1)})"] if x],
                 run=run, run_note=run_note,
                 n_assert=len(asserts), n_unwrap=len(re.findall(r"\.(unwrap|expect)\(", body)),
                 weak=len(RS_WEAK.findall(body)),
                 sleep=bool(SLEEP.search(body)), swallow=len(SWALLOW_RS.findall(body)),
                 should_panic_unchecked=bool(should_panic and "expected" not in (should_panic.group(1) or "")),
-                loc=body.count("\n") + 1, end=line + body.count("\n"),
+                loc=body.count("\n") + 1, end=text.count("\n", 0, body_close) + 1, deco_line=start_line,
             ))
 
 
@@ -184,10 +212,20 @@ def scan(repo: Path) -> dict:
             tree = ast.parse(text)
         except SyntaxError:
             return
+        lines = text.splitlines()
+        registered_checks = {}
+        if suite == "api-system":
+            for statement in tree.body:
+                if (isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name)
+                        and statement.target.id == "CHECK_FUNCS" and isinstance(statement.value, ast.Dict)):
+                    registered_checks = {
+                        value.id: key.value for key, value in zip(statement.value.keys, statement.value.values)
+                        if isinstance(key, ast.Constant) and isinstance(key.value, str) and isinstance(value, ast.Name)
+                    }
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            if not node.name.startswith("test") and not (suite == "api-system" and node.name.startswith("check_")):
+            if not node.name.startswith("test") and not (suite == "api-system" and node.name in registered_checks):
                 continue
             decos = [ast.unparse(d) for d in node.decorator_list]
             parent_decos = []
@@ -203,19 +241,31 @@ def scan(repo: Path) -> dict:
             weak = sum(py_weak(a) for a in asserts)
             waits = [n for n in ast.walk(node) if isinstance(n, ast.Call) and re.match(r"^(wait|wait_for\w*|run_suite)$", py_call_name(n) or "")]
             swallow = sum(1 for n in ast.walk(node) if isinstance(n, ast.ExceptHandler) and all(isinstance(s, ast.Pass) for s in n.body))
-            early_return = any(isinstance(s, ast.If) and any(isinstance(b, ast.Return) for b in s.body) and re.search(r"environ|getenv|which|exists\(", ast.unparse(s.test)) for s in node.body[:4])
+            env_guards = [(statement, ast.unparse(statement.test)) for statement in node.body
+                          if isinstance(statement, ast.If)
+                          and re.search(r"\b(?:environ|getenv|which|exists)\b", ast.unparse(statement.test))]
+            early_return = any(any(isinstance(branch, ast.Return) for branch in guard.body)
+                               for guard, _ in env_guards)
             cond_only = bool(asserts) and all(any(a in ast.walk(i) for i in ast.walk(node) if isinstance(i, ast.If)) for a in asserts) and not calls
-            src = ast.get_source_segment(text, node) or ""
+            src = "\n".join(lines[node.lineno - 1:node.end_lineno])
             run, note = "ci", suite
+            if suite == "nightly-e2e" and path.relative_to(SP / "e2e").as_posix() not in nightly:
+                run, note = "never-in-ci", "file is not selected in sitepulse-nightly.yml"
             if any("xfail" in d or "expectedFailure" in d for d in all_decos):
                 run, note = "xfail", suite
             elif any(re.search(r"\bskip\b|skip\(|skipTest", d) for d in all_decos):
                 run, note = "skipped", suite
-            elif any("skipIf" in d or "skipUnless" in d for d in all_decos):
+            elif any("skipIf" in d or "skipUnless" in d or "skipif" in d for d in all_decos):
                 run, note = "conditional", suite + " (" + "; ".join(d for d in all_decos if "skip" in d)[:160] + ")"
-            env_skip = re.search(r'if not os\.environ\.get\("(\w+)"\):\s*\n\s*pytest\.skip', src)
-            if env_skip and env_skip.group(1) not in WORKFLOWS:
-                run, note = "silent-skip", suite + f" (pytest.skip unless {env_skip.group(1)} is set; no workflow sets it)"
+            for guard, condition in env_guards:
+                if not any(isinstance(node, ast.Call) and py_call_name(node) in {"skip", "skipTest"}
+                           for branch in guard.body for node in ast.walk(branch)):
+                    continue
+                variables = set(re.findall(r"""['"]([A-Z][A-Z0-9_]*)['"]""", condition))
+                missing = sorted(name for name in variables if not re.search(
+                    rf"(?m)^\s*(?:{re.escape(name)}:|(?:export\s+)?{re.escape(name)}=)", WORKFLOWS))
+                if missing:
+                    run, note = "silent-skip", f"{suite} skips on missing environment: {', '.join(missing)}"
             if early_return:
                 run, note = "silent-pass", suite + " (returns early on missing env/tool: reported PASS)"
             tests.append(dict(
@@ -241,6 +291,8 @@ def scan(repo: Path) -> dict:
         py_scan(p, "harness-selftest")
     for p in sorted((SP / "e2e/tests").rglob("test_*.py")):
         py_scan(p, "gui-e2e")
+    for p in sorted((SP / "e2e/nightly").rglob("test_*.py")):
+        py_scan(p, "nightly-e2e")
     for p in sorted((REPO / "tests").rglob("test_*.py")):
         py_scan(p, "engineering-harness-ci")
     api_check = SP / "scripts/api_system_check.py"
@@ -252,7 +304,7 @@ def scan(repo: Path) -> dict:
     for t in tests:
         flags = []
         if t["n_assert"] == 0 and t["n_unwrap"] == 0 and t.get("n_wait"):
-            flags.append("wait-only (no explicit assertion)" if "linked_backend_suites" not in t["file"] else "suite-wrapper")
+            flags.append("wait-only (no explicit assertion)" if not t["file"].endswith(WRAPPER) else "suite-wrapper")
         elif t["n_assert"] == 0 and t["n_unwrap"] == 0:
             flags.append("no-assertion")
         elif t["n_assert"] == 0:
@@ -271,84 +323,122 @@ def scan(repo: Path) -> dict:
             flags.append("allow_server_errors")
         t["flags"] = flags
 
-    # ---- scenario join ---------------------------------------------------------------------------
-    cat = ft.load_catalogue(SP)
-    index = defaultdict(list)
-    for t in tests:
-        sp_rel = (REPO / t["file"]).relative_to(SP).as_posix() if str(REPO / t["file"]).startswith(str(SP)) else t["file"]
-        index[(sp_rel, t["name"])].append(t)
-        index[("*", t["name"])].append(t)
+    return dict(tests=tests, db_gate_files=sorted(DB_GATE_FILES), opt_in=sorted(OPT_IN))
 
+
+def resolve_links(sitepulse: Path, repo: Path, links: dict, tests: list[dict]) -> dict:
+    """Resolve declarations using lexical test ranges and immediately attached comments."""
     by_file = defaultdict(list)
-    for t in tests:
-        by_file[(REPO / t["file"]).relative_to(SP).as_posix() if str(REPO / t["file"]).startswith(str(SP)) else t["file"]].append(t)
+    for test in tests:
+        path = repo / test["file"]
+        if path.is_relative_to(sitepulse):
+            by_file[path.relative_to(sitepulse).as_posix()].append(test)
+    source_lines = {}
+    resolved = {}
+    for sid, refs in links.items():
+        resolved[sid] = []
+        for ref in refs:
+            file, line = ref["file"], ref["line"]
+            if file not in source_lines:
+                source_lines[file] = (sitepulse / file).read_text(errors="replace").splitlines()
+            lines = source_lines[file]
+            candidates = by_file[file]
+            inside = [test for test in candidates if test.get("deco_line", test["line"]) <= line <= test["end"]]
+            target = min(inside, key=lambda test: test["end"] - test["line"], default=None)
+            attachment = "enclosing"
+            if target is None:
+                attachment = "next"
+                # The comment must be next to the declaration in the same scope.
+                indent = len(lines[line - 1]) - len(lines[line - 1].lstrip())
+                for test in candidates:
+                    begin = test.get("deco_line", test["line"])
+                    if begin <= line:
+                        continue
+                    head = lines[begin - 1]
+                    if indent != len(head) - len(head.lstrip()):
+                        continue
+                    if all(re.match(r"^\s*(?://|#(?!\[))", part) for part in lines[line:begin - 1]):
+                        target = test
+                        break
+            if file == WRAPPER:
+                kind, problem = "wrapper", "whole-suite wrapper is not a named scenario test"
+            elif file.startswith("scripts/") and (file != API_CHECK or target is None):
+                kind, problem = "script", "script declaration is not a registered CI test case"
+            elif target is None:
+                first = min((test["line"] for test in candidates), default=float("inf"))
+                kind = "file-level" if line < first else "unresolved"
+                problem = "unattached declaration; place it inside or immediately above its named test"
+            elif target["run"] not in RUNS_IN_CI:
+                kind, problem = "test", f'{target["name"]} does not execute in CI: {target["run_note"]}'
+            else:
+                kind, problem = "test", ""
+            resolved[sid].append(dict(ref=ref, kind=kind, test=target, problem=problem,
+                                      attached_by=attachment if target else None))
+    return resolved
 
 
-    def by_line(f, ln):
-        ts = by_file.get(f, [])
-        inside = [t for t in ts if t.get("deco_line", t["line"]) - 1 <= ln <= t["end"]]
-        if inside:
-            return [min(inside, key=lambda t: t["end"] - t["line"])]
-        after = sorted((t for t in ts if 0 < t.get("deco_line", t["line"]) - ln <= 15), key=lambda t: t["line"])
-        return after[:1]
+def scenario_verdict(scenario, links: list[dict]) -> str:
+    """Return the shared static verification classification for one scenario."""
+    if scenario.mode == "pending":
+        return "PENDING"
+    if scenario.mode == "gherkin":
+        return "GHERKIN"
+    if not links:
+        return "NO-LINK"
+    valid = [link for link in links if not link["problem"]]
+    if any(not set(link["test"]["flags"]) & WEAK_FLAGS for link in valid):
+        return "OK"
+    if valid:
+        return "LINKED-WEAK-ONLY"
+    kinds = {link["kind"] for link in links}
+    if len(kinds) != 1:
+        return "NO-VALID-LINK"
+    return {"file-level": "FILE-LEVEL-ONLY", "wrapper": "COARSE-ONLY", "script": "SCRIPT-ONLY",
+            "test": "LINKED-BUT-NEVER-RUN"}.get(kinds.pop(), "NO-VALID-LINK")
 
 
-    WRAPPER = "e2e/tests/test_linked_backend_suites.py"
+def verified_count(verdicts) -> int:
+    return sum(verdict in ("OK", "GHERKIN") for verdict in verdicts)
+
+
+def scan(repo: Path) -> dict:
+    """Return the test inventory and its links to the scenario catalogue."""
+    repo = repo.resolve()
+    sitepulse = repo / "apps/development-time/SitePulse"
+    scripts = str(Path(__file__).resolve().parent)
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import feature_traceability as ft
+
+    result = inventory(repo, sitepulse)
+    tests = result["tests"]
+    catalogue = ft.load_catalogue(sitepulse)
+    resolved = resolve_links(sitepulse, repo, catalogue.links, tests)
     scen_rows = []
     test_scen_count = Counter()
-    for s in cat.scenarios:
-        refs = cat.links.get(s.id, [])
-        resolved = []
-        for r in refs:
-            cand = (index.get((r["file"], r["test"])) if r["test"] else None) or by_line(r["file"], r["line"])
-            if not cand and r["file"].startswith("scripts/"):
-                resolved.append(dict(ref=r, kind="script", test=None))
-                continue
-            if not cand:
-                first = min((t["line"] for t in by_file.get(r["file"], [])), default=10**9)
-                resolved.append(dict(ref=r, kind="file-level" if r["line"] < first else "unresolved", test=None))
-                continue
-            t = cand[0]
-            test_scen_count[(t["file"], t["name"])] += 1
-            resolved.append(dict(ref=r, kind="wrapper" if t["file"].endswith(WRAPPER) else "test", test=t,
-                                 attached_by="name" if r["test"] else "line"))
-        run_ok = [x for x in resolved if x["kind"] in ("script", "file-level") or (x["test"] and x["test"]["run"] in ("ci", "ci-db-gate", "conditional"))]  # silent-skip / never-in-ci do not count
-        WEAKF = {"no-assertion", "weak-assertions-only", "only-unwrap (passes if nothing panics)", "wait-only (no explicit assertion)"}
-        precise = [x for x in run_ok if x["kind"] == "test"]
-        strong = [x for x in precise if not set(x["test"]["flags"]) & WEAKF]
-        if s.mode == "pending":
-            verdict = "PENDING"
-        elif s.mode == "gherkin":
-            verdict = "GHERKIN"
-        elif not refs:
-            verdict = "NO-LINK"
-        elif not run_ok:
-            verdict = "LINKED-BUT-NEVER-RUN"
-        elif not precise:
-            kinds = {x["kind"] for x in run_ok}
-            verdict = "FILE-LEVEL-ONLY" if kinds == {"file-level"} else "SCRIPT-ONLY" if kinds == {"script"} else "COARSE-ONLY"
-        elif not strong:
-            verdict = "LINKED-WEAK-ONLY"
-        else:
-            verdict = "OK"
-        layer_mismatch = False
-        if s.layer == "gui" and s.mode == "linked":
-            layer_mismatch = not any(x["test"] and x["test"]["file"].endswith(".py") and "/e2e/" in x["test"]["file"] for x in resolved) and not any(x["test"] and x["test"]["lang"] == "dart" for x in resolved)
+    for s in catalogue.scenarios:
+        links = resolved.get(s.id, [])
+        linked_tests = [link["test"] for link in links if link["test"]]
+        for test in linked_tests:
+            test_scen_count[(test["file"], test["name"])] += 1
+        layer_mismatch = s.layer == "gui" and s.mode == "linked" and not any(
+            test["lang"] == "dart" or (test["lang"] == "python" and "/e2e/" in test["file"])
+            for test in linked_tests
+        )
         scen_rows.append(dict(
             id=s.id, name=s.name, mode=s.mode, layer=s.layer, file=s.file, line=s.line,
             priority=next((p for p in ("smoke", "core", "edge") if p in s.all_tags), ""),
-            pending_note=s.pending_note, verdict=verdict, layer_mismatch=layer_mismatch,
-            unresolved=[x["ref"] for x in resolved if x["kind"] == "unresolved"],
-            links=[dict(file=x["ref"]["file"], line=x["ref"]["line"], test=x["ref"]["test"],
-                        run=(x["test"] or {}).get("run", x["kind"]), flags=(x["test"] or {}).get("flags", []),
-                        kind=x["kind"], resolved_test=(x["test"] or {}).get("name"), attached_by=x.get("attached_by"))
-                   for x in resolved],
+            pending_note=s.pending_note, verdict=scenario_verdict(s, links), layer_mismatch=layer_mismatch,
+            unresolved=[link["ref"] for link in links if link["kind"] == "unresolved"],
+            links=[dict(file=link["ref"]["file"], line=link["ref"]["line"], test=link["ref"]["test"],
+                        run=(link["test"] or {}).get("run", link["kind"]),
+                        flags=(link["test"] or {}).get("flags", []), kind=link["kind"],
+                        resolved_test=(link["test"] or {}).get("name"), attached_by=link["attached_by"],
+                        problem=link["problem"]) for link in links],
         ))
-
-    for t in tests:
-        t["scenarios_claimed"] = test_scen_count.get((t["file"], t["name"]), 0)
-
-    return dict(tests=tests, scenarios=scen_rows, db_gate_files=sorted(DB_GATE_FILES), opt_in=sorted(OPT_IN))
+    for test in tests:
+        test["scenarios_claimed"] = test_scen_count[(test["file"], test["name"])]
+    return dict(result, scenarios=scen_rows)
 
 
 def summarize(result: dict) -> dict:
@@ -360,6 +450,7 @@ def summarize(result: dict) -> dict:
         "by_run_status": count(f"{t['lang']}:{t['run']}" for t in tests),
         "flags": count(f for t in tests for f in t["flags"]),
         "scenarios": len(scenarios),
+        "verified_scenarios": verified_count(r["verdict"] for r in scenarios),
         "verdicts": count(r["verdict"] for r in scenarios),
         "link_kinds": count(l["kind"] for r in scenarios for l in r["links"]),
         "never_run_tests": [f"{t['file']}:{t['line']} {t['name']}" for t in tests if t["run"] in ("never-in-ci", "silent-skip")],
@@ -380,7 +471,7 @@ def main(argv=None) -> int:
     if args.json:
         print(json.dumps(summary, indent=2))
     else:
-        for key in ("tests", "by_language", "by_run_status", "flags", "scenarios", "verdicts", "link_kinds"):
+        for key in ("tests", "by_language", "by_run_status", "flags", "scenarios", "verified_scenarios", "verdicts", "link_kinds"):
             print(f"{key}: {summary[key]}")
         print("never-run tests:", *summary["never_run_tests"] or ["none"], sep="\n  ")
         print("mis-covered scenarios:", *summary["mis_covered"] or ["none"], sep="\n  ")

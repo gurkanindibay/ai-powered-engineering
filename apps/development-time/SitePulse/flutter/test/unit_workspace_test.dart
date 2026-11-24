@@ -10,9 +10,6 @@ import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/residents/owners_residents_module_page.dart';
 import 'test_fixtures.dart';
 
-// covers: SC-08-11-01
-// covers: SC-08-11-02
-// covers: SC-08-11-03
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

@@ -56,6 +56,8 @@ Exit code: `check` 1 on problems; `report` 1 if a story is FAIL, ERROR or MISSIN
 from __future__ import annotations
 
 import argparse
+import ast
+import io
 import html
 import json
 import os
@@ -63,10 +65,13 @@ import re
 import subprocess
 import sys
 import tempfile
+import tokenize
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+
+SUITE_WRAPPER = "e2e/tests/test_linked_backend_suites.py"
 
 ROOT = Path(__file__).resolve().parent.parent
 REQUIREMENTS = ROOT / ".specify" / "requirements"
@@ -91,6 +96,7 @@ STORY_HEADING = re.compile(r"^###\s+(STORY-\d{2}-\d{2}):\s*(.+?)\s*$")
 SCENARIO_ID = re.compile(r"SC-(\d{2})-(\d{2})-\d{2}")
 SCENARIO_LINE = re.compile(r"^(Scenario Outline|Scenario Template|Scenario|Example):\s*(.*)$")
 STEP_LINE = re.compile(r"^(Given|When|Then|And|But|\*)\s+(.*)$")
+COVER_COMMENT = re.compile(r"^\s*(?://|#)\s*covers:")
 TEST_NAME = re.compile(r"""(?:fn|def)\s+(\w+)|(?:test|testWidgets)\(\s*['"](.+?)['"]\s*,""")
 
 SCENARIO_ORDER = ["FAIL", "ERROR", "NOT RUN", "DEFECT", "PENDING", "SKIPPED", "PASS"]
@@ -216,21 +222,49 @@ def load_stories(requirements: Path = REQUIREMENTS) -> tuple[dict[str, str], dic
     return epics, stories
 
 
+def cover_declarations(path: Path, text: str) -> list[tuple[int, str]]:
+    """Read markers from comments and pytest calls, including multiline markers."""
+    if "covers" not in text:
+        return []
+    if path.suffix != ".py":
+        return [(line, match.group()) for line, content in enumerate(text.splitlines(), 1)
+                if COVER_COMMENT.match(content) for match in SCENARIO_ID.finditer(content)]
+    declarations = []
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(text).readline)
+        declarations.extend((token.start[0], match.group()) for token in tokens
+                            if token.type == tokenize.COMMENT and COVER_COMMENT.match(token.string)
+                            for match in SCENARIO_ID.finditer(token.string))
+        tree = ast.parse(text) if "pytest.mark.covers" in text else None
+    except (IndentationError, SyntaxError, tokenize.TokenError):
+        # A malformed registered test fails its own suite. A comment still needs evidence.
+        return declarations
+    if tree is not None:
+        declarations.extend((node.lineno, argument.value) for node in ast.walk(tree)
+                            if isinstance(node, ast.Call) and ast.unparse(node.func) == "pytest.mark.covers"
+                            for argument in node.args
+                            if isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+                            and SCENARIO_ID.fullmatch(argument.value))
+    return sorted(declarations)
+
+
 def load_links(root: Path = ROOT) -> dict[str, list[dict]]:
-    """{scenario id: [{file, line, test}]} from `covers` declarations in the test suites."""
+    """{scenario id: [{file, line, test}]} from explicit covers declarations."""
     links: dict[str, list[dict]] = defaultdict(list)
     for directory, pattern in LINK_SOURCES:
         for path in sorted((root / directory).rglob(pattern)):
-            if path.relative_to(root).as_posix() in LINK_EXCLUDE:
+            file = path.relative_to(root).as_posix()
+            if file in LINK_EXCLUDE:
                 continue
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-            for index, line in enumerate(lines):
-                if "covers" not in line:
-                    continue
-                name = next((m.group(1) or m.group(2) for m in map(TEST_NAME.search, lines[index:index + 6]) if m), "")
-                for found in SCENARIO_ID.finditer(line):
-                    links[found.group(0)].append(
-                        {"file": path.relative_to(root).as_posix(), "line": index + 1, "test": name})
+            content = path.read_text(encoding="utf-8", errors="replace")
+            declarations = cover_declarations(path, content)
+            if not declarations:
+                continue
+            lines = content.splitlines()
+            for line, scenario in declarations:
+                match = next((m for m in map(TEST_NAME.search, lines[line - 1:line + 5]) if m), None)
+                name = (match.group(1) or match.group(2)) if match else ""
+                links[scenario].append({"file": file, "line": line, "test": name})
     return dict(links)
 
 
@@ -241,6 +275,7 @@ class Catalogue:
     scenarios: list[Scenario]
     links: dict[str, list[dict]]
     problems: list[str]
+    root: Path = ROOT
 
     @property
     def migrated_epics(self) -> list[str]:
@@ -276,10 +311,26 @@ def load_catalogue(root: Path = ROOT) -> Catalogue:
         for scenario in found:
             if scenario.id and parents_of(scenario.id) != (epic_tags[0], story_tags[0]):
                 problems.append(f"{rel}:{scenario.line}: {scenario.id} does not belong to {story_tags[0]}")
-    return Catalogue(epics, stories, scenarios, load_links(root), problems)
+    return Catalogue(epics, stories, scenarios, load_links(root), problems, root)
 
 
-def check(catalogue: Catalogue) -> list[str]:
+def scenario_evidence(catalogue: Catalogue) -> tuple[dict, list[str], int]:
+    # The CLI is also invoked via a symlink and loaded directly by the harness tests.
+    scripts = str(Path(__file__).resolve().parent)
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    from test_strategy_scan import inventory, resolve_links, scenario_verdict, verified_count
+
+    root = catalogue.root.resolve()
+    repo = root.parents[2] if root.parent.name == "development-time" else root
+    tests = inventory(repo, root)["tests"]
+    resolved = resolve_links(root, repo, catalogue.links, tests)
+    verdicts = [scenario_verdict(s, resolved.get(s.id, [])) for s in catalogue.scenarios]
+    return resolved, verdicts, verified_count(verdicts)
+
+
+def check(catalogue: Catalogue, evidence: tuple[dict, list[str], int] | None = None) -> list[str]:
+    resolved, verdicts, _ = evidence if evidence is not None else scenario_evidence(catalogue)
     problems = list(catalogue.problems)
     known = Counter(s.id for s in catalogue.scenarios if s.id)
     problems += [f"{sid}: used by {count} scenarios (ids must be unique)" for sid, count in known.items() if count > 1]
@@ -288,7 +339,7 @@ def check(catalogue: Catalogue) -> list[str]:
         epic = "EPIC-" + story.split("-")[1]
         if epic in catalogue.migrated_epics and story not in by_story:
             problems.append(f"{story}: no scenario under .specify/features/{epic}")
-    for scenario in catalogue.scenarios:
+    for scenario, verdict in zip(catalogue.scenarios, verdicts):
         where = f"{scenario.file}:{scenario.line}: {scenario.id or scenario.name}"
         if not scenario.steps:
             problems.append(f"{where} has no steps")
@@ -296,11 +347,19 @@ def check(catalogue: Catalogue) -> list[str]:
             problems.append(f"{where} needs a @layer:<name> tag")
         if scenario.mode == "pending" and not scenario.pending_note:
             problems.append(f"{where} is @pending but has no `# Pending: <reason>` comment above its tags")
-        if scenario.mode == "linked" and scenario.id not in catalogue.links:
-            problems.append(f"{where} is @linked but no test declares `covers: {scenario.id}`")
+        if scenario.mode == "linked":
+            if verdict == "NO-LINK":
+                problems.append(f"{where} is @linked but no test declares `covers: {scenario.id}`")
+            elif verdict == "LINKED-WEAK-ONLY":
+                problems.append(f"{where} is @linked but no named CI test has an explicit, meaningful assertion")
     for sid, refs in sorted(catalogue.links.items()):
         if sid not in known:
             problems += [f"{ref['file']}:{ref['line']}: covers unknown scenario {sid}" for ref in refs]
+    for sid, links in sorted(resolved.items()):
+        for link in links:
+            if link["problem"]:
+                ref = link["ref"]
+                problems.append(f"{ref['file']}:{ref['line']}: covers {sid}: {link['problem']}")
     return problems
 
 
@@ -659,9 +718,13 @@ def affected(catalogue: Catalogue, repo: Path = ROOT, impact_map: Path = IMPACT_
     # gui_e2e.py is the sole writer of execution records. Include scenario-driven GUI
     # cases and scenarios linked to an E2E test; backend, Flutter and harness-linked
     # scenarios are verified by their own test gates and cannot be recorded by this runner.
+    wrapper = catalogue.root / SUITE_WRAPPER
+    suite_ids = set()
+    if wrapper.is_file():
+        suite_ids = set(re.findall(r'@pytest\.mark\.suite_covers\("(SC-\d{2}-\d{2}-\d{2})"\)', wrapper.read_text()))
     automated = [s for s in catalogue.scenarios if s.id and s.mode != "pending" and (
-        s.mode == "gherkin" or any(link["file"].startswith("e2e/")
-                                    for link in catalogue.links.get(s.id, [])))]
+        s.mode == "gherkin" or s.id in suite_ids or any(link["file"].startswith("e2e/")
+                                                      for link in catalogue.links.get(s.id, [])))]
     changed = changed_behaviour_paths(repo)
     if changed is None:
         return {"mode": "full", "epics": [], "marker": "", "files": [], "scenarios": sorted(s.id for s in automated),
@@ -1093,7 +1156,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "check":
         catalogue = load_catalogue()
-        problems = check(catalogue)
+        evidence = scenario_evidence(catalogue)
+        problems = check(catalogue, evidence)
         note = ""
         if args.require_run:
             run_problems, note = require_run(catalogue, open_store(args.store))
@@ -1102,7 +1166,8 @@ def main(argv: list[str] | None = None) -> int:
         warnings = closed_issue_warnings(catalogue, closed) if closed is not None else []
         summary = {"migrated_epics": catalogue.migrated_epics, "scenarios": len(catalogue.scenarios),
                    "by_mode": dict(Counter(s.mode for s in catalogue.scenarios)),
-                   "linked_tests": sum(len(v) for v in catalogue.links.values())}
+                   "linked_tests": sum(len(v) for v in catalogue.links.values()),
+                   "verified_scenarios": evidence[2]}
         if args.require_run:
             summary["test_run"] = note
         if args.json:
@@ -1113,7 +1178,8 @@ def main(argv: list[str] | None = None) -> int:
                 print("\n".join(f"warning: {w}" for w in warnings), file=sys.stderr)
             print("\n".join(problems) if problems else
                   f"OK: {summary['scenarios']} scenarios in {', '.join(summary['migrated_epics']) or 'no epic'} "
-                  f"({summary['by_mode']}), {summary['linked_tests']} linked tests"
+                  f"({summary['by_mode']}), {summary['linked_tests']} declarations, "
+                  f"{summary['verified_scenarios']} verified scenarios"
                   + (f"\ntest run: {note}" if note else ""))
         return 1 if problems else 0
 

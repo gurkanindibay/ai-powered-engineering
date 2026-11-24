@@ -15,9 +15,6 @@ import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/residents/owners_residents_module_page.dart';
 import 'test_fixtures.dart';
 
-// covers: SC-12-07-01
-// covers: SC-12-07-02
-// covers: SC-12-07-03
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

@@ -3,10 +3,10 @@
     "any-error-is-err-checks": 61,
     "environment-mutations": 24,
     "fixed-sleep-calls": 29,
-    "scenario-over-cap-tests": 14,
+    "scenario-over-cap-tests": 8,
     "unwrap-only-tests": 3,
     "utc-now-backend-test-reads": 84,
-    "wait-only-gui-tests": 5,
+    "wait-only-gui-tests": 3,
     "weak-only-tests": 9
   },
   "over_limit_tests": {
@@ -17,12 +17,6 @@
     "apps/development-time/SitePulse/backend/tests/sale_clearance_tests.rs::only_an_approved_override_makes_the_seller_pay_later_installments": 4,
     "apps/development-time/SitePulse/e2e/tests/test_epic01_resident_dues.py::test_overdue_balance_matches_backend_total": 4,
     "apps/development-time/SitePulse/e2e/tests/test_epic12_unit_directory.py::test_residents_module_search_by_name_and_unit": 4,
-    "apps/development-time/SitePulse/e2e/tests/test_journey_accruals_payments.py::test_multi_site_journey_accruals_and_mixed_payments": 7,
-    "apps/development-time/SitePulse/e2e/tests/test_linked_backend_suites.py::test_epic07_accrual_corrections_linked_scenarios": 6,
-    "apps/development-time/SitePulse/e2e/tests/test_linked_backend_suites.py::test_epic07_proration_linked_scenarios": 5,
-    "apps/development-time/SitePulse/e2e/tests/test_linked_backend_suites.py::test_epic07_rust_linked_scenarios": 7,
-    "apps/development-time/SitePulse/e2e/tests/test_linked_backend_suites.py::test_epic08_rust_linked_scenarios": 26,
-    "apps/development-time/SitePulse/e2e/tests/test_linked_backend_suites.py::test_epic09_rust_linked_scenarios": 6,
-    "apps/development-time/SitePulse/e2e/tests/test_linked_backend_suites.py::test_epic11_rust_linked_scenarios": 26
+    "apps/development-time/SitePulse/e2e/tests/test_journey_accruals_payments.py::test_multi_site_journey_accruals_and_mixed_payments": 7
   }
 }
