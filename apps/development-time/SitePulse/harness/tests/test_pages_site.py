@@ -157,6 +157,35 @@ class PagesSiteTests(unittest.TestCase):
             self.assertIn("reports/400-1/serenity", (site / "serenity/index.html").read_text(encoding="utf-8"))
             pages.verify_local(site, json.loads((site / "sitepulse-pages.json").read_text(encoding="utf-8")))
 
+    def test_serenity_retention_oversize_and_bundled_js(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            site = root / "site"
+            serenity = root / "serenity"
+            serenity.mkdir()
+            (serenity / "index.html").write_text("<html>ok</html>", encoding="utf-8")
+            (serenity / "app.js").write_text("x={authorization:e.headers,password:\"abcdef\"}", encoding="utf-8")
+            (serenity / "data.json").write_text('{"password": "abcdef"}', encoding="utf-8")
+            count = pages.SERENITY_RETAINED_RUNS + 1
+            for number in range(1, count + 1):
+                pages.build(site, self._report(root / f"r{number}"), str(500 + number), "1", 50 + number,
+                            "f" * 40, str(6000 + number), serenity=serenity)
+            self.assertEqual((site / "reports/501-1/serenity").exists(), False)
+            self.assertNotIn("serenity/index.html", (site / "reports/501-1/index.html").read_text(encoding="utf-8"))
+            self.assertTrue((site / "reports/502-1/serenity/index.html").is_file())
+            self.assertIn("serenity/index.html", (site / f"reports/{500 + count}-1/index.html").read_text(encoding="utf-8"))
+            current = site / f"reports/{500 + count}-1/serenity"
+            self.assertIn("authorization:e.headers", (current / "app.js").read_text(encoding="utf-8"))
+            self.assertNotIn("abcdef", (current / "data.json").read_text(encoding="utf-8"))
+
+            original = pages.SERENITY_MAX_BYTES
+            pages.SERENITY_MAX_BYTES = 10
+            try:
+                with self.assertRaises(ValueError):
+                    pages._copy_serenity(serenity, root / "out")
+            finally:
+                pages.SERENITY_MAX_BYTES = original
+
     def test_new_attempt_of_same_run_becomes_latest(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

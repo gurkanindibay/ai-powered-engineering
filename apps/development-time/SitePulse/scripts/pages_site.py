@@ -241,16 +241,21 @@ SERENITY_EXTENSIONS = {".html", ".css", ".js", ".json", ".png", ".jpg", ".jpeg",
                        ".woff", ".woff2", ".ttf", ".eot", ".map", ".txt"}
 SERENITY_TEXT_EXTENSIONS = {".html", ".css", ".js", ".json", ".svg", ".map", ".txt"}
 SERENITY_MAX_BYTES = 80 * 1024 * 1024
-SERENITY_SECRETS = re.compile(
+SERENITY_RETAINED_RUNS = 8
+SERENITY_TOKENS = re.compile(
     r"ci-only-password|-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
-    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"
-    r"|(?i:\"?(?:password|passwd|secret|api[_-]?key|authorization)\"?\s*[:=]\s*\"?)[^\s\",<]{4,}")
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}")
+# Key/value credentials are redacted only in report data: the same text is ordinary code in bundled JS.
+SERENITY_KEY_VALUES = re.compile(
+    r"(?i:\"?(?:password|passwd|secret|api[_-]?key|authorization)\"?\s*[:=]\s*\"?)[^\s\",<]{4,}")
+SERENITY_DATA_EXTENSIONS = {".html", ".json"}
 
 
 def _copy_serenity(source: Path, destination: Path) -> dict:
     """Copy a generated Serenity BDD site, keeping only static asset types and redacting secrets.
 
-    Links, unexpected file types and oversized trees are dropped rather than published.
+    Links and unexpected file types are dropped. A tree over the size cap is rejected whole, because a
+    partly copied report would load without its scripts and styles.
     """
     if not source.is_dir() or source.is_symlink() or not (source / "index.html").is_file():
         raise ValueError("Serenity site directory must contain index.html")
@@ -260,17 +265,21 @@ def _copy_serenity(source: Path, destination: Path) -> dict:
             skipped += path.is_symlink()
             continue
         suffix = path.suffix.lower()
-        size = path.stat().st_size
-        total += size
-        if suffix not in SERENITY_EXTENSIONS or total > SERENITY_MAX_BYTES:
+        if suffix not in SERENITY_EXTENSIONS:
             skipped += 1
             continue
+        total += path.stat().st_size
+        if total > SERENITY_MAX_BYTES:
+            raise ValueError(f"Serenity site exceeds the {SERENITY_MAX_BYTES // (1024 * 1024)} MB publishing cap")
         target = destination / path.relative_to(source)
         target.parent.mkdir(parents=True, exist_ok=True)
         if suffix in SERENITY_TEXT_EXTENSIONS:
             text = path.read_text(encoding="utf-8", errors="replace")
-            clean, count = SERENITY_SECRETS.subn("[redacted]", text)
+            clean, count = SERENITY_TOKENS.subn("[redacted]", text)
             redacted += count
+            if suffix in SERENITY_DATA_EXTENSIONS:
+                clean, more = SERENITY_KEY_VALUES.subn("[redacted]", clean)
+                redacted += more
             target.write_text(clean, encoding="utf-8")
         else:
             shutil.copyfile(path, target)
@@ -291,6 +300,14 @@ def _stash_serenity(report_root: Path, stash: Path) -> list[str]:
                 shutil.move(str(tree), str(stash / folder.name))
                 kept.append(folder.name)
     return kept
+
+
+def _prune_serenity(stash: Path, kept: list[str], keep: int) -> set[str]:
+    """Keep only the newest `keep` stashed Serenity trees; drop the rest."""
+    ordered = sorted(kept, key=lambda n: tuple(int(x) for x in RUN_DIRECTORY.fullmatch(n).groups()), reverse=True)
+    for name in ordered[max(keep, 0):]:
+        shutil.rmtree(stash / name, ignore_errors=True)
+    return set(ordered[:max(keep, 0)])
 
 
 def _latest_serenity(site: Path) -> str | None:
@@ -430,7 +447,10 @@ def build(site: Path, report: Path, run_id: str, attempt: str, run_number: int,
     old_archives = []
     report_root = site / "reports"
     stash = Path(tempfile.mkdtemp(prefix="sitepulse-serenity-"))
-    kept_serenity = set(_stash_serenity(report_root, stash))
+    current_has_serenity = serenity is not None and serenity.is_dir()
+    kept_serenity = _prune_serenity(
+        stash, _stash_serenity(report_root, stash),
+        SERENITY_RETAINED_RUNS - (1 if current_has_serenity else 0))
     if report_root.exists():
         for folder in sorted(p for p in report_root.iterdir() if p.is_dir() and not p.is_symlink()):
             if folder.name == f"{run_id}-{attempt}":
