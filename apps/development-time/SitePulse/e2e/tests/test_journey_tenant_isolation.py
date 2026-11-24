@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -399,6 +400,7 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
         # Ahmet Yılmaz (owner) and Selin Demir (tenant)
         selin_email = f"{attempt_a}.selin@journey.e2e.test"
         ahmet_email = f"{attempt_a}.ahmet@journey.e2e.test"
+        api.clock.set_date(date.today())
 
         selin_person_id = stack.sql(f"SELECT id FROM persons WHERE site_id = {site_a.site_id} AND email = '{selin_email}';")
         ahmet_person_id = stack.sql(f"SELECT id FROM persons WHERE site_id = {site_a.site_id} AND email = '{ahmet_email}';")
@@ -408,10 +410,10 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
             "BEGIN; "
             f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, "
             f"principal_amount, due_date, status) VALUES "
-            f"({unit_2}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {selin_person_id}, 1500.00, (now() AT TIME ZONE 'Europe/Istanbul')::date - 36, 'PENDING'); "
+            f"({unit_2}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {selin_person_id}, 1500.00, CURRENT_DATE - 36, 'PENDING'); "
             f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, "
             f"principal_amount, due_date, status) VALUES "
-            f"({unit_2}, 'Ekim 2026', 'OWNER', 'CAPITAL_DUES', {ahmet_person_id}, 1000.00, (now() AT TIME ZONE 'Europe/Istanbul')::date - 36, 'PENDING'); "
+            f"({unit_2}, 'Ekim 2026', 'OWNER', 'CAPITAL_DUES', {ahmet_person_id}, 1000.00, CURRENT_DATE - 36, 'PENDING'); "
             "COMMIT;"
         )
 
