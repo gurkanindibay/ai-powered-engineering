@@ -106,10 +106,16 @@ impl WebhookSender {
         })
     }
 
-    fn from_env() -> Result<Self, SendError> {
-        let url = std::env::var("SITEPULSE_NOTIFICATION_WEBHOOK_URL").unwrap_or_default();
-        let token = std::env::var("SITEPULSE_NOTIFICATION_WEBHOOK_TOKEN").ok();
-        Self::new(&url, token, crate::state::AppStateInner::is_production())
+    fn from_settings(settings: &crate::state::AppSettings) -> Result<Self, SendError> {
+        let url = settings
+            .notification_webhook_url
+            .as_deref()
+            .unwrap_or_default();
+        Self::new(
+            url,
+            settings.notification_webhook_token.clone(),
+            settings.production,
+        )
     }
 
     async fn post(&self, payload: serde_json::Value) -> Result<String, SendError> {
@@ -184,21 +190,33 @@ impl NotificationSender for WebhookSender {
     }
 }
 
-/// The deployment's sender. Without a real vendor, production records the
-/// message as FAILED instead of pretending it was delivered.
-pub fn configured_sender() -> Result<Box<dyn NotificationSender>, SendError> {
-    let name = std::env::var("SITEPULSE_NOTIFICATION_SENDER").unwrap_or_else(|_| "LOG".into());
-    match name.trim().to_ascii_uppercase().as_str() {
-        "LOG" if !crate::state::AppStateInner::is_production() => Ok(Box::new(LogSender)),
+/// The deployment's sender for the given `settings`. Without a real vendor,
+/// production records the message as FAILED instead of pretending it was delivered.
+pub fn configured_sender_for(
+    settings: &crate::state::AppSettings,
+) -> Result<Box<dyn NotificationSender>, SendError> {
+    match settings
+        .notification_sender
+        .trim()
+        .to_ascii_uppercase()
+        .as_str()
+    {
+        "LOG" if !settings.production => Ok(Box::new(LogSender)),
         "LOG" => Err(SendError(
             "No notification vendor is configured for production".into(),
         )),
-        "WEBHOOK" => Ok(Box::new(WebhookSender::from_env()?)),
+        "WEBHOOK" => Ok(Box::new(WebhookSender::from_settings(settings)?)),
         other => Err(SendError(format!(
             "Notification sender '{}' is not integrated in this build",
             other
         ))),
     }
+}
+
+/// The deployment's sender. Without a real vendor, production records the
+/// message as FAILED instead of pretending it was delivered.
+pub fn configured_sender() -> Result<Box<dyn NotificationSender>, SendError> {
+    configured_sender_for(&crate::state::AppSettings::from_env())
 }
 
 /// What to send.
@@ -226,12 +244,14 @@ impl Message {
 
 pub struct NotificationService {
     store: FinanceStore,
+    settings: crate::state::AppSettings,
 }
 
 impl NotificationService {
     pub fn new(state: &AppState) -> Self {
         Self {
             store: FinanceStore::new(state),
+            settings: state.settings.clone(),
         }
     }
 
@@ -331,7 +351,7 @@ impl NotificationService {
                 row.status = NOTIFY_BLOCKED.to_string();
                 row.block_reason = Some(refusal.to_string());
             }
-            Ok(()) => match configured_sender()
+            Ok(()) => match configured_sender_for(&self.settings)
                 .and_then(|s| s.send(message.channel, to, &message.subject, &message.body))
             {
                 Ok(reference) => {

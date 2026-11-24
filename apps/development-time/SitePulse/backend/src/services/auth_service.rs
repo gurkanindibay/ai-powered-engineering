@@ -193,7 +193,7 @@ impl AuthService {
         if request.id_token.trim().is_empty() {
             return Err("Invalid Google ID Token.".to_string());
         }
-        let payload = verify_google_id_token(&request.id_token).await?;
+        let payload = verify_google_id_token(&request.id_token, &self.state.settings).await?;
         if !payload.email_verified {
             return Err("Google account email is not verified.".to_string());
         }
@@ -469,7 +469,7 @@ impl AuthService {
     /// # Errors
     /// Rejects conflicting identity links, invalid tokens and unavailable storage.
     pub async fn link_google(&self, user_id: &str, id_token: &str) -> Result<AuthResponse, String> {
-        let payload = verify_google_id_token(id_token).await?;
+        let payload = verify_google_id_token(id_token, &self.state.settings).await?;
         if !payload.email_verified {
             return Err("Google identity is unverified".to_string());
         }
@@ -765,13 +765,6 @@ struct GoogleTokenPayload {
     picture: String,
 }
 
-fn mock_google_tokens_allowed() -> bool {
-    !crate::state::AppStateInner::is_production()
-        && std::env::var("SITEPULSE_ALLOW_MOCK_GOOGLE_TOKENS")
-            .map(|v| v == "true")
-            .unwrap_or(false)
-}
-
 async fn google_jwks(force: bool) -> Result<JwkSet, String> {
     static CACHE: Mutex<Option<(Instant, JwkSet)>> = Mutex::new(None);
     if let Some((at, set)) = CACHE
@@ -806,9 +799,12 @@ async fn google_jwks(force: bool) -> Result<JwkSet, String> {
 
 /// Verifies a Google ID token's RS256 signature against Google's published keys
 /// and checks issuer, audience (`GOOGLE_CLIENT_ID`) and expiry.
-async fn verify_google_id_token(id_token: &str) -> Result<GoogleTokenPayload, String> {
+async fn verify_google_id_token(
+    id_token: &str,
+    settings: &crate::state::AppSettings,
+) -> Result<GoogleTokenPayload, String> {
     if let Some(rest) = id_token.strip_prefix("mock-google-token:") {
-        if !mock_google_tokens_allowed() {
+        if !(!settings.production && settings.allow_mock_google_tokens) {
             return Err("Invalid Google ID Token.".to_string());
         }
         let parts: Vec<&str> = rest.split(':').collect();
@@ -826,8 +822,12 @@ async fn verify_google_id_token(id_token: &str) -> Result<GoogleTokenPayload, St
         };
     }
 
-    let client_id = std::env::var("GOOGLE_CLIENT_ID")
-        .map_err(|_| "Google sign-in is not configured on this server.".to_string())?;
+    let client_id = settings
+        .google_client_id
+        .as_ref()
+        .filter(|s| !s.is_empty())
+        .cloned()
+        .ok_or_else(|| "Google sign-in is not configured on this server.".to_string())?;
     let header = decode_header(id_token).map_err(|_| "Invalid Google ID Token.".to_string())?;
     let kid = header
         .kid

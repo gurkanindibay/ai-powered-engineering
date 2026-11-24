@@ -338,9 +338,7 @@ async fn when_duplicate_email_then_throws_exception() {
         blocks: None,
     };
 
-    let res = service.register_site(req).await;
-    assert!(res.is_err());
-    let err = res.unwrap_err();
+    let err = service.register_site(req).await.unwrap_err();
     assert!(err.contains("already exists") || err.contains("zaten mevcut"));
     assert_eq!(
         state.inner.read().await.sites.len(),
@@ -441,9 +439,10 @@ async fn when_duplicate_email_for_home_owner_then_throws_exception() {
         role: None,
     };
 
-    let res = service.register_home_owner("site-1", req).await;
-    assert!(res.is_err());
-    let err = res.unwrap_err();
+    let err = service
+        .register_home_owner("site-1", req)
+        .await
+        .unwrap_err();
     assert_eq!(err, site_admin_service::EMAIL_NOT_AVAILABLE);
     assert!(
         !err.contains("ahmet.yilmaz"),
@@ -615,9 +614,7 @@ async fn when_duplicate_email_for_home_resident_then_throws_exception() {
         relationship: None,
     };
 
-    let res = service.register_home_resident(req).await;
-    assert!(res.is_err());
-    let err = res.unwrap_err();
+    let err = service.register_home_resident(req).await.unwrap_err();
     assert!(err.contains("already exists") || err.contains("zaten mevcut"));
 }
 
@@ -665,8 +662,12 @@ async fn when_valid_password_registration_then_can_authenticate() {
             phone: None,
             unit_invite_token: Some(invite.token),
         })
-        .await;
-    assert!(replay.is_err());
+        .await
+        .unwrap_err();
+    assert!(
+        replay.contains("kullanıldı") || replay.contains("used") || replay.contains("Invalid"),
+        "unexpected invite replay error: {replay}"
+    );
 
     let login_req = PasswordLoginRequest {
         email: "emre.aydin@gmail.com".to_string(),
@@ -691,17 +692,18 @@ async fn when_wrong_password_then_throws_exception() {
         password: "WrongPassword999!".to_string(),
     };
 
-    let res = service.authenticate_with_password(login_req).await;
-    assert!(res.is_err());
-    let err = res.unwrap_err();
+    let err = service
+        .authenticate_with_password(login_req)
+        .await
+        .unwrap_err();
     assert!(err.contains("Invalid") || err.contains("hatalı"));
 }
 
 // covers: SC-06-03-01
 #[tokio::test]
 async fn when_valid_google_id_token_then_authenticates_and_links_account() {
-    std::env::set_var("SITEPULSE_ALLOW_MOCK_GOOGLE_TOKENS", "true");
-    let state = AppState::new();
+    let mut state = AppState::new();
+    state.settings.allow_mock_google_tokens = true;
     let invite = HomeResidentInvitationService::new(state.clone())
         .generate_unit_invite_link("d-14", None)
         .await
@@ -795,9 +797,7 @@ async fn when_deleting_site_with_active_units_or_actions_then_strictly_rejected(
     let service = SaasTenantService::new(state);
 
     // "site-1" (Begonya Sitesi) has active units (d-14), dues (b-101), and pending registrations
-    let del_res = service.delete_site("site-1").await;
-    assert!(del_res.is_err());
-    let err_msg = del_res.unwrap_err();
+    let err_msg = service.delete_site("site-1").await.unwrap_err();
     assert!(err_msg.contains("active units exist") || err_msg.contains("işlem kaydı"));
 }
 
@@ -837,8 +837,14 @@ async fn when_resetting_admin_password_for_non_existent_site_then_fails() {
     let state = AppState::new();
     let service = SaasTenantService::new(state);
 
-    let reset_res = service.reset_site_admin_password("invalid-site-id").await;
-    assert!(reset_res.is_err());
+    let err = service
+        .reset_site_admin_password("invalid-site-id")
+        .await
+        .unwrap_err();
+    assert!(
+        err.contains("bulunamadı") || err.contains("not found") || err.contains("NotFound"),
+        "unexpected error: {err}"
+    );
 }
 
 // ============================================================================
@@ -1188,9 +1194,11 @@ async fn when_invalid_bank_code_or_iban_then_configuration_fails_validation() {
         account_holder: "Begonya Sitesi".to_string(),
         configured_by: None,
     };
-    let err1 = service.configure_account("site-1", req_unknown).await;
-    assert!(err1.is_err());
-    assert!(err1.unwrap_err().contains("Unknown bank code"));
+    let err1 = service
+        .configure_account("site-1", req_unknown)
+        .await
+        .unwrap_err();
+    assert!(err1.contains("Unknown bank code"), "got: {err1}");
 
     // 2. Non-TR IBAN
     let req_non_tr = ConfigureBankAccountRequest {
@@ -1199,9 +1207,11 @@ async fn when_invalid_bank_code_or_iban_then_configuration_fails_validation() {
         account_holder: "Begonya Sitesi".to_string(),
         configured_by: None,
     };
-    let err2 = service.configure_account("site-1", req_non_tr).await;
-    assert!(err2.is_err());
-    assert!(err2.unwrap_err().contains("Invalid IBAN"));
+    let err2 = service
+        .configure_account("site-1", req_non_tr)
+        .await
+        .unwrap_err();
+    assert!(err2.contains("Invalid IBAN"), "got: {err2}");
 
     // 3. Short IBAN
     let req_short = ConfigureBankAccountRequest {
@@ -1210,8 +1220,11 @@ async fn when_invalid_bank_code_or_iban_then_configuration_fails_validation() {
         account_holder: "Begonya Sitesi".to_string(),
         configured_by: None,
     };
-    let err3 = service.configure_account("site-1", req_short).await;
-    assert!(err3.is_err());
+    let err3 = service
+        .configure_account("site-1", req_short)
+        .await
+        .unwrap_err();
+    assert!(err3.contains("Invalid IBAN"), "got: {err3}");
 
     // 4. Empty account holder
     let req_empty_holder = ConfigureBankAccountRequest {
@@ -1220,8 +1233,14 @@ async fn when_invalid_bank_code_or_iban_then_configuration_fails_validation() {
         account_holder: "   ".to_string(),
         configured_by: None,
     };
-    let err4 = service.configure_account("site-1", req_empty_holder).await;
-    assert!(err4.is_err());
+    let err4 = service
+        .configure_account("site-1", req_empty_holder)
+        .await
+        .unwrap_err();
+    assert!(
+        err4.contains("Account holder") || err4.contains("required"),
+        "got: {err4}"
+    );
 
     // 5. Correct structure but wrong check digits (one mistyped digit)
     let req_bad_checksum = ConfigureBankAccountRequest {
@@ -2900,11 +2919,11 @@ async fn when_invalid_email_or_phone_then_registration_rejected_with_validation_
         is_resident: true,
         role: None,
     };
-    let res = service
+    let err_email = service
         .register_home_owner("site-1", invalid_email_req)
-        .await;
-    assert!(res.is_err());
-    assert!(res.unwrap_err().contains("Geçerli bir e-posta"));
+        .await
+        .unwrap_err();
+    assert!(err_email.contains("Geçerli bir e-posta"));
 
     // 2. Invalid phone (too short or letters)
     let invalid_phone_req = RegisterHomeOwnerRequest {
@@ -2926,11 +2945,11 @@ async fn when_invalid_email_or_phone_then_registration_rejected_with_validation_
         is_resident: true,
         role: None,
     };
-    let res = service
+    let err_phone = service
         .register_home_owner("site-1", invalid_phone_req)
-        .await;
-    assert!(res.is_err());
-    assert!(res.unwrap_err().contains("Geçerli bir cep telefonu"));
+        .await
+        .unwrap_err();
+    assert!(err_phone.contains("Geçerli bir cep telefonu"));
 }
 
 #[tokio::test]
@@ -4520,7 +4539,7 @@ const TEST_WEBHOOK_SECRET: &str = "integration-test-webhook-secret";
 
 /// Calls the webhook handler exactly as the bank would: JSON body plus HMAC header.
 async fn call_signed_webhook(
-    state: AppState,
+    mut state: AppState,
     req: BankIncomingWebhookRequest,
 ) -> Result<
     (
@@ -4529,7 +4548,7 @@ async fn call_signed_webhook(
     ),
     (axum::http::StatusCode, String),
 > {
-    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", TEST_WEBHOOK_SECRET);
+    state.settings.bank_webhook_secret = Some(TEST_WEBHOOK_SECRET.to_string());
     let body = serde_json::to_vec(&req).unwrap();
     let sig = sitepulse_backend::auth::sign_webhook_body(TEST_WEBHOOK_SECRET, &body);
     let mut headers = axum::http::HeaderMap::new();
@@ -4547,8 +4566,8 @@ async fn call_signed_webhook(
 
 #[tokio::test]
 async fn when_webhook_is_unsigned_or_forged_then_it_is_rejected() {
-    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", TEST_WEBHOOK_SECRET);
-    let state = AppState::new();
+    let mut state = AppState::new();
+    state.settings.bank_webhook_secret = Some(TEST_WEBHOOK_SECRET.to_string());
     let req = BankIncomingWebhookRequest {
         transaction_id: "TXN-FORGED-1".to_string(),
         virtual_iban: "TR000000000000000000000000".to_string(),
@@ -4611,7 +4630,7 @@ async fn when_webhook_currency_is_not_try_then_it_is_rejected() {
 async fn when_registering_without_invite_or_with_unknown_invite_then_rejected() {
     let service = AuthService::new(AppState::new());
     for token in [None, Some("SP-HANE-NOTREAL".to_string())] {
-        let res = service
+        let err = service
             .register_with_password(RegisterUserRequest {
                 full_name: "Intruder".to_string(),
                 email: "intruder@example.com".to_string(),
@@ -4619,27 +4638,37 @@ async fn when_registering_without_invite_or_with_unknown_invite_then_rejected() 
                 phone: None,
                 unit_invite_token: token,
             })
-            .await;
-        assert!(res.is_err());
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_ascii_lowercase().contains("invitation token"),
+            "unexpected error for bad/missing invite: {err}"
+        );
     }
 }
 
 #[tokio::test]
 async fn when_google_token_is_unsigned_then_account_takeover_is_impossible() {
-    // A hand-made "JWT" carrying the admin's email must not authenticate.
-    std::env::remove_var("GOOGLE_CLIENT_ID");
-    let service = AuthService::new(AppState::new());
+    // A hand-made "JWT" carrying the admin's email must not authenticate even when
+    // Google sign-in is configured.
+    let mut state = AppState::new();
+    state.settings.google_client_id = Some("test-google-client-id".to_string());
+    let service = AuthService::new(state);
     let payload = base64::Engine::encode(
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         r#"{"sub":"x","email":"admin@sitepulse.io","email_verified":true}"#,
     );
-    let res = service
+    let err = service
         .authenticate_with_google(GoogleLoginRequest {
             id_token: format!("eyJhbGciOiJub25lIn0.{}.", payload),
             unit_invite_token: None,
         })
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert!(
+        err.contains("Invalid Google ID Token"),
+        "expected Invalid Google ID Token, got: {err}"
+    );
 }
 
 #[tokio::test]
@@ -4650,13 +4679,19 @@ async fn when_using_former_backdoor_or_placeholder_passwords_then_login_fails() 
         ("admin@sitepulse.io", "admin123"),
         ("mehmet.demir@begonya.com", "ARGON2_HASH_mehmet123"),
     ] {
-        let res = service
+        let err = service
             .authenticate_with_password(PasswordLoginRequest {
                 email: email.to_string(),
                 password: password.to_string(),
             })
-            .await;
-        assert!(res.is_err(), "{} must not log in with {}", email, password);
+            .await
+            .unwrap_err();
+        assert!(
+            err.contains("Invalid") || err.contains("hatalı"),
+            "{} must not log in with {}: {err}",
+            email,
+            password
+        );
     }
 }
 

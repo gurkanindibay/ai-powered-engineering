@@ -48,7 +48,8 @@ fn liability(
 /// The fixture site (unit d-14 in site-1) owing exactly `dues`: no seeded
 /// liabilities, advances, receipts or ledger rows.
 async fn state_with(dues: Vec<DuesLiability>) -> AppState {
-    let state = AppState::new_with_test_fixtures();
+    let mut state = AppState::new_with_test_fixtures();
+    state.settings.bank_webhook_secret = Some(WEBHOOK_SECRET.to_string());
     {
         let mut inner = state.inner.write().await;
         inner.dues = dues;
@@ -71,7 +72,6 @@ async fn webhook(
     amount: &str,
     description: &str,
 ) -> BankIncomingWebhookResponse {
-    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", WEBHOOK_SECRET);
     let req = BankIncomingWebhookRequest {
         transaction_id: txn.to_string(),
         virtual_iban: VIRTUAL_IBAN.to_string(),
@@ -123,7 +123,6 @@ async fn when_tenant_webhook_mentions_capital_then_it_waits_for_manager_review()
             .unwrap()
             .tenant_user_id = Some("usr-review-tenant".to_string());
     }
-    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", WEBHOOK_SECRET);
     let req = BankIncomingWebhookRequest {
         transaction_id: "CAPITAL-REVIEW-001".to_string(),
         virtual_iban: VIRTUAL_IBAN.to_string(),
@@ -588,7 +587,6 @@ async fn when_unmatched_sender_pays_tenanted_unit_with_only_tenant_debt_then_it_
     )])
     .await;
 
-    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", WEBHOOK_SECRET);
     let req = BankIncomingWebhookRequest {
         transaction_id: "UNMATCHED-SENDER-TXN-1".to_string(),
         virtual_iban: VIRTUAL_IBAN.to_string(),
@@ -719,7 +717,6 @@ async fn when_identified_owner_pays_tenanted_unit_with_only_tenant_debt_then_ten
     )])
     .await;
 
-    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", WEBHOOK_SECRET);
     let req = BankIncomingWebhookRequest {
         transaction_id: "OWNER-IDENTIFIED-TXN-1".to_string(),
         virtual_iban: VIRTUAL_IBAN.to_string(),

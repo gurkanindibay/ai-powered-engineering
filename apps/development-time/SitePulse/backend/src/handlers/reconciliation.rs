@@ -1228,7 +1228,11 @@ pub async fn handle_bank_incoming_webhook(
     let signature = headers
         .get(BANK_WEBHOOK_SIGNATURE_HEADER)
         .and_then(|v| v.to_str().ok());
-    if !crate::auth::verify_webhook_signature(&body, signature) {
+    if !crate::auth::verify_webhook_signature_with_secret(
+        state.settings.bank_webhook_secret.as_deref(),
+        &body,
+        signature,
+    ) {
         return Err((
             StatusCode::UNAUTHORIZED,
             "Invalid or missing webhook signature".to_string(),
