@@ -447,7 +447,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::run_autopay (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_writes_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
@@ -1171,7 +1173,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::set_budget_transition (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_writes_follow_manager_site"
+      ]
     },
     {
       "method": "DELETE",
