@@ -113,7 +113,7 @@ SitePulse's hard cases are combinations: who is liable (owner, tenant, joint) ×
 | --- | --- | --- | --- |
 | A money rule (split, proration, fee, apportionment) | Rust domain unit | Decision tables plus property-based invariants | `financial_fixtures` shared Rust/Dart, `heat_share`, `installments` |
 | Who pays what for each combination | Rust domain + Dart use case | **One decision table** (liable party × expense type × occupancy × payer) loaded by both languages, one row = one case id | Partly: `financial_fixtures` covers amounts, not liability |
-| State changes over time (occupancy, periods) | Rust domain | **Model-based testing**: random command sequences against the state machine and a tiny reference model, with invariants checked after every step | `occupancy_state_machine_tests` (example-based) |
+| State changes over time (occupancy, periods) | Rust domain | **Model-based testing**: deterministic generated command sequences against the state machine and a tiny reference model, with invariants checked after every step | `occupancy_state_machine_tests` |
 | Persistence invariants and RLS | PostgreSQL tests | Direct SQL constraint checks, two-connection concurrency, fault injection | `db_*` tests, `MUT-DB-002` control |
 | API contract and authorisation | API system check | Generated from OpenAPI: every endpoint called with another tenant's ids must return 403/404 | `openapi_tests.rs`, `api_system_check.py` |
 | UI shows the right thing | Flutter widget | Fixture JSON validated against OpenAPI; exact Decimal text | 366 widget tests |
@@ -121,7 +121,7 @@ SitePulse's hard cases are combinations: who is liable (owner, tenant, joint) ×
 
 **Six techniques for the hard cases:**
 
-1. **Ledger oracle after every journey step.** Turn the ledger invariants of the journey plan (§4) into an autouse E2E/API fixture. After each test, check per unit and person that accrued minus paid equals the balance, that bank cash equals recorded collections, and that no liability lacks a liable person. Failure-only bugs like SC-13-03-21 then surface everywhere, not just in one scenario.
+1. **Ledger oracle after every journey step.** Journey stages check the detailed ledger invariants in §4. The autouse E2E/API pytest fixture also asserts that `v_integrity_violations` is empty after each test, so invariant regressions surface even outside journey scenarios.
 2. **Calendar matrix on the injectable clock.** Run accrual, due-day, late-fee and period-close rules over frozen dates: the 28th to 31st, February in leap and non-leap years, 23:30 and 00:30 at UTC+3, back-dated entries just inside and outside the window. The `e2e` clock already supports this; use it at the API layer, not the browser.
 3. **Model-based occupancy and ownership.** Generate sequences of move-in, move-out, handover, sale and reversal, including same-day handovers. Assert no gap or overlap in liable periods and that a split never gains or loses a kuruş. This covers SC-13-03-06, -07 and -09 once the product gaps close.
 4. **Concurrency and idempotency.** Two PostgreSQL connections with a barrier: two payments on one unit (SC-05-02-01), double approval of one statement line (SC-13-09-07), concurrent accrual of one period. Assert one committed result and one clean rejection.
@@ -136,7 +136,7 @@ Every test starts from a named, versioned state, not from data it invents. The j
 | --- | --- | --- | --- |
 | Starting states F0–F7 (empty site to residents added after accruals) | `docs/testing/journey-plan/README.md` §3 | E2E journeys today; API and DB tests next | A new test names its state (`Given the site is in state F5`) or declares one small boundary fixture next to it |
 | Reference data (clock 2026-11-19 12:00 Europe/Istanbul, tariffs, due day, KMK 5% late fee) | journey plan §2 | All layers | Expected amounts are written as literals in the scenario, never recomputed by the test |
-| Ledger invariants | journey plan §4 | Journey stages | Becomes an autouse check after every E2E and API test (Strategy for complex business cases, technique 1) |
+| Ledger invariants | journey plan §4 and `v_integrity_violations` | Journey stages and autouse E2E/API pytest teardown | Detailed balance checks run at journey checkpoints; the database view must be empty after every E2E/API pytest test |
 | Money cases | `harness/fixtures/financial_cases.json` | Rust `financial_fixtures.rs`, Dart `financial_fixture_test.dart` | Add the liability decision table here so both languages run it |
 | Boundary partitions for capital dues | `TEST_PLAN_EPIC_10_CAPITAL_EXPENDITURE.md` §3 | Property tests | Generators draw from these partitions |
 | API data builders | `e2e/support/api.py` (listed in `GUI_TEST_PLAN.md` §4) | E2E arrange steps | Seed through the API or SQL, never through screens, except in the one UI test per flow |

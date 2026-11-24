@@ -91,6 +91,36 @@ mod tests {
     }
 
     #[test]
+    fn month_end_and_leap_day_matrix_uses_the_site_calendar() {
+        let cases = [
+            ((2024, 2, 28, 20, 59), (2024, 2, 28)),
+            ((2024, 2, 28, 21, 0), (2024, 2, 29)),
+            ((2024, 2, 29, 20, 59), (2024, 2, 29)),
+            ((2024, 2, 29, 21, 0), (2024, 3, 1)),
+            ((2025, 2, 28, 21, 0), (2025, 3, 1)),
+            ((2026, 4, 29, 21, 0), (2026, 4, 30)),
+            ((2026, 4, 30, 21, 0), (2026, 5, 1)),
+            ((2026, 1, 30, 21, 0), (2026, 1, 31)),
+            ((2026, 1, 31, 21, 0), (2026, 2, 1)),
+        ];
+
+        for ((year, month, day, hour, minute), (expected_year, expected_month, expected_day)) in
+            cases
+        {
+            let instant = Utc
+                .with_ymd_and_hms(year, month, day, hour, minute, 0)
+                .single()
+                .expect("valid UTC boundary instant");
+            assert_eq!(
+                local_date("Europe/Istanbul", instant),
+                NaiveDate::from_ymd_opt(expected_year, expected_month, expected_day)
+                    .expect("valid expected local date"),
+                "UTC {year}-{month:02}-{day:02} {hour:02}:{minute:02}"
+            );
+        }
+    }
+
+    #[test]
     fn an_unknown_time_zone_falls_back_to_istanbul() {
         assert_eq!(local_date("Not/AZone", utc(11, 30, 21, 30)), date(12, 1));
     }
