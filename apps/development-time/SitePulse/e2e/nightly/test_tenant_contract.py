@@ -72,7 +72,7 @@ TEST_BANK_IBAN = "TR190020500009863791600001"
 # remaining reports carry the selected site ID in the response object.
 IMPLICIT_READ_CASES = {
     "/api/v1/accounting/account-report": None,
-    "/api/v1/accounting/approval-policy": None,
+    "/api/v1/accounting/approval-policy": "approval-policy",
     "/api/v1/accounting/budget-vs-actual": None,
     "/api/v1/accounting/expenses": "expense",
     "/api/v1/accounting/journal": "journal",
@@ -334,6 +334,11 @@ def arrange_implicit_read(api, stack, manager, ids, arrangement: str | None) -> 
 
     if arrangement is None:
         return "site_id", site
+    if arrangement == "approval-policy":
+        api.call("PUT", "/api/v1/accounting/approval-policy", manager.token, body={
+            "manager_limit": "4321.00",
+        })
+        return "site_id", site
     if arrangement == "journal":
         return "reference", str(ids["receipt_number"])
     if arrangement in {"audit", "access-log"}:
@@ -451,6 +456,8 @@ def test_implicit_reads_follow_manager_site(api, stack, two_sites, path, arrange
     owner_status, owner_body = get_response(api, path, second.token)
     assert owner_status == 200, f"Second-site GET {path} returned {owner_status}"
     assert marker in field_values(json.loads(owner_body), field), f"GET {path} did not return the seeded {field}"
+    if arrangement == "approval-policy":
+        assert Decimal(json.loads(owner_body)["manager_limit"]) == Decimal("4321.00")
 
     foreign_status, foreign_body = get_response(api, path, first.token)
     assert foreign_status == 200, f"First-site GET {path} returned {foreign_status}"
@@ -458,3 +465,5 @@ def test_implicit_reads_follow_manager_site(api, stack, two_sites, path, arrange
     if arrangement is None:
         assert str(first.user["site_id"]) in first_values, f"GET {path} did not identify the first site"
     assert marker not in first_values, f"GET {path} returned the other site's {field}"
+    if arrangement == "approval-policy":
+        assert Decimal(json.loads(foreign_body)["manager_limit"]) != Decimal("4321.00")
