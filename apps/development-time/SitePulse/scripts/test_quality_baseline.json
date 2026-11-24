@@ -1,7 +1,7 @@
 {
   "counts": {
     "any-error-is-err-checks": 61,
-    "environment-mutations": 24,
+    "environment-mutations": 25,
     "fixed-sleep-calls": 29,
     "scenario-over-cap-tests": 8,
     "unwrap-only-tests": 3,
