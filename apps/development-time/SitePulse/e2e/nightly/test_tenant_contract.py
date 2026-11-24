@@ -341,6 +341,48 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         {"receipt": str(ids["receipt"]), "reason": "Nightly cross-site rejection control"},
         success={201},
     )
+    assert_write_is_site_scoped(
+        api, "/api/v1/dues/periods", second, first,
+        {"site_id": ids["site"], "period_name": "Nightly Scope Period", "due_date": "2026-11-30"},
+        success={201},
+    )
+    assert_write_is_site_scoped(
+        api, "/api/v1/dues/accrue-period", second, first,
+        {"site_id": ids["site"], "period": "Ekim 2026", "amount": "1.00", "due_date": "2026-10-15"},
+        success={200},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/operating-budgets?{query_site}", second, first,
+        {"fiscal_year": 2027, "lines": [
+            {"category": "CLEANING", "annual_amount": "1200.00", "allocation_key": "EQUAL"},
+        ]},
+        success={201},
+    )
+    assert_write_is_site_scoped(
+        api, "/api/v1/capital-projects", second, first,
+        {
+            "site_id": ids["site"], "title": "Nightly Tenant Scope Project",
+            "category": "OTHER", "total_budget": "12.00", "allocation_basis": "EQUAL_PER_UNIT",
+            "contract_amount": "12.00", "installments": [{
+                "installment_number": 1, "total_installments": 1,
+                "due_date": "2026-11-30", "installment_budget": "12.00",
+            }],
+        },
+        success={201},
+    )
+    assert_write_is_site_scoped(
+        api, "/api/v1/leases", second, first,
+        {
+            "unit_id": str(ids["unit"]), "tenant_name": "Nightly Lease Tenant",
+            "monthly_rent": "100.00", "lease_start": "2026-11-01",
+        },
+        success={201},
+    )
+    assert_write_is_site_scoped(
+        api, "/api/v1/announcements", second, first,
+        {"site_id": ids["site"], "title": "Nightly Tenant Scope Announcement", "body": "Site scoped."},
+        success={201},
+    )
     api.create_units(second, "B", unit_number=1)
     api.create_units(second, "B", unit_number=2)
     api.register_home_owner(second, "B", 1, "Nightly Scoped Owner", "nightly-scoped-owner@example.test")
