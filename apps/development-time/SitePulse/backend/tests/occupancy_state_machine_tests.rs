@@ -13,6 +13,8 @@ const VACANT: UnitState = UnitState::new(Ownership::Owned, Occupancy::Vacant);
 const OWNER_OCCUPIED: UnitState = UnitState::new(Ownership::Owned, Occupancy::OwnerOccupied);
 const TENANT_OCCUPIED: UnitState = UnitState::new(Ownership::Owned, Occupancy::TenantOccupied);
 const UNOWNED_VACANT: UnitState = UnitState::new(Ownership::Unowned, Occupancy::Vacant);
+const UNOWNED_TENANT_OCCUPIED: UnitState =
+    UnitState::new(Ownership::Unowned, Occupancy::TenantOccupied);
 
 fn d(s: &str) -> NaiveDate {
     NaiveDate::parse_from_str(s, "%Y-%m-%d").expect("valid date")
@@ -77,7 +79,7 @@ fn model_next(state: UnitState, command: Command) -> Option<UnitState> {
     }
 }
 
-fn generated_commands() -> [Command; 11] {
+fn generated_commands() -> [Command; 12] {
     use Command::*;
     [
         RegisterOwner { resides: false },
@@ -100,47 +102,74 @@ fn generated_commands() -> [Command; 11] {
             buyer_is_tenant: false,
             new_owner_moves_in: true,
         },
+        TitleTransfer {
+            buyer_is_tenant: true,
+            new_owner_moves_in: true,
+        },
     ]
+}
+
+fn mark_target_state(reached: &mut [bool; 4], state: UnitState) {
+    let index = match (state.ownership, state.occupancy) {
+        (Ownership::Owned, Occupancy::Vacant) => 0,
+        (Ownership::Owned, Occupancy::OwnerOccupied) => 1,
+        (Ownership::Owned, Occupancy::TenantOccupied) => 2,
+        (Ownership::Unowned, Occupancy::Vacant) => 3,
+        (Ownership::Unowned, Occupancy::TenantOccupied | Occupancy::OwnerOccupied) => {
+            panic!("unowned occupancy is not a transition target")
+        }
+    };
+    reached[index] = true;
 }
 
 // covers: SC-08-06-01, SC-08-07-01, SC-08-09-01
 #[test]
 fn generated_occupancy_sequences_match_the_reference_model() {
     let commands = generated_commands();
-    let mut state = UNOWNED_VACANT;
+    let mut reached_targets = [false; 4];
     let mut seed = 0x5eed_u64;
 
-    for step in 0..512 {
-        // Stable xorshift sequence keeps failures reproducible without external randomness.
-        seed ^= seed << 13;
-        seed ^= seed >> 7;
-        seed ^= seed << 17;
-        let command = commands[(seed as usize) % commands.len()];
-        let expected = model_next(state, command);
-        let result = plan(state, command);
+    // The second source state covers the existing unowned-tenant move-out arm,
+    // which cannot be reached from the ordinary registered-unit starting state.
+    for mut state in [UNOWNED_VACANT, UNOWNED_TENANT_OCCUPIED] {
+        for step in 0..512 {
+            // Stable xorshift sequence keeps failures reproducible without external randomness.
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let command = commands[(seed as usize) % commands.len()];
+            let expected = model_next(state, command);
+            let result = plan(state, command);
 
-        assert_eq!(
-            result.as_ref().ok().map(|transition| transition.to),
-            expected,
-            "step {step}, state {:?}, command {:?}",
-            state,
-            command
-        );
-        if let Some(next) = expected {
-            let transition = result.expect("model-legal command must have a plan");
             assert_eq!(
-                transition.from, state,
-                "step {step} must start at model state"
+                result.as_ref().ok().map(|transition| transition.to),
+                expected,
+                "step {step}, state {:?}, command {:?}",
+                state,
+                command
             );
-            assert_eq!(transition.to, next, "step {step} must reach model state");
-            assert!(
-                transition.to.ownership == Ownership::Owned
-                    || transition.to.occupancy != Occupancy::OwnerOccupied,
-                "step {step} cannot leave an unowned unit owner-occupied"
-            );
-            state = next;
+            if let Some(next) = expected {
+                let transition = result.expect("model-legal command must have a plan");
+                assert_eq!(
+                    transition.from, state,
+                    "step {step} must start at model state"
+                );
+                assert_eq!(transition.to, next, "step {step} must reach model state");
+                assert!(
+                    transition.to.ownership == Ownership::Owned
+                        || transition.to.occupancy != Occupancy::OwnerOccupied,
+                    "step {step} cannot leave an unowned unit owner-occupied"
+                );
+                mark_target_state(&mut reached_targets, next);
+                state = next;
+            }
         }
     }
+
+    assert_eq!(
+        reached_targets, [true; 4],
+        "the generated walks must reach every reference-model target state"
+    );
 }
 
 // covers: SC-08-06-01
