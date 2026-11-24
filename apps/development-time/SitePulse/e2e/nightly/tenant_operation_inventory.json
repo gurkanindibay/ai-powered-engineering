@@ -505,7 +505,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "Bank transfer inputs are matched against candidates in the caller's site.",
       "evidence": "backend/src/app.rs: handlers::suggest_matches (Require(ReconciliationConfirm))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_bank_matching_suggestions_follow_manager_site"
+      ]
     },
     {
       "method": "POST",

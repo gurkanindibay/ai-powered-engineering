@@ -742,3 +742,32 @@ def test_implicit_writes_follow_manager_site(api, two_sites, method, path, body_
     foreign_status, foreign_body = get_response(api, path, first.token, method=method, body=body)
     assert foreign_status == 200, f"First-site {method} {path} returned {foreign_status}"
     assert json.loads(foreign_body)["site_id"] == str(first.user["site_id"])
+
+
+def test_bank_matching_suggestions_follow_manager_site(api, two_sites):
+    first, second, ids = two_sites
+    paths = api.call("GET", "/api/v1/openapi.json")["paths"]
+    path = "/api/v1/bank-matching/suggest"
+    assert "post" in paths.get(path, {}), f"POST {path} is missing from generated OpenAPI"
+    body = {"transfers": [{
+        "reference": "nightly-owner-transfer", "amount": "1.00",
+        "description": "Nightly Owner", "sender_name": "Nightly Owner",
+    }]}
+
+    owner_status, owner_body = get_response(api, path, second.token, method="POST", body=body)
+    assert owner_status == 200, f"Second-site POST {path} returned {owner_status}"
+    owner_units = {
+        candidate["unit_id"]
+        for suggestion in json.loads(owner_body)
+        for candidate in suggestion["candidates"]
+    }
+    assert ids["unit"] in owner_units, "Second-site suggestions omitted its matching unit"
+
+    foreign_status, foreign_body = get_response(api, path, first.token, method="POST", body=body)
+    assert foreign_status == 200, f"First-site POST {path} returned {foreign_status}"
+    foreign_units = {
+        candidate["unit_id"]
+        for suggestion in json.loads(foreign_body)
+        for candidate in suggestion["candidates"]
+    }
+    assert ids["unit"] not in foreign_units, "First-site suggestions exposed a second-site unit"
