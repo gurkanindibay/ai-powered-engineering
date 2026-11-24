@@ -455,58 +455,66 @@ impl CapitalProjectService {
         );
         let now = Utc::now();
 
-        // Generate dues_liabilities in DB if available
+        // Persist the accrual under the project's tenant so row-level security
+        // applies to both the project and its generated liabilities.
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
-                    for (unit, share) in &unit_shares {
-                        if let Some(u_id) = crate::db::parse_id_to_i64(&unit.id) {
-                            // The owner on record at accrual owes the installment, unless an
-                            // approved seller-pays override names the seller (STORY-08-05).
-                            let seller =
-                                crate::services::sale_clearance_service::approved_seller_for_unit(
-                                    &client, u_id,
-                                )
-                                .await
-                                .map_err(|e| e.to_string())?;
-                            client
-                                .execute(
-                                    r#"
-                                    INSERT INTO dues_liabilities (
-                                        unit_id, period, debtor_type, expense_type,
-                                        principal_amount, due_date, status, delay_penalty,
-                                        paid_amount, capital_project_id, installment_number, created_at,
-                                        liable_person_id
-                                    )
-                                    VALUES (
-                                        $1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00, $5, $6, $7,
-                                        COALESCE($8::bigint, (SELECT owner_person_id FROM units WHERE id = $1))
-                                    )
-                                    "#,
-                                    &[
-                                        &u_id,
-                                        &period_name,
-                                        share,
-                                        &installment.due_date,
-                                        &p_id,
-                                        &installment_number,
-                                        &now,
-                                        &seller,
-                                    ],
-                                )
-                                .await.map_err(|e| e.to_string())?;
-                        }
-                    }
-
-                    // Mark installment accrued in DB
-                    client
-                        .execute(
-                            "UPDATE capital_project_installments SET is_accrued = TRUE, accrued_at = $1 WHERE project_id = $2 AND installment_number = $3",
-                            &[&now, &p_id, &installment_number],
+            let p_id = crate::db::require_id("capital project", project_id)?;
+            let site_num = crate::db::require_id("site", &project.site_id)?;
+            let mut client = pool
+                .get()
+                .await
+                .map_err(|e| format!("Database unavailable: {e}"))?;
+            let tx = client
+                .transaction()
+                .await
+                .map_err(|e| format!("Database unavailable: {e}"))?;
+            crate::db::tx_bind_tenant(&tx, site_num)
+                .await
+                .map_err(|e| format!("Could not bind project tenant: {e}"))?;
+            for (unit, share) in &unit_shares {
+                if let Some(u_id) = crate::db::parse_id_to_i64(&unit.id) {
+                    // The owner on record at accrual owes the installment, unless an
+                    // approved seller-pays override names the seller (STORY-08-05).
+                    let seller = crate::services::sale_clearance_service::approved_seller_for_unit(
+                        &tx, u_id,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    tx.execute(
+                        r#"
+                        INSERT INTO dues_liabilities (
+                            unit_id, period, debtor_type, expense_type,
+                            principal_amount, due_date, status, delay_penalty,
+                            paid_amount, capital_project_id, installment_number, created_at,
+                            liable_person_id
                         )
-                        .await.map_err(|e| e.to_string())?;
+                        VALUES (
+                            $1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00, $5, $6, $7,
+                            COALESCE($8::bigint, (SELECT owner_person_id FROM units WHERE id = $1))
+                        )
+                        "#,
+                        &[
+                            &u_id,
+                            &period_name,
+                            share,
+                            &installment.due_date,
+                            &p_id,
+                            &installment_number,
+                            &now,
+                            &seller,
+                        ],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
                 }
             }
+            tx.execute(
+                "UPDATE capital_project_installments SET is_accrued = TRUE, accrued_at = $1 WHERE project_id = $2 AND installment_number = $3",
+                &[&now, &p_id, &installment_number],
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            tx.commit().await.map_err(|e| e.to_string())?;
         }
 
         // Also update memory state

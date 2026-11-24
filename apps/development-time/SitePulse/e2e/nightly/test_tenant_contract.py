@@ -15,7 +15,6 @@ import pytest
 # control. Validate each route against the server's generated OpenAPI contract.
 READ_CASES = (
     ("/api/v1/home-residents/members/{unit_id}", "unit_id", "unit", False),
-    ("/api/v1/residents/{unit_id}/autopay", "unit_id", "unit", False),
     ("/api/v1/residents/{unit_id}/dashboard", "unit_id", "unit", False),
     ("/api/v1/residents/{unit_id}/disputes", "unit_id", "unit", False),
     ("/api/v1/residents/{unit_id}/matching-criteria", "unit_id", "unit", False),
@@ -621,8 +620,9 @@ def test_registration_decisions_are_site_scoped(api, stack, two_sites):
     assert owner_approve == 409, f"Same-site POST {approve_path} returned {owner_approve}"
 
 
-def test_reconciliation_queue_decisions_are_site_scoped(api, two_sites):
+def test_reconciliation_queue_decisions_are_site_scoped(api, stack, two_sites):
     first, second, ids = two_sites
+    arrange_open_due(api, stack, ids)
     marker = "NIGHTLY-RECON-SCOPE"
     api.call(
         "POST", "/api/v1/bank/statements/parse", second.token,
@@ -703,9 +703,12 @@ def test_person_merge_is_site_scoped(api, two_sites):
 
 def test_occupancy_transition_is_site_scoped(api, two_sites):
     first, second, ids = two_sites
-    new_units = api.create_units(second, "A", unit_number=2)
-    unit_id = str(new_units[0]["id"])
+    api.create_units(second, "A", unit_number=2)
+    unit = next(item for item in api.get_units(second) if int(item["unit_number"]) == 2)
+    unit_id = str(unit["id"])
     path = f"/api/v1/site-admin/units/{unit_id}/occupancy-transitions?site_id={ids['site']}"
+    state = api.get_unit_occupancy_state(second, unit_id, ids["site"])
+    assert "TENANT_MOVE_IN" in state["allowed_commands"], f"Unexpected vacant unit state: {state}"
     body = {
         "command": "TENANT_MOVE_IN", "effective_date": date.today().isoformat(),
         "full_name": "Nightly Scoped Tenant", "email": "nightly-scoped-tenant@example.test",
@@ -713,12 +716,18 @@ def test_occupancy_transition_is_site_scoped(api, two_sites):
     }
     foreign_status, _ = get_response(api, path, first.token, method="POST", body=body)
     assert foreign_status in {403, 404}, f"Foreign POST {path} returned {foreign_status}"
-    owner_status, _ = get_response(api, path, second.token, method="POST", body=body)
-    assert owner_status == 200, f"Same-site POST {path} returned {owner_status}"
+    owner_status, owner_body = get_response(api, path, second.token, method="POST", body=body)
+    assert owner_status == 200, f"Same-site POST {path} returned {owner_status}: {owner_body[:300]}"
 
 
-def test_autopay_mandate_lifecycle_is_site_scoped(api, stack, two_sites):
+def test_autopay_mandate_lifecycle_is_site_scoped(api, stack, actors, two_sites):
     first, second, ids = two_sites
+    stack.sql(
+        "UPDATE users SET password_hash = (SELECT password_hash FROM users WHERE id = "
+        f"{int(second.user['id'])}), must_change_password = FALSE "
+        "WHERE email = 'second-owner@example.test' "
+        f"AND site_id = {int(ids['site'])};"
+    )
     method_id = stack.sql(
         "INSERT INTO saved_payment_methods "
         "(site_id, unit_id, debtor_type, owner_ref, provider, token_ref, brand, last4, "
@@ -728,18 +737,20 @@ def test_autopay_mandate_lifecycle_is_site_scoped(api, stack, two_sites):
         "RETURNING id;"
     ).splitlines()[0]
     stack.restart_backend()
-    unit_path = f"/api/v1/residents/{ids['unit']}/autopay/mandates"
+    owner = api.login("second-owner@example.test", "Nightly-Manager-2026!")
+    first_owner = api.login(**actors["homeowner"])
+    unit_path = f"/api/v1/residents/{owner.user['unit_id']}/autopay/mandates"
     body = {"payment_method_id": int(method_id), "debtor_type": "OWNER", "max_amount": "100.00"}
-    foreign_create, _ = get_response(api, unit_path, first.token, method="POST", body=body)
+    foreign_create, _ = get_response(api, unit_path, first_owner.token, method="POST", body=body)
     assert foreign_create in {403, 404}, f"Foreign POST {unit_path} returned {foreign_create}"
-    owner_create, owner_response = get_response(api, unit_path, second.token, method="POST", body=body)
+    owner_create, owner_response = get_response(api, unit_path, owner.token, method="POST", body=body)
     assert owner_create == 201, f"Same-site POST {unit_path} returned {owner_create}"
     mandate_id = json.loads(owner_response)["id"]
 
     cancel_path = f"{unit_path}/{mandate_id}/cancel"
-    foreign_cancel, _ = get_response(api, cancel_path, first.token, method="POST")
+    foreign_cancel, _ = get_response(api, cancel_path, first_owner.token, method="POST")
     assert foreign_cancel in {403, 404}, f"Foreign POST {cancel_path} returned {foreign_cancel}"
-    owner_cancel, _ = get_response(api, cancel_path, second.token, method="POST")
+    owner_cancel, _ = get_response(api, cancel_path, owner.token, method="POST")
     assert owner_cancel == 200, f"Same-site POST {cancel_path} returned {owner_cancel}"
 
 
@@ -778,8 +789,16 @@ def test_support_grant_lifecycle_requires_platform_scope(api, stack, actors, two
         assert owner_status == 200, f"Platform approver POST {path} returned {owner_status}"
 
 
-def test_inter_ledger_transfer_is_site_scoped(api, two_sites):
+def test_inter_ledger_transfer_is_site_scoped(api, stack, two_sites):
     first, second, ids = two_sites
+    stack.sql(
+        "INSERT INTO dues_liabilities "
+        "(unit_id, period, debtor_type, expense_type, principal_amount, due_date, status) "
+        f"VALUES ({int(ids['unit'])}, 'Nightly interledger scope', 'TENANT', 'OPERATIONAL_DUES', "
+        "5.00, CURRENT_DATE - 1, 'PENDING');"
+    )
+    stack.restart_backend()
+    api.clock.set_date(date.today())
     path = "/api/v1/payments/inter-ledger-transfer"
     body = {
         "site_id": ids["site"], "unit_id": ids["unit"], "amount": "1.00",
@@ -787,10 +806,11 @@ def test_inter_ledger_transfer_is_site_scoped(api, two_sites):
     }
     foreign_status, _ = get_response(api, path, first.token, method="POST", body=body)
     assert foreign_status in {403, 404}, f"Foreign POST {path} returned {foreign_status}"
-    owner_status, _ = get_response(api, path, second.token, method="POST", body=body)
-    assert owner_status == 200, f"Same-site POST {path} returned {owner_status}"
+    owner_status, owner_body = get_response(api, path, second.token, method="POST", body=body)
+    assert owner_status == 200, f"Same-site POST {path} returned {owner_status}: {owner_body[:300]}"
 
 
+@pytest.mark.covers("SC-10-01-03")
 def test_additional_tenant_resource_reads_require_membership(api, stack, actors, two_sites):
     """Exercise resource reads that need domain-specific nightly arrangements."""
     first, second, ids = two_sites
@@ -1090,6 +1110,11 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     assert_read_is_site_scoped(
         api, paths, invite_template,
         invite_template.format(unit_id=second_owner_unit), second_owner, first_owner,
+    )
+    autopay_template = "/api/v1/residents/{unit_id}/autopay"
+    assert_read_is_site_scoped(
+        api, paths, autopay_template,
+        autopay_template.format(unit_id=second_owner_unit), second_owner, first_owner,
     )
     second_intent = api.call(
         "POST", f"/api/v1/residents/{second_owner_unit}/payment-intents", second_owner.token,
