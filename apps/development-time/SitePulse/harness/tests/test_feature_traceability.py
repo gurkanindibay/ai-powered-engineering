@@ -52,8 +52,8 @@ def _workspace(tmp: str, feature: str = FEATURE, second_story: bool = True) -> P
     (root / "backend" / "tests" / "demo.rs").write_text(
         "#[test]\nfn unrelated_backend_test() {}\n", encoding="utf-8")
     (root / "e2e" / "tests").mkdir(parents=True)
-    (root / "e2e" / "tests" / "demo.py").write_text(
-        "# covers: SC-42-02-01\ndef test_when_linked_then_listed(): pass\n", encoding="utf-8")
+    (root / "e2e" / "tests" / "test_demo.py").write_text(
+        "# covers: SC-42-02-01\ndef test_when_linked_then_listed(): assert 2 + 2 == 4\n", encoding="utf-8")
     return root
 
 
@@ -97,7 +97,7 @@ class CatalogueTests(unittest.TestCase):
     def test_pending_note_citing_a_closed_issue_is_a_warning_not_a_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             catalogue = ft.load_catalogue(_workspace(tmp))
-        self.assertEqual(ft.check(catalogue), [])
+            self.assertEqual(ft.check(catalogue), [])
         self.assertEqual(ft.closed_issue_warnings(catalogue, {8, 9}), [])
         warnings = ft.closed_issue_warnings(catalogue, {7, 9})
         self.assertEqual(len(warnings), 1)
@@ -137,9 +137,104 @@ class CatalogueTests(unittest.TestCase):
     def test_linked_scenario_without_a_covering_test_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = _workspace(tmp)
-            (root / "e2e" / "tests" / "demo.py").write_text("def test_nothing(): pass\n", encoding="utf-8")
+            (root / "e2e" / "tests" / "test_demo.py").write_text("def test_nothing(): pass\n", encoding="utf-8")
             problems = ft.check(ft.load_catalogue(root))
         self.assertTrue(any("is @linked but no test declares" in p for p in problems), problems)
+
+
+    def test_cover_declarations_resolve_to_enclosing_and_next_tests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _workspace(tmp)
+            (root / "e2e" / "tests" / "test_demo.py").write_text(
+                "def test_enclosing():\n"
+                "    # covers: SC-42-02-01\n"
+                "    assert 2 + 2 == 4\n"
+                "\n"
+                '@pytest.mark.covers(\n'
+                '    "SC-42-02-01",\n'
+                ')\n'
+                "def test_decorated():\n"
+                "    assert 2 + 2 == 4\n"
+            )
+            (root / "backend" / "tests" / "demo.rs").write_text(
+                "// covers: SC-42-02-01\n"
+                "#[test]\n"
+                "fn next_test() { assert_eq!(2 + 2, 4); }\n"
+            )
+            catalogue = ft.load_catalogue(root)
+            evidence = ft.scenario_evidence(catalogue)
+            self.assertEqual(ft.check(catalogue, evidence), [])
+            self.assertEqual({link["test"]["name"] for link in evidence[0]["SC-42-02-01"]},
+                             {"next_test", "test_enclosing", "test_decorated"})
+
+    def test_bad_declarations_fail_even_with_other_valid_evidence(self):
+        cases = {
+            "backend/tests/ignored.rs": (
+                '#[ignore = "requires a database"]\n#[test]\n// covers: SC-42-02-01\n'
+                "fn ignored() { assert_eq!(1, 1); }\n", "rust-db-test --test list"),
+            "backend/tests/feature.rs": (
+                '#![cfg(feature = "experimental-api")]\n\n// covers: SC-42-02-01\n'
+                "#[test]\nfn gated() { assert_eq!(1, 1); }\n", "no CI gate passes it"),
+            "backend/tests/env.rs": (
+                '// covers: SC-42-02-01\n#[test]\nfn opt_in() {\n'
+                '    if std::env::var("SITEPULSE_TEST_OPT_IN").is_err() { return; }\n'
+                "    assert_eq!(1, 1);\n}\n", "reports PASS without running"),
+            "e2e/tests/test_env.py": (
+                '@pytest.mark.covers("SC-42-02-01")\ndef test_opt_in():\n'
+                '    if not os.getenv("TEST_OPT_IN"):\n        pytest.skip("opt in")\n'
+                "    assert 2 + 2 == 4\n", "TEST_OPT_IN"),
+            "e2e/tests/test_skipped.py": (
+                '@pytest.mark.skip(reason="later")\n@pytest.mark.covers("SC-42-02-01")\n'
+                "def test_skipped():\n    assert 2 + 2 == 4\n", "does not execute in CI"),
+            "e2e/tests/test_linked_backend_suites.py": (
+                '@pytest.mark.covers("SC-42-02-01")\ndef test_wrapper():\n    run_suite([])\n',
+                "whole-suite wrapper"),
+            "e2e/tests/test_file_level.py": (
+                "# covers: SC-42-02-01\n\nimport sys\n\n"
+                "def test_unrelated():\n    assert 2 + 2 == 4\n", "unattached declaration"),
+            "e2e/tests/test_helper.py": (
+                "def helper():\n    # covers: SC-42-02-01\n    pass\n\n"
+                "def test_unrelated():\n    assert 2 + 2 == 4\n", "unattached declaration"),
+            "scripts/demo.py": (
+                "# covers: SC-42-02-01\ndef check():\n    return True\n", "not a registered CI test case"),
+        }
+        for filename, (source, diagnostic) in cases.items():
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as tmp:
+                root = _workspace(tmp)
+                path = root / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(source)
+                catalogue = ft.load_catalogue(root)
+                problems = ft.check(catalogue)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn(filename, problems[0])
+                self.assertIn(diagnostic, problems[0])
+
+    def test_ignored_test_in_postgres_gate_supplies_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _workspace(tmp)
+            (root / "e2e" / "tests" / "test_demo.py").unlink()
+            (root / "backend" / "tests" / "demo.rs").write_text(
+                '// covers: SC-42-02-01\n#[ignore]\n#[test]\nfn database() { assert_eq!(1, 1); }\n'
+            )
+            gates = root / "harness/loop/verification_gates.py"
+            gates.parent.mkdir(parents=True)
+            gates.write_text(
+                '{"rust-db-test": [CommandSpec(["cargo", "test", "--test", "demo", "--", "--ignored"], "backend")]}'
+            )
+            catalogue = ft.load_catalogue(root)
+            evidence = ft.scenario_evidence(catalogue)
+            self.assertEqual(ft.check(catalogue, evidence), [])
+            self.assertEqual(evidence[0]["SC-42-02-01"][0]["test"]["run"], "ci-db-gate")
+
+    def test_gate_and_scanner_agree_on_verified_count(self):
+        from test_strategy_scan import scan, summarize
+
+        catalogue = ft.load_catalogue()
+        evidence = ft.scenario_evidence(catalogue)
+        scanned = summarize(scan(ft.ROOT.parents[2]))
+        self.assertEqual(scanned["verified_scenarios"], evidence[2])
+        self.assertFalse(scanned["mis_covered"])
 
 
 class ReportTests(unittest.TestCase):

@@ -50,8 +50,6 @@ def test_empty_credentials_are_rejected_without_a_request(login_page, page):
 
 @pytest.mark.skip(reason="Pending in-repo fake Google OIDC provider for CI")
 @pytest.mark.edge
-@pytest.mark.covers("SC-06-03-02")
-@pytest.mark.covers("SC-06-05-01")
 @pytest.mark.gui_id("GUI-06-11")
 def test_google_sign_in_redirects_to_the_provider(login_page, page):
     google_requests: list[str] = []

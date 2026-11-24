@@ -903,8 +903,8 @@ area = "traceability"
 operator = "remove-check"
 risk = "high"
 file = "scripts/feature_traceability.py"
-original = "if scenario.mode == \"linked\" and scenario.id not in catalogue.links:"
-mutant = "if False and scenario.mode == \"linked\" and scenario.id not in catalogue.links:"
+original = 'if verdict == "NO-LINK":'
+mutant = 'if False and verdict == "NO-LINK":'
 intent = "A @linked scenario with no test declaring `covers:` passes the traceability gate."
 suites = ["harness"]
 

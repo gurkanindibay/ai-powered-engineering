@@ -402,4 +402,13 @@ The assessment covers master at `2f16868` (2026-11-23), read from a shallow clon
 3. **Mis-coverage.** It loads the catalogue and links through the repo's own `feature_traceability.py`, resolves each of the 642 links to the enclosing or next test by line range, and classifies the scenario by the strongest running, asserting link.
 4. **Rerun** from `apps/development-time/SitePulse`: `python3 -I scripts/test_strategy_scan.py` prints totals, never-run tests and mis-covered scenarios; `--json` gives the summary as JSON and `--output scan.json` writes every test and scenario row. `harness/tests/test_test_strategy.py` keeps the strategy wired into AGENTS.md, the tester agent and the harness policy.
 
+`python3 scripts/feature_traceability.py --json check` and the scanner report the same
+`verified_scenarios` count. This is a static count of Gherkin scenarios and linked scenarios
+with a named, asserting test selected by CI. Actual pass and fail results come from the CI
+case results artifact. Use a covers declaration inside a test or immediately above its declaration
+and attributes. Put a scenario's coverage on an individual test, even when a suite wrapper records
+that scenario for local history. An API system check can supply evidence when registered as a
+named case in its CI gate. Other standalone script and file declarations are rejected.
+
+
 **Limits.** Assertion strength is judged statically, so a helper that asserts internally counts as an assertion only if its name starts with `assert`, `expect`, `check` or `verify`. Dynamic skips inside helpers can be missed. Line, branch and mutation coverage were not measured in this review; their numbers come from the repo documents cited.
