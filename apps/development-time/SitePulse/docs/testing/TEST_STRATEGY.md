@@ -39,9 +39,9 @@ This document is the single test strategy for SitePulse. It absorbs 15 testing d
 | Document | What it held | Disposition |
 | --- | --- | --- |
 | `docs/testing/TEST_PLAN_AND_EXECUTION_MATRIX.md` | Five principles, 6 functional areas, 6 execution cases | **Merged** (Principles, Lanes). The area map stays executable in `run_tests.py --area` |
-| `docs/testing/GUI_TEST_PLAN.md` | GUI-xx-nn catalogue, API data builders, phase logs from 2026-11-07 to 11-11 | **Narrowed** to the GUI-id ↔ SC-id map and data builders; phase logs and xfail statuses marked historical by the banner; removed in roadmap item 4 |
+| `docs/testing/GUI_TEST_PLAN.md` | GUI-xx-nn scenario and selector catalogue, API data builders | **Narrowed** to the catalogue and data builders; historical execution notes removed |
 | `docs/testing/GUI_AUTOMATION_PLAN.md` | Plan to build the browser suite (phases 0–4 done) | **Retired** (banner now; removed in roadmap phase 1): complete |
-| `docs/testing/GUI_COVERAGE_GAPS.md` | About 20 UI features with no scenario; missing test kinds | **Merged** into the roadmap backlog |
+| `docs/testing/GUI_COVERAGE_GAPS.md` | Superseded 2026-11-07 gap report | **Retired**; current state is in this strategy and CI reports |
 | `docs/testing/journey-plan/` (3 files) | Fixtures F0–F7, ledger invariants, isolation and teardown contract | **Kept** as the test-data reference (Test data section) |
 | `docs/testing/TEST_PLAN_EPIC_10_CAPITAL_EXPENDITURE.md` | EPIC-10 RTM, boundary partitions, teardown | **Narrowed** to its boundary data dictionary; the RTM is superseded by `.specify/features` traceability |
 | `docs/testing/test-coverage-assessment-2026-11-10.md` | Point-in-time assessment | **Retired** (banner now; removed in roadmap phase 1): superseded by the assessment here |
@@ -51,7 +51,7 @@ This document is the single test strategy for SitePulse. It absorbs 15 testing d
 | `docs/testing/test-reporting-pages-analysis.md` | One Pages dashboard for all suites | **Merged** (Reporting) |
 | `docs/engineering-process/test-time-analysis.md` | Measured CI time, steps A–N | **Merged**: done steps recorded, open steps in the roadmap |
 
-Until roadmap phase 1 removes retired content, every absorbed document keeps its text behind a banner that states its disposition; nothing has been deleted yet.
+Retired reports are either removed or replaced with a short pointer to the current source of truth.
 
 Editing this strategy is operator or interactive work. Durable-harness workers read it through AGENTS.md but cannot write it (it is a protected path, like the gate catalogue); a worker whose change needs a strategy update reports that as a residual risk.
 
@@ -251,18 +251,18 @@ Every test function was parsed from source (Rust attributes, Dart `test`/`testWi
 | E2E suite wrappers | `e2e/tests/test_linked_backend_suites.py` | 21 | ignored in CI (`PYTEST_ADDOPTS --ignore`) | 0 | 21 by design |
 | SitePulse harness | `harness/tests` | 267 | `harness-selftest` (lint) | 267 | 0 |
 | Engineering harness | `tests/**` | 143 | `engineering-harness-ci.yml` | 143 | 0 |
-| Cucumber/Serenity pilot | `e2e-cucumber/` | 5 cases, 4 scenarios | opt-in workflow only | 0 | reference only |
+| Retired Cucumber/Serenity pilot | git tag `pilot/cucumber-serenity-arm-b` | 5 cases, 4 scenarios | archived | n/a | reference only |
 | Mutation catalogue | `scripts/mutation_scenarios.py` | 58 mutants | `mutation-testing.yml`, nightly 02:00 UTC | nightly | not on PRs |
 
 CI is structured well. Five gate groups (lint, rust, flutter, e2e, final) run as parallel jobs, and `test_run_tests_groups.py` fails if a gate is dropped from CI. PR runs cancel superseded pushes. The `continue-on-error: true` flags sit only on artifact and metadata steps, so they never mask a red gate. The six env-conditional harness tests (`HARNESS_DOCKER_IMAGE`, workflow-file presence) do run in CI, because CI sets those preconditions.
 
 ## Tags and markers: xfail, ignore, skip, pending
 
-There are no active xfails today, even though the docs still describe dozens. `e2e/pytest.ini` sets `xfail_strict = true` and `--strict-markers`, which is the right policy. But no test applies `xfail` any more, and `e2e/support/known_issues.py` defines a reason for BUG #277 that nothing uses. Meanwhile `GUI_TEST_PLAN.md` mentions xfail 33 times (for example "strict xfail #283/#284/#286") and `GUI_COVERAGE_GAPS.md` 11 times. The 2026-11-10 assessment counted 43. Either those defects were fixed or the markers were removed; the docs no longer say which.
+There are no active xfail markers. `e2e/pytest.ini` keeps `xfail_strict = true` and `--strict-markers`. Historical execution notes describing old xfails have been removed; the GUI scenario catalogue remains in `GUI_TEST_PLAN.md`.
 
 | Marker | Where | Count | Effect in CI | Verdict |
 | --- | --- | --- | --- | --- |
-| `@pytest.mark.xfail` / `expectedFailure` | e2e, harness | 0 | n/a | Docs stale; reconcile with issues #277, #283, #284, #286 |
+| `@pytest.mark.xfail` / `expectedFailure` | e2e, harness | 0 | n/a | No active markers |
 | `#[ignore = "needs PostgreSQL"]` | 8 `db_*` files | 66 | Run by `rust-db-test --ignored` | Good |
 | `#[ignore = "needs PostgreSQL… run by the rust-db-test gate"]` | `sale_clearance_tests.rs` | 2 | **Never run**: file missing from the gate's `--test` list | Bug: the message is false |
 | `#[ignore = "visual review helper"]` | `payments_phase2_tests.rs` `sample_receipt_pdf` | 1 | Never run, by design | Move to `examples/` or a bin |
