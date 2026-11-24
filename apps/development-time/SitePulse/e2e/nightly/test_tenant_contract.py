@@ -68,6 +68,7 @@ PDF_ROUTE = "/api/v1/payments/receipts/{id}/pdf"
 IMPLICIT_WRITE_CASES = (
     ("POST", "/api/v1/autopay/run", lambda: {"as_of": date.today().isoformat()}),
     ("PUT", "/api/v1/operating-budgets/transition", lambda: {"transition_days": 30}),
+    ("POST", "/api/v1/kvkk/retention/purge", lambda: {}),
 )
 SECOND_SITE_MARKER = "Nightly second-site scope marker"
 TEST_BANK_IBAN = "TR190020500009863791600001"
@@ -707,6 +708,24 @@ def test_implicit_reads_follow_manager_site(api, stack, two_sites, path, arrange
     owner_status, owner_body = get_response(api, path, second.token)
     assert owner_status == 200, f"Second-site GET {path} returned {owner_status}"
     assert marker in field_values(json.loads(owner_body), field), f"GET {path} did not return the seeded {field}"
+    if arrangement == "payment-plan":
+        plan = next(item for item in json.loads(owner_body) if item.get("note") == marker)
+        plan_id = plan["id"]
+        as_of = (date.fromisoformat(plan["first_due_date"]) + timedelta(days=90)).isoformat()
+        run_path = "/api/v1/payment-plans/run"
+        assert "post" in paths.get(run_path, {}), f"POST {run_path} is missing from generated OpenAPI"
+        owner_run_status, owner_run_body = get_response(
+            api, run_path, second.token, method="POST", body={"as_of": as_of},
+        )
+        assert owner_run_status == 200, f"Second-site POST {run_path} returned {owner_run_status}"
+        owner_run = json.loads(owner_run_body)
+        assert plan_id in owner_run["completed"] + owner_run["broken"]
+        foreign_run_status, foreign_run_body = get_response(
+            api, run_path, first.token, method="POST", body={"as_of": as_of},
+        )
+        assert foreign_run_status == 200, f"First-site POST {run_path} returned {foreign_run_status}"
+        foreign_run = json.loads(foreign_run_body)
+        assert plan_id not in foreign_run["completed"] + foreign_run["broken"]
     if arrangement == "approval-policy":
         assert Decimal(json.loads(owner_body)["manager_limit"]) == Decimal("4321.00")
     if arrangement == "privacy":
