@@ -324,8 +324,15 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
         api, f"/api/v1/site-admin/house-types?{query_site}", second, first,
         {"type_name": "Nightly Scoped Type", "dues_amount": "100.00"}, success={201},
     )
+    api.register_home_owner(
+        second, "A", 2, "Nightly Move In Owner", "nightly-move-in-owner@example.test",
+        is_resident=False,
+    )
+    move_in_unit = next(
+        item for item in api.get_units(second) if int(item["unit_number"]) == 2
+    )
     assert_write_is_site_scoped(
-        api, f"/api/v1/site-admin/units/{ids['unit']}/move-in?{query_site}", second, first,
+        api, f"/api/v1/site-admin/units/{move_in_unit['id']}/move-in?{query_site}", second, first,
         {
             "role": "TENANT", "full_name": "Nightly Scoped Tenant",
             "phone": "+90 532 111 22 44", "email": "nightly-scoped-tenant@example.test",
@@ -704,11 +711,15 @@ def test_person_merge_is_site_scoped(api, two_sites):
 def test_occupancy_transition_is_site_scoped(api, two_sites):
     first, second, ids = two_sites
     api.create_units(second, "A", unit_number=2)
+    api.register_home_owner(
+        second, "A", 2, "Nightly Transition Owner", "nightly-transition-owner@example.test",
+        is_resident=False,
+    )
     unit = next(item for item in api.get_units(second) if int(item["unit_number"]) == 2)
     unit_id = str(unit["id"])
     path = f"/api/v1/site-admin/units/{unit_id}/occupancy-transitions?site_id={ids['site']}"
     state = api.get_unit_occupancy_state(second, unit_id, ids["site"])
-    assert "TENANT_MOVE_IN" in state["allowed_commands"], f"Unexpected vacant unit state: {state}"
+    assert "TENANT_MOVE_IN" in state["allowed_commands"], f"Unexpected owned vacant unit state: {state}"
     body = {
         "command": "TENANT_MOVE_IN", "effective_date": date.today().isoformat(),
         "full_name": "Nightly Scoped Tenant", "email": "nightly-scoped-tenant@example.test",

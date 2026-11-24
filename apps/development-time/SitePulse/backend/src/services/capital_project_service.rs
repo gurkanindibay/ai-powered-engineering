@@ -10,6 +10,19 @@ use crate::models::{
 };
 use crate::state::AppState;
 
+fn capital_db_error(
+    operation: &str,
+    error: &(dyn std::error::Error + Send + Sync + 'static),
+) -> String {
+    let detail = crate::db::describe_db_error(error);
+    tracing::error!(
+        operation,
+        error = %detail,
+        "Capital project persistence failed"
+    );
+    format!("Capital project {operation} failed")
+}
+
 #[derive(Clone)]
 pub struct CapitalProjectService {
     state: AppState,
@@ -459,18 +472,20 @@ impl CapitalProjectService {
         // applies to both the project and its generated liabilities.
         if let Some(pool) = &self.state.pool {
             let p_id = crate::db::require_id("capital project", project_id)?;
+            let installment_id =
+                crate::db::require_id("capital project installment", &installment.id)?;
             let site_num = crate::db::require_id("site", &project.site_id)?;
             let mut client = pool
                 .get()
                 .await
-                .map_err(|e| format!("Database unavailable: {e}"))?;
+                .map_err(|e| capital_db_error("connection acquisition", &e))?;
             let tx = client
                 .transaction()
                 .await
-                .map_err(|e| format!("Database unavailable: {e}"))?;
+                .map_err(|e| capital_db_error("transaction start", &e))?;
             crate::db::tx_bind_tenant(&tx, site_num)
                 .await
-                .map_err(|e| format!("Could not bind project tenant: {e}"))?;
+                .map_err(|e| capital_db_error("tenant binding", e.as_ref()))?;
             for (unit, share) in &unit_shares {
                 if let Some(u_id) = crate::db::parse_id_to_i64(&unit.id) {
                     // The owner on record at accrual owes the installment, unless an
@@ -479,18 +494,19 @@ impl CapitalProjectService {
                         &tx, u_id,
                     )
                     .await
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| capital_db_error("seller lookup", &e))?;
                     tx.execute(
                         r#"
                         INSERT INTO dues_liabilities (
                             unit_id, period, debtor_type, expense_type,
                             principal_amount, due_date, status, delay_penalty,
-                            paid_amount, capital_project_id, installment_number, created_at,
-                            liable_person_id
+                            paid_amount, capital_project_id, installment_number,
+                            capital_project_installment_id, created_at, liable_person_id
                         )
                         VALUES (
-                            $1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00, $5, $6, $7,
-                            COALESCE($8::bigint, (SELECT owner_person_id FROM units WHERE id = $1))
+                            $1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00,
+                            $5, $6, $7, $8, COALESCE($9::bigint,
+                                (SELECT owner_person_id FROM units WHERE id = $1))
                         )
                         "#,
                         &[
@@ -500,12 +516,13 @@ impl CapitalProjectService {
                             &installment.due_date,
                             &p_id,
                             &installment_number,
+                            &installment_id,
                             &now,
                             &seller,
                         ],
                     )
                     .await
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| capital_db_error("liability insertion", &e))?;
                 }
             }
             tx.execute(
@@ -513,8 +530,10 @@ impl CapitalProjectService {
                 &[&now, &p_id, &installment_number],
             )
             .await
-            .map_err(|e| e.to_string())?;
-            tx.commit().await.map_err(|e| e.to_string())?;
+            .map_err(|e| capital_db_error("installment update", &e))?;
+            tx.commit()
+                .await
+                .map_err(|e| capital_db_error("transaction commit", &e))?;
         }
 
         // Also update memory state
