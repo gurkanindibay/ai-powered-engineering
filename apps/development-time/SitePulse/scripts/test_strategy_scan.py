@@ -242,8 +242,6 @@ def scan(repo: Path) -> dict:
         py_scan(p, "engineering-harness-ci")
 
     # pytest-bdd scenarios automated by step definitions (test_features.py) are 'gherkin' mode
-    # Cucumber pilot: not run by CI
-    pilot = ["SC-10-01-01", "SC-10-04-01", "SC-10-04-02", "SC-07-06-03"]
 
     for t in tests:
         flags = []
@@ -339,7 +337,6 @@ def scan(repo: Path) -> dict:
                         run=(x["test"] or {}).get("run", x["kind"]), flags=(x["test"] or {}).get("flags", []),
                         kind=x["kind"], resolved_test=(x["test"] or {}).get("name"), attached_by=x.get("attached_by"))
                    for x in resolved],
-            cucumber_pilot=s.id in pilot,
         ))
 
     for t in tests:
