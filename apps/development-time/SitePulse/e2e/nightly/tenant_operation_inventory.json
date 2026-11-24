@@ -925,7 +925,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameters unit_id, resident_id.",
       "evidence": "backend/src/app.rs: handlers::delete_unit_member (RequireAny(&[UnitManageHousehold, PersonManage]))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "PUT",
@@ -933,7 +935,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameters unit_id, resident_id.",
       "evidence": "backend/src/app.rs: handlers::update_unit_member (RequireAny(&[UnitManageHousehold, PersonManage]))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
