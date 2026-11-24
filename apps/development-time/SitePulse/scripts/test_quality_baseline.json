@@ -2,7 +2,7 @@
   "counts": {
     "any-error-is-err-checks": 40,
     "environment-mutations": 12,
-    "fixed-sleep-calls": 29,
+    "fixed-sleep-calls": 2,
     "scenario-over-cap-tests": 8,
     "unwrap-only-tests": 3,
     "utc-now-backend-test-reads": 84,
