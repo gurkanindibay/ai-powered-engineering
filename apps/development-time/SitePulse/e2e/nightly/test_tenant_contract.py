@@ -335,6 +335,14 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         api, f"/api/v1/site-admin/persons/duplicate-check?{query_site}", second, first,
         {"full_name": "Nightly Duplicate Scope Probe"}, success={200},
     )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/persons/import?{query_site}", second, first,
+        {
+            "dry_run": True,
+            "csv": "block,unit_no,owner_full_name,owner_email,owner_phone\n"
+                   "A,99,Nightly Import Owner,nightly-import@example.test,+90 532 111 22 33\n",
+        }, success={200},
+    )
     bank_account = {
         "bank_code": "KUVEYT_TURK", "iban": TEST_BANK_IBAN,
         "account_holder": "Nightly authorization site",
