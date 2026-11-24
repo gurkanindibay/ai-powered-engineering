@@ -1,5 +1,7 @@
 # SitePulse GUI Test Coverage: What Is Not Covered
 
+> **Superseded by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** Its gaps are merged into the strategy (Non-functional and security testing, Roadmap). Figures here are from 2026-11-07.
+
 Date: 2026-11-07. Scope: the browser suite in `e2e/` (Playwright, real backend and database) against the scenario catalogue in [GUI_TEST_PLAN.md](GUI_TEST_PLAN.md) and the Flutter UI in `flutter/lib/ui`.
 
 **Bottom line.** All 83 catalogued scenarios now have at least one browser test. But the behaviour of 28 of them is never confirmed as working: those tests exist only as strict xfails that pin a known defect or a missing feature. In addition, about 20 UI features have no scenario at all, and the suite runs only in Chrome on a desktop viewport.

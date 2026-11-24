@@ -1,5 +1,7 @@
 # SitePulse test reporting on GitHub Pages
 
+> **Superseded by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** Merged into the strategy (Reporting and evidence).
+
 ## Recommendation
 
 Use the existing [SitePulse Pages dashboard](https://gurkanindibay.github.io/ai-powered-engineering/) as the entry point for all SitePulse CI results. Add a per-run test inventory for every suite, and keep the existing epic, story, and scenario views for acceptance evidence. Publish a Cucumber pilot view when a pilot run is available. If the team wants the Serenity presentation on Pages, generate it from reviewed, public-safe inputs. The full generated report belongs with the raw diagnostics in Actions artifacts, whose access follows the source repository's permissions. This repository is public, so artifact storage alone does not make the report confidential.

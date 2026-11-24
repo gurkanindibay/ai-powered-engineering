@@ -1,5 +1,7 @@
 # SitePulse mutation testing analysis
 
+> **Retired by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** Historical first run. Mutation policy is in the strategy (Quality signals and gates).
+
 **Status** — First run, 20 November 2026 · revision `3c481b2e` (master) plus this change
 
 > The [23 November coverage assessment](mutation-coverage-improvement.md) reports the nightly workflow and current priorities. The observations below describe the original assessment.

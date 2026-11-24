@@ -1,5 +1,7 @@
 # Test Time Analysis: Where the Time Goes and How to Cut It
 
+> **Superseded by the [SitePulse Test Strategy](../testing/TEST_STRATEGY.md) (2026-11-24).** Done steps A–E are recorded in the strategy; open steps F–N are in its Execution lanes and Roadmap.
+
 Date: 2026-11-15. Scope: `scripts/run_tests.py` (local gate run), `.github/workflows/sitepulse-ci.yml`
 (PR/master CI) and `scripts/gui_e2e.py` (browser suite).
 

@@ -155,7 +155,10 @@ GATES: Dict[str, List[CommandSpec]] = {
     "rust-build": [CommandSpec(["cargo", "build", "--all-targets", "--locked"], "backend")],
     "rust-clippy": [CommandSpec(["cargo", "clippy", "--all-targets", "--locked", "--", "-D", "warnings"], "backend")],
     "rust-fmt": [CommandSpec(["cargo", "fmt", "--check"], "backend", 120)],
-    "rust-test": [CommandSpec(["cargo", "test", "--locked"], "backend")],
+    "rust-test": [CommandSpec(["cargo", "test", "--locked"], "backend"),
+                  # The e2e clock tests compile only with the `e2e` feature; without this command no gate ran them.
+                  CommandSpec(["cargo", "test", "--locked", "--features", "e2e",
+                               "--test", "e2e_clock_tests", "--test", "e2e_clock_reset_tests"], "backend")],
     # The PostgreSQL persistence path: RLS tenant isolation, read-only GETs,
     # transactional advance offsets, 503 on database failure (needs DB_PASS).
     # The unit state model (EPIC-08 §3): guarded transitions, derived status.
@@ -171,6 +174,7 @@ GATES: Dict[str, List[CommandSpec]] = {
                                   "--test", "db_accrual_atomic_tests",
                                   "--test", "db_accrual_persistence_tests",
                                   "--test", "db_advance_exit_settlements_tests",
+                                  "--test", "sale_clearance_tests",
                                   "--", "--ignored", "--test-threads=4"], "backend", 900),
                         # These opt-in PostgreSQL tests were previously never reached by CI.
                         # The CI job uses a fresh service database for this gate.

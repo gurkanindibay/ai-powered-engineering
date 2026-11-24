@@ -1,5 +1,7 @@
 # SitePulse GUI Test Plan (Scenario Catalogue)
 
+> **Narrowed by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** Keep using its GUI-id catalogue (§3) and API data builders (§4). Its phase logs and xfail statuses (§6–§12) are historical; current status lives in `.specify/features` and the strategy.
+
 Status: Phase 0 output of [GUI_AUTOMATION_PLAN.md](GUI_AUTOMATION_PLAN.md). Built from `.specify/requirements/EPIC-01..10` at master `8d0d1d3`.
 Scope: the Flutter web client driven in a real browser (Playwright), against the real Rust backend and PostgreSQL.
 

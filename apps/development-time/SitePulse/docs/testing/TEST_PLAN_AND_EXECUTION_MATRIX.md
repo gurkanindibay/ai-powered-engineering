@@ -1,5 +1,7 @@
 # SitePulse Platform Test Plan & Execution Matrix
 
+> **Superseded by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** Its principles and execution cases are merged into the strategy (Principles, Execution lanes and CI). The area map stays executable in `scripts/run_tests.py --area`.
+
 > **Standard:** CMMI® V2.0 VER / VAL, ISO/IEC/IEEE 29119 Software Testing Standard  
 > **Application:** SitePulse Residential Site Management Platform (`apps/development-time/SitePulse`)  
 > **Status:** Active & Ratified (November 2026)  
