@@ -261,7 +261,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::close_agenda_item (Require(GovernanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -269,7 +271,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::cast_votes (Require(GovernanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -327,7 +331,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::record_attendance (Require(GovernanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
