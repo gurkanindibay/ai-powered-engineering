@@ -467,6 +467,7 @@ impl CapitalProjectService {
             project.title, installment.installment_number, installment.total_installments
         );
         let now = Utc::now();
+        let mut charged_units_count = unit_shares.len() as i64;
 
         // Persist the accrual under the project's tenant so row-level security
         // applies to both the project and its generated liabilities.
@@ -486,17 +487,34 @@ impl CapitalProjectService {
             crate::db::tx_bind_tenant(&tx, site_num)
                 .await
                 .map_err(|e| capital_db_error("tenant binding", e.as_ref()))?;
-            for (unit, share) in &unit_shares {
-                if let Some(u_id) = crate::db::parse_id_to_i64(&unit.id) {
-                    // The owner on record at accrual owes the installment, unless an
-                    // approved seller-pays override names the seller (STORY-08-05).
-                    let seller = crate::services::sale_clearance_service::approved_seller_for_unit(
-                        &tx, u_id,
-                    )
-                    .await
-                    .map_err(|e| capital_db_error("seller lookup", &e))?;
-                    tx.execute(
-                        r#"
+            // Database IDs are authoritative for tenant RLS; API fixtures can
+            // leave synthetic unit IDs in the in-memory store.
+            let db_units = tx
+                .query(
+                    "SELECT id, land_share FROM units WHERE site_id = $1 ORDER BY id",
+                    &[&site_num],
+                )
+                .await
+                .map_err(|e| capital_db_error("site unit lookup", &e))?;
+            if db_units.is_empty() {
+                return Err("Sitede kayıtlı bağımsız bölüm (daire) bulunamadı.".to_string());
+            }
+            charged_units_count = db_units.len() as i64;
+            let db_land_shares: Vec<i32> =
+                db_units.iter().map(|row| row.get("land_share")).collect();
+            let db_shares =
+                Self::apportion_by_land_shares(&project, installment_budget, &db_land_shares)
+                    .map_err(str::to_string)?;
+            for (row, share) in db_units.iter().zip(db_shares) {
+                let u_id: i64 = row.get("id");
+                // The owner on record at accrual owes the installment, unless an
+                // approved seller-pays override names the seller (STORY-08-05).
+                let seller =
+                    crate::services::sale_clearance_service::approved_seller_for_unit(&tx, u_id)
+                        .await
+                        .map_err(|e| capital_db_error("seller lookup", &e))?;
+                tx.execute(
+                    r#"
                         INSERT INTO dues_liabilities (
                             unit_id, period, debtor_type, expense_type,
                             principal_amount, due_date, status, delay_penalty,
@@ -508,22 +526,21 @@ impl CapitalProjectService {
                             $5, $6, $7, $8, COALESCE($9::bigint,
                                 (SELECT owner_person_id FROM units WHERE id = $1))
                         )
-                        "#,
-                        &[
-                            &u_id,
-                            &period_name,
-                            share,
-                            &installment.due_date,
-                            &p_id,
-                            &installment_number,
-                            &installment_id,
-                            &now,
-                            &seller,
-                        ],
-                    )
-                    .await
-                    .map_err(|e| capital_db_error("liability insertion", &e))?;
-                }
+                    "#,
+                    &[
+                        &u_id,
+                        &period_name,
+                        &share,
+                        &installment.due_date,
+                        &p_id,
+                        &installment_number,
+                        &installment_id,
+                        &now,
+                        &seller,
+                    ],
+                )
+                .await
+                .map_err(|e| capital_db_error("liability insertion", &e))?;
             }
             tx.execute(
                 "UPDATE capital_project_installments SET is_accrued = TRUE, accrued_at = $1 WHERE project_id = $2 AND installment_number = $3",
@@ -616,7 +633,7 @@ impl CapitalProjectService {
             project_id: project_id.to_string(),
             installment_number,
             total_accrued_amount: installment_budget,
-            charged_units_count: unit_shares.len() as i64,
+            charged_units_count,
             accrued_at: now,
         })
     }
@@ -640,18 +657,26 @@ impl CapitalProjectService {
         amount: Decimal,
         units: &[crate::models::IndependentUnit],
     ) -> Result<Vec<Decimal>, String> {
+        let land_shares: Vec<i32> = units.iter().map(|unit| unit.land_share).collect();
+        Self::apportion_by_land_shares(project, amount, &land_shares).map_err(str::to_string)
+    }
+
+    fn apportion_by_land_shares(
+        project: &CapitalProject,
+        amount: Decimal,
+        land_shares: &[i32],
+    ) -> Result<Vec<Decimal>, &'static str> {
         let weights: Vec<u64> = match project.allocation_basis {
-            AllocationBasis::EqualPerUnit => vec![1; units.len()],
-            AllocationBasis::ByLandShare => units
+            AllocationBasis::EqualPerUnit => vec![1; land_shares.len()],
+            AllocationBasis::ByLandShare => land_shares
                 .iter()
-                .map(|u| {
-                    u64::try_from(u.land_share).map_err(|_| {
-                        format!("Bağımsız bölüm {} için arsa payı negatif olamaz.", u.id)
-                    })
+                .map(|land_share| {
+                    u64::try_from(*land_share)
+                        .map_err(|_| "Bağımsız bölüm için arsa payı negatif olamaz.")
                 })
                 .collect::<Result<_, _>>()?,
         };
-        crate::domain::apportion(amount, &weights).map_err(|e| e.to_string())
+        crate::domain::apportion(amount, &weights).map_err(|_| "Taksit payları hesaplanamadı.")
     }
 
     /// Records a contractor progress payment (hakediş).

@@ -394,12 +394,32 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
             "sender_iban": "TR110006200000000123456789", "sender_name": "Nightly scoped payer",
         }, success={200},
     )
-    assert_write_is_site_scoped(
-        api, "/api/v1/assembly/decisions", second, first,
-        {
-            "decided_on": date.today().isoformat(), "title": "Nightly linked budget decision",
-            "text": "Tenant scope check", "linked_budget_id": str(ids["budget"]),
-        }, success={201},
+    decision_path = "/api/v1/assembly/decisions"
+    decision_body = {
+        "decided_on": date.today().isoformat(), "title": "Nightly linked budget decision",
+        "text": "Tenant scope check", "linked_budget_id": str(ids["budget"]),
+    }
+    decision_status, decision_response = get_response(
+        api, decision_path, second.token, method="POST", body=decision_body,
+    )
+    assert decision_status == 201, f"Same-site POST {decision_path} returned {decision_status}"
+    # This route creates a decision in the caller's current site. A foreign
+    # caller may create its own decision, but must not attach the other site's
+    # budget or receive a duplicate/conflict from that site's request.
+    foreign_decision_body = {
+        "decided_on": date.today().isoformat(), "title": "Nightly foreign-site decision",
+        "text": "Caller-site scope check",
+    }
+    foreign_decision_status, foreign_decision_response = get_response(
+        api, decision_path, first.token, method="POST", body=foreign_decision_body,
+    )
+    assert foreign_decision_status == 201, (
+        f"Caller-site POST {decision_path} returned {foreign_decision_status}"
+    )
+    owner_decision = json.loads(decision_response)
+    foreign_decision = json.loads(foreign_decision_response)
+    assert foreign_decision["site_id"] != owner_decision["site_id"], (
+        "Foreign caller's assembly decision was stored in the other site's scope"
     )
     virman_path = "/api/v1/residents/" + str(ids["unit"]) + "/virman-requests"
     virman_body = {"source_debtor": "OWNER", "amount": "1.00", "note": "Nightly scope virman"}
