@@ -45,6 +45,15 @@ jobs:
         env:
           SITEPULSE_GATE_ARTIFACT_DIR: ${{ runner.temp }}/sitepulse-suite-lint/gates
         run: python3 scripts/run_tests.py --group lint
+      - name: Collect Python coverage (harness and scripts)
+        run: |
+          python3 -m pip install --quiet coverage
+          mkdir -p "${{ runner.temp }}/sitepulse-suite-lint/coverage"
+          python3 -m coverage run --branch --source=harness,scripts --omit="harness/tests/*" \
+            -m unittest discover -s harness/tests
+          python3 -m coverage json -o "${{ runner.temp }}/sitepulse-suite-lint/coverage/python.json"
+          python3 -m coverage lcov -o "${{ runner.temp }}/sitepulse-suite-lint/coverage/python.lcov"
+          python3 -m coverage xml -o "${{ runner.temp }}/sitepulse-suite-lint/coverage/python.xml"
       - name: Write lint suite manifest and run identity
         if: always()
         continue-on-error: true
@@ -85,7 +94,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
-          components: clippy, rustfmt
+          components: clippy, rustfmt, llvm-tools-preview
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: apps/development-time/SitePulse/backend
@@ -96,10 +105,38 @@ jobs:
           python-version: "3.12"
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install cargo-llvm-cov
+        run: |
+          curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz \
+            | tar xzf - -C "${CARGO_HOME:-$HOME/.cargo}/bin"
       - name: Rust and database gates
         env:
           SITEPULSE_GATE_ARTIFACT_DIR: ${{ runner.temp }}/sitepulse-suite-rust/gates
         run: python3 scripts/run_tests.py --group rust
+      - name: Collect Rust coverage
+        working-directory: apps/development-time/SitePulse/backend
+        run: |
+          mkdir -p "${{ runner.temp }}/sitepulse-suite-rust/coverage"
+          PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres \
+            -c "DROP DATABASE IF EXISTS sitepulse_cov;" -c "CREATE DATABASE sitepulse_cov;"
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --no-report --locked
+          cargo llvm-cov --no-report --locked --features e2e --test e2e_clock_tests --test e2e_clock_reset_tests
+          DB_NAME=sitepulse_cov cargo llvm-cov --no-report --locked \
+            --test db_tenant_isolation_tests \
+            --test db_occupancy_transitions_tests \
+            --test db_person_api_tests \
+            --test db_person_merge_tests \
+            --test db_unit_person_action_cycles_tests \
+            --test db_accrual_atomic_tests \
+            --test db_accrual_persistence_tests \
+            --test db_advance_exit_settlements_tests \
+            --test sale_clearance_tests \
+            --test accrual_corrections_tests \
+            --test finance_store_pg_tests \
+            -- --ignored --test-threads=4
+          cargo llvm-cov report --lcov --output-path "${{ runner.temp }}/sitepulse-suite-rust/coverage/rust.lcov"
+          cargo llvm-cov report --json --summary-only --output-path "${{ runner.temp }}/sitepulse-suite-rust/coverage/rust-summary.json"
       - name: Write rust suite manifest and run identity
         if: always()
         continue-on-error: true
@@ -150,6 +187,12 @@ jobs:
         env:
           SITEPULSE_GATE_ARTIFACT_DIR: ${{ runner.temp }}/sitepulse-suite-flutter/gates
         run: python3 scripts/run_tests.py --group flutter
+      - name: Collect Flutter coverage
+        working-directory: apps/development-time/SitePulse/flutter
+        run: |
+          mkdir -p "${{ runner.temp }}/sitepulse-suite-flutter/coverage"
+          flutter test --coverage
+          cp coverage/lcov.info "${{ runner.temp }}/sitepulse-suite-flutter/coverage/flutter.lcov"
       - name: Write flutter suite manifest and run identity
         if: always()
         continue-on-error: true
@@ -314,10 +357,13 @@ jobs:
         with:
           pattern: sitepulse-suite-*
           path: ${{ runner.temp }}/suite-artifacts
+      - name: Install diff-cover
+        run: python3 -m pip install --quiet diff-cover
       - name: Merge shard results into one report
         env:
           SITEPULSE_TASK: ${{ github.event_name == 'pull_request' && format('PR {0} ({1})', github.event.pull_request.number, github.head_ref) || github.ref_name }}
           SITEPULSE_PRODUCER_STATUS: '{"lint":"${{ needs.lint.result }}","rust":"${{ needs.rust.result }}","flutter":"${{ needs.flutter.result }}","e2e":"${{ needs.e2e.result }}","verify":"${{ needs.verify.result }}"}'
+          SITEPULSE_COVERAGE_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || 'HEAD~1' }}
         run: >-
           python3 scripts/ci_test_report.py
           --shards "${{ runner.temp }}/shards"
@@ -328,6 +374,7 @@ jobs:
           --attempt "${{ github.run_attempt }}"
           --commit "$GITHUB_SHA"
           --producer-status "$SITEPULSE_PRODUCER_STATUS"
+          --require-diff-cover
       - id: evidence_metadata
         name: Name this attempt's evidence artifact
         run: |

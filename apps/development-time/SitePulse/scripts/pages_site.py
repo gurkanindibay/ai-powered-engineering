@@ -146,6 +146,57 @@ def _safe_snapshot(raw: object, summary: dict) -> dict | None:
     return result
 
 
+def _safe_coverage(raw: object) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    allowed_layers = {"backend", "flutter", "python"}
+    allowed_statuses = {"collected", "missing"}
+    allowed_diff_statuses = {"collected", "no-changed-lines", "not-run", "unavailable"}
+    layers = []
+    for row in raw.get("layers", []) if isinstance(raw.get("layers"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        layer_id = row.get("layer")
+        if layer_id not in allowed_layers:
+            continue
+        status = row.get("status") if row.get("status") in allowed_statuses else "missing"
+        diff_status = row.get("diff_status") if row.get("diff_status") in allowed_diff_statuses else "not-run"
+        clean_row = {
+            "layer": layer_id,
+            "label": _safe_label(row.get("label"), layer_id),
+            "tool": _safe_label(row.get("tool"), ""),
+            "status": status,
+            "diff_status": diff_status,
+        }
+        for key in ("lines_covered", "lines_total", "branches_covered", "branches_total",
+                    "diff_lines_covered", "diff_lines_total"):
+            val = _nonnegative_number(row.get(key))
+            if val is not None:
+                clean_row[key] = int(val)
+        for key in ("line_pct", "branch_pct", "diff_line_pct"):
+            val = _nonnegative_number(row.get(key))
+            if val is not None and val <= 100:
+                clean_row[key] = round(float(val), 1)
+        layers.append(clean_row)
+    changed_raw = raw.get("changed_lines")
+    changed_lines = {}
+    if isinstance(changed_raw, dict):
+        for key in ("lines_covered", "lines_total"):
+            val = _nonnegative_number(changed_raw.get(key))
+            if val is not None:
+                changed_lines[key] = int(val)
+        for key in ("line_pct", "threshold_pct"):
+            val = _nonnegative_number(changed_raw.get(key))
+            if val is not None and val <= 100:
+                changed_lines[key] = round(float(val), 1)
+        if changed_raw.get("status") in allowed_diff_statuses:
+            changed_lines["status"] = changed_raw["status"]
+        changed_lines["mode"] = "report-only"
+    if not layers and not changed_lines:
+        return None
+    return {"schema": 1, "layers": layers, "changed_lines": changed_lines}
+
+
 def _safe_public_report(path: Path) -> dict | None:
     if not path.is_file():
         return None
@@ -178,7 +229,11 @@ def _safe_public_report(path: Path) -> dict | None:
         if isinstance(scenario, str) and SCENARIO_ID.fullmatch(scenario):
             item["scenario_id"] = scenario
         cases.append(item)
-    return {"schema": 1, "gates": gates, "cases": cases}
+    result = {"schema": 1, "gates": gates, "cases": cases}
+    coverage = _safe_coverage(raw.get("coverage"))
+    if coverage is not None:
+        result["coverage"] = coverage
+    return result
 
 
 def _detail_page(summary: dict, public_report: dict | None, archive_href: str) -> str:
@@ -203,13 +258,41 @@ def _detail_page(summary: dict, public_report: dict | None, archive_href: str) -
                              for c in public_report["cases"])
         cases_html = ("<h2>Test inventory</h2><table><thead><tr><th>ID</th><th>Test</th><th>Status</th>"
                       "<th>Scenario</th></tr></thead><tbody>" + case_rows + "</tbody></table>")
+    coverage_html = ""
+    if public_report and isinstance(public_report.get("coverage"), dict):
+        cov_data = public_report["coverage"]
+        cov_rows = []
+        for layer in cov_data.get("layers", []):
+            line_txt = (f"{layer['line_pct']:.1f}% ({layer.get('lines_covered', 0)}/{layer.get('lines_total', 0)})"
+                        if "line_pct" in layer else html.escape(layer.get("status", "missing")))
+            branch_txt = (f"{layer['branch_pct']:.1f}% ({layer.get('branches_covered', 0)}/{layer.get('branches_total', 0)})"
+                          if "branch_pct" in layer else "n/a")
+            diff_txt = (f"{layer['diff_line_pct']:.1f}% ({layer.get('diff_lines_covered', 0)}/{layer.get('diff_lines_total', 0)})"
+                        if "diff_line_pct" in layer else "n/a")
+            cov_rows.append(
+                f"<tr><td>{html.escape(layer.get('label', layer.get('layer', '')))}</td>"
+                f"<td>{html.escape(layer.get('tool', ''))}</td>"
+                f"<td>{line_txt}</td><td>{branch_txt}</td><td>{diff_txt}</td></tr>"
+            )
+        changed = cov_data.get("changed_lines") or {}
+        if "line_pct" in changed:
+            cov_rows.append(
+                f"<tr><td><strong>Changed lines total</strong></td><td>diff-cover</td><td>—</td><td>—</td>"
+                f"<td><strong>{changed['line_pct']:.1f}% ({changed.get('lines_covered', 0)}/{changed.get('lines_total', 0)})</strong></td></tr>"
+            )
+        if cov_rows:
+            coverage_html = (
+                "<h2>Code coverage (report-only)</h2><table><thead><tr><th>Layer</th><th>Tool</th>"
+                "<th>Line coverage</th><th>Branch coverage</th><th>Changed lines</th></tr></thead><tbody>"
+                + "".join(cov_rows) + "</tbody></table>"
+            )
     commit = html.escape(summary.get("commit", "")[:12])
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SitePulse report {run}</title><style>body{{font:16px system-ui,sans-serif;max-width:1000px;margin:3rem auto;padding:0 1rem;color:#172033}}a{{color:#1459a6}}table{{border-collapse:collapse;width:100%;margin:1rem 0}}th,td{{padding:.65rem;text-align:left;border-bottom:1px solid #d8dee8}}</style></head>
 <body><p><a href="{html.escape(archive_href, quote=True)}">Product status</a> · <a href="{html.escape(archive_href.replace('index.html','history.html'), quote=True)}">All runs</a></p>
 <h1>SitePulse CI report</h1><p>Run <a href="{action_url}">{run}</a> · commit {commit} · {html.escape(summary['status'])}</p>
-<p>{numbers}</p>{gate_table}{cases_html}</body></html>\n"""
+<p>{numbers}</p>{coverage_html}{gate_table}{cases_html}</body></html>\n"""
 
 
 def _write_archive(site: Path, folder: str, raw_summary: object, product_snapshot: object,
