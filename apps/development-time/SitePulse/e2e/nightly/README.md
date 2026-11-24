@@ -28,7 +28,10 @@ point-in-time smoke measurement. Production SLOs use the observation windows
 in the matrix.
 
 The static tenant operation inventory classifies all 275 generated OpenAPI
-operations against the Rust route table. The nightly runtime contract checks
+operations against the Rust route table. Its validator resolves each mapped
+runtime test reference to an existing Python test function, and nightly CI
+regenerates OpenAPI and compares the complete document with the checked-in
+specification. The nightly runtime contract checks
 42 tenant-reference reads with same-site success controls before cross-site
 denial, and 36 implicit-scope reads with distinct second-site data visible only
 to that site's manager. It also runs the multi-resource scenarios in

@@ -8,7 +8,9 @@ have run or passed.
 from __future__ import annotations
 
 import argparse
+import ast
 from collections import Counter
+from functools import lru_cache
 import json
 from pathlib import Path
 import re
@@ -92,8 +94,32 @@ def _inventory_rows(document: object) -> list[object]:
     return document["operations"]
 
 
+@lru_cache(maxsize=256)
+def _runtime_reference_error(reference: str, root: Path) -> str | None:
+    file_name, separator, test_name = reference.partition("::")
+    if (not separator or not file_name.startswith("e2e/") or not test_name
+            or "::" in test_name):
+        return "must use e2e/<file>.py::test_function format"
+    root = root.resolve()
+    path = (root / file_name).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return "must resolve to a file inside the SitePulse workspace"
+    if path.suffix != ".py" or not path.is_file():
+        return f"test file does not exist: {file_name}"
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (OSError, SyntaxError) as error:
+        return f"test file cannot be parsed: {error}"
+    if not any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+               and node.name == test_name for node in ast.walk(tree)):
+        return f"test function does not exist: {file_name}::{test_name}"
+    return None
+
+
 def validate(document: object, spec: set[Operation], routes: Counter[Operation], *,
-             require_runtime_evidence: bool = False) -> dict:
+             require_runtime_evidence: bool = False, runtime_test_root: Path = ROOT) -> dict:
     inventory = Counter()
     classified: dict[Operation, str] = {}
     with_runtime_tests: set[Operation] = set()
@@ -125,6 +151,11 @@ def validate(document: object, spec: set[Operation], routes: Counter[Operation],
             invalid.append(f"{name}: runtime_tests must be an array of nonempty test references")
         elif len({reference.strip() for reference in runtime_tests}) != len(runtime_tests):
             invalid.append(f"{name}: runtime_tests contains duplicate references")
+        else:
+            for reference in runtime_tests:
+                error = _runtime_reference_error(reference.strip(), runtime_test_root)
+                if error:
+                    invalid.append(f"{name}: runtime test reference {reference!r} {error}")
         if len(invalid) == before:
             classified[operation] = applicability
             if runtime_tests:

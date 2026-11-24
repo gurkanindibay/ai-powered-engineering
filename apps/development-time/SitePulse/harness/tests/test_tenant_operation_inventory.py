@@ -2,6 +2,7 @@
 from collections import Counter
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 
 SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
@@ -74,21 +75,28 @@ class TenantOperationInventoryTests(unittest.TestCase):
         ]
         document = {"version": 1, "operations": rows}
         routes = Counter(operations)
-        result = inventory.validate(document, operations, routes)
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["runtime_coverage"], {
-            "tenant_reference": {"tested": 1, "uncovered": 0},
-            "implicit_tenant_scope": {"tested": 0, "uncovered": 1},
-            "outside_scope": {"tested": 0, "uncovered": 1},
-        })
-        strict = inventory.validate(document, operations, routes, require_runtime_evidence=True)
-        self.assertFalse(strict["ok"])
-        self.assertEqual(strict["runtime_evidence_missing"], ["GET /other"])
+        with tempfile.TemporaryDirectory() as temporary:
+            test_root = Path(temporary)
+            test_file = test_root / "e2e/example.py"
+            test_file.parent.mkdir(parents=True)
+            test_file.write_text("def test_known(): pass\ndef test_other(): pass\n", encoding="utf-8")
+            result = inventory.validate(document, operations, routes, runtime_test_root=test_root)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["runtime_coverage"], {
+                "tenant_reference": {"tested": 1, "uncovered": 0},
+                "implicit_tenant_scope": {"tested": 0, "uncovered": 1},
+                "outside_scope": {"tested": 0, "uncovered": 1},
+            })
+            strict = inventory.validate(document, operations, routes, require_runtime_evidence=True,
+                                        runtime_test_root=test_root)
+            self.assertFalse(strict["ok"])
+            self.assertEqual(strict["runtime_evidence_missing"], ["GET /other"])
 
-        rows[1]["runtime_tests"] = ["e2e/example.py::test_other"]
-        strict = inventory.validate(document, operations, routes, require_runtime_evidence=True)
-        self.assertTrue(strict["ok"])
-        self.assertEqual(strict["runtime_evidence_missing"], [])
+            rows[1]["runtime_tests"] = ["e2e/example.py::test_other"]
+            strict = inventory.validate(document, operations, routes, require_runtime_evidence=True,
+                                        runtime_test_root=test_root)
+            self.assertTrue(strict["ok"])
+            self.assertEqual(strict["runtime_evidence_missing"], [])
 
     def test_invalid_runtime_test_references_cannot_supply_evidence(self):
         operations = {("GET", "/known")}
@@ -103,6 +111,29 @@ class TenantOperationInventoryTests(unittest.TestCase):
                 self.assertFalse(result["ok"])
                 self.assertIn(message, result["invalid"][0])
                 self.assertEqual(result["runtime_coverage"]["tenant_reference"]["tested"], 0)
+
+    def test_missing_runtime_test_file_or_function_cannot_supply_evidence(self):
+        operations = {("GET", "/known")}
+        with tempfile.TemporaryDirectory() as temporary:
+            test_root = Path(temporary)
+            test_file = test_root / "e2e/example.py"
+            test_file.parent.mkdir(parents=True)
+            test_file.write_text("def test_present(): pass\n", encoding="utf-8")
+            for reference, expected in (
+                ("e2e/missing.py::test_missing", "test file does not exist"),
+                ("e2e/example.py::test_missing", "test function does not exist"),
+                ("outside.py::test_present", "must use e2e/<file>.py::test_function format"),
+            ):
+                with self.subTest(reference=reference):
+                    document = {"version": 1, "operations": [entry(
+                        "GET", "/known", runtime_tests=[reference],
+                    )]}
+                    result = inventory.validate(
+                        document, operations, Counter(operations), runtime_test_root=test_root,
+                    )
+                    self.assertFalse(result["ok"])
+                    self.assertIn(expected, result["invalid"][0])
+                    self.assertEqual(result["runtime_coverage"]["tenant_reference"]["tested"], 0)
 
     def test_drifts_reported_separately_from_inventory_findings(self):
         source = """

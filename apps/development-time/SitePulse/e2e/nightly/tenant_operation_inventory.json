@@ -16,7 +16,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::account_report (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -26,7 +26,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::get_approval_policy (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -44,7 +44,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::budget_vs_actual (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -62,7 +62,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_expenses (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -104,7 +104,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::journal (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -122,7 +122,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::reserve_fund (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -132,7 +132,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::trial_balance (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -142,7 +142,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_vendors (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -160,7 +160,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_corrections (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -186,7 +186,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::get_accrual_schedule (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -204,7 +204,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_adjustments (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -230,7 +230,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::collection_analytics (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -264,7 +264,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_decisions (RequireAny(&[GovernanceManage, FinanceRead, UnitRead]))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -282,7 +282,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_meetings (Require(GovernanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -316,7 +316,7 @@
       "reason": "Reads audit entries in the authenticated caller's site or platform scope.",
       "evidence": "backend/src/app.rs: authorization::audit_events (Require(AuditLogRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -326,7 +326,7 @@
       "reason": "Reads audit entries in the authenticated caller's site or platform scope.",
       "evidence": "backend/src/app.rs: authorization::audit_events (Require(AuditLogExport))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -440,7 +440,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::reconciliation_runs (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -458,7 +458,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_bank_feeds (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -648,7 +648,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_cases (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -771,7 +771,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::dunning_actions (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -789,7 +789,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::get_dunning_policy (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -823,7 +823,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_heat_periods (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -916,7 +916,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::financial_access_log (Require(AuditLogRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -926,7 +926,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::debtor_export (RequireAny(&[FinanceManage, FinanceRead, UnitRead]))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -936,7 +936,7 @@
       "reason": "Derives debtor identity from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::kvkk_status (SelfOnly)",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -970,7 +970,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::retention_review (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -996,7 +996,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::late_fee_reconciliation (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1006,7 +1006,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_leases (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1024,7 +1024,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::joint_exposure (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1034,7 +1034,7 @@
       "reason": "Derives the notification scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_notifications (RequireAny(&[FinanceManage, FinanceRead, UnitRead]))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1088,7 +1088,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::budget_legal_basis (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1189,7 +1189,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_plans (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1432,7 +1432,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::site_disputes (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1450,7 +1450,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::site_virman_requests (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1749,7 +1749,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_advance_exit_settlements (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -2041,7 +2041,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_seller_pays_overrides (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {

@@ -102,6 +102,11 @@ jobs:
       - name: Validate tenant operation inventory
         if: matrix.name == 'tenant-authorization'
         run: python3 scripts/tenant_operation_inventory.py
+      - name: Verify checked-in OpenAPI is generated
+        if: matrix.name == 'tenant-authorization'
+        run: |
+          cargo run --quiet --manifest-path backend/Cargo.toml --bin generate-openapi -- "$RUNNER_TEMP/sitepulse-openapi.json"
+          cmp docs/api/openapi.json "$RUNNER_TEMP/sitepulse-openapi.json"
       - name: Run nightly tests
         working-directory: apps/development-time/SitePulse/e2e
         env:
