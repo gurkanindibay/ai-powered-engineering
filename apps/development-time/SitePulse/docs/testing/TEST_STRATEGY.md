@@ -201,19 +201,19 @@ Four signals measure whether the tests are strong, not just numerous. Each has o
 
 ## Non-functional and security testing
 
-Security has static gates but almost no runtime tests. Performance, accessibility, other browsers and mobile are not tested at all (`GUI_COVERAGE_GAPS.md` §6). Each kind gets one owner check, one lane and a threshold taken from an existing document.
+The [nightly quality workflow](../../e2e/nightly/README.md) runs scheduled performance, accessibility, browser, mobile and tenant authorization checks. Each kind gets one owner check, one lane and a threshold taken from an existing document.
 
 | Kind | Today | Check to add | Lane | Threshold source |
 | --- | --- | --- | --- | --- |
 | Static security | `security-lint` on every PR; `dependency_audit.py` weekly and on lock changes | Keep | PR / weekly | `security_lint_baseline.json`, allowlist expiry dates |
 | Security regressions | 17 findings in `SECURITY_ASSESSMENT.md`; S3, S4 and S7 are fixed but need runtime tests | One API test per fixed finding: production mode without `APP_ENV`, per-client and per-account lockout (S4, the PostgreSQL counter is still open), security headers and no public API docs in production | PR (API layer) | The finding's own acceptance text |
 | Code and database flaws | `architecture_flaws_regression_tests.rs` covers flaws AF-01 to AF-10 and NV-01 to NV-07 in 5 tests; the 21 critical and high findings of the 2026-11-07 report have no single regression index | Every new flaw finding ships with a regression test id in the same PR | PR | `CODE_AND_DATABASE_FLAWS_REPORT.md` |
-| Cross-tenant access | RLS DB tests, `tenant-lint` | OpenAPI-driven fuzz: every endpoint with another tenant's ids must return 403/404 | Nightly | Zero leaks |
+| Cross-tenant access | RLS DB tests, `tenant-lint`, nightly OpenAPI contract checks for selected routes | Extend the contract when a new tenant-scoped resource needs an explicit check | Nightly | Zero access to another fixture site |
 | Input hardening | None through the UI | XSS, very long and Unicode input on every form (names, IBANs, amounts) at the API and in 5 key screens | Nightly | No 5xx; stored text renders escaped |
-| Performance | None | 50 sites × 200 units seeded from the 88-unit fixture. Time payment record, accrual batch, reconciliation and statement endpoints | Nightly | Observability SLOs: payment record under 800 ms at 99.9%, monthly accrual for all sites under 30 min, auto-match within 60 s |
+| Performance | 50 sites × 200 units from the fixture pattern | Time payment record, accrual batch, reconciliation and statement endpoints | Nightly | Observability SLOs: payment record under 800 ms at 99.9%, monthly accrual for all sites under 30 min, auto-match within 60 s |
 | Ledger integrity | Ledger invariants in journeys; the view is queried in one tenant-isolation DB test | Assert `v_integrity_violations` is empty after every DB and E2E test | PR | 0 violations (P0 SLO) |
-| Accessibility | E2E build turns semantics on; nothing asserts it | axe-core on 10 key screens; every interactive element has a label | Nightly, then PR for touched screens | Zero critical violations |
-| Browsers and mobile | Chrome desktop; one 375 px smoke | `smoke` on Firefox and WebKit (`gui_e2e.py --browser` exists); `smoke` at 375 px | Nightly and release candidate | All smoke tests pass |
+| Accessibility | axe-core on 10 screens with semantics enabled | Assert critical violations and missing accessible names | Nightly, then PR for touched screens | Zero critical violations |
+| Browsers and mobile | Chrome desktop on PRs | `smoke` on Firefox and WebKit; `smoke` in Chromium at 375 px | Nightly and release candidate | All smoke tests pass |
 | Concurrency | API check covers concurrent payments over HTTP | Two-connection DB tests (Strategy, technique 4); two-user browser journey for approve-while-paying | PR (DB) / nightly (browser) | One commit, one clean rejection |
 
 ## Reporting and evidence
