@@ -280,10 +280,10 @@ def test_failed_attempt_evidence_and_retry_cleanup_are_isolated(request, api, ac
     restart_count = 0
     original_restart = stack.restart_backend
 
-    def count_restart():
+    def count_restart(*, preserve_e2e_clock=True):
         nonlocal restart_count
         restart_count += 1
-        original_restart()
+        original_restart(preserve_e2e_clock=preserve_e2e_clock)
 
     monkeypatch.setattr(stack, "restart_backend", count_restart)
     try:
