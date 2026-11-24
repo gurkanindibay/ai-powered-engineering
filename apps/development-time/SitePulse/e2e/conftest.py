@@ -26,6 +26,7 @@ sys.path.insert(0, str(E2E))
 from support import stack as st  # noqa: E402
 from support.api import Api, Builders  # noqa: E402
 from support.journey_attempts import reclaim_stale_attempts  # noqa: E402
+from support.flutter import by_id, wait_for_app  # noqa: E402
 from pages import LoginPage  # noqa: E402
 
 ARTIFACTS = E2E / ".artifacts"
@@ -153,10 +154,52 @@ def login_page(page, stack) -> LoginPage:
     return LoginPage(page, st.web_base()).open()
 
 
+@pytest.fixture(scope="session")
+def role_storage_state(browser, stack, actors, browser_context_args):
+    """Sign in once per role per worker and cache Playwright storage_state."""
+    cache: dict[str, Path] = {}
+
+    def _get(role: str) -> Path:
+        if role not in cache:
+            state_path = ARTIFACTS / f"storage_state_{os.getpid()}_{role}.json"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            actor = actors[role]
+            ctx = browser.new_context(**browser_context_args)
+            try:
+                temp_page = ctx.new_page()
+                lp = LoginPage(temp_page, st.web_base()).open()
+                lp.login(role, actor["email"], actor["password"])
+                by_id(temp_page, "login_tab_quickAll").wait_for(state="detached", timeout=20_000)
+                ctx.storage_state(path=str(state_path))
+            finally:
+                ctx.close()
+            cache[role] = state_path
+        return cache[role]
+
+    return _get
+
+
 @pytest.fixture
-def login_as(login_page, actors):
-    """login_as('manager') -> logs in through the UI with the seed account."""
+def login_as(page, role_storage_state):
+    """login_as('manager') -> restores cached role storage_state without UI sign-in."""
     def _login(role: str) -> None:
-        actor = actors[role]
-        login_page.login(role, actor["email"], actor["password"])
+        state = json.loads(role_storage_state(role).read_text(encoding="utf-8"))
+        entries = [
+            (item["name"], item["value"])
+            for origin in state.get("origins", [])
+            for item in origin.get("localStorage", [])
+        ]
+        if entries:
+            payload = json.dumps(entries)
+            page.add_init_script(
+                f"""(() => {{
+                    if (!window.sessionStorage.getItem('__e2e_seeded')) {{
+                        window.sessionStorage.setItem('__e2e_seeded', '1');
+                        for (const [k, v] of {payload}) window.localStorage.setItem(k, v);
+                    }}
+                }})();"""
+            )
+        page.goto(st.web_base())
+        wait_for_app(page)
+        by_id(page, "login_tab_quickAll").wait_for(state="detached", timeout=20_000)
     return _login

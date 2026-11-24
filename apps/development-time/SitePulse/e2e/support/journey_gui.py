@@ -52,14 +52,14 @@ def sign_in_manager(page: Page, login_page, fixture) -> ManagerCockpit:
     """Sign the journey site's manager in through the login screen and wait for the cockpit."""
     login_page.login("manager", fixture.manager_email, fixture.manager_password)
     cockpit = ManagerCockpit(page).wait()
-    page.wait_for_timeout(1_000)
+    page.wait_for_load_state("networkidle")
     return cockpit
 
 
 def open_dues_segment(page: Page, index: int) -> DuesManagement:
     dues = DuesManagement(page).open()
     dues.segment(index)
-    page.wait_for_timeout(1_500)
+    page.wait_for_load_state("networkidle")
     return dues
 
 
@@ -69,7 +69,7 @@ def open_people_directory(page: Page) -> None:
     by_id(page, "open_owners_residents_module").click()
     by_id(page, "module_people_directory_btn").click()
     by_id(page, "people_search_input").wait_for(timeout=10_000)
-    page.wait_for_timeout(1_000)
+    page.wait_for_load_state("networkidle")
 
 
 @contextmanager

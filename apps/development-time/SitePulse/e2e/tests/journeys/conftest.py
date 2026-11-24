@@ -42,7 +42,7 @@ def first_sign_in(page, net: NetworkLog, login_page: LoginPage):
             mark = net.mark()
             login_page.login(account.login_role, account.email, account.temporary_password)
             gate.wait()
-            page.wait_for_timeout(TEMPORARY_SETTLE_MS)
+            page.wait_for_load_state("networkidle")
             assert route(page) == "/change-password", route(page)
             assert gate.visible_dashboard_markers() == [], gate.visible_dashboard_markers()
             business = net.business_calls_since(mark)
@@ -51,7 +51,8 @@ def first_sign_in(page, net: NetworkLog, login_page: LoginPage):
         with j.step("a link to another page waits behind the change screen"):
             mark = net.mark()
             push_route(page, deep_link or home_route)
-            page.wait_for_timeout(1_000)
+            wait_route(page, "/change-password")
+            page.wait_for_load_state("networkidle")
             gate.wait()
             assert route(page) == "/change-password", route(page)
             assert net.business_calls_since(mark) == []

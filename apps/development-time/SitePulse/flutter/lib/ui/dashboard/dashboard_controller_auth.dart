@@ -19,6 +19,7 @@ extension DashboardControllerAuth on DashboardController {
 
   void logout() {
     unawaited(ApiClient.logout());
+    if (kE2E) writePreference(DashboardController._e2eSessionKey, null);
     _userSession = _userSession.copyWith(permissions: const []);
     _isAuthenticated = false;
     _authMessage = null;
@@ -448,6 +449,9 @@ extension DashboardControllerAuth on DashboardController {
               mustChangePassword: mustChangePassword,
             ).copyWith(id: userData['id']?.toString(), permissions: serverPermissions);
             _isAuthenticated = true;
+            if (kE2E) {
+              writePreference(DashboardController._e2eSessionKey, json.encode(data));
+            }
             _authMessage = 'Şifre ile başarıyla giriş yapıldı (${resolvedRole.displayName}).';
             notify();
             return true;

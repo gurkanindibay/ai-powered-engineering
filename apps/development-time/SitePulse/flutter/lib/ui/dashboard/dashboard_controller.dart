@@ -16,6 +16,7 @@ import '../../domain/services/bank_file_parser.dart';
 import '../../domain/services/person_directory_api.dart';
 import '../../domain/services/payments_phase3_api.dart';
 import '../../domain/services/platform_env.dart';
+import '../../testing/test_id.dart';
 import '../../domain/usecases/calculate_dues_usecase.dart';
 import '../design_system/money_formatter.dart';
 import '../../l10n/app_strings.dart';
@@ -79,6 +80,7 @@ class DashboardController extends ChangeNotifier {
     _isOffline = isPlatformOffline();
     _offlineSubscription = platformOfflineChanges().listen(setNetworkOffline);
     _sessionSubscription = ApiClient.sessionExpired.listen((_) {
+      if (kE2E) writePreference(_e2eSessionKey, null);
       _isAuthenticated = false;
       _userSession = _userSession.copyWith(permissions: const []);
       _authMessage = 'Session expired. Please sign in again.';
@@ -219,6 +221,7 @@ class DashboardController extends ChangeNotifier {
   String? _lastSiteRegistrationError;
   String? get lastSiteRegistrationError => _lastSiteRegistrationError;
 
+  static const _e2eSessionKey = 'e2e_session';
   // Theme: follows the system until the user picks one; the choice is saved.
   static const themePreferenceKey = 'theme_mode';
   ThemeMode _themeMode = ThemeMode.system;
@@ -950,7 +953,57 @@ class DashboardController extends ChangeNotifier {
       fetchReconciliationQueue();
     }
     if (!isTestMode) {
-      fetchSaasSites();
+      _restoreE2ESession();
+      if (!_isAuthenticated) {
+        fetchSaasSites();
+      }
+    }
+  }
+
+  void _restoreE2ESession() {
+    if (!kE2E || isTestMode) return;
+    final raw = readPreference(_e2eSessionKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final data = json.decode(raw) as Map<String, dynamic>;
+      final userData = data['user'] as Map<String, dynamic>?;
+      if (userData == null || userData.isEmpty) return;
+      final email = userData['email']?.toString().trim() ?? '';
+      final role = UserRole.fromApi(userData['role']?.toString() ?? '');
+      final siteId = userData['site_id']?.toString() ?? '';
+      final unitId = userData['unit_id']?.toString() ?? '';
+      final rawName = userData['full_name']?.toString().trim() ?? '';
+      final fullName = rawName.isNotEmpty ? rawName : email;
+      final phone = userData['phone']?.toString() ?? '';
+      final mustChangePassword = userData['must_change_password'] == true;
+      final permissions = (userData['permissions'] as List<dynamic>? ?? const [])
+          .map(
+            (p) => PermissionScope(
+              code: p as String,
+              title: p,
+              isGranted: true,
+              isolationNote: 'Server-authorized scope',
+            ),
+          )
+          .toList(growable: false);
+      ApiClient.setSession(data);
+      _userSession = _createSession(
+        role,
+        AuthProvider.local,
+        customName: fullName,
+        customEmail: email,
+        customPhone: phone,
+        mustChangePassword: mustChangePassword,
+      ).copyWith(id: userData['id']?.toString(), permissions: permissions);
+      _isAuthenticated = true;
+      if (!mustChangePassword) {
+        unawaited(
+          _loadRoleData(role: role, email: email, siteId: siteId, unitId: unitId)
+              .then((_) => notify()),
+        );
+      }
+    } catch (_) {
+      writePreference(_e2eSessionKey, null);
     }
   }
 
