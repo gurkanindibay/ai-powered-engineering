@@ -18,7 +18,7 @@ Feature: Capital project creation and budget allocation
     Then every unit is shown an equal share of 60000.00
     And the project is stored as "ACTIVE" with budget 60000.00 and allocation "EQUAL_PER_UNIT"
 
-  @SC-10-01-03 @layer:api @role_manager
+  @SC-10-01-03 @linked @layer:api @role_manager
   Scenario: Installment accrual persists tenant-scoped liabilities
     Given a capital project has an unaccrued installment for a site
     When the site manager accrues that installment
