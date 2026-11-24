@@ -358,6 +358,13 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         }, success={200},
     )
     assert_write_is_site_scoped(
+        api, "/api/v1/assembly/decisions", second, first,
+        {
+            "decided_on": date.today().isoformat(), "title": "Nightly linked budget decision",
+            "text": "Tenant scope check", "linked_budget_id": str(ids["budget"]),
+        }, success={201},
+    )
+    assert_write_is_site_scoped(
         api, "/api/v1/payments/record", second, first,
         {
             "unit_id": str(ids["unit"]), "amount": "1.00",
@@ -503,10 +510,27 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
 
     due_id, _ = arrange_open_due(api, stack, ids)
     arrangements.append(("/api/v1/dunning/notice-letter/{due_id}", due_id))
-    case = api.call("POST", "/api/v1/collections/cases", second.token, body={
+    case_body = {
         "unit_id": str(ids["unit"]), "debtor_type": "OWNER", "due_ids": [due_id],
         "note": "Nightly tenant authorization collection case",
-    })
+    }
+    case_status, case_response = get_response(
+        api, "/api/v1/collections/cases", second.token, method="POST", body=case_body,
+    )
+    assert case_status == 201, f"Same-site POST /api/v1/collections/cases returned {case_status}"
+    foreign_case_status, _ = get_response(
+        api, "/api/v1/collections/cases", first.token, method="POST", body=case_body,
+    )
+    assert foreign_case_status in {403, 404}, (
+        f"Foreign POST /api/v1/collections/cases returned {foreign_case_status}"
+    )
+    case = json.loads(case_response)
+    assert_write_is_site_scoped(
+        api, "/api/v1/adjustments", second, first,
+        {"due_id": due_id, "kind": "PRINCIPAL_WRITE_OFF", "amount": "1.00",
+         "reason": "Nightly adjustment scope"},
+        success={201},
+    )
     arrangements.extend((
         ("/api/v1/collections/cases/{id}", str(case["id"])),
         ("/api/v1/collections/cases/{id}/evidence-pack", str(case["id"])),
