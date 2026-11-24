@@ -147,7 +147,9 @@ jobs:
           curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz \
             | tar xzf - -C "${CARGO_HOME:-$HOME/.cargo}/bin"
       - name: Install cargo-nextest
-        run: cargo install cargo-nextest --locked --version 0.9.152
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
       - name: Verify cargo-nextest
         run: cargo nextest --version
       - name: Rust and database gates

@@ -150,6 +150,8 @@ Every test starts from a named, versioned state, not from data it invents. The j
 
 CI already went from about 27 minutes in one sequential job to 11.5 minutes (run 129). That came from parallel gate groups, cache-on-failure, lints first, 8 duration-balanced E2E shards and dropping the duplicate wrapper suites (time analysis steps A–E). PRs now run `smoke` and `core` plus any epic selected by `impact-map.json`; shared-code changes still run the full browser suite. Docs-only PRs skip the browser build and shards. Master runs the full suite, and nightly runs `edge`. The lanes below decide what runs when. The table after them tracks the speed-ups, with time-analysis step letters where one exists.
 
+Targeted PR lanes trade early cross-epic coverage for speed: a regression outside the selected epic tests may only be caught by the full E2E suite on master. When a master E2E run fails, the author of the merged change owns triage and a fix or revert; maintainers coordinate when several changes may be involved.
+
 ### Lanes: what runs when
 
 | Lane | Trigger | Runs | Blocks merge | Target |
