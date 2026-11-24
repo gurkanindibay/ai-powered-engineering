@@ -1,8 +1,10 @@
 # Mutation Testing: Runs curated mutation scenarios across layers (Rust, Flutter, Python, DB).
-# Scheduled nightly or triggered manually via workflow_dispatch.
+# Full catalogue nightly and on demand; direct target changes on pull requests.
 name: Mutation Testing
 
 on:
+  pull_request:
+    branches: [master]
   schedule:
     - cron: '0 2 * * *' # Nightly at 02:00 UTC
   workflow_dispatch:
@@ -20,22 +22,85 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: never
+  MUTATION_BASE: ${{ github.event.pull_request.base.sha }}
 
 jobs:
+  mutation-selection:
+    name: select PR mutation layers
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    outputs:
+      python: ${{ steps.select.outputs.python }}
+      flutter: ${{ steps.select.outputs.flutter }}
+      rust: ${{ steps.select.outputs.rust }}
+      db: ${{ steps.select.outputs.db }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Select mutants targeting changed files
+        id: select
+        run: |
+          python3 scripts/mutation_scenarios.py list --changed "$MUTATION_BASE" --direct-only --json > "$RUNNER_TEMP/mutation-selection.json"
+          python3 - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "mutation-selection.json"
+          selected = json.loads(path.read_text(encoding="utf-8"))
+          layers = {scenario["layer"] for scenario in selected}
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as outputs:
+              for layer in ("python", "flutter", "rust", "db"):
+                  print(f"{layer}={str(layer in layers).lower()}", file=outputs)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              print(f"Selected **{len(selected)}** mutants for changed target files.", file=summary)
+              if layers:
+                  print(f"Layers: {', '.join(sorted(layers))}.", file=summary)
+          PYTHON
+
   mutate-python:
     name: mutation (python harness)
+    needs: mutation-selection
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.mutation-selection.outputs.python == 'true') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Run Python mutation scenarios
+        id: mutate
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         run: |
           mkdir -p "${{ runner.temp }}/mutation"
-          python3 scripts/mutation_scenarios.py run --layer python \
+          selection=()
+          if [[ -n "$MUTATION_BASE" ]]; then
+            selection=(--changed "$MUTATION_BASE" --direct-only --strict)
+          fi
+          python3 scripts/mutation_scenarios.py run --layer python "${selection[@]}" \
             --markdown "${{ runner.temp }}/mutation/mutation_python.md" \
             --output "${{ runner.temp }}/mutation/mutation_python.json"
+      - name: Publish PR mutation summary
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          MUTATION_OUTCOME: ${{ steps.mutate.outcome }}
+        run: |
+          echo "### Mutation testing (python, report only)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Runner outcome: $MUTATION_OUTCOME." >> "$GITHUB_STEP_SUMMARY"
+          report="$RUNNER_TEMP/mutation/mutation_python.md"
+          if test -f "$report"; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No mutation report was generated. Inspect the job log." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -45,9 +110,14 @@ jobs:
 
   mutate-flutter:
     name: mutation (flutter frontend)
+    needs: mutation-selection
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.mutation-selection.outputs.flutter == 'true') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: "3.47.5"
@@ -60,11 +130,30 @@ jobs:
         with:
           python-version: "3.12"
       - name: Run Flutter mutation scenarios
+        id: mutate
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         run: |
           mkdir -p "${{ runner.temp }}/mutation"
-          python3 scripts/mutation_scenarios.py run --layer flutter \
+          selection=()
+          if [[ -n "$MUTATION_BASE" ]]; then
+            selection=(--changed "$MUTATION_BASE" --direct-only --strict)
+          fi
+          python3 scripts/mutation_scenarios.py run --layer flutter "${selection[@]}" \
             --markdown "${{ runner.temp }}/mutation/mutation_flutter.md" \
             --output "${{ runner.temp }}/mutation/mutation_flutter.json"
+      - name: Publish PR mutation summary
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          MUTATION_OUTCOME: ${{ steps.mutate.outcome }}
+        run: |
+          echo "### Mutation testing (flutter, report only)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Runner outcome: $MUTATION_OUTCOME." >> "$GITHUB_STEP_SUMMARY"
+          report="$RUNNER_TEMP/mutation/mutation_flutter.md"
+          if test -f "$report"; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No mutation report was generated. Inspect the job log." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -74,6 +163,8 @@ jobs:
 
   mutate-rust:
     name: mutation (rust backend)
+    needs: mutation-selection
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.mutation-selection.outputs.rust == 'true') }}
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -88,6 +179,9 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           components: clippy
@@ -99,6 +193,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Run Rust mutation scenarios
+        id: mutate
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: "5432"
@@ -106,9 +202,26 @@ jobs:
           DB_PASS: ci-only-password
         run: |
           mkdir -p "${{ runner.temp }}/mutation"
-          python3 scripts/mutation_scenarios.py run --layer rust --with postgres \
+          selection=()
+          if [[ -n "$MUTATION_BASE" ]]; then
+            selection=(--changed "$MUTATION_BASE" --direct-only --strict)
+          fi
+          python3 scripts/mutation_scenarios.py run --layer rust --with postgres "${selection[@]}" \
             --markdown "${{ runner.temp }}/mutation/mutation_rust.md" \
             --output "${{ runner.temp }}/mutation/mutation_rust.json"
+      - name: Publish PR mutation summary
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          MUTATION_OUTCOME: ${{ steps.mutate.outcome }}
+        run: |
+          echo "### Mutation testing (rust, report only)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Runner outcome: $MUTATION_OUTCOME." >> "$GITHUB_STEP_SUMMARY"
+          report="$RUNNER_TEMP/mutation/mutation_rust.md"
+          if test -f "$report"; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No mutation report was generated. Inspect the job log." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -118,6 +231,8 @@ jobs:
 
   mutate-db:
     name: mutation (database & migrations)
+    needs: mutation-selection
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.mutation-selection.outputs.db == 'true') }}
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -132,6 +247,9 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           components: clippy
@@ -143,6 +261,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Run DB mutation scenarios
+        id: mutate
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: "5432"
@@ -150,9 +270,26 @@ jobs:
           DB_PASS: ci-only-password
         run: |
           mkdir -p "${{ runner.temp }}/mutation"
-          python3 scripts/mutation_scenarios.py run --layer db --with postgres \
+          selection=()
+          if [[ -n "$MUTATION_BASE" ]]; then
+            selection=(--changed "$MUTATION_BASE" --direct-only --strict)
+          fi
+          python3 scripts/mutation_scenarios.py run --layer db --with postgres "${selection[@]}" \
             --markdown "${{ runner.temp }}/mutation/mutation_db.md" \
             --output "${{ runner.temp }}/mutation/mutation_db.json"
+      - name: Publish PR mutation summary
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          MUTATION_OUTCOME: ${{ steps.mutate.outcome }}
+        run: |
+          echo "### Mutation testing (db, report only)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Runner outcome: $MUTATION_OUTCOME." >> "$GITHUB_STEP_SUMMARY"
+          report="$RUNNER_TEMP/mutation/mutation_db.md"
+          if test -f "$report"; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No mutation report was generated. Inspect the job log." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -162,7 +299,7 @@ jobs:
 
   mutation-report:
     name: mutation report & summary
-    if: always()
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     needs: [mutate-python, mutate-flutter, mutate-rust, mutate-db]
     runs-on: ubuntu-24.04
     steps:
@@ -178,7 +315,9 @@ jobs:
           path: ${{ runner.temp }}/mutation-shards
           merge-multiple: false
       - name: Aggregate layer mutation reports
+        id: aggregate
         if: always()
+        continue-on-error: true
         run: |
           # Strict aggregation requires all four shards and the full scenario catalogue.
           python3 scripts/ci_mutation_report.py \
@@ -200,3 +339,6 @@ jobs:
           path: ${{ runner.temp }}/mutation-report/
           if-no-files-found: warn
           retention-days: 30
+      - name: Enforce full-catalogue verdict
+        if: ${{ always() && steps.aggregate.outcome != 'success' }}
+        run: exit 1
