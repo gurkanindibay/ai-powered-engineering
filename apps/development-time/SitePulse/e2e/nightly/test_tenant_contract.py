@@ -502,6 +502,24 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         "period_start": "2026-10-01", "period_end": "2026-10-31",
         "total_cost": "104.29", "due_date": "2026-11-15",
     })
+    agenda_item_id = str(meeting["agenda"][0]["id"])
+    assert_write_is_site_scoped(
+        api, "/api/v1/assembly/meetings/" + str(meeting["id"]) + "/attendance",
+        second, first,
+        {"attendance": [{
+            "unit_id": str(ids["unit"]), "attendee_name": "Nightly Owner",
+        }], "held_on": date.today().isoformat()},
+        success={200},
+    )
+    assert_write_is_site_scoped(
+        api, "/api/v1/assembly/agenda-items/" + agenda_item_id + "/votes",
+        second, first,
+        {"votes": [{"unit_id": str(ids["unit"]), "vote": "FOR"}]}, success={200},
+    )
+    assert_write_is_site_scoped(
+        api, "/api/v1/assembly/agenda-items/" + agenda_item_id + "/close",
+        second, first, {"decision_text": "Nightly tenant-scope decision"}, success={200},
+    )
     arrangements = [
         ("/api/v1/assembly/meetings/{id}", str(meeting["id"])),
         ("/api/v1/heat-share/periods/{id}", str(heat_period["id"])),

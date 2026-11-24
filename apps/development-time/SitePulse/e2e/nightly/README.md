@@ -34,7 +34,7 @@ that every inventory operation is present in the live OpenAPI document, then
 cross-site denial, and 37 implicit-scope reads and scoped write reports with distinct second-site data
 visible only to that site's manager. It also runs the multi-resource scenarios
 in `tests/test_journey_tenant_isolation.py`. The inventory maps runtime test
-evidence for 150 of 208 tenant-applicable operations; the others remain visible
+evidence for 153 of 208 tenant-applicable operations; the others remain visible
 as uncovered rows. Classification completeness does not mean an operation has
 a runtime fixture.
 
