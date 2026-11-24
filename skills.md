@@ -488,3 +488,17 @@ Execution needs a digest-pinned bridge/toolchain image and operator policy. The 
 - **Usage:** `python3 apps/development-time/SitePulse/scripts/person_integrity_report.py [--json]`
 - **Database:** Uses `DATABASE_URL` or `DB_HOST`, `DB_PORT`, `DB_USER`, and `DB_PASS`. Requires `psql` on `PATH`.
 
+## 5b-6. Test Strategy Scanner (`test_strategy_scan.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/test_strategy_scan.py](file:///apps/development-time/SitePulse/scripts/test_strategy_scan.py)
+- **Strategy:** [apps/development-time/SitePulse/docs/testing/TEST_STRATEGY.md](file:///apps/development-time/SitePulse/docs/testing/TEST_STRATEGY.md) ("Method and reproduction")
+- **Purpose:** Reproduces the current-state assessment of the test strategy. Classifies every Rust, Dart and Python test by how CI runs it (gate, DB gate, conditional, never run, silent skip), flags shortcuts (no or weak assertions, unwrap-only, wait-only GUI checks, fixed sleeps, swallowed results) and joins the result with the Gherkin catalogue to find scenarios covered only on paper (never-run, wrapper-only, file-level or script-only links).
+
+### Quick Usage Examples:
+```bash
+cd apps/development-time/SitePulse
+python3 -I scripts/test_strategy_scan.py                     # totals, never-run tests, mis-covered scenarios
+python3 -I scripts/test_strategy_scan.py --json              # the same summary as JSON
+python3 -I scripts/test_strategy_scan.py --output scan.json  # every test and scenario row
+```
+

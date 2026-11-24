@@ -95,6 +95,8 @@
 
 ## 3. Running the Tests & Harness
 
+How SitePulse is tested, what runs when and why, is defined in the [SitePulse Test Strategy](docs/testing/TEST_STRATEGY.md).
+
 ### Run Complete Test & Verification Suite
 ```bash
 ./apps/development-time/SitePulse/scripts/run-tests.sh

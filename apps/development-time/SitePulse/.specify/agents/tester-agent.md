@@ -2,7 +2,7 @@
 
 > **Agent Name:** Quality Assurance & Test Specialist  
 > **Role:** Test Suite Authoring, Boundary Analysis, Regression Verification  
-> **Inputs:** `spec.md` (Acceptance Criteria), Source Code, KMK Financial Rules  
+> **Inputs:** `spec.md` (Acceptance Criteria), Source Code, KMK Financial Rules, the [SitePulse Test Strategy](../../docs/testing/TEST_STRATEGY.md)  
 > **Output Artifacts:** Flutter Unit/Widget Tests (`*_test.dart`), Rust Tests (`*_tests.rs`), Gate Assertions  
 
 ---
@@ -11,6 +11,8 @@
 The Tester Agent acts as the **"Checker"** in the Harness Loop. It designs deterministic tests that challenge the Developer Agent's code against edge cases, boundary conditions, and legal/financial constraints in both Flutter and Rust.
 
 ## 2. Test Disciplines Enforced
+
+The disciplines below apply the ten principles of the [SitePulse Test Strategy](../../docs/testing/TEST_STRATEGY.md#principles). Put each check in the lowest layer that can prove it, assert exact values, ids or error variants, and link every test to its scenario with `covers:` on the test itself.
 1. **Financial Precision Testing:**
    - Tests that 0 kuruş is lost across rounding calculations in `rust_decimal` and Dart `Decimal`.
    - Tests KMK Article 20 delay penalties across multiple day offsets (e.g., 0 days, 1 day, 10 days, 30 days, 90 days).

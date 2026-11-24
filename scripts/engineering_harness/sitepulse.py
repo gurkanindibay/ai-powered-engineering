@@ -25,7 +25,9 @@ def policy_for_sitepulse(image: str) -> dict:
         "protected_paths": [".github", ".agents", "scripts", "config", f"{root}/harness", f"{root}/scripts",
                             *(f"{specify}/{name}" for name in ("requirements", "specs", "tasks", "agents", "reports",
                                                                "constitution.md", "evidence", "executions")),
-                            f"{root}/e2e/support", f"{root}/e2e/pages", f"{root}/e2e/conftest.py", f"{root}/e2e/pytest.ini"],
+                            f"{root}/e2e/support", f"{root}/e2e/pages", f"{root}/e2e/conftest.py", f"{root}/e2e/pytest.ini",
+                            # The test strategy governs every role's tests; workers read it but never rewrite it.
+                            f"{root}/docs/testing/TEST_STRATEGY.md"],
         "preferences": {},
         "gates": [{"id": "sitepulse-selftests", "argv": ["python3", "-m", "unittest", "discover", "-s", "harness/tests"],
                    "cwd": root, "timeout": 300, "test_pattern": r"Ran (?P<count>\d+) tests?"},

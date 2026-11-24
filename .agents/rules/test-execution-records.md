@@ -5,6 +5,8 @@ globs: apps/development-time/SitePulse/**
 
 # Test Execution Records (All Agents)
 
+The overall test strategy (principles, layers, lanes, quality gates) is [docs/testing/TEST_STRATEGY.md](file:///apps/development-time/SitePulse/docs/testing/TEST_STRATEGY.md). This rule covers only how test runs are recorded and reported.
+
 Operationalizes AGENTS.md rule 13. Paths are relative to `apps/development-time/SitePulse/`.
 
 ## What the harness enforces

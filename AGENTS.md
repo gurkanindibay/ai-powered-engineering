@@ -18,6 +18,7 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - Monetary or calculation fields MUST use high-precision decimals (`decimal` in C#, `rust_decimal::Decimal` in Rust, `Decimal` in Dart/Python, `BigDecimal` in Java, `NUMERIC(15,2)` in SQL). Never introduce floating-point arithmetic in financial domains.
 
 3. **Verification Before Delivery**:
+   - **The SitePulse test strategy is [apps/development-time/SitePulse/docs/testing/TEST_STRATEGY.md](file:///apps/development-time/SitePulse/docs/testing/TEST_STRATEGY.md)**, the single source of truth for how SitePulse is tested: principles, which layer a check belongs in, test data, execution lanes, quality gates and the roadmap. Read it before adding, moving or changing tests or gates, and change it in the same PR when you change how SitePulse is tested. The older documents under `docs/testing/` carry a banner saying whether they are superseded, narrowed or kept as reference.
    - Always run the relevant automated test suite before concluding any code modification:
      - SitePulse harness tests: `python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests`
      - SitePulse full gate run (build, clippy, Rust/Flutter tests, money fixtures, schema and API system checks): `DB_PASS=... python3 apps/development-time/SitePulse/scripts/run_tests.py` (`--skip-db` without PostgreSQL; skipped gates are reported, never counted as passed)
