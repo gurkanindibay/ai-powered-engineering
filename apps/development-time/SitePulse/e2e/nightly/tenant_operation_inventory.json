@@ -1,0 +1,2388 @@
+{
+  "version": 1,
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/api-docs/openapi.json",
+      "applicability": "outside_scope",
+      "reason": "Public API metadata.",
+      "evidence": "backend/src/app.rs: handlers::openapi_spec (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accounting/account-report",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::account_report (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accounting/approval-policy",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::get_approval_policy (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/accounting/approval-policy",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::set_approval_policy (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accounting/budget-vs-actual",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::budget_vs_actual (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accounting/chart",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::chart_of_accounts (Require(FinanceRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accounting/expenses",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_expenses (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/accounting/expenses",
+      "applicability": "tenant_reference",
+      "reason": "CreateExpenseRequest can supply a vendor ID.",
+      "evidence": "backend/src/app.rs: handlers::create_expense (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/accounting/expenses/{id}/approve",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::approve_expense (Require(ExpenseApprove))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/accounting/expenses/{id}/payments",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::pay_expense (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/accounting/expenses/{id}/reject",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::reject_expense (Require(ExpenseApprove))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accounting/journal",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::journal (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/accounting/journal",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::create_journal_entry (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accounting/reserve-fund",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::reserve_fund (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accounting/trial-balance",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::trial_balance (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accounting/vendors",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_vendors (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/accounting/vendors",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::create_vendor (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accrual-corrections",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_corrections (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/accrual-corrections",
+      "applicability": "tenant_reference",
+      "reason": "RequestCorrectionRequest supplies a liability ID.",
+      "evidence": "backend/src/app.rs: handlers::request_correction (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/accrual-corrections/{id}/decide",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::decide_correction (Require(AdjustmentApprove))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/accrual-schedule",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::get_accrual_schedule (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/accrual-schedule",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::update_accrual_schedule (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/adjustments",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_adjustments (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/adjustments",
+      "applicability": "tenant_reference",
+      "reason": "RequestAdjustmentRequest supplies a liability ID.",
+      "evidence": "backend/src/app.rs: handlers::request_adjustment (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/adjustments/{id}/decide",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::decide_adjustment (Require(AdjustmentApprove))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/analytics/collections",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::collection_analytics (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/announcements",
+      "applicability": "tenant_reference",
+      "reason": "CreateAnnouncementRequest supplies a site ID.",
+      "evidence": "backend/src/app.rs: handlers::create_announcement (Require(AnnouncementBroadcast))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assembly/agenda-items/{id}/close",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::close_agenda_item (Require(GovernanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assembly/agenda-items/{id}/votes",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::cast_votes (Require(GovernanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assembly/decisions",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_decisions (RequireAny(&[GovernanceManage, FinanceRead, UnitRead]))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assembly/decisions",
+      "applicability": "tenant_reference",
+      "reason": "RecordDecisionRequest can link a site budget by ID.",
+      "evidence": "backend/src/app.rs: handlers::record_decision (Require(GovernanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assembly/meetings",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_meetings (Require(GovernanceManage))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assembly/meetings",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::create_meeting (Require(GovernanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assembly/meetings/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_meeting (Require(GovernanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assembly/meetings/{id}/attendance",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::record_attendance (Require(GovernanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audit/events",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Reads audit entries in the authenticated caller's site or platform scope.",
+      "evidence": "backend/src/app.rs: authorization::audit_events (Require(AuditLogRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audit/export",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Reads audit entries in the authenticated caller's site or platform scope.",
+      "evidence": "backend/src/app.rs: authorization::audit_events (Require(AuditLogExport))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/activate",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: handlers::activate_account (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/change-password",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: handlers::change_password (SelfOnly)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/confirm-email",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: handlers::confirm_email_change (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/google",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: handlers::login_google (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/link-google",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: security::link_google (SelfOnly)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/login",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: handlers::login_password (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: security::logout (SelfOnly)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout-all",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: security::logout_all (SelfOnly)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/me",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: handlers::get_profile (SelfOnly)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/refresh",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: security::refresh (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: handlers::register_password (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/step-up",
+      "applicability": "outside_scope",
+      "reason": "Identity or session operation uses authentication, self access, or account activation.",
+      "evidence": "backend/src/app.rs: security::step_up (SelfOnly)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/autopay/run",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::run_autopay (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/bank-matching/daily-reconciliation",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::reconciliation_runs (Require(ReconciliationConfirm))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank-matching/daily-reconciliation",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Derives the ledger site from the caller for the supplied statement lines.",
+      "evidence": "backend/src/app.rs: handlers::daily_reconciliation (Require(ReconciliationConfirm))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/bank-matching/feeds",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_bank_feeds (Require(ReconciliationConfirm))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank-matching/feeds",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Creates the feed in the caller's site using a bank account number, without selecting a SitePulse site or existing resource.",
+      "evidence": "backend/src/app.rs: handlers::create_bank_feed (Require(ReconciliationConfirm))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank-matching/feeds/{id}/sync",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::sync_bank_feed (Require(ReconciliationConfirm))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank-matching/suggest",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Bank transfer inputs are matched against candidates in the caller's site.",
+      "evidence": "backend/src/app.rs: handlers::suggest_matches (Require(ReconciliationConfirm))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank/kuveyt-turk/configure",
+      "applicability": "outside_scope",
+      "reason": "Configures the platform-wide bank sandbox integration.",
+      "evidence": "backend/src/app.rs: handlers::configure_kuveyt_turk (Require(PlatformIntegrationConfigure))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/bank/kuveyt-turk/status",
+      "applicability": "outside_scope",
+      "reason": "Checks the platform-wide bank sandbox configuration.",
+      "evidence": "backend/src/app.rs: handlers::get_kuveyt_turk_status (Require(BankAccountManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank/kuveyt-turk/test-connection",
+      "applicability": "outside_scope",
+      "reason": "Checks connectivity using platform bank sandbox credentials.",
+      "evidence": "backend/src/app.rs: handlers::test_kuveyt_turk_connection (Require(PlatformIntegrationConfigure))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank/remembered-ibans",
+      "applicability": "tenant_reference",
+      "reason": "RememberSenderIbanRequest supplies a site and unit.",
+      "evidence": "backend/src/app.rs: handlers::remember_sender_iban (Require(ReconciliationConfirm))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank/statements/confirm-reconciliation",
+      "applicability": "tenant_reference",
+      "reason": "ConfirmReconciliationRequest supplies a site and match IDs.",
+      "evidence": "backend/src/app.rs: handlers::confirm_reconciliation (Require(ReconciliationConfirm))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank/statements/parse",
+      "applicability": "tenant_reference",
+      "reason": "ParseBankStatementRequest supplies a site ID.",
+      "evidence": "backend/src/app.rs: handlers::parse_bank_statement (Require(ReconciliationConfirm))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/bank/statements/reconciliation-queue",
+      "applicability": "tenant_reference",
+      "reason": "The query accepts site_id or siteId.",
+      "evidence": "backend/src/app.rs: handlers::get_reconciliation_queue (Require(ReconciliationConfirm))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank/statements/reconciliation-queue/{match_id}/assign",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter match_id.",
+      "evidence": "backend/src/app.rs: handlers::assign_reconciliation_match (Require(ReconciliationConfirm))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank/statements/reconciliation-queue/{match_id}/reject",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter match_id.",
+      "evidence": "backend/src/app.rs: handlers::reject_reconciliation_match (Require(ReconciliationConfirm))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bank/webhook/incoming-transfer",
+      "applicability": "outside_scope",
+      "reason": "Signed bank integration with a separate caller model.",
+      "evidence": "backend/src/app.rs: handlers::handle_bank_incoming_webhook (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capital-projects",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::list_capital_projects (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/capital-projects",
+      "applicability": "tenant_reference",
+      "reason": "CreateCapitalProjectRequest supplies a site ID.",
+      "evidence": "backend/src/app.rs: handlers::create_capital_project (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capital-projects/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_capital_project (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/capital-projects/{id}/accrue-installment",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::accrue_capital_installment (Require(LedgerManageAll))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capital-projects/{id}/disbursements",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::list_capital_disbursements (Require(SiteManage))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/capital-projects/{id}/disbursements",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::record_capital_disbursement (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capital-projects/{id}/installments",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::list_capital_installments (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capital-projects/{id}/unit-shares",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_unit_capital_shares (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/collections/cases",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_cases (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/collections/cases",
+      "applicability": "tenant_reference",
+      "reason": "OpenCaseRequest supplies a unit and liability IDs.",
+      "evidence": "backend/src/app.rs: handlers::open_case (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/collections/cases/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_case (Require(FinanceRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/collections/cases/{id}/advance",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::advance_case (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/collections/cases/{id}/evidence-pack",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::evidence_pack (Require(FinanceRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/collections/cases/{id}/lawyer-access",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::grant_lawyer_access (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dues/accrual-runs",
+      "applicability": "tenant_reference",
+      "reason": "DuesPeriodsQuery accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::list_accrual_runs (Require(LedgerManageAll))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dues/accrue-period",
+      "applicability": "tenant_reference",
+      "reason": "AccrueDuesPeriodRequest supplies a site ID.",
+      "evidence": "backend/src/app.rs: handlers::accrue_monthly_dues (Require(LedgerManageAll))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dues/period-reopen-requests/{request_id}/decide",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter request_id.",
+      "evidence": "backend/src/app.rs: handlers::decide_billing_period_reopen (Require(LedgerManageAll))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dues/periods",
+      "applicability": "tenant_reference",
+      "reason": "DuesPeriodsQuery accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::list_dues_periods (Require(LedgerManageAll))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dues/periods",
+      "applicability": "tenant_reference",
+      "reason": "CreateDuesPeriodRequest supplies a site ID.",
+      "evidence": "backend/src/app.rs: handlers::create_dues_period (Require(LedgerManageAll))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dues/periods/{period_id}/close",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter period_id.",
+      "evidence": "backend/src/app.rs: handlers::close_billing_period (Require(LedgerManageAll))",
+      "runtime_tests": [
+        "e2e/tests/test_journey_tenant_isolation.py::test_manager_cannot_mutate_another_site_records"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dues/periods/{period_id}/reopen",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter period_id.",
+      "evidence": "backend/src/app.rs: handlers::request_billing_period_reopen (Require(LedgerManageAll))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dues/periods/{period_id}/summary",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter period_id.",
+      "evidence": "backend/src/app.rs: handlers::billing_period_summary (Require(LedgerManageAll))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership",
+        "e2e/tests/test_journey_tenant_isolation.py::test_direct_reads_and_downloads_require_site_access"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dunning/actions",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::dunning_actions (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dunning/notice-letter/{due_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter due_id.",
+      "evidence": "backend/src/app.rs: handlers::dunning_notice_letter (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dunning/policy",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::get_dunning_policy (Require(FinanceManage))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/dunning/policy",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::set_dunning_policy (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dunning/run",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::run_dunning (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health",
+      "applicability": "outside_scope",
+      "reason": "Public service health metadata.",
+      "evidence": "backend/src/app.rs: handlers::health_check (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/heat-share/periods",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_heat_periods (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/heat-share/periods",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::create_heat_period (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/heat-share/periods/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_heat_period (Require(FinanceRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/heat-share/periods/{id}/approve",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::approve_heat_period (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/heat-share/periods/{id}/readings",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::record_heat_readings (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/home-residents/invite-link/{unit_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::generate_unit_invite_link (Require(UnitInviteCoResident))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/home-residents/members/{unit_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::get_unit_members (RequireAny(&[UnitManageHousehold, PersonManage]))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership",
+        "e2e/tests/test_journey_tenant_isolation.py::test_replacing_tenant_keeps_history_and_receipts_private"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/home-residents/members/{unit_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::add_unit_member (RequireAny(&[UnitManageHousehold, PersonManage]))",
+      "runtime_tests": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/home-residents/members/{unit_id}/{resident_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameters unit_id, resident_id.",
+      "evidence": "backend/src/app.rs: handlers::delete_unit_member (RequireAny(&[UnitManageHousehold, PersonManage]))",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/home-residents/members/{unit_id}/{resident_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameters unit_id, resident_id.",
+      "evidence": "backend/src/app.rs: handlers::update_unit_member (RequireAny(&[UnitManageHousehold, PersonManage]))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/home-residents/register",
+      "applicability": "outside_scope",
+      "reason": "Public resident registration uses the invitation flow rather than site membership.",
+      "evidence": "backend/src/app.rs: handlers::register_home_resident (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/kvkk/access-log",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::financial_access_log (Require(AuditLogRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/kvkk/debtor-export",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::debtor_export (RequireAny(&[FinanceManage, FinanceRead, UnitRead]))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/kvkk/me",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Derives debtor identity from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::kvkk_status (SelfOnly)",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/kvkk/me/acknowledge",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Binds the privacy notice acknowledgement to the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::kvkk_acknowledge (SelfOnly)",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/kvkk/me/consents",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Binds consent changes to the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::kvkk_update_consents (SelfOnly)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/kvkk/privacy-notices",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::publish_privacy_notice (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/kvkk/retention",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::retention_review (Require(FinanceManage))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/kvkk/retention",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::set_retention_policy (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/kvkk/retention/purge",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::retention_purge (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/late-fees/reconciliation",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::late_fee_reconciliation (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/leases",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_leases (Require(FinanceManage))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/leases",
+      "applicability": "tenant_reference",
+      "reason": "UpsertLeaseRequest supplies a unit ID.",
+      "evidence": "backend/src/app.rs: handlers::upsert_lease (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/leases/joint-exposure",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::joint_exposure (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/notifications",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Derives the notification scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_notifications (RequireAny(&[FinanceManage, FinanceRead, UnitRead]))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/notifications/broadcast",
+      "applicability": "implicit_tenant_scope",
+      "reason": "Derives the broadcast site from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::broadcast_notification (Require(AnnouncementBroadcast))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/openapi.json",
+      "applicability": "outside_scope",
+      "reason": "Public API metadata.",
+      "evidence": "backend/src/app.rs: handlers::openapi_spec (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operating-budgets",
+      "applicability": "tenant_reference",
+      "reason": "SiteQuery accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::list_operating_budgets (Require(SiteManage))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operating-budgets",
+      "applicability": "tenant_reference",
+      "reason": "SiteQuery accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::create_operating_budget (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operating-budgets/compliance",
+      "applicability": "tenant_reference",
+      "reason": "SiteQuery accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::get_budget_compliance (Require(SiteManage))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operating-budgets/legal-basis",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::budget_legal_basis (Require(SiteManage))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/operating-budgets/policy",
+      "applicability": "tenant_reference",
+      "reason": "SiteQuery accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::set_budget_policy (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/operating-budgets/transition",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::set_budget_transition (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/operating-budgets/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::delete_operating_budget (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operating-budgets/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_operating_budget (Require(SiteManage))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership",
+        "e2e/tests/test_journey_tenant_isolation.py::test_direct_reads_and_downloads_require_site_access"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operating-budgets/{id}/approve",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::approve_operating_budget (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operating-budgets/{id}/finalize",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::finalize_operating_budget (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operating-budgets/{id}/issue-interim",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::issue_interim_budget (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operating-budgets/{id}/objections",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::file_budget_objection (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operating-budgets/{id}/objections/{objection_id}/resolve",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameters id, objection_id.",
+      "evidence": "backend/src/app.rs: handlers::resolve_budget_objection (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operating-budgets/{id}/reject",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::reject_operating_budget (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operating-budgets/{id}/service",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::record_budget_service (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payment-plans",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_plans (Require(FinanceRead))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payment-plans",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::create_plan (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payment-plans/run",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::run_plans (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payment-plans/{id}/cancel",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::cancel_plan (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payment-provider/sandbox/checkout/{reference}",
+      "applicability": "outside_scope",
+      "reason": "Sandbox payment checkout uses a payment reference as its capability.",
+      "evidence": "backend/src/app.rs: handlers::sandbox_checkout_page (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payment-provider/sandbox/checkout/{reference}/complete",
+      "applicability": "outside_scope",
+      "reason": "Sandbox payment checkout uses a payment reference as its capability.",
+      "evidence": "backend/src/app.rs: handlers::sandbox_checkout_complete (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payments/debt-aging",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::get_debt_aging_report (Require(LedgerManageAll))",
+      "runtime_tests": [
+        "e2e/tests/test_journey_tenant_isolation.py::test_manager_lists_and_searches_are_site_scoped",
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/debt-aging/snapshot",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::snapshot_debt_aging (Require(LedgerManageAll))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payments/homeowner-records",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::get_homeowner_payments (Require(LedgerManageAll))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/inter-ledger-transfer",
+      "applicability": "tenant_reference",
+      "reason": "InterLedgerTransferRequest supplies a unit and can supply a site ID.",
+      "evidence": "backend/src/app.rs: handlers::inter_ledger_transfer (Require(LedgerManageAll))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/match-all",
+      "applicability": "tenant_reference",
+      "reason": "MatchAllPaymentsRequest supplies a site ID.",
+      "evidence": "backend/src/app.rs: handlers::match_all_homeowner_payments (Require(PaymentRecordManual))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/provider/webhook",
+      "applicability": "outside_scope",
+      "reason": "Provider webhook with a separate caller model.",
+      "evidence": "backend/src/app.rs: handlers::provider_webhook_v2 (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payments/receipts/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_payment_receipt (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership",
+        "e2e/tests/test_journey_tenant_isolation.py::test_resident_cannot_read_another_unit_financial_records",
+        "e2e/tests/test_journey_tenant_isolation.py::test_tenant_statement_excludes_owner_private_transactions",
+        "e2e/tests/test_journey_tenant_isolation.py::test_replacing_tenant_keeps_history_and_receipts_private"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payments/receipts/{id}/pdf",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_payment_receipt_pdf_logged (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership",
+        "e2e/tests/test_journey_tenant_isolation.py::test_resident_cannot_read_another_unit_financial_records",
+        "e2e/tests/test_journey_tenant_isolation.py::test_tenant_statement_excludes_owner_private_transactions",
+        "e2e/tests/test_journey_tenant_isolation.py::test_replacing_tenant_keeps_history_and_receipts_private"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payments/receipts/{id}/rent-deduction-certificate",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::rent_deduction_certificate (Require(UnitRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/record",
+      "applicability": "tenant_reference",
+      "reason": "RecordHomeownerPaymentRequest supplies a unit ID.",
+      "evidence": "backend/src/app.rs: handlers::record_homeowner_payment (Require(PaymentRecordManual))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/record-manual",
+      "applicability": "tenant_reference",
+      "reason": "RecordManualPaymentRequest supplies a unit and can supply a site ID.",
+      "evidence": "backend/src/app.rs: handlers::record_manual_payment (Require(PaymentRecordManual))",
+      "runtime_tests": [
+        "e2e/tests/test_journey_tenant_isolation.py::test_manager_cannot_mutate_another_site_records"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/payments/reverse",
+      "applicability": "tenant_reference",
+      "reason": "ReversePaymentRequest supplies a receipt and can supply a site ID.",
+      "evidence": "backend/src/app.rs: handlers::reverse_payment (Require(PaymentReverse))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payments/stream",
+      "applicability": "tenant_reference",
+      "reason": "PaymentStreamFilter accepts site and unit IDs.",
+      "evidence": "backend/src/app.rs: handlers::get_payment_stream (Require(LedgerManageAll))",
+      "runtime_tests": [
+        "e2e/tests/test_journey_tenant_isolation.py::test_manager_lists_and_searches_are_site_scoped",
+        "e2e/tests/test_journey_tenant_isolation.py::test_site_parameter_cannot_widen_manager_permissions",
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/portfolio/companies/{id}/summary",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::portfolio_summary (Require(PortfolioRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/public/collection-cases/pack",
+      "applicability": "outside_scope",
+      "reason": "Public lawyer access token is the authority for the case package.",
+      "evidence": "backend/src/app.rs: handlers::lawyer_pack (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/public/receipts/verify",
+      "applicability": "outside_scope",
+      "reason": "Public receipt verification uses a separate verification capability.",
+      "evidence": "backend/src/app.rs: handlers::verify_receipt (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/registration/approve/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::approve_registration (Require(ResidentApprove))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/registration/invite-link",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::generate_registration_link (Require(ResidentInviteSite))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/registration/pending",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::get_pending_registrations (Require(ResidentApprove))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/registration/reject/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::reject_registration (Require(ResidentApprove))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/registration/submit/{slug}",
+      "applicability": "outside_scope",
+      "reason": "Public site registration uses the invitation flow rather than site membership.",
+      "evidence": "backend/src/app.rs: handlers::submit_self_registration (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/resident-requests/disputes",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::site_disputes (Require(FinanceManage))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/resident-requests/disputes/{id}/resolve",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::resolve_dispute (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/resident-requests/virman",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::site_virman_requests (Require(FinanceManage))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/resident-requests/virman/{id}/decide",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::decide_virman_request (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/residents/{unit_id}/autopay",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::autopay_overview (Require(UnitPay))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/residents/{unit_id}/autopay/mandates",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::create_mandate (Require(UnitPay))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/residents/{unit_id}/autopay/mandates/{mandate_id}/cancel",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameters unit_id, mandate_id.",
+      "evidence": "backend/src/app.rs: handlers::cancel_mandate (Require(UnitPay))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/residents/{unit_id}/dashboard",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::get_resident_dashboard (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/residents/{unit_id}/disputes",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::unit_disputes (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/residents/{unit_id}/disputes",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::create_dispute (Require(UnitRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/residents/{unit_id}/matching-criteria",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::get_unit_matching_criteria (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/residents/{unit_id}/matching-criteria/ibans",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::add_unit_sender_iban (Require(UnitPaymentProfileManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/residents/{unit_id}/matching-criteria/ibans/{sender_iban}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameters unit_id, sender_iban.",
+      "evidence": "backend/src/app.rs: handlers::delete_unit_sender_iban (Require(UnitPaymentProfileManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/residents/{unit_id}/matching-criteria/payer-names",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::update_unit_payer_names (Require(UnitPaymentProfileManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/residents/{unit_id}/operating-budget",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::get_resident_operating_budget (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/residents/{unit_id}/payment-intents",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::create_payment_intent_v2 (Require(UnitPay))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/residents/{unit_id}/payment-intents/{intent_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameters unit_id, intent_id.",
+      "evidence": "backend/src/app.rs: handlers::get_payment_intent (Require(UnitPay))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/residents/{unit_id}/payment-plans",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::unit_plans (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/residents/{unit_id}/statement",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::get_resident_statement_logged (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership",
+        "e2e/tests/test_journey_tenant_isolation.py::test_resident_cannot_read_another_unit_financial_records",
+        "e2e/tests/test_journey_tenant_isolation.py::test_tenant_statement_excludes_owner_private_transactions",
+        "e2e/tests/test_journey_tenant_isolation.py::test_replacing_tenant_keeps_history_and_receipts_private"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/residents/{unit_id}/virman-requests",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::unit_virman_requests (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/residents/{unit_id}/virman-requests",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::create_virman_request (Require(UnitRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/revaluation-rates",
+      "applicability": "outside_scope",
+      "reason": "Reads the platform-wide revaluation rate catalog.",
+      "evidence": "backend/src/app.rs: handlers::list_revaluation_rates (SelfOnly)",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/revaluation-rates",
+      "applicability": "outside_scope",
+      "reason": "Platform administration of the shared revaluation rate catalog.",
+      "evidence": "backend/src/app.rs: handlers::set_revaluation_rate (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/saas/companies",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::list_companies (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/saas/companies",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::create_company (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/saas/companies/{id}/fee-invoices",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::list_fee_invoices (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/saas/companies/{id}/fee-invoices",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::issue_fee_invoices (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/saas/companies/{id}/members",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::add_company_member (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/saas/companies/{id}/sites",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::attach_company_site (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/saas/companies/{id}/summary",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::portfolio_summary (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/saas/platform-roles",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: authorization::assign_platform_role (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/saas/sites",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::get_all_sites (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/saas/sites",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::register_site (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/saas/sites/{id}",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::delete_site (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/saas/sites/{id}",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::update_site (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/saas/sites/{id}/reset-admin-password",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::reset_site_admin_password (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/saas/stats",
+      "applicability": "outside_scope",
+      "reason": "Platform administration is governed by TenantManage permissions.",
+      "evidence": "backend/src/app.rs: handlers::get_saas_stats (Require(TenantManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/advance-exit-settlements",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_advance_exit_settlements (Require(FinanceManage))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/advance-exit-settlements/{id}/decide",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::decide_advance_exit_settlement (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/bank-account/{site_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter site_id.",
+      "evidence": "backend/src/app.rs: handlers::get_site_bank_account (Require(BankAccountManage))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/bank-account/{site_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter site_id.",
+      "evidence": "backend/src/app.rs: handlers::configure_site_bank_account (Require(BankAccountManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/banks",
+      "applicability": "outside_scope",
+      "reason": "Public platform bank catalog.",
+      "evidence": "backend/src/app.rs: handlers::list_supported_banks (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/blocks",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::get_blocks (Require(SiteManage))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/blocks",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::create_block (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/home-owners",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::get_home_owners (Require(PersonRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/home-owners",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::register_home_owner (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/site-admin/home-owners/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::delete_home_owner (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/site-admin/home-owners/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::update_home_owner (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/home-owners/{id}/resend-activation",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::resend_activation (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/house-types",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::get_house_types (Require(SiteManage))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/house-types",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::create_house_type (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/site-admin/house-types/{id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::delete_house_type (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/overview",
+      "applicability": "tenant_reference",
+      "reason": "SiteOverviewQuery accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::get_site_overview (Require(SiteManage))",
+      "runtime_tests": [
+        "e2e/tests/test_journey_tenant_isolation.py::test_manager_lists_and_searches_are_site_scoped",
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/persons",
+      "applicability": "tenant_reference",
+      "reason": "DirectoryQuery accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::list_persons (Require(PersonRead))",
+      "runtime_tests": [
+        "e2e/tests/test_journey_tenant_isolation.py::test_manager_lists_and_searches_are_site_scoped",
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/persons",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::create_person (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/persons/duplicate-check",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::check_person_duplicates (Require(PersonRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/persons/export",
+      "applicability": "tenant_reference",
+      "reason": "DirectoryQuery accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::export_persons (Require(PersonExport))",
+      "runtime_tests": [
+        "e2e/tests/test_journey_tenant_isolation.py::test_site_parameter_cannot_widen_manager_permissions"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/persons/import",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::import_persons (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/persons/search",
+      "applicability": "tenant_reference",
+      "reason": "PersonSearchParams accepts a site selector.",
+      "evidence": "backend/src/app.rs: handlers::search_people (Require(PersonRead))",
+      "runtime_tests": [
+        "e2e/tests/test_journey_tenant_isolation.py::test_manager_lists_and_searches_are_site_scoped",
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/persons/{person_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter person_id.",
+      "evidence": "backend/src/app.rs: handlers::get_person_profile (Require(PersonRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/site-admin/persons/{person_id}",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter person_id.",
+      "evidence": "backend/src/app.rs: handlers::update_person (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/persons/{person_id}/card",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter person_id.",
+      "evidence": "backend/src/app.rs: handlers::get_person_card (Require(PersonRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership",
+        "e2e/tests/test_journey_tenant_isolation.py::test_direct_reads_and_downloads_require_site_access"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/site-admin/persons/{person_id}/login",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter person_id.",
+      "evidence": "backend/src/app.rs: handlers::remove_person_login (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/persons/{person_id}/login",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter person_id.",
+      "evidence": "backend/src/app.rs: handlers::open_person_login (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/persons/{person_id}/merge",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter person_id.",
+      "evidence": "backend/src/app.rs: handlers::merge_person (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/site-admin/persons/{person_id}/national-id",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter person_id.",
+      "evidence": "backend/src/app.rs: handlers::set_person_national_id (Require(PersonIdentityManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/site-admin/persons/{person_id}/preferences",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter person_id.",
+      "evidence": "backend/src/app.rs: handlers::update_person_preferences (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/proration-policy",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::get_proration_policy (Require(SiteManage))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/site-admin/proration-policy",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::set_proration_policy (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/roles",
+      "applicability": "tenant_reference",
+      "reason": "RoleAssignment supplies a user ID scoped to the caller's site.",
+      "evidence": "backend/src/app.rs: authorization::assign_role (Require(RoleGrant))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/seller-pays-overrides",
+      "applicability": "implicit_tenant_scope",
+      "reason": "The operation derives its site or account scope from the authenticated caller.",
+      "evidence": "backend/src/app.rs: handlers::list_seller_pays_overrides (Require(FinanceManage))",
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/seller-pays-overrides/{id}/decide",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::decide_seller_pays_override (Require(FinanceManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/units",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::get_units (Require(SiteManage))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/units",
+      "applicability": "tenant_reference",
+      "reason": "Selects a site in SiteIdParam.",
+      "evidence": "backend/src/app.rs: handlers::create_units (Require(SiteManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/units/{id}/move-in",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::move_in_resident (Require(OccupancyManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/units/{id}/move-out",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::move_out_resident (Require(OccupancyManage))",
+      "runtime_tests": [
+        "e2e/tests/test_journey_tenant_isolation.py::test_manager_cannot_mutate_another_site_records"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/units/{id}/occupancy-history",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_unit_occupancy_history (Require(PersonRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/units/{id}/occupancy-state",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_unit_occupancy_state (Require(PersonRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/units/{id}/occupancy-transitions",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::apply_occupancy_transition (Require(OccupancyManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/site-admin/units/{id}/responsible-contact",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::select_responsible_contact (Require(PersonManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/units/{id}/transfer-ownership",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::transfer_unit_ownership (Require(OccupancyManage))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/units/{unit_id}/advance-exit-settlements",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::create_advance_exit_settlement (RequireAny(&[OccupancyManage, FinanceManage]))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/site-admin/units/{unit_id}/sale-clearance",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::get_sale_clearance (RequireAny(&[OccupancyManage, FinanceManage]))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/site-admin/units/{unit_id}/seller-pays-overrides",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter unit_id.",
+      "evidence": "backend/src/app.rs: handlers::create_seller_pays_override (RequireAny(&[OccupancyManage, FinanceManage]))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/support/grants",
+      "applicability": "tenant_reference",
+      "reason": "GrantRequest supplies the target site and operator IDs.",
+      "evidence": "backend/src/app.rs: authorization::request_grant (Require(SupportAccess))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/support/grants/approve",
+      "applicability": "tenant_reference",
+      "reason": "GrantAction identifies a site-bound support grant.",
+      "evidence": "backend/src/app.rs: authorization::approve_grant (Require(SupportAccess))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/support/grants/revoke",
+      "applicability": "tenant_reference",
+      "reason": "GrantAction identifies a site-bound support grant.",
+      "evidence": "backend/src/app.rs: authorization::revoke_grant (Require(SupportAccess))",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/accrue-test-due",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::accrue_test_due (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/clear-all-data",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::clear_all_data (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/delete-all-data",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::wipe_all_data (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/delete-site-cascade/{site_id}",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::purge_site_cascade (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/fresh-start",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::wipe_all_data (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/provision-site-units",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::provision_site_units (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/purge-site/{site_id}",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::purge_site_cascade (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/recreate-db",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::recreate_db (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/reset-demo-data",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::reset_demo_data (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/reset-to-initial-state",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::reset_to_initial_state (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/seed-test-data",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::seed_test_fixtures (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/seed-test-fixtures",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::seed_test_fixtures (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/site-payments",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::get_site_payments (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/sync-db",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::sync_db (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/units-summary",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::get_units_summary (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/wipe-all-data",
+      "applicability": "outside_scope",
+      "reason": "Development-only route controls the local test or demo system.",
+      "evidence": "backend/src/app.rs: handlers::wipe_all_data (Development)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/units/{id}/virtual-iban",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_or_allocate_virtual_iban (Require(UnitRead))",
+      "runtime_tests": [
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/units/{id}/virtual-iban",
+      "applicability": "tenant_reference",
+      "reason": "Route accepts tenant resource path parameter id.",
+      "evidence": "backend/src/app.rs: handlers::get_or_allocate_virtual_iban (Require(UnitRead))",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/docs",
+      "applicability": "outside_scope",
+      "reason": "Public API documentation UI.",
+      "evidence": "backend/src/app.rs: handlers::swagger_ui (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "applicability": "outside_scope",
+      "reason": "Public service health metadata.",
+      "evidence": "backend/src/app.rs: handlers::health_check (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/openapi.json",
+      "applicability": "outside_scope",
+      "reason": "Public API metadata.",
+      "evidence": "backend/src/app.rs: handlers::openapi_spec (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/scalar",
+      "applicability": "outside_scope",
+      "reason": "Public API documentation UI.",
+      "evidence": "backend/src/app.rs: handlers::scalar_ui (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/swagger-ui",
+      "applicability": "outside_scope",
+      "reason": "Public API documentation UI.",
+      "evidence": "backend/src/app.rs: handlers::swagger_ui (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/swagger-ui/",
+      "applicability": "outside_scope",
+      "reason": "Public API documentation UI.",
+      "evidence": "backend/src/app.rs: handlers::swagger_ui (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/swagger-ui/index.html",
+      "applicability": "outside_scope",
+      "reason": "Public API documentation UI.",
+      "evidence": "backend/src/app.rs: handlers::swagger_ui (Public)",
+      "runtime_tests": []
+    }
+  ]
+}
