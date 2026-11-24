@@ -435,6 +435,11 @@ def test_f5_multiple_periods_add_up_per_unit_and_per_site(request, api, actors, 
     with journey_site(request, api, actors, stack, "F5") as fixture:
         sign_in_manager(page, login_page, fixture)
         open_dues_segment(page, 2)
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('flt-semantics')].some("
+            "e => /A Blok D:\\d+/.test((e.getAttribute('aria-label') || e.textContent || '').trim()))",
+            timeout=15_000,
+        )
         rows = _aging_rows(page)
         expected = {
             "A-2": Decimal("3122.50"), "A-3": Decimal("1675.00"),

@@ -37,6 +37,8 @@ class PersonPicker:
         fill(self.page, "person_form_name", full_name)
         if phone:
             fill(self.page, "person_form_phone", phone)
+        if email:
+            fill(self.page, "person_form_email", email)
         if email or phone:
             checking = by_id(self.page, "person_form_checking")
             candidate_any = by_id_prefix(self.page, "person_form_use_").first

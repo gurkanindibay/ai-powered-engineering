@@ -60,6 +60,7 @@ def open_dues_segment(page: Page, index: int) -> DuesManagement:
     dues = DuesManagement(page).open()
     dues.segment(index)
     page.wait_for_load_state("networkidle")
+    page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
     return dues
 
 
