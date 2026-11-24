@@ -440,6 +440,12 @@ python3 scripts/cargo_target_pool.py clean-worktree <worktree-path> --dry-run
 python3 -m unittest discover -s tests/cargo_target_pool
 ```
 
+Use [cargo_target_benchmark.py](scripts/cargo_target_benchmark.py) to compare the former and current
+SitePulse profiles at a fixed revision. It builds all backend test executables, samples disk use,
+and measures a warm target slot handoff across source trees. See the
+[Cargo target benchmark](apps/development-time/SitePulse/docs/engineering-process/cargo-target-benchmark.md)
+for results and prerequisites.
+
 ## 5c-4. PR Review Bot (`review_bot.py`)
 
 - **Executable Script:** [scripts/review_bot.py](file:///scripts/review_bot.py)
