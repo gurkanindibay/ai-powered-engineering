@@ -555,18 +555,14 @@ async fn s4_login_throttling_enforces_per_client_and_per_account_lockout() {
     use axum::extract::ConnectInfo;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-    async fn post_login(
-        app: Router,
-        ip: Ipv4Addr,
-        email: &str,
-        password: &str,
-    ) -> (StatusCode, String) {
+    async fn post_login(app: Router, ip: Ipv4Addr, email: &str) -> (StatusCode, String) {
+        let credential = format!("invalid-{}", uuid::Uuid::new_v4());
         let mut req = Request::builder()
             .method("POST")
             .uri("/api/v1/auth/login")
             .header(axum::http::header::CONTENT_TYPE, "application/json")
             .body(Body::from(
-                serde_json::json!({ "email": email, "password": password }).to_string(),
+                serde_json::json!({ "email": email, "password": credential }).to_string(),
             ))
             .unwrap();
         req.extensions_mut()
@@ -586,23 +582,23 @@ async fn s4_login_throttling_enforces_per_client_and_per_account_lockout() {
     // 10 attempts from client A against one account succeed in reaching auth (401);
     // the 11th is throttled (429).
     for _ in 0..10 {
-        let (status, _) = post_login(app.clone(), client_a, "victim@begonya.com", "wrong").await;
+        let (status, _) = post_login(app.clone(), client_a, "victim@begonya.com").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
-    let (status, body) = post_login(app.clone(), client_a, "victim@begonya.com", "wrong").await;
+    let (status, body) = post_login(app.clone(), client_a, "victim@begonya.com").await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "body: {body}");
 
     // Another client (client B) is not locked out for the same account.
-    let (status, _) = post_login(app.clone(), client_b, "victim@begonya.com", "wrong").await;
+    let (status, _) = post_login(app.clone(), client_b, "victim@begonya.com").await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 
     // Per-client limit across distinct emails: 120 requests allowed, 121st blocked.
     for i in 0..120 {
         let email = format!("probe-{i}@example.com");
-        let (status, _) = post_login(app.clone(), client_c, &email, "wrong").await;
+        let (status, _) = post_login(app.clone(), client_c, &email).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED, "failed on attempt {i}");
     }
-    let (status, body) = post_login(app, client_c, "probe-120@example.com", "wrong").await;
+    let (status, body) = post_login(app, client_c, "probe-120@example.com").await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "body: {body}");
 }
 

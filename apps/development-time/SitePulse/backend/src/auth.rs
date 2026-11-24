@@ -1072,21 +1072,21 @@ mod tests {
 
     #[test]
     fn webhook_signature() {
-        let secret = "unit-test-secret";
+        let secret = generate_temporary_password("WH-TEST-");
         let body = br#"{"amount":"10.00"}"#;
-        let sig = sign_webhook_body(secret, body);
+        let sig = sign_webhook_body(&secret, body);
         assert!(verify_webhook_signature_with_secret(
-            Some(secret),
+            Some(&secret),
             body,
             Some(&sig)
         ));
         assert!(!verify_webhook_signature_with_secret(
-            Some(secret),
+            Some(&secret),
             b"tampered",
             Some(&sig)
         ));
         assert!(!verify_webhook_signature_with_secret(
-            Some(secret),
+            Some(&secret),
             body,
             None
         ));

@@ -4688,9 +4688,7 @@ async fn when_using_former_backdoor_or_placeholder_passwords_then_login_fails() 
             .unwrap_err();
         assert!(
             err.contains("Invalid") || err.contains("hatalı"),
-            "{} must not log in with {}: {err}",
-            email,
-            password
+            "{email} must not log in with rejected credential: {err}",
         );
     }
 }
