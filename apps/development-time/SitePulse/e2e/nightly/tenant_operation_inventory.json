@@ -1826,7 +1826,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter site_id.",
       "evidence": "backend/src/app.rs: handlers::configure_site_bank_account (Require(BankAccountManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1870,7 +1872,9 @@
       "applicability": "tenant_reference",
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::register_home_owner (Require(PersonManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "DELETE",
@@ -1950,7 +1954,9 @@
       "applicability": "tenant_reference",
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::create_person (Require(PersonManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -2118,7 +2124,9 @@
       "applicability": "tenant_reference",
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::create_units (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
