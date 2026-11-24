@@ -204,6 +204,28 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
             assert foreign_post_status in {403, 404}, (
                 f"Foreign POST {template} returned {foreign_post_status}"
             )
+        if template == "/api/v1/home-residents/members/{unit_id}":
+            members_path = f"/api/v1/home-residents/members/{ids['unit']}?site_id={ids['site']}"
+            member_body = {
+                "person": {"kind": "new", "card": {
+                    "full_name": "Nightly Additional Resident",
+                    "phone": "+90 532 000 00 00",
+                    "email": "nightly-additional-resident@example.test",
+                }},
+                "relationship": "OTHER",
+            }
+            owner_member_status, _ = get_response(
+                api, members_path, second.token, method="POST", body=member_body,
+            )
+            assert owner_member_status == 201, (
+                f"Same-site POST /api/v1/home-residents/members/{{unit_id}} returned {owner_member_status}"
+            )
+            foreign_member_status, _ = get_response(
+                api, members_path, first.token, method="POST", body=member_body,
+            )
+            assert foreign_member_status in {403, 404}, (
+                f"Foreign POST /api/v1/home-residents/members/{{unit_id}} returned {foreign_member_status}"
+            )
         if template == "/api/v1/site-admin/units/{id}/occupancy-state":
             contact_path = f"/api/v1/site-admin/units/{ids['unit']}/responsible-contact"
             body = {"person_id": int(ids["person"])}

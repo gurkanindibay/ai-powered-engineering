@@ -915,7 +915,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::add_unit_member (RequireAny(&[UnitManageHousehold, PersonManage]))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "DELETE",
