@@ -3,7 +3,10 @@
 Never touches the developer stack (backend :8080, database `sitepulse`):
 - the database is `sitepulse_e2e_<pid>`, created and dropped here;
 - the backend listens on E2E_API_PORT (8180) and gets test-only secrets;
-- the web bundle is served from flutter/build/web-e2e on E2E_WEB_PORT (9190).
+- the web bundle is served on E2E_WEB_PORT (9190).
+
+CI provides both the backend and the web bundle in SITEPULSE_E2E_PREBUILT_DIR.
+Local runs build the backend with Cargo and the web bundle in flutter/build/web-e2e.
 
 PostgreSQL access reuses scripts/api_system_check.py (DB_USER/DB_PASS/DB_HOST/
 DB_PORT; `psql` on PATH or `docker exec <container> psql`).
@@ -27,7 +30,9 @@ import api_system_check as asc  # noqa: E402
 
 E2E_API_PORT = int(os.environ.get("E2E_API_PORT", "8180"))
 E2E_WEB_PORT = int(os.environ.get("E2E_WEB_PORT", "9190"))
-WEB_BUILD = SITEPULSE / "flutter" / "build" / "web-e2e"
+_prebuilt_dir = os.environ.get("SITEPULSE_E2E_PREBUILT_DIR")
+PREBUILT_DIR = Path(_prebuilt_dir).resolve() if _prebuilt_dir else None
+WEB_BUILD = (PREBUILT_DIR or SITEPULSE / "flutter" / "build") / "web-e2e"
 FLUTTER = Path(os.environ.get("FLUTTER_ROOT", str(Path.home() / "flutter"))) / "bin" / "flutter"
 
 # Test-only values; they exist only inside the throwaway stack.
@@ -52,20 +57,32 @@ def web_base() -> str:
 
 def build_web(force: bool = False) -> None:
     """Build the E2E web bundle (semantics on, API pointed at the E2E backend)."""
-    digest=hashlib.sha256(api_base().encode())
-    flutter=SITEPULSE / "flutter"
-    inputs=[flutter/"pubspec.yaml",flutter/"pubspec.lock"]
-    for directory in ("lib","web","assets"):
-        inputs.extend(sorted(path for path in (flutter/directory).rglob("*") if path.is_file()))
+    digest = hashlib.sha256(api_base().encode())
+    flutter = SITEPULSE / "flutter"
+    inputs = [flutter / "pubspec.yaml", flutter / "pubspec.lock"]
+    for directory in ("lib", "web", "assets"):
+        inputs.extend(sorted(path for path in (flutter / directory).rglob("*") if path.is_file()))
     for path in inputs:
         if path.exists():
             digest.update(str(path.relative_to(flutter)).encode())
             digest.update(path.read_bytes())
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
     digest.update(google_client_id.encode())
-    fingerprint=digest.hexdigest()
-    stamp=WEB_BUILD / ".source-fingerprint"
-    if WEB_BUILD.joinpath("main.dart.js").exists() and stamp.exists() and stamp.read_text()==fingerprint and not force:
+    fingerprint = digest.hexdigest()
+    stamp = WEB_BUILD / ".source-fingerprint"
+    bundle_matches = (
+        (WEB_BUILD / "index.html").is_file()
+        and (WEB_BUILD / "main.dart.js").is_file()
+        and stamp.is_file()
+        and stamp.read_text(encoding="utf-8") == fingerprint
+    )
+    if PREBUILT_DIR is not None:
+        if force:
+            raise SetupError("Cannot rebuild the E2E web bundle with SITEPULSE_E2E_PREBUILT_DIR set")
+        if not bundle_matches:
+            raise SetupError(f"Prebuilt E2E web bundle is missing or stale: {WEB_BUILD}")
+        return
+    if bundle_matches and not force:
         return
     proc = subprocess.run(
         [str(FLUTTER), "build", "web", "--dart-define=E2E=true",
@@ -74,7 +91,7 @@ def build_web(force: bool = False) -> None:
         cwd=SITEPULSE / "flutter", capture_output=True, text=True)
     if proc.returncode != 0:
         raise SetupError("flutter build web failed:\n" + proc.stdout[-2000:] + proc.stderr[-2000:])
-    stamp.write_text(fingerprint)
+    stamp.write_text(fingerprint, encoding="utf-8")
 
 
 class _QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -112,6 +129,7 @@ class E2EStack:
         self.backend = asc.Backend(
             self.db_name, E2E_API_PORT, log_dir, profile="release", log_prefix="gui_e2e_backend",
             features=("e2e",),
+            prebuilt_binary=PREBUILT_DIR / "sitepulse-backend" if PREBUILT_DIR else None,
             extra_env={
                 "SITEPULSE_JWT_SECRET": JWT_SECRET,
                 "SITEPULSE_BANK_WEBHOOK_SECRET": WEBHOOK_SECRET,

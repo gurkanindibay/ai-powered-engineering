@@ -1,8 +1,10 @@
 """Static self-tests for scripts/api_system_check.py (no backend or PostgreSQL needed)."""
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 
@@ -36,6 +38,28 @@ class BackendTargetDirTests(unittest.TestCase):
         self.assertEqual(
             api_check.backend_target_dir({"CARGO_BUILD_TARGET_DIR": "/cache/other"}), Path("/cache/other")
         )
+
+
+class PrebuiltBackendTests(unittest.TestCase):
+    def test_reuses_executable_without_cargo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log_dir = Path(directory)
+            binary = log_dir / "sitepulse-backend"
+            binary.touch(mode=0o755)
+            with patch.object(api_check.subprocess, "run") as run:
+                backend = api_check.Backend("sitepulse_e2e_1", 8180, log_dir, prebuilt_binary=binary)
+                self.assertEqual(backend.binary(), binary.resolve())
+                run.assert_not_called()
+
+    def test_rejects_missing_or_non_executable_binary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log_dir = Path(directory)
+            binary = log_dir / "sitepulse-backend"
+            with self.assertRaisesRegex(api_check.SetupError, "missing or not executable"):
+                api_check.Backend("sitepulse_e2e_1", 8180, log_dir, prebuilt_binary=binary)
+            binary.touch(mode=0o644)
+            with self.assertRaisesRegex(api_check.SetupError, "missing or not executable"):
+                api_check.Backend("sitepulse_e2e_1", 8180, log_dir, prebuilt_binary=binary)
 
 
 class PublicRouteMirrorTests(unittest.TestCase):

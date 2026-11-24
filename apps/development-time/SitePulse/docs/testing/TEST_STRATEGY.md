@@ -144,11 +144,11 @@ Every test starts from a named, versioned state, not from data it invents. The j
 
 **Isolation.** Each scenario attempt gets its own site (`e2e-<run>-<shard>-<attempt>`, journey plan §5). Each PostgreSQL test gets its own database, created from a migrated template. Teardown must work from a half-built state (`test_teardown_works_after_half_built_state` already proves this).
 
-**Environments.** Local runs use `run_tests.py`. CI uses the GitHub service PostgreSQL. The browser stack uses the debug backend binary built once per workflow (open step F of the time analysis), served beside the cached `web-e2e` bundle. Real Google OIDC, the SMS provider and the live bank are replaced by in-repo fakes with recorded contracts, so their scenarios can run instead of staying skipped or pending.
+**Environments.** Local runs use `run_tests.py`. CI uses the GitHub service PostgreSQL. Each browser shard downloads the debug backend and `web-e2e` bundle produced by the workflow's `build-e2e` job. Real Google OIDC, the SMS provider and the live bank are replaced by in-repo fakes with recorded contracts, so their scenarios can run instead of staying skipped or pending.
 
 ## Execution lanes and CI
 
-CI already went from about 27 minutes in one sequential job to 11.5 minutes (run 129). That came from parallel gate groups, cache-on-failure, lints first, 8 duration-balanced E2E shards and dropping the duplicate wrapper suites (time analysis steps A–E). Every PR still runs the full browser suite, each shard still compiles its own release backend, and every test still signs in through the UI. The lanes below decide what runs when. The table after them lists the remaining speed-ups, with time-analysis step letters where one exists. Live CI timings were not available to this review, so savings are estimates to confirm against the Actions history.
+CI already went from about 27 minutes in one sequential job to 11.5 minutes (run 129). That came from parallel gate groups, cache-on-failure, lints first, 8 duration-balanced E2E shards and dropping the duplicate wrapper suites (time analysis steps A–E). Every PR still runs the full browser suite, and every test still signs in through the UI. The lanes below decide what runs when. The table after them tracks the speed-ups, with time-analysis step letters where one exists.
 
 ### Lanes: what runs when
 
@@ -162,7 +162,7 @@ CI already went from about 27 minutes in one sequential job to 11.5 minutes (run
 
 | # | Area | Today | Change | Expected effect |
 | --- | --- | --- | --- | --- |
-| 1 | E2E setup | Each of the 8 shards installs Rust and Flutter, compiles the backend with `--features e2e`, and restores or builds the web bundle | One `build-e2e` job builds the backend binary and `flutter/build/web-e2e` once and uploads them; shards only download and run | Removes 7 redundant compiles per PR; the shortest shard path drops by the compile time |
+| 1 | E2E setup | Each of the 8 shards installed Rust and Flutter, compiled the backend with `--features e2e`, and restored or built the web bundle | Implemented in #375. One `build-e2e` job builds the backend binary and `flutter/build/web-e2e` once and uploads them. Shards download and run both artifacts. | Removes 7 redundant compiles per PR |
 | 2 | E2E per-test cost | Median 6.9 s per test, 20–30 s per journey; every test signs in through the UI | Playwright `storage_state` per role, created once per worker. Seed data through the API or SQL fixtures (F0–F6), not through screens. Keep one UI sign-in test per role | Typically 30–50% off GUI test time |
 | 3 | Fixed waits | 41 `wait_for_timeout` calls, about 48 s per full pass | State-based waits (`expect`, `wait_for_response`) | Saves about 48 s per pass and removes timing flakes |
 | 4 | Shard balance | 1 min 52 s spread between shards. Balancing uses local recorded runs, which hold only 115 of 250 E2E tests | Feed CI JUnit durations from every shard into the `e2e_shard.py` duration store | Shards converge on the mean, about 1 min off the critical path |
@@ -172,7 +172,7 @@ CI already went from about 27 minutes in one sequential job to 11.5 minutes (run
 | 8 | PostgreSQL tests | Each test creates a throwaway database and migrates it; 4 threads | Migrate once into a template, then `CREATE DATABASE … TEMPLATE sitepulse_tpl` per test; raise threads to the runner's cores | Per-test setup goes from a full migration run to a file copy |
 | 9 | Mutation on PRs | Nightly only, about 24 min; a survivor stops the aggregator before it publishes | PR job: `cargo-mutants --in-diff` on changed `domain/` and `services/` files, 10-minute cap, non-blocking at first. Fix the aggregator to publish before failing | Mutation signal while the author is still on the change |
 | 10 | Retries and evidence | Flaky failures look like real failures | `pytest-rerunfailures --reruns 1` reported as FLAKY, never PASS; the flake rate feeds quarantine (suggestion 10) | Fewer red reruns without hiding flakes |
-| 11 | Backend profile (F) | E2E compiles a release backend next to the debug build every other gate uses | Run E2E on the debug binary, or a \[profile.e2e\] inheriting dev with opt-level 1 for dependencies | One full compile less per workflow (several minutes cold) |
+| 11 | Backend profile (F) | E2E compiled a release backend next to the debug build every other gate uses | Implemented in #375. The shared E2E backend uses Cargo's dev profile. | Avoids release compilation and retains the dev profile's optimized password hashing |
 | 12 | Long journeys (N) | The 111 s auditor journey sets the floor for any shard | Split journeys into checkpointed stages sharing one fixture, or run the full chains in the master lane only | Shards can shrink below 2 minutes each |
 | 13 | Post-merge evidence (M) | record-evidence re-runs global gates once per DAG task | Run global gates once per commit and reuse the results for every task | Shorter master post-merge time |
 

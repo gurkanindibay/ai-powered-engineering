@@ -55,9 +55,9 @@ def _actors() -> dict:
 
 @pytest.fixture(scope="session")
 def stack():
-    st.build_web(force=os.environ.get("GUI_E2E_REBUILD") == "1")
-    s = st.E2EStack(ARTIFACTS / "logs")
     try:
+        st.build_web(force=os.environ.get("GUI_E2E_REBUILD") == "1")
+        s = st.E2EStack(ARTIFACTS / "logs")
         s.start()
         reclaim_stale_attempts(s, ARTIFACTS / "journeys")
     except st.SetupError as exc:
