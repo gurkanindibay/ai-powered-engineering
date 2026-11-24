@@ -94,9 +94,8 @@ def inventory(repo: Path, sitepulse: Path | None = None) -> dict:
 
 
     def rust_scan(path):
-        attributes_to_function = re.compile(
-            r"\s*(?:(?:#\[[^\]]*\]|//[^\n]*)\s*)*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)"
-        )
+        trivia = re.compile(r"\s+|//[^\n]*|#\[[^\]]*\]")
+        function = re.compile(r"(?:pub\s+)?(?:async\s+)?fn\s+(\w+)")
         text = path.read_text(errors="replace")
         lines = text.splitlines(keepends=True)
         file_cfg = re.search(r'#!\[cfg\(feature\s*=\s*"([\w-]+)"\)\]', text)
@@ -108,7 +107,10 @@ def inventory(repo: Path, sitepulse: Path | None = None) -> dict:
                     break
                 start_line -= 1
             head_start = sum(map(len, lines[:start_line - 1]))
-            fn = attributes_to_function.match(text, m.end())
+            cursor = m.end()
+            while token := trivia.match(text, cursor):
+                cursor = token.end()
+            fn = function.match(text, cursor)
             if not fn:
                 continue
             name_start = fn.start(1)
