@@ -502,6 +502,20 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         "period_start": "2026-10-01", "period_end": "2026-10-31",
         "total_cost": "104.29", "due_date": "2026-11-15",
     })
+    project_path = "/api/v1/capital-projects/" + str(ids["project"])
+    assert_write_is_site_scoped(
+        api, project_path + "/accrue-installment?site_id=" + str(ids["site"]),
+        second, first, {"installment_number": 1}, success={200},
+    )
+    assert_write_is_site_scoped(
+        api, project_path + "/disbursements", second, first,
+        {
+            "milestone_name": "Nightly tenant-scope milestone",
+            "amount": "1.00", "recipient_name": "Nightly Contractor",
+            "recipient_iban": "TR330006100519786457841326",
+            "disbursement_date": date.today().isoformat(),
+        }, success={201},
+    )
     heat_path = "/api/v1/heat-share/periods/" + str(heat_period["id"])
     assert_write_is_site_scoped(
         api, heat_path + "/readings", second, first,

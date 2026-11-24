@@ -641,7 +641,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::accrue_capital_installment (Require(LedgerManageAll))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -650,7 +652,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::list_capital_disbursements (Require(SiteManage))",
       "runtime_tests": [
-        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "nightly/test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -659,7 +661,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::record_capital_disbursement (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_additional_tenant_resource_reads_require_membership"
+      ]
     },
     {
       "method": "GET",
