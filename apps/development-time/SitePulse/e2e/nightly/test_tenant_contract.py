@@ -96,7 +96,7 @@ IMPLICIT_READ_CASES = {
     "/api/v1/kvkk/access-log": "access-log",
     "/api/v1/kvkk/debtor-export": "debtor-export",
     "/api/v1/kvkk/me": "privacy",
-    "/api/v1/kvkk/retention": None,
+    "/api/v1/kvkk/retention": "retention",
     "/api/v1/late-fees/reconciliation": None,
     "/api/v1/leases": "lease",
     "/api/v1/leases/joint-exposure": None,
@@ -561,13 +561,20 @@ def arrange_implicit_read(api, stack, manager, ids, arrangement: str | None) -> 
 
     if arrangement is None:
         return "site_id", site
+    if arrangement == "journal":
+        post("/accounting/journal", {
+            "kind": "RESERVE_ALLOCATION", "description": marker,
+            "lines": [
+                {"account_code": "690", "debit": "1.00", "credit": "0.00"},
+                {"account_code": "549", "debit": "0.00", "credit": "1.00"},
+            ],
+        })
+        return "description", marker
     if arrangement == "approval-policy":
         api.call("PUT", "/api/v1/accounting/approval-policy", manager.token, body={
             "manager_limit": "4321.00",
         })
         return "site_id", site
-    if arrangement == "journal":
-        return "reference", str(ids["receipt_number"])
     if arrangement in {"audit", "access-log"}:
         api.resident_statement(manager, unit)
         return "site_id", site
@@ -607,6 +614,11 @@ def arrange_implicit_read(api, stack, manager, ids, arrangement: str | None) -> 
             "total_cost": "104.29", "due_date": "2026-11-15",
         })
         return "label", marker
+    if arrangement == "retention":
+        api.call("PUT", "/api/v1/kvkk/retention", manager.token, body={
+            "category": "ACCESS_LOG", "retention_months": 137,
+        })
+        return "retention_months", "137"
     if arrangement == "privacy":
         post("/kvkk/privacy-notices", {"title": marker, "body": marker})
         return "title", marker
@@ -617,6 +629,10 @@ def arrange_implicit_read(api, stack, manager, ids, arrangement: str | None) -> 
         return "tenant_name", marker
     if arrangement == "notification":
         post("/announcements", {"site_id": site, "title": marker, "body": marker})
+        post("/notifications/broadcast", {
+            "channel": "NOTICE_BOARD", "category": "ANNOUNCEMENT",
+            "subject": marker, "body": marker,
+        })
         return "subject", marker
     if arrangement == "virman":
         post(f"/residents/{unit}/virman-requests", {"source_debtor": "OWNER", "amount": "1.00", "note": marker})
