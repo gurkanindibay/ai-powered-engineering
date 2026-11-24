@@ -75,6 +75,17 @@ jobs:
   mutate-rust:
     name: mutation (rust backend)
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sitepulse_user
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: sitepulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sitepulse_user -d sitepulse"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
@@ -88,9 +99,14 @@ jobs:
         with:
           python-version: "3.12"
       - name: Run Rust mutation scenarios
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: "5432"
+          DB_USER: sitepulse_user
+          DB_PASS: ci-only-password
         run: |
           mkdir -p "${{ runner.temp }}/mutation"
-          python3 scripts/mutation_scenarios.py run --layer rust \
+          python3 scripts/mutation_scenarios.py run --layer rust --with postgres \
             --markdown "${{ runner.temp }}/mutation/mutation_rust.md" \
             --output "${{ runner.temp }}/mutation/mutation_rust.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
