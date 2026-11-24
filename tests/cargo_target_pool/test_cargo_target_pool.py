@@ -176,6 +176,49 @@ class SweepTests(PoolTestCase):
         self.assertTrue(fresh.exists())
 
 
+class TempDirLockTests(PoolTestCase):
+    def test_sweep_skips_an_old_temp_dir_whose_lock_is_held(self):
+        pool = self.pool(slots=1)
+        self.root.mkdir(parents=True)
+        busy = self.root / "tmp-busy"
+        busy.mkdir()
+        os.utime(busy, (0, 0))
+        fd = pool_tool._try_lock(pool_tool.temp_lock_path(busy))
+        self.assertIsNotNone(fd)
+        self.clock.now = pool_tool.time.time()
+        report = pool.sweep(max_age_days=7)
+        self.assertEqual(report["swept"], [])
+        self.assertTrue(busy.exists())
+        os.close(fd)
+        report = pool.sweep(max_age_days=7)
+        self.assertEqual(report["swept"], ["tmp-busy"])
+        self.assertFalse(busy.exists())
+        self.assertFalse(pool_tool.temp_lock_path(busy).exists())
+
+    def test_sweep_removes_a_leftover_temp_lock_file(self):
+        pool = self.pool(slots=1)
+        self.root.mkdir(parents=True)
+        stale = self.root / "tmp-gone.lock"
+        stale.write_text("")
+        pool.sweep(max_age_days=7)
+        self.assertFalse(stale.exists())
+
+    def test_temp_build_holds_its_lock_and_cleans_up(self):
+        held = self.pool(slots=1).try_lease("fp")
+        seen = self.tmp / "seen.json"
+        script = (
+            "import json, os, sys; "
+            "t = os.environ['CARGO_TARGET_DIR']; "
+            "json.dump({'lock': os.path.exists(t + '.lock')}, open(sys.argv[1], 'w'))"
+        )
+        code, _, _ = run_main("--pool-dir", str(self.root), "--slots", "1", "run", "--on-busy", "temp",
+                              "--", sys.executable, "-c", script, str(seen))
+        self.assertEqual(code, 0)
+        self.assertTrue(json.loads(seen.read_text())["lock"])
+        self.assertEqual(list(self.root.glob("tmp-*")), [])
+        held.release()
+
+
 class WatchdogTests(PoolTestCase):
     def make_slots(self, pool, count):
         """Fill `count` slots; slot i is released at time i + 1, so lower indexes are older."""

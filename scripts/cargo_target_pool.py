@@ -23,7 +23,9 @@ Pool layout (`--pool-dir`, default `$CARGO_TARGET_POOL_DIR` or `~/.cache/agent-c
 `run` leases one free slot, exports CARGO_TARGET_DIR (and CARGO_INCREMENTAL=0 unless it is
 already set), runs the command and releases the slot. The lock file descriptor is passed on to
 the command, so the slot stays leased while any process still uses it, even if this tool is
-killed; the operating system releases it when the last holder exits. A slot is wiped before use
+killed; the operating system releases it when the last holder exits. A server or other process
+that the command leaves running in the background therefore keeps the slot leased: if `status`
+shows a slot LEASED after `run` returned, find the holder with `fuser <pool>/slot-N.lock` and stop it. A slot is wiped before use
 when the build fingerprint (RUSTFLAGS, wrapper, toolchain) differs from the one it was built
 with, because Cargo would otherwise keep both sets of artifacts and the slot would only grow.
 
@@ -178,6 +180,10 @@ class Lease:
         self.release()
 
 
+def temp_lock_path(temp_dir: Path) -> Path:
+    return temp_dir.with_name(temp_dir.name + ".lock")
+
+
 def _try_lock(lock_path: Path) -> int | None:
     fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o644)
     try:
@@ -273,14 +279,34 @@ class Pool:
                     swept.append(slot.name)
                     freed += bytes_freed
         for orphan in sorted(self.root.glob("tmp-*")) if self.root.exists() else []:
-            try:
-                if orphan.stat().st_mtime < cutoff:
-                    freed += dir_size(orphan)
-                    shutil.rmtree(orphan, ignore_errors=True)
-                    swept.append(orphan.name)
-            except OSError:
-                continue
+            if orphan.is_dir():
+                freed += self._sweep_temp_dir(orphan, cutoff, swept)
+        for lock in sorted(self.root.glob("tmp-*.lock")) if self.root.exists() else []:
+            if not lock.with_suffix("").exists():  # leftover lock file of a temp dir that is gone
+                fd = _try_lock(lock)
+                if fd is not None:
+                    lock.unlink(missing_ok=True)
+                    os.close(fd)
         return {"swept": swept, "freed_bytes": freed}
+
+    def _sweep_temp_dir(self, orphan: Path, cutoff: float, swept: list[str]) -> int:
+        """Remove an old temp dir unless a running `--on-busy temp` command still holds its lock."""
+        lock = temp_lock_path(orphan)
+        fd = _try_lock(lock)
+        if fd is None:
+            return 0
+        try:
+            if orphan.stat().st_mtime >= cutoff:
+                return 0
+            freed = dir_size(orphan)
+            shutil.rmtree(orphan, ignore_errors=True)
+            lock.unlink(missing_ok=True)
+            swept.append(orphan.name)
+            return freed
+        except OSError:
+            return 0
+        finally:
+            os.close(fd)
 
     def watchdog(self, min_free_bytes: int, free: Callable[[Path], int] = free_bytes) -> dict:
         """Wipe least recently used idle slots until free space is back above the threshold."""
@@ -390,7 +416,7 @@ def cmd_run(args: argparse.Namespace, pool: Pool, env: dict[str, str]) -> int:
                                 f"need {args.min_free_gb:g} GiB")
             return EXIT_LOW_DISK
     fingerprint = build_fingerprint(env, detect_toolchain())
-    lease, temp_dir = None, None
+    lease, temp_dir, temp_fd = None, None, None
     if args.on_busy == "wait":
         lease = pool.lease(fingerprint, args.wait)
     else:
@@ -400,14 +426,16 @@ def cmd_run(args: argparse.Namespace, pool: Pool, env: dict[str, str]) -> int:
             emit(args, {"error": "no free slot"}, f"no free slot in {pool.root} ({pool.slots} slots)")
             return EXIT_BUSY
         temp_dir = Path(tempfile.mkdtemp(prefix="tmp-", dir=pool.root))
+        temp_fd = _try_lock(temp_lock_path(temp_dir))  # sweep skips a temp dir while this is held
     target = temp_dir if temp_dir is not None else lease.slot.path
     child_env = dict(env, CARGO_TARGET_DIR=str(target))
     child_env.setdefault("CARGO_INCREMENTAL", "0")
     child_env["CARGO_TARGET_POOL_SLOT"] = target.name
+    held = lease.fd if lease is not None else temp_fd
     pass_fds: tuple[int, ...] = ()
-    if lease is not None:
-        os.set_inheritable(lease.fd, True)
-        pass_fds = (lease.fd,)
+    if held is not None:
+        os.set_inheritable(held, True)
+        pass_fds = (held,)
     try:
         return run_command(command, child_env, None, pass_fds)
     finally:
@@ -415,6 +443,9 @@ def cmd_run(args: argparse.Namespace, pool: Pool, env: dict[str, str]) -> int:
             lease.release()
         if temp_dir is not None:
             shutil.rmtree(temp_dir, ignore_errors=True)
+            temp_lock_path(temp_dir).unlink(missing_ok=True)
+            if temp_fd is not None:
+                os.close(temp_fd)
 
 
 def emit(args: argparse.Namespace, payload: dict | list, text: str) -> None:
