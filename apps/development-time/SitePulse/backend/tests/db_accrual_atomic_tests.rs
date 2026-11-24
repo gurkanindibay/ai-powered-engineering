@@ -448,6 +448,43 @@ async fn skipped_units_are_recorded_where_the_manager_can_read_them() {
     env.drop_db().await;
 }
 
+// covers: SC-07-08-04
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn empty_accrual_with_skipped_units_still_records_a_run() {
+    let env = Env::new("empty_skipped").await;
+    let site_id = env.site.to_string();
+    let period_key = "2099-03";
+    let due_date = NaiveDate::from_ymd_opt(2099, 3, 15).expect("fixture date");
+    let skipped = vec!["unit 123: no eligible tariff".to_string()];
+    let batch = db::AccrualBatch {
+        site_id: &site_id,
+        period_key,
+        period_label: period_key,
+        due_date,
+        source: "SCHEDULER",
+        dues: &[],
+        skipped: &skipped,
+    };
+
+    db::commit_accrual_batch(&env.pool, &batch)
+        .await
+        .expect("skipped-only accrual is recorded");
+
+    let client = env.pool.get().await.expect("connection");
+    let row = client
+        .query_one(
+            "SELECT accrued_count, skipped_units FROM dues_accrual_runs WHERE site_id = $1 AND period_key = $2",
+            &[&env.site, &period_key],
+        )
+        .await
+        .expect("skipped-only run exists");
+    assert_eq!(row.get::<_, i32>(0), 0);
+    assert_eq!(row.get::<_, Vec<String>>(1), skipped);
+    drop(client);
+    env.drop_db().await;
+}
+
 // covers: SC-07-08-03
 #[tokio::test]
 #[ignore = "needs PostgreSQL and DB_PASS"]
