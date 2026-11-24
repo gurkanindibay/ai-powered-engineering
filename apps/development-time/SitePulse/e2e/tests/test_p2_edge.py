@@ -48,13 +48,12 @@ def test_empty_credentials_are_rejected_without_a_request(login_page, page):
     assert login_calls == []
 
 
+@pytest.mark.skip(reason="Pending in-repo fake Google OIDC provider for CI")
 @pytest.mark.edge
 @pytest.mark.covers("SC-06-03-02")
 @pytest.mark.covers("SC-06-05-01")
 @pytest.mark.gui_id("GUI-06-11")
 def test_google_sign_in_redirects_to_the_provider(login_page, page):
-    if not os.environ.get("GOOGLE_CLIENT_ID"):
-        pytest.skip("Set GOOGLE_CLIENT_ID to exercise the Google OAuth redirect")
     google_requests: list[str] = []
     page.on("request", lambda r: google_requests.append(r.url) if "accounts.google.com" in r.url else None)
     page.context.on(
