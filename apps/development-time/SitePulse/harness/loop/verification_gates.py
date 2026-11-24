@@ -175,15 +175,9 @@ GATES: Dict[str, List[CommandSpec]] = {
                                   "--test", "db_accrual_persistence_tests",
                                   "--test", "db_advance_exit_settlements_tests",
                                   "--test", "sale_clearance_tests",
-                                  "--", "--ignored", "--test-threads=4"], "backend", 900),
-                        # These opt-in PostgreSQL tests were previously never reached by CI.
-                        # The CI job uses a fresh service database for this gate.
-                        CommandSpec(["env", "SITEPULSE_PG_TESTS=1", "cargo", "test", "--locked",
-                                     "--test", "accrual_corrections_tests",
-                                     "corrections_round_trip_through_postgresql", "--", "--exact"], "backend", 600),
-                        CommandSpec(["env", "SITEPULSE_PG_TESTS=1", "cargo", "test", "--locked",
-                                     "--test", "finance_store_pg_tests",
-                                     "every_spec009_record_round_trips_through_postgresql", "--", "--exact"], "backend", 600)],
+                                  "--test", "accrual_corrections_tests",
+                                  "--test", "finance_store_pg_tests",
+                                  "--", "--ignored", "--test-threads=4"], "backend", 900)],
     # Errors are fatal; warnings/infos are reported by `flutter analyze` itself.
     "flutter-analyze": [CommandSpec(["flutter", "analyze", "--no-fatal-infos", "--no-fatal-warnings"], "flutter", 600)],
     "flutter-test": [CommandSpec(["flutter", "test", "--reporter=json"], "flutter", 1200)],
@@ -280,7 +274,7 @@ def _write_gate_artifacts_impl(name: str, specs: Sequence[CommandSpec], results:
         payload: dict[str, object] | None = None
         if cargo_argv:
             native_runner = "cargo"
-            suite = "money-fixtures" if "financial_fixtures" in cargo_argv else "rust-db-opt-in" if any(target in cargo_argv for target in ("accrual_corrections_tests", "finance_store_pg_tests")) else "rust-db-test" if "--ignored" in cargo_argv or "SITEPULSE_PG_TESTS=1" in argv else name
+            suite = "money-fixtures" if "financial_fixtures" in cargo_argv else "rust-db-test" if "--ignored" in cargo_argv or "SITEPULSE_PG_TESTS=1" in argv else name
             try:
                 cases = ci_case_results.parse_cargo(text, suite)
             except Exception as exc:
