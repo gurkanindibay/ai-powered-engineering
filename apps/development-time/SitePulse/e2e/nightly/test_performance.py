@@ -12,6 +12,7 @@ UNITS_PER_SITE = 200
 SAMPLED_UNITS_PER_SITE = 20
 DUES = Decimal("1400.00")
 CLOCK_DATE = "2026-11-02"
+PAYMENT_INSTANT = f"{CLOCK_DATE}T00:00:00Z"
 PAYMENT_TARGET_SECONDS = 0.8
 ACCRUAL_TARGET_SECONDS = 30 * 60
 RECONCILIATION_TARGET_SECONDS = 60
@@ -70,7 +71,7 @@ def test_financial_actions_at_residential_volume(api, actors, stack, record_prop
         for unit_id, number, _iban in units[:SAMPLED_UNITS_PER_SITE]:
             elapsed, payment = _measure(
                 api.record_manual_payment, manager, unit_id, DUES, f"Nightly owner {number}",
-                payment_date=CLOCK_DATE,
+                payment_date=PAYMENT_INSTANT,
             )
             assert payment["receipt_number"]
             payment_times.append(elapsed)

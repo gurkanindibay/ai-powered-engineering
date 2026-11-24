@@ -14,6 +14,9 @@ updates the existing open nightly failure issue with the run link.
 | Performance | Runs the scheduler and measures API latency with 50 synthetic sites, each with 200 owned units. Measures 1,000 manual payments, 50 statements, and 50 bank previews with 20 transfers each. |
 | Tenant authorization | Verifies a fixed set of documented routes against two fixture sites. Each check proves the resource exists and is accessible to its site's manager before testing the denied read. |
 
+The accessibility audit excludes only Flutter Web's disabled hidden textarea used as its text-input
+bridge. User-facing semantics remain in the axe scan; the excluded proxy count is recorded in JUnit.
+
 The performance test applies the thresholds from the
 [observability SLO matrix](../../docs/quality/product-action-observability-report.md#6-service-level-objectives-slos--alerting-hierarchy).
 It expects at least 99.9% of sampled manual payments to finish within 800 ms, the

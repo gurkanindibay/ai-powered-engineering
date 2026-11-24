@@ -43,6 +43,7 @@ NAME_RULES = {
     "aria-command-name", "aria-input-field-name", "aria-toggle-field-name",
     "button-name", "label", "link-name", "select-name",
 }
+FLUTTER_DISABLED_TEXT_PROXY = "textarea[data-semantics-role='text-field'][disabled]"
 
 
 @pytest.fixture(scope="session")
@@ -54,10 +55,16 @@ def axe_script():
 
 
 @pytest.mark.parametrize("screen", SCREENS)
+@pytest.mark.covers("SC-06-05-04")
+@pytest.mark.covers("SC-01-04-04")
 def test_no_critical_accessibility_violations(screen, axe_script, page, login_as, record_property):
     SCREENS[screen](page, login_as)
     page.add_script_tag(path=str(axe_script))
-    result = page.evaluate("() => axe.run(document, {resultTypes: ['violations', 'passes']})")
+    proxy_count = page.locator(FLUTTER_DISABLED_TEXT_PROXY).count()
+    result = page.evaluate(
+        "selector => axe.run({exclude: [[selector]]}, {resultTypes: ['violations', 'passes']})",
+        FLUTTER_DISABLED_TEXT_PROXY,
+    )
     # Prevent a green audit caused by scanning an empty page or an engine failure.
     assert result["passes"], f"axe did not run any rules successfully on {screen}"
     violations = result["violations"]
@@ -65,6 +72,7 @@ def test_no_critical_accessibility_violations(screen, axe_script, page, login_as
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(violations, indent=2) + "\n", encoding="utf-8")
     record_property("axe_violations", len(violations))
+    record_property("excluded_disabled_flutter_text_proxies", proxy_count)
     blocking = [violation["id"] for violation in violations
                 if violation["impact"] == "critical" or violation["id"] in NAME_RULES]
     assert not blocking, f"{screen}: {', '.join(blocking)}. Details in {report.name}"

@@ -19,3 +19,8 @@ Feature: Material 3 resident dashboard screens
     When the resident launches the app
     Then all action buttons meet the 48dp touch target accessibility requirement
     And unapproved sub-meter features "Sayaç Gir" and "Rezervasyon" are hidden
+
+  @SC-01-04-04 @layer:gui @linked @role_homeowner
+  Scenario: Resident dashboard text controls have accessible names
+    When the resident opens the dashboard
+    Then text entry controls expose their visible labels to assistive technology

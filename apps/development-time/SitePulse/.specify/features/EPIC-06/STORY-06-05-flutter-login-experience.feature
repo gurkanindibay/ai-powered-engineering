@@ -21,3 +21,9 @@ Feature: Cross-platform Flutter login and registration experience
     Given the user is on the SitePulse login screen
     When they sign in with email and password
     Then the role's dashboard is shown
+
+  @SC-06-05-04 @layer:gui @linked @smoke @role_manager
+  Scenario: Sign-in role choices have accessible names
+    Given the user is on the SitePulse login screen
+    When the role choices are shown
+    Then each choice exposes its visible label to assistive technology

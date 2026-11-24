@@ -32,6 +32,7 @@ void main() {
     expect(find.text('Kat Maliki Olarak Gir'), findsOneWidget);
   });
 
+  // covers: SC-06-05-04, SC-01-04-04
   testWidgets('Selecting Site Admin shows dual path options and logging in as Kat Maliki enters own flat view', (WidgetTester tester) async {
     final controller = _createTestController(startAuthenticated: false);
     await tester.pumpWidget(SitePulseApp(controller: controller));
@@ -40,6 +41,16 @@ void main() {
     // Verify dual path options appear on Site Manager card
     final myFlatOption = find.textContaining('Kendi Dairem (Kat Maliki)');
     expect(myFlatOption, findsOneWidget);
+
+    final semantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(find.byType(Radio<SiteAdminActivePath>).first).label,
+      'Site Yönetim Paneli',
+    );
+    expect(
+      tester.getSemantics(find.byType(Radio<SiteAdminActivePath>).last).label,
+      'Kendi Dairem (Kat Maliki)',
+    );
 
     // Scroll to option and tap it
     await tester.ensureVisible(myFlatOption);
@@ -68,6 +79,7 @@ void main() {
 
     expect(controller.isAuthenticated, isFalse);
     expect(find.text('Test Kullanıcıları ile Hızlı Giriş'), findsOneWidget);
+    semantics.dispose();
   });
 
   testWidgets('Logging in as Site Admin with Cockpit path displays complex collection cockpit', (WidgetTester tester) async {

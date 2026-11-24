@@ -2156,6 +2156,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 maxLines: 4,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
+                  labelText: 'Açıklama',
                   hintText: 'Sorunun yerini ve detayını kısaca yazın...',
                   hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
                   filled: true,

@@ -74,7 +74,7 @@ FEATURES = ROOT / ".specify" / "features"
 EXECUTIONS = ROOT / "e2e" / ".artifacts" / "executions.jsonl"
 HTML_REPORT = ROOT / "e2e" / ".artifacts" / "feature-report.html"
 RECENT_RUNS = 30
-LINK_SOURCES = (("backend/tests", "*.rs"), ("flutter/test", "*.dart"), ("e2e/tests", "*.py"),
+LINK_SOURCES = (("backend/tests", "*.rs"), ("flutter/test", "*.dart"), ("e2e/tests", "*.py"), ("e2e/nightly", "*.py"),
                 ("harness/tests", "*.py"), ("scripts", "*.py"))
 # Files that quote `covers:` markers as fixtures or documentation, never as real links.
 LINK_EXCLUDE = frozenset({"harness/tests/test_feature_traceability.py", "scripts/feature_traceability.py"})

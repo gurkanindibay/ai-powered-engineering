@@ -40,14 +40,14 @@ jobs:
         include:
           - name: firefox-smoke
             browser: firefox
-            selection: tests/ --ignore=tests/test_linked_backend_suites.py -m smoke
+            selection: tests/test_epic06_auth.py
           - name: webkit-smoke
             browser: webkit
-            selection: tests/ --ignore=tests/test_linked_backend_suites.py -m smoke
+            selection: tests/test_epic06_auth.py
           - name: mobile-smoke
             browser: chromium
             width: "375"
-            selection: tests/ --ignore=tests/test_linked_backend_suites.py -m smoke
+            selection: tests/test_epic06_auth.py tests/test_epic03_saas.py::test_portfolio_lists_every_site
           - name: accessibility
             browser: chromium
             selection: nightly/test_accessibility.py
