@@ -172,10 +172,51 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  build-e2e:
+    name: build-e2e (backend and web bundle)
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: apps/development-time/SitePulse/backend
+          key: e2e-debug
+          cache-on-failure: true
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Build debug backend with E2E support
+        working-directory: apps/development-time/SitePulse/backend
+        run: cargo build --locked --bin sitepulse-backend --features e2e
+      - name: Build Flutter E2E bundle
+        run: python3 scripts/gui_e2e.py build
+      - name: Pack backend and web bundle
+        # The tar keeps the binary executable and includes the hidden web fingerprint.
+        run: |
+          tar -czf "$RUNNER_TEMP/sitepulse-e2e.tar.gz" \
+            -C "$PWD/backend/target/debug" sitepulse-backend \
+            -C "$PWD/flutter/build" web-e2e
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
+        with:
+          name: sitepulse-e2e-build-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sitepulse-e2e.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+
   # The browser suite runs as 8 duration-balanced shards on 8 runners at once
   # (scripts/e2e_shard.py, on the durations recorded in .specify/executions/runs).
   # Each shard has its own PostgreSQL, backend and web server; every test runs in exactly one shard.
   e2e:
+    needs: build-e2e
     name: e2e (browser suite, shard ${{ matrix.shard }}/8)
     runs-on: ubuntu-24.04
     strategy:
@@ -202,27 +243,15 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: apps/development-time/SitePulse/backend
-          # Red runs are the common case while a PR is iterated; keep their compile output too.
-          cache-on-failure: true
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        with:
-          flutter-version: "3.47.5"
-          channel: stable
-          cache: true
-      - name: Flutter dependencies
-        working-directory: apps/development-time/SitePulse/flutter
-        run: flutter pub get
-      # The E2E web bundle; e2e/support/stack.py rebuilds it anyway when its source fingerprint differs.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/development-time/SitePulse/flutter/build/web-e2e
-          key: e2e-web-${{ hashFiles('apps/development-time/SitePulse/flutter/pubspec.*', 'apps/development-time/SitePulse/flutter/lib/**', 'apps/development-time/SitePulse/flutter/web/**', 'apps/development-time/SitePulse/flutter/assets/**') }}
+          # A shard-only rerun reuses the successful build job's output from its attempt.
+          artifact-ids: ${{ needs.build-e2e.outputs.artifact-id }}
+          path: ${{ runner.temp }}
+      - name: Unpack E2E build
+        run: |
+          mkdir "$RUNNER_TEMP/sitepulse-e2e"
+          tar -xzf "$RUNNER_TEMP/sitepulse-e2e.tar.gz" -C "$RUNNER_TEMP/sitepulse-e2e"
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
@@ -230,6 +259,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Browser end-to-end suite
         env:
+          SITEPULSE_E2E_PREBUILT_DIR: ${{ runner.temp }}/sitepulse-e2e
           SITEPULSE_GATE_ARTIFACT_DIR: e2e/.artifacts/gates
         run: python3 scripts/run_tests.py --group e2e
       - name: Write shard collection metadata

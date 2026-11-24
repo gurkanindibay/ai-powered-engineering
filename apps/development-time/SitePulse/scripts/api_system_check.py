@@ -184,7 +184,7 @@ def free_port() -> int:
 class Backend:
     def __init__(self, db_name: str, port: int, log_dir: Path, extra_env: Optional[Dict[str, str]] = None,
                  profile: str = "debug", log_prefix: str = "api_system_check",
-                 features: tuple[str, ...] = ()):
+                 features: tuple[str, ...] = (), prebuilt_binary: Path | None = None):
         self.db_name = db_name
         self.port = port
         self.log_dir = log_dir
@@ -192,6 +192,11 @@ class Backend:
         self.profile = profile
         self.log_prefix = log_prefix
         self.features = features
+        self.prebuilt_binary = prebuilt_binary.resolve() if prebuilt_binary is not None else None
+        if self.prebuilt_binary is not None and (
+            not self.prebuilt_binary.is_file() or not os.access(self.prebuilt_binary, os.X_OK)
+        ):
+            raise SetupError(f"Prebuilt backend binary is missing or not executable: {self.prebuilt_binary}")
         self.proc: Optional[subprocess.Popen] = None
         self.boots = 0
 
@@ -200,6 +205,8 @@ class Backend:
         return f"http://127.0.0.1:{self.port}"
 
     def binary(self) -> Path:
+        if self.prebuilt_binary is not None:
+            return self.prebuilt_binary
         path = backend_target_dir() / self.profile / "sitepulse-backend"
         argv = ["cargo", "build", "--locked", "--bin", "sitepulse-backend"]
         if self.profile == "release":

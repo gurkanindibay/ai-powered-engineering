@@ -189,11 +189,15 @@ def cmd_serve(_: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_build(_: argparse.Namespace) -> int:
+def cmd_build(args: argparse.Namespace) -> int:
     sys.path.insert(0, str(E2E))
     from support import stack as st  # noqa: E402
-    st.build_web(force=True)
-    print(f"built {st.WEB_BUILD}")
+    try:
+        st.build_web(force=True)
+    except st.SetupError as exc:
+        print(json.dumps({"exit_code": 2, "error": str(exc)}) if args.json else f"setup error: {exc}")
+        return 2
+    print(json.dumps({"exit_code": 0, "bundle": str(st.WEB_BUILD)}) if args.json else f"built {st.WEB_BUILD}")
     return 0
 
 
@@ -234,6 +238,8 @@ def main() -> int:
         args.browser_channel = ""
     if args.env_file and args.env_file.exists():
         load_env_file(args.env_file)
+    if args.command == "build":
+        return cmd_build(args)
     if not os.environ.get("DB_PASS"):
         msg = "DB_PASS is not set (pass --env-file or export DB_PASS)"
         print(json.dumps({"exit_code": 2, "error": msg}) if args.json else f"setup error: {msg}", file=sys.stdout)
@@ -245,8 +251,6 @@ def main() -> int:
         return 2
     if args.command == "serve":
         return cmd_serve(args)
-    if args.command == "build":
-        return cmd_build(args)
     return cmd_run(args, passthrough)
 
 
