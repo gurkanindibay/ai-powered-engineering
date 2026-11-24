@@ -214,7 +214,7 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
                 }},
                 "relationship": "OTHER",
             }
-            owner_member_status, _ = get_response(
+            owner_member_status, owner_member_raw = get_response(
                 api, members_path, second.token, method="POST", body=member_body,
             )
             assert owner_member_status == 201, (
@@ -225,6 +225,40 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
             )
             assert foreign_member_status in {403, 404}, (
                 f"Foreign POST /api/v1/home-residents/members/{{unit_id}} returned {foreign_member_status}"
+            )
+            resident_id = json.loads(owner_member_raw)["resident_id"]
+            member_path = (
+                f"/api/v1/home-residents/members/{ids['unit']}/{resident_id}?site_id={ids['site']}"
+            )
+            update_body = {
+                "full_name": "Nightly Updated Resident",
+                "phone": "+90 532 000 00 01",
+                "email": "nightly-additional-resident@example.test",
+                "relationship": "OTHER",
+            }
+            owner_update_status, _ = get_response(
+                api, member_path, second.token, method="PUT", body=update_body,
+            )
+            assert owner_update_status == 200, (
+                f"Same-site PUT /api/v1/home-residents/members/{{unit_id}}/{{resident_id}} returned {owner_update_status}"
+            )
+            foreign_update_status, _ = get_response(
+                api, member_path, first.token, method="PUT", body=update_body,
+            )
+            assert foreign_update_status in {403, 404}, (
+                f"Foreign PUT /api/v1/home-residents/members/{{unit_id}}/{{resident_id}} returned {foreign_update_status}"
+            )
+            foreign_delete_status, _ = get_response(
+                api, member_path, first.token, method="DELETE",
+            )
+            assert foreign_delete_status in {403, 404}, (
+                f"Foreign DELETE /api/v1/home-residents/members/{{unit_id}}/{{resident_id}} returned {foreign_delete_status}"
+            )
+            owner_delete_status, _ = get_response(
+                api, member_path, second.token, method="DELETE",
+            )
+            assert owner_delete_status == 204, (
+                f"Same-site DELETE /api/v1/home-residents/members/{{unit_id}}/{{resident_id}} returned {owner_delete_status}"
             )
         if template == "/api/v1/site-admin/units/{id}/occupancy-state":
             contact_path = f"/api/v1/site-admin/units/{ids['unit']}/responsible-contact"
