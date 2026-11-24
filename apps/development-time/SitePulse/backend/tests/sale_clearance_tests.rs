@@ -365,10 +365,12 @@ struct TestDb {
 }
 
 impl TestDb {
-    async fn create() -> Self {
+    /// `tag` keeps the database name unique per test: the rust-db-test gate runs these tests on
+    /// several threads of one process, so the process id alone collides.
+    async fn create(tag: &str) -> Self {
         let admin =
             db::create_pool_for("postgres").expect("DB_PASS is required for PostgreSQL tests");
-        let name = format!("sp_sale_{}", std::process::id());
+        let name = format!("sp_sale_{}_{}", tag, std::process::id());
         let client = admin.get().await.expect("admin connection");
         for sql in [
             format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
@@ -417,7 +419,7 @@ async fn capital_debtor(pool: &Pool, unit: i64, project: i64, installment: i32) 
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 // covers: SC-08-05-06, SC-08-05-07, SC-13-03-05, SC-13-12-02
 async fn only_an_approved_override_makes_the_seller_pay_later_installments() {
-    let db = TestDb::create().await;
+    let db = TestDb::create("approved_override").await;
     let client = db.pool.get().await.expect("connection");
     let row = client
         .query_one(
@@ -582,7 +584,7 @@ async fn only_an_approved_override_makes_the_seller_pay_later_installments() {
 async fn a_rejected_override_request_leaves_the_seller_as_the_owner() {
     use sitepulse_backend::services::sale_clearance_service::TransferFlowError;
 
-    let db = TestDb::create().await;
+    let db = TestDb::create("rejected_override").await;
     let client = db.pool.get().await.expect("connection");
     let row = client
         .query_one(
