@@ -214,20 +214,29 @@ def field_values(document, field: str) -> set[str]:
     return set()
 
 
-def arrange_open_due(api, stack, manager, unit_id: str) -> tuple[str, date]:
-    # The unit and owner were created at the real current date. A later billing
-    # month keeps the fixture valid whether the site prorates dues or not.
-    month = (date.today().replace(day=28) + timedelta(days=4)).replace(day=1)
-    due_date = month.replace(day=15)
-    as_of = due_date + timedelta(days=60)
-    api.clock.set_date(month)
-    api.accrue_period(manager, month.strftime("%Y-%m"), Decimal("327.41"), due_date.isoformat())
+def arrange_open_due(api, stack, ids) -> tuple[str, date]:
+    # Seed the overdue liability in the throwaway E2E database, as the shared
+    # journey builders do. The read contract only needs the resulting row.
+    row = stack.sql(f"""
+        INSERT INTO dues_liabilities (
+            unit_id, period, period_key, dues_period_id, debtor_type, expense_type,
+            liable_person_id, principal_amount, due_date, effective_due_date, status, created_at
+        )
+        SELECT u.id, p.period_name, p.period_key, p.id, 'OWNER', 'OPERATIONAL_DUES',
+               u.owner_person_id, 327.41, p.due_date, p.due_date, 'PENDING', p.due_date
+          FROM units u
+          JOIN dues_periods p ON p.site_id = u.site_id
+         WHERE u.site_id = {int(ids["site"])}
+           AND u.id = {int(ids["unit"])}
+           AND u.owner_person_id = {int(ids["person"])}
+           AND p.id = {int(ids["period"])}
+        RETURNING id, due_date;
+    """)
+    assert row, "The second site's unit, owner and period must all match the liability"
+    due_id, due_date = row.split("|")
+    as_of = date.fromisoformat(due_date) + timedelta(days=60)
+    stack.restart_backend()
     api.clock.set_date(as_of)
-    due_id = stack.sql(
-        f"SELECT id FROM dues_liabilities WHERE unit_id = {int(unit_id)} "
-        "AND debtor_type = 'OWNER' AND principal_amount > paid_amount ORDER BY id DESC LIMIT 1;"
-    ).strip()
-    assert due_id, "The second site must have an open liability for this case"
     return due_id, as_of
 
 
@@ -317,9 +326,7 @@ def arrange_implicit_read(api, stack, manager, ids, arrangement: str | None) -> 
             f"FROM users WHERE id = {int(manager.user['id'])} RETURNING id;"
         ).strip()
         assert reviewer, "Could not create the payment-plan approver"
-        stack.restart_backend()
-
-    due, as_of = arrange_open_due(api, stack, manager, unit)
+    due, as_of = arrange_open_due(api, stack, ids)
     if arrangement == "correction":
         post("/accrual-corrections", {"due_id": due, "kind": "CANCEL", "reason": marker})
         return "reason", marker
