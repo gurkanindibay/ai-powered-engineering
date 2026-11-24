@@ -520,6 +520,75 @@ async fn when_tenant_is_replaced_then_outgoing_tenant_is_settled() {
     t.drop_db().await;
 }
 
+// covers: SC-13-03-14
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn when_replacement_fails_at_transition_insert_then_the_original_session_and_balance_remain()
+{
+    let t = TestDb::create("replace_rollback").await;
+    let site = t.site().await;
+    let (unit, _) = t.unit_and_owner().await;
+    let (app, token) = t.app().await;
+    vacate(&app, &token, site, unit).await;
+    let opened = tenant_move_in(
+        &app,
+        &token,
+        site,
+        unit,
+        "Zeynep Kaya",
+        "rollback.zeynep@x.test",
+    )
+    .await;
+    let session = opened["id"].as_i64().expect("session id");
+    let tenant = opened["person_id"].as_i64().expect("tenant id");
+    t.exec(&format!(
+        "UPDATE unit_occupancies SET start_date = CURRENT_DATE - 60 WHERE id = {session};
+         INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, occupancy_id, principal_amount, due_date, status)
+         VALUES ({unit}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {tenant}, {session}, 1500.00, CURRENT_DATE - 10, 'PENDING');
+         CREATE FUNCTION reject_occupancy_transition() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN RAISE EXCEPTION 'injected transition write failure'; END $$;
+         CREATE TRIGGER reject_transition BEFORE INSERT ON occupancy_transitions
+         FOR EACH ROW EXECUTE FUNCTION reject_occupancy_transition();"
+    )).await;
+
+    let before = t.fingerprint(unit).await;
+    let (status, body) = command(
+        &app,
+        &token,
+        site,
+        unit,
+        json!({ "command": "REPLACE_TENANT", "full_name": "Mehmet Demir", "email": "rollback.mehmet@x.test" }),
+    ).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
+    assert_eq!(
+        t.fingerprint(unit).await,
+        before,
+        "failed replacement must roll back the close and open"
+    );
+    assert_eq!(t.int(&format!("SELECT count(*) FROM dues_liabilities WHERE unit_id = {unit} AND occupancy_id = {session} AND status = 'PENDING' AND principal_amount = 1500.00")).await, 1,
+        "exit balance remains attached to the original tenant session");
+    assert_eq!(t.int(&format!("SELECT count(*) FROM unit_occupancies WHERE unit_id = {unit} AND is_active AND person_id = {tenant}")).await, 1,
+        "the original tenant remains the sole active occupant");
+    t.exec("DROP TRIGGER reject_transition ON occupancy_transitions; DROP FUNCTION reject_occupancy_transition();").await;
+    let (status, retry) = command(
+        &app,
+        &token,
+        site,
+        unit,
+        json!({ "command": "REPLACE_TENANT", "full_name": "Mehmet Demir", "email": "rollback.mehmet@x.test" }),
+    ).await;
+    assert_eq!(status, StatusCode::OK, "{retry}");
+    assert_eq!(
+        t.int(&format!(
+            "SELECT count(*) FROM unit_occupancies WHERE unit_id = {unit} AND is_active"
+        ))
+        .await,
+        1
+    );
+    assert_eq!(t.int(&format!("SELECT count(*) FROM unit_occupancies WHERE unit_id = {unit} AND person_id = {tenant} AND is_active = FALSE")).await, 1);
+    t.drop_db().await;
+}
+
 // covers: SC-08-09-01, SC-08-09-02, SC-08-09-03, SC-08-09-04, SC-08-05-08
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]

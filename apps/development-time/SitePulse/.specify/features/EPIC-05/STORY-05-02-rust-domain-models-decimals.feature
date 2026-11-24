@@ -1,12 +1,11 @@
 @EPIC-05 @STORY-05-02
 Feature: Rust domain models with high-precision decimals
-  Domain models use rust_decimal with optimistic concurrency versioning. No existing
-  Rust test exercises two concurrent balance updates, so the scenario is pending.
+  Domain models use rust_decimal. PostgreSQL uniqueness and transactions serialize
+  competing writes for the same unit and period.
 
-  # Pending: no test runs two concurrent payments on one unit, and the ledger serializes with row locks, not a balance version column, so the 'optimistic locking' wording needs revising before it is automated.
-  @SC-05-02-01 @pending @layer:backend
+  @SC-05-02-01 @linked @layer:backend
   Scenario: Prevent concurrent balance modification race conditions
-    Given two concurrent requests attempting to update the same unit balance
-    When both commit simultaneously
-    Then optimistic locking ensures sequence safety
-    And no balance inconsistency or corruption occurs
+    Given two PostgreSQL accrual transactions for the same unit and period
+    When both attempt to commit concurrently
+    Then exactly one liability is committed
+    And the conflicting transaction is a clean no-op with no duplicate balance
