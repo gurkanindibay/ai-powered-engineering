@@ -251,7 +251,7 @@ Every test function was parsed from source (Rust attributes, Dart `test`/`testWi
 | E2E suite wrappers | `e2e/tests/test_linked_backend_suites.py` | 21 | ignored in CI (`PYTEST_ADDOPTS --ignore`) | 0 | 21 by design |
 | SitePulse harness | `harness/tests` | 267 | `harness-selftest` (lint) | 267 | 0 |
 | Engineering harness | `tests/**` | 143 | `engineering-harness-ci.yml` | 143 | 0 |
-| Retired Cucumber/Serenity pilot | git tag `pilot/cucumber-serenity-arm-b` | 5 cases, 4 scenarios | archived | n/a | reference only |
+| Cucumber/Serenity pilot | `e2e-cucumber/` | 5 cases, 4 scenarios | master push (`serenity-report` job, never gates); on-demand `sitepulse-cucumber-pilot.yml` | 0 | reference only; its Serenity site is published on Pages |
 | Mutation catalogue | `scripts/mutation_scenarios.py` | 66 mutants | `mutation-testing.yml`, direct PR changes and nightly 02:00 UTC | PR and nightly | report only on PRs |
 
 CI is structured well. Five gate groups (lint, rust, flutter, e2e, final) run as parallel jobs, and `test_run_tests_groups.py` fails if a gate is dropped from CI. PR runs cancel superseded pushes. The `continue-on-error: true` flags sit only on artifact and metadata steps, so they never mask a red gate. The six env-conditional harness tests (`HARNESS_DOCKER_IMAGE`, workflow-file presence) do run in CI, because CI sets those preconditions.
