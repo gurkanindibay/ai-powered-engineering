@@ -17,6 +17,7 @@ import math
 import re
 import shutil
 import sys
+import tempfile
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -236,7 +237,83 @@ def _safe_public_report(path: Path) -> dict | None:
     return result
 
 
-def _detail_page(summary: dict, public_report: dict | None, archive_href: str) -> str:
+SERENITY_EXTENSIONS = {".html", ".css", ".js", ".json", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+                       ".woff", ".woff2", ".ttf", ".eot", ".map", ".txt"}
+SERENITY_TEXT_EXTENSIONS = {".html", ".css", ".js", ".json", ".svg", ".map", ".txt"}
+SERENITY_MAX_BYTES = 80 * 1024 * 1024
+SERENITY_SECRETS = re.compile(
+    r"ci-only-password|-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"
+    r"|(?i:\"?(?:password|passwd|secret|api[_-]?key|authorization)\"?\s*[:=]\s*\"?)[^\s\",<]{4,}")
+
+
+def _copy_serenity(source: Path, destination: Path) -> dict:
+    """Copy a generated Serenity BDD site, keeping only static asset types and redacting secrets.
+
+    Links, unexpected file types and oversized trees are dropped rather than published.
+    """
+    if not source.is_dir() or source.is_symlink() or not (source / "index.html").is_file():
+        raise ValueError("Serenity site directory must contain index.html")
+    copied = skipped = redacted = total = 0
+    for path in sorted(source.rglob("*")):
+        if path.is_symlink() or not path.is_file():
+            skipped += path.is_symlink()
+            continue
+        suffix = path.suffix.lower()
+        size = path.stat().st_size
+        total += size
+        if suffix not in SERENITY_EXTENSIONS or total > SERENITY_MAX_BYTES:
+            skipped += 1
+            continue
+        target = destination / path.relative_to(source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if suffix in SERENITY_TEXT_EXTENSIONS:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            clean, count = SERENITY_SECRETS.subn("[redacted]", text)
+            redacted += count
+            target.write_text(clean, encoding="utf-8")
+        else:
+            shutil.copyfile(path, target)
+        copied += 1
+    if not (destination / "index.html").is_file():
+        raise ValueError("Serenity site copy has no index.html")
+    return {"files": copied, "skipped": skipped, "redactions": redacted}
+
+
+def _stash_serenity(report_root: Path, stash: Path) -> list[str]:
+    """Move archived Serenity trees out of reports/ before it is rebuilt."""
+    kept = []
+    if report_root.is_dir():
+        for folder in report_root.iterdir():
+            tree = folder / "serenity"
+            if folder.is_dir() and not folder.is_symlink() and tree.is_dir() and not tree.is_symlink() \
+                    and RUN_DIRECTORY.fullmatch(folder.name):
+                shutil.move(str(tree), str(stash / folder.name))
+                kept.append(folder.name)
+    return kept
+
+
+def _latest_serenity(site: Path) -> str | None:
+    found = [(int(m.group(1)), int(m.group(2)), p.parent.parent.name)
+             for p in (site / "reports").glob("*/serenity/index.html")
+             if (m := RUN_DIRECTORY.fullmatch(p.parent.parent.name))]
+    return max(found)[2] if found else None
+
+
+def _render_serenity_redirect(site: Path) -> None:
+    folder = _latest_serenity(site)
+    if folder is None:
+        return
+    target = f"../reports/{folder}/serenity/index.html"
+    (site / "serenity").mkdir(exist_ok=True)
+    (site / "serenity" / "index.html").write_text(
+        f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Serenity BDD report</title>'
+        f'<meta http-equiv="refresh" content="0; url={target}"></head>'
+        f'<body><p><a href="{target}">Latest Serenity BDD report</a></p></body></html>\n', encoding="utf-8")
+
+
+def _detail_page(summary: dict, public_report: dict | None, archive_href: str,
+                 serenity_href: str | None = None) -> str:
     run = html.escape(summary["run_id"])
     action_url = f"https://github.com/gurkanindibay/ai-powered-engineering/actions/runs/{run}"
     junit = summary["junit"]
@@ -287,16 +364,19 @@ def _detail_page(summary: dict, public_report: dict | None, archive_href: str) -
                 + "".join(cov_rows) + "</tbody></table>"
             )
     commit = html.escape(summary.get("commit", "")[:12])
+    serenity_link = (f' · <a href="{html.escape(serenity_href, quote=True)}">Serenity BDD report</a>'
+                     if serenity_href else "")
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SitePulse report {run}</title><style>body{{font:16px system-ui,sans-serif;max-width:1000px;margin:3rem auto;padding:0 1rem;color:#172033}}a{{color:#1459a6}}table{{border-collapse:collapse;width:100%;margin:1rem 0}}th,td{{padding:.65rem;text-align:left;border-bottom:1px solid #d8dee8}}</style></head>
-<body><p><a href="{html.escape(archive_href, quote=True)}">Product status</a> · <a href="{html.escape(archive_href.replace('index.html','history.html'), quote=True)}">All runs</a></p>
+<body><p><a href="{html.escape(archive_href, quote=True)}">Product status</a> · <a href="{html.escape(archive_href.replace('index.html','history.html'), quote=True)}">All runs</a>{serenity_link}</p>
 <h1>SitePulse CI report</h1><p>Run <a href="{action_url}">{run}</a> · commit {commit} · {html.escape(summary['status'])}</p>
 <p>{numbers}</p>{coverage_html}{gate_table}{cases_html}</body></html>\n"""
 
 
 def _write_archive(site: Path, folder: str, raw_summary: object, product_snapshot: object,
-                   public_report: dict | None = None, identity: dict | None = None) -> dict:
+                   public_report: dict | None = None, identity: dict | None = None,
+                   has_serenity: bool = False) -> dict:
     match = RUN_DIRECTORY.fullmatch(folder)
     if not match:
         raise ValueError(f"invalid report archive directory: {folder}")
@@ -316,12 +396,14 @@ def _write_archive(site: Path, folder: str, raw_summary: object, product_snapsho
         _write_json(destination / "product-status.json", clean_snapshot)
     _write_json(destination / "summary.json", summary)
     _write_json(destination / "public-report.json", public_report or {"schema": 1, "gates": [], "cases": []})
-    (destination / "index.html").write_text(_detail_page(summary, public_report, "../../index.html"), encoding="utf-8")
+    (destination / "index.html").write_text(_detail_page(
+        summary, public_report, "../../index.html", "serenity/index.html" if has_serenity else None), encoding="utf-8")
     return summary
 
 
 def build(site: Path, report: Path, run_id: str, attempt: str, run_number: int,
-          commit: str, action_run_id: str | None = None, require_public_report: bool = False) -> dict:
+          commit: str, action_run_id: str | None = None, require_public_report: bool = False,
+          serenity: Path | None = None) -> dict:
     """Sanitize legacy state, add this report, and render a static Pages tree."""
     if not re.fullmatch(r"\d+", run_id) or not re.fullmatch(r"\d+", attempt):
         raise ValueError("run ID and attempt must be numeric")
@@ -347,6 +429,8 @@ def build(site: Path, report: Path, run_id: str, attempt: str, run_number: int,
         previous = None
     old_archives = []
     report_root = site / "reports"
+    stash = Path(tempfile.mkdtemp(prefix="sitepulse-serenity-"))
+    kept_serenity = set(_stash_serenity(report_root, stash))
     if report_root.exists():
         for folder in sorted(p for p in report_root.iterdir() if p.is_dir() and not p.is_symlink()):
             if folder.name == f"{run_id}-{attempt}":
@@ -386,10 +470,20 @@ def build(site: Path, report: Path, run_id: str, attempt: str, run_number: int,
         raise ValueError("public-report.json is required before Pages publishing is enabled")
     public_report = _safe_public_report(public_path)
     for folder, summary, snapshot, public in old_archives:
-        _write_archive(site, folder, summary, snapshot, public)
+        _write_archive(site, folder, summary, snapshot, public, has_serenity=folder in kept_serenity)
     current_key = f"{run_id}-{attempt}"
+    kept_serenity.discard(current_key)
+    serenity_result = None
+    if serenity is not None and serenity.is_dir():
+        serenity_result = True
     current = _write_archive(site, current_key, raw_current, raw_current_snapshot, public_report,
-                             {"run_number": run_number, "commit": commit})
+                             {"run_number": run_number, "commit": commit}, has_serenity=bool(serenity_result))
+    for folder in kept_serenity:
+        shutil.move(str(stash / folder), str(site / "reports" / folder / "serenity"))
+    serenity_stats = None
+    if serenity_result:
+        serenity_stats = _copy_serenity(serenity, site / "reports" / current_key / "serenity")
+    shutil.rmtree(stash, ignore_errors=True)
     current_identity = {"run_id": run_id, "run_number": run_number, "run_attempt": int(attempt),
                         "commit": commit, "action_run_id": action_run_id}
     candidate_order = (run_number, int(attempt))
@@ -398,7 +492,9 @@ def build(site: Path, report: Path, run_id: str, attempt: str, run_number: int,
     is_latest = candidate_order >= previous_order
     if is_latest:
         _write_json(marker, current_identity)
-        (site / "latest.html").write_text(_detail_page(current, public_report, "index.html"), encoding="utf-8")
+        (site / "latest.html").write_text(_detail_page(
+            current, public_report, "index.html",
+            f"reports/{current_key}/serenity/index.html" if serenity_stats else None), encoding="utf-8")
     else:
         _write_json(marker, previous)
         latest_folder = f"{previous.get('run_id')}-{previous.get('run_attempt')}"
@@ -407,10 +503,14 @@ def build(site: Path, report: Path, run_id: str, attempt: str, run_number: int,
             raise ValueError("refusing stale run: persisted latest archive is missing")
         latest_summary = json.loads((latest_dir / "summary.json").read_text(encoding="utf-8"))
         latest_public = _safe_public_report(latest_dir / "public-report.json")
-        (site / "latest.html").write_text(_detail_page(latest_summary, latest_public, "index.html"), encoding="utf-8")
+        (site / "latest.html").write_text(_detail_page(
+            latest_summary, latest_public, "index.html",
+            f"reports/{latest_folder}/serenity/index.html"
+            if (latest_dir / "serenity" / "index.html").is_file() else None), encoding="utf-8")
+    _render_serenity_redirect(site)
     _render_history(site)
     _render_dashboard(site, current if is_latest else None)
-    return {"archive": current_key, "archives": len(list(report_root.glob("*/summary.json"))),
+    return {"serenity": serenity_stats, "archive": current_key, "archives": len(list(report_root.glob("*/summary.json"))),
             "latest": json.loads(marker.read_text(encoding="utf-8")), "is_latest": is_latest,
             "site": str(site)}
 
@@ -474,6 +574,11 @@ def verify_local(site: Path, expected: dict) -> None:
     for relative in ("index.html", "latest.html", "history.html", report_key):
         if not (site / relative).is_file():
             raise ValueError(f"required Pages route is missing: {relative}")
+    if (site / "reports" / f"{marker['run_id']}-{marker['run_attempt']}" / "serenity").exists() \
+            and not (site / report_folder / "serenity" / "index.html").is_file():
+        raise ValueError("Serenity report is missing its index.html")
+    if _latest_serenity(site) and not (site / "serenity" / "index.html").is_file():
+        raise ValueError("required Pages route is missing: serenity/index.html")
     for relative, link in (("index.html", "latest.html"), ("index.html", "history.html"),
                            ("history.html", report_folder), ("latest.html", "history.html")):
         if link not in (site / relative).read_text(encoding="utf-8"):
@@ -524,8 +629,13 @@ def main() -> int:
     build_parser.add_argument("--run-number", type=int, required=True)
     build_parser.add_argument("--commit", required=True)
     build_parser.add_argument("--action-run-id")
+    build_parser.add_argument("--serenity", type=Path,
+                              help="generated Serenity BDD site to publish under the run archive")
     build_parser.add_argument("--require-public-report", action="store_true",
                               help="fail closed when the reviewed inventory artifact is absent")
+    sanitize_parser = subparsers.add_parser("sanitize-serenity", help="copy a Serenity site keeping safe assets only")
+    sanitize_parser.add_argument("--source", type=Path, required=True)
+    sanitize_parser.add_argument("--out", type=Path, required=True)
     verify_parser = subparsers.add_parser("verify-local", help="check expected routes and identity in artifact tree")
     verify_parser.add_argument("--site", type=Path, required=True)
     remote_parser = subparsers.add_parser("verify-remote", help="check served revision and routes")
@@ -540,7 +650,11 @@ def main() -> int:
     try:
         if args.command == "build":
             result = build(args.site, args.report, args.run_id, args.attempt, args.run_number,
-                           args.commit, args.action_run_id, args.require_public_report)
+                           args.commit, args.action_run_id, args.require_public_report, args.serenity)
+        elif args.command == "sanitize-serenity":
+            if args.out.exists():
+                shutil.rmtree(args.out)
+            result = _copy_serenity(args.source, args.out)
         elif args.command == "verify-local":
             marker = json.loads((args.site / "sitepulse-pages.json").read_text(encoding="utf-8"))
             verify_local(args.site, marker)

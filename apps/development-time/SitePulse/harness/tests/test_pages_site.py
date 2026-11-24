@@ -128,6 +128,35 @@ class PagesSiteTests(unittest.TestCase):
             self.assertTrue((site / "reports/100-1/index.html").is_file())
             pages.verify_local(site, marker)
 
+    def test_serenity_site_is_published_redacted_and_survives_later_builds(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            site = root / "site"
+            serenity = root / "serenity"
+            (serenity / "css").mkdir(parents=True)
+            (serenity / "index.html").write_text("<html>ok password: ci-only-password</html>", encoding="utf-8")
+            (serenity / "css" / "a.css").write_text("body{}", encoding="utf-8")
+            (serenity / "run.sh").write_text("echo bad", encoding="utf-8")
+            (serenity / "link.html").symlink_to(serenity / "index.html")
+
+            result = pages.build(site, self._report(root / "first"), "400", "1", 40, "d" * 40, "5000",
+                                 serenity=serenity)
+            self.assertEqual(result["serenity"]["files"], 2)
+            self.assertEqual(result["serenity"]["skipped"], 2)
+            published = (site / "reports/400-1/serenity/index.html").read_text(encoding="utf-8")
+            self.assertNotIn("ci-only-password", published)
+            self.assertFalse((site / "reports/400-1/serenity/run.sh").exists())
+            self.assertIn("reports/400-1/serenity/index.html", (site / "serenity/index.html").read_text(encoding="utf-8"))
+            self.assertIn("serenity/index.html", (site / "latest.html").read_text(encoding="utf-8"))
+            pages.verify_local(site, json.loads((site / "sitepulse-pages.json").read_text(encoding="utf-8")))
+
+            # A later run without a Serenity report keeps the earlier archive and the root redirect.
+            later = pages.build(site, self._report(root / "second"), "401", "1", 41, "e" * 40, "5001")
+            self.assertIsNone(later["serenity"])
+            self.assertTrue((site / "reports/400-1/serenity/css/a.css").is_file())
+            self.assertIn("reports/400-1/serenity", (site / "serenity/index.html").read_text(encoding="utf-8"))
+            pages.verify_local(site, json.loads((site / "sitepulse-pages.json").read_text(encoding="utf-8")))
+
     def test_new_attempt_of_same_run_becomes_latest(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
