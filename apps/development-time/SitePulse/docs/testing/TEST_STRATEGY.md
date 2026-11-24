@@ -186,10 +186,10 @@ Four signals measure whether the tests are strong, not just numerous. Each has o
 | --- | --- | --- | --- |
 | **Verified scenarios**: every non-pending scenario has a named test that runs in a CI lane, asserts, and passed on the commit | `feature_traceability.py check` (exists), extended with gate-awareness and CI case results (new) | PR, lint group | Report only → blocking; 409/466 → all non-pending |
 | **Changed-lines coverage** | `cargo llvm-cov`, `flutter test --coverage`, coverage.py, combined with `diff-cover` (new) | PR | Published → ≥ 80% on `backend/src/{domain,services}` and `flutter/lib` |
-| **Mutation score** | `mutation_scenarios.py` with 58 curated mutants (exists); `run --changed --strict` (exists, not wired) | Tier 1 on PRs touching targeted files; tier 2 nightly | 96.6% nightly → ≥ 95% on 66+ mutants, and no survivor on PR-changed files |
+| **Mutation score** | `mutation_scenarios.py` with 66 curated mutants; PR runs use `run --changed BASE --direct-only --strict` | Tier 1 reports on PRs touching targeted files; tier 2 enforces strict verdicts nightly | 96.6% nightly → ≥ 95% on 66+ mutants, and no survivor on PR-changed files |
 | **Test quality** | `test_quality_lint.py` with `test_quality_baseline.json` | PR, lint group | Baseline: 132 shortcut counts, 84 backend `Utc::now()` reads and 14 existing over-limit claims; target 10 or fewer shortcut counts, with no new over-limit claims |
 
-**Mutation tiers** follow `mutation-testing-ci-integration.md`. Tier 1 runs only the mutants whose target file the PR changes (2–3 min for `dues_ledger.rs`, 0 s for unrelated changes). It needs `fetch-depth: 0`. Tier 2 is the existing nightly matrix (Rust about 15 min, Flutter 3, Python 1, DB 3). The aggregator must publish its artifact before failing on a survivor. The catalogue grows with the 8 candidates in `mutation-coverage-improvement.md`, plus one probe per regression fix that exposes a new invariant.
+**Mutation tiers** follow `mutation-testing-ci-integration.md`. Tier 1 runs only the mutants whose target file the PR changes (2–3 min for `dues_ledger.rs`, 0 s for unrelated changes). Its report includes per-layer outcomes and artifacts. The workflow checks out full history and compares the PR merge tree to the event base SHA. Tier 2 is the existing nightly matrix (Rust about 15 min, Flutter 3, Python 1, DB 3). The aggregator must publish its artifact before failing on a survivor. The catalogue grows with the 8 candidates in `mutation-coverage-improvement.md`, plus one probe per regression fix that exposes a new invariant.
 
 **Known defects and flakes.**
 
@@ -252,7 +252,7 @@ Every test function was parsed from source (Rust attributes, Dart `test`/`testWi
 | SitePulse harness | `harness/tests` | 267 | `harness-selftest` (lint) | 267 | 0 |
 | Engineering harness | `tests/**` | 143 | `engineering-harness-ci.yml` | 143 | 0 |
 | Retired Cucumber/Serenity pilot | git tag `pilot/cucumber-serenity-arm-b` | 5 cases, 4 scenarios | archived | n/a | reference only |
-| Mutation catalogue | `scripts/mutation_scenarios.py` | 58 mutants | `mutation-testing.yml`, nightly 02:00 UTC | nightly | not on PRs |
+| Mutation catalogue | `scripts/mutation_scenarios.py` | 66 mutants | `mutation-testing.yml`, direct PR changes and nightly 02:00 UTC | PR and nightly | report only on PRs |
 
 CI is structured well. Five gate groups (lint, rust, flutter, e2e, final) run as parallel jobs, and `test_run_tests_groups.py` fails if a gate is dropped from CI. PR runs cancel superseded pushes. The `continue-on-error: true` flags sit only on artifact and metadata steps, so they never mask a red gate. The six env-conditional harness tests (`HARNESS_DOCKER_IMAGE`, workflow-file presence) do run in CI, because CI sets those preconditions.
 
