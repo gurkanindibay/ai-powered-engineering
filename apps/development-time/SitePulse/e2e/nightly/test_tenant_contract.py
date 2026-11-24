@@ -139,11 +139,13 @@ def assert_read_is_site_scoped(api, paths, template, path, owner, foreign):
         assert not foreign_body.startswith(b"%PDF"), "Foreign receipt response contains a PDF"
 
 
-def assert_write_is_site_scoped(api, path: str, owner, foreign, body, *, success: set[int]) -> None:
-    owner_status, _ = get_response(api, path, owner.token, method="POST", body=body)
-    assert owner_status in success, f"Same-site POST {path} returned {owner_status}"
-    foreign_status, _ = get_response(api, path, foreign.token, method="POST", body=body)
-    assert foreign_status in {403, 404}, f"Foreign POST {path} returned {foreign_status}"
+def assert_write_is_site_scoped(
+    api, path: str, owner, foreign, body, *, success: set[int], method: str = "POST",
+) -> None:
+    owner_status, _ = get_response(api, path, owner.token, method=method, body=body)
+    assert owner_status in success, f"Same-site {method} {path} returned {owner_status}"
+    foreign_status, _ = get_response(api, path, foreign.token, method=method, body=body)
+    assert foreign_status in {403, 404}, f"Foreign {method} {path} returned {foreign_status}"
 
 
 @pytest.fixture
@@ -293,8 +295,24 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         {"block_name": "A", "unit_number": 2}, success={201},
     )
     assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/blocks?{query_site}", second, first,
+        {"block_name": "Z", "total_floors": 1}, success={201},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/house-types?{query_site}", second, first,
+        {"type_name": "Nightly Scoped Type", "dues_amount": "100.00"}, success={201},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/proration-policy?{query_site}", second, first,
+        {"proration_enabled": True}, success={200}, method="PUT",
+    )
+    assert_write_is_site_scoped(
         api, f"/api/v1/site-admin/persons?{query_site}", second, first,
         {"card": {"full_name": "Nightly Tenant Scope Person"}}, success={201},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/site-admin/persons/duplicate-check?{query_site}", second, first,
+        {"full_name": "Nightly Duplicate Scope Probe"}, success={200},
     )
     bank_account = {
         "bank_code": "KUVEYT_TURK", "iban": TEST_BANK_IBAN,

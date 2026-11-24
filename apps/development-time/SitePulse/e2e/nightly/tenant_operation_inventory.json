@@ -1854,7 +1854,9 @@
       "applicability": "tenant_reference",
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::create_block (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1916,7 +1918,9 @@
       "applicability": "tenant_reference",
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::create_house_type (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "DELETE",
@@ -1964,7 +1968,9 @@
       "applicability": "tenant_reference",
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::check_person_duplicates (Require(PersonRead))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -2080,7 +2086,9 @@
       "applicability": "tenant_reference",
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::set_proration_policy (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
