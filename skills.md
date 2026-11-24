@@ -423,6 +423,23 @@ python3 scripts/pr_review_watch.py --author-pr 257 --after "$pr_baseline" --json
 python3 -m unittest discover -s tests/pr_review_watch
 ```
 
+## 5c-3d. Cargo Target Pool (`cargo_target_pool.py`)
+
+- **Executable Script:** [scripts/cargo_target_pool.py](file:///scripts/cargo_target_pool.py)
+- **Purpose:** Bounds the disk used by Rust build output when several agents work in separate worktrees. Cargo puts a full `target/` in every worktree, so disk grows with each agent and nothing removes it. The tool keeps build output in a fixed pool of N slots on a cache volume (default `~/.cache/agent-cargo-pool`, override with `--pool-dir` or `$CARGO_TARGET_POOL_DIR`; N from `--slots` or `$CARGO_TARGET_POOL_SLOTS`, default 4, set it to the number of agents that build at once). `run` leases one free slot with `flock`, exports `CARGO_TARGET_DIR` and `CARGO_INCREMENTAL=0` (unless already set), runs the command and releases the slot, so a new worktree starts with registry dependencies already compiled. The lock descriptor is inherited by the command, so a slot stays leased while any process still uses it, even if the tool is killed. A slot is wiped before use when `RUSTFLAGS`, the compiler wrapper or `rustc -vV` differ from what it was built with, so mixed flags cannot pile up stale artifacts. If `status` shows a slot LEASED after `run` returned, a process the command left running in the background (for example a backend server) still holds it: find it with `fuser <pool>/slot-N.lock` and stop it. Disk is bounded by N slots of the size one build needs; `sweep` and `watchdog` keep stale artifacts from growing a slot, and `measure` shows the real size. A single shared `CARGO_TARGET_DIR` was rejected: Cargo locks the build directory, so parallel agents would block each other.
+- **When there is no free slot:** `--on-busy wait` (default, `--wait` seconds, then exit 75), `temp` (a throwaway dir that is deleted afterwards) or `fail` (exit 75). `--min-free-gb G` sweeps the least recently used idle slots and refuses to start (exit 3) while free space stays below `G`.
+- **Other commands:** `measure` shows where the bytes of a target dir go (deps, incremental, build, number of linked test binaries), `status` shows leases and sizes, `sweep --max-age-days 7` wipes idle slots and orphaned temp dirs, `watchdog --min-free-gb G` is the same disk check on its own, and `clean-worktree <path>` deletes the Cargo `target` directories (recognised by Cargo's `CACHEDIR.TAG`) inside a worktree. Leased slots are never swept. POSIX only.
+
+```bash
+python3 scripts/cargo_target_pool.py run -- python3 apps/development-time/SitePulse/scripts/run_tests.py --summary
+python3 scripts/cargo_target_pool.py run --min-free-gb 20 -- cargo test --locked
+python3 scripts/cargo_target_pool.py measure --target-dir apps/development-time/SitePulse/backend/target --json
+python3 scripts/cargo_target_pool.py status
+python3 scripts/cargo_target_pool.py sweep --max-age-days 7
+python3 scripts/cargo_target_pool.py clean-worktree <worktree-path> --dry-run
+python3 -m unittest discover -s tests/cargo_target_pool
+```
+
 ## 5c-4. PR Review Bot (`review_bot.py`)
 
 - **Executable Script:** [scripts/review_bot.py](file:///scripts/review_bot.py)

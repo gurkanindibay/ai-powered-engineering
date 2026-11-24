@@ -43,6 +43,16 @@ qrcode = { version = "0.15.0", default-features = false }
 utoipa = { version = "6.0.0", features = ["chrono", "decimal", "uuid"] }
 
 # Password hashing is deliberately expensive; keep it fast in debug/test builds.
+# Smaller dev/test build output (issue #384): many agents build in parallel worktrees, and full
+# DWARF for every dependency dominates the size of target/debug/deps. Workspace code keeps file
+# and line tables, so backtraces and panics still point at source lines; dependencies get no
+# debug info. Set `debug = true` locally to step through dependency code in a debugger.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.dev.package.argon2]
 opt-level = 3
 

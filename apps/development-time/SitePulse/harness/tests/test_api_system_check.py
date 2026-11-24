@@ -18,6 +18,26 @@ def _load(name: str):
 api_check = _load("api_system_check")
 
 
+class BackendTargetDirTests(unittest.TestCase):
+    def test_defaults_to_backend_target(self):
+        self.assertEqual(api_check.backend_target_dir({}), api_check.BACKEND / "target")
+
+    def test_honours_cargo_target_dir(self):
+        self.assertEqual(
+            api_check.backend_target_dir({"CARGO_TARGET_DIR": "/cache/slot-0"}), Path("/cache/slot-0")
+        )
+
+    def test_relative_value_resolves_against_backend(self):
+        self.assertEqual(
+            api_check.backend_target_dir({"CARGO_TARGET_DIR": "../slot"}), api_check.BACKEND / "../slot"
+        )
+
+    def test_honours_cargo_build_target_dir(self):
+        self.assertEqual(
+            api_check.backend_target_dir({"CARGO_BUILD_TARGET_DIR": "/cache/other"}), Path("/cache/other")
+        )
+
+
 class PublicRouteMirrorTests(unittest.TestCase):
     def test_public_routes_mirror_matches_app_rs(self):
         # Regression: the OpenAPI/Swagger/Scalar doc routes were declared Public in app.rs
