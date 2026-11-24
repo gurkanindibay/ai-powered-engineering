@@ -1,24 +1,23 @@
 {
-  "run_id": "20261120T053651Z-b0d31a9",
-  "task": "master",
+  "attempt": "1",
   "commit": "b0d31a924a28ac010733d879007707035253cb9e",
-  "shards": 8,
-  "executions": 177,
+  "generated_at": "2026-11-20T05:36:52Z",
   "junit": {
-    "tests": 164,
-    "failures": 0,
     "errors": 0,
-    "skipped": 1,
+    "failures": 0,
+    "files": 8,
     "passed": 163,
     "seconds": 2184.5,
-    "files": 8,
-    "unparseable": []
+    "skipped": 1,
+    "tests": 164
   },
-  "status": "PASS",
+  "run_id": "44681412125",
+  "run_number": null,
   "scenario_counts": {
     "PASS": 175,
     "SKIPPED": 2
   },
   "scenarios_covered": "143/336",
-  "out": "/home/runner/work/_temp/e2e-test-report"
+  "schema": 1,
+  "status": "PASS"
 }
