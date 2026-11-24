@@ -1,5 +1,5 @@
 //! Person module security regressions (S2, S3, S5, S6, S8, S9 and the removed fake success paths).
-mod support;
+use crate::support;
 use rust_decimal::Decimal;
 use sitepulse_backend::models::*;
 use sitepulse_backend::services::account_activation_service::{

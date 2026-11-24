@@ -1,11 +1,10 @@
 //! PostgreSQL system coverage for advance exit settlement decisions.
 //!
-//! Run with `cargo test --test db_advance_exit_settlements_tests -- --ignored --test-threads=1`.
+//! Run with `cargo nextest run --locked --profile db --test it -E 'test(/db_advance_exit_settlements_tests::/)' --run-ignored ignored-only --test-threads 4`.
 
 use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use sitepulse_backend::{
-    db,
     models::{
         CreateAdvanceExitSettlementRequest, DebtorType, DecideAdvanceExitSettlementRequest,
         IndependentUnit, PaymentChannel, RecordManualPaymentRequest,
@@ -26,25 +25,8 @@ struct TestDb {
 
 impl TestDb {
     async fn create() -> Self {
-        let admin =
-            db::create_pool_for("postgres").expect("DB_PASS is required for PostgreSQL tests");
-        let name = format!("sp_exit_{}", std::process::id());
-        let client = admin.get().await.expect("admin connection");
-        // One statement per call: DROP/CREATE DATABASE cannot run in the implicit
-        // transaction a multi-statement batch opens.
-        for sql in [
-            format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
-            format!("CREATE DATABASE {name}"),
-        ] {
-            client
-                .batch_execute(&sql)
-                .await
-                .expect("create throwaway database");
-        }
-        drop(client);
-        let pool = db::create_pool_for(&name).expect("test database pool");
-        db::init_db(&pool).await.expect("apply migrations");
-        db::seed_test_data(&pool).await.expect("seed test data");
+        let crate::test_db::TestDatabase { name, admin, pool } =
+            crate::test_db::create("advance_exit").await;
         Self { name, admin, pool }
     }
 

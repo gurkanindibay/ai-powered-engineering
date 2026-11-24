@@ -525,11 +525,12 @@ def execute_area_plan(plan: Dict[str, object], root: Path, is_json: bool = False
     rust_tests = plan["rust_tests"]
     rust_lib = plan["rust_lib_tests"]
     if rust_tests:
-        cmd = ["cargo", "test", "--locked"]
+        cmd = ["cargo", "nextest", "run", "--locked", "--profile", "ci", "--test", "it"]
         if "e2e_clock_tests" in rust_tests:
             cmd.extend(["--features", "e2e"])
-        for t in rust_tests:
-            cmd.extend(["--test", t])
+        module_names = sorted(rust_tests)
+        filter_expression = " | ".join(f"test(/{re.escape(module)}::/)" for module in module_names)
+        cmd.extend(["-E", filter_expression])
         gate_name = f"rust-area-integration [{', '.join(rust_tests)}]"
         announce(gate_name, is_json)
         res = run_command(gate_name, CommandSpec(cmd, "backend", 600), root)

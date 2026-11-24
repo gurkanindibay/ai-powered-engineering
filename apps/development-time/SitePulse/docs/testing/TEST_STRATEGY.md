@@ -16,7 +16,7 @@ The suite is broad and well traced, but "traced" is not the same as "verified". 
 
 | Layer | Tests | Runs in CI | Strength | Main gap |
 | --- | --- | --- | --- | --- |
-| Rust backend (unit + integration + DB) | 679 | 673 (68 via `--ignored` DB gate) | Money rules, RLS tenant isolation, state machines | 6 never run; `is_err()`-only error checks; env-var races |
+| Rust backend (unit + integration + DB) | 678 | 678 (70 via `rust-db-test`) | Money rules, RLS tenant isolation, state machines | 6 never run; `is_err()`-only error checks; env-var races |
 | Flutter frontend | 366 | 366 | Widget + Decimal money behaviour | 13 untagged files invisible to `--area` runs; no coverage numbers |
 | Browser E2E (pytest + Playwright) | 250 | 228, plus 1 that always skips (wrapper file ignored in CI) | Journeys per role, 8-way sharding | \~7 s median per test, 41 fixed waits, 30 pending GUI scenarios |
 | Harness / tooling (Python) | 410 | 410 (6 env-conditional, all met in CI) | Lints, traceability, report tooling | Validates tooling, not product |
@@ -167,11 +167,11 @@ Targeted PR lanes trade early cross-epic coverage for speed: a regression outsid
 | 1 | E2E setup | Each of the 8 shards installed Rust and Flutter, compiled the backend with `--features e2e`, and restored or built the web bundle | Implemented in #375. One `build-e2e` job builds the backend binary and `flutter/build/web-e2e` once and uploads them. Shards download and run both artifacts. | Removes 7 redundant compiles per PR |
 | 2 | E2E per-test cost | Median 6.9 s per test, 20–30 s per journey; every test signs in through the UI | Playwright `storage_state` per role, created once per worker. Seed data through the API or SQL fixtures (F0–F6), not through screens. Keep one UI sign-in test per role | Typically 30–50% off GUI test time |
 | 3 | Fixed waits | 41 `wait_for_timeout` calls, about 48 s per full pass | State-based waits (`expect`, `wait_for_response`) | Saves about 48 s per pass and removes timing flakes |
-| 4 | Shard balance | 1 min 52 s spread between shards. Balancing used local recorded runs, which hold only 115 of 250 E2E tests | Master CI ingests JUnit durations from every shard into a cache-backed `e2e_shard.py` store; PR shards restore the latest master store | Shard assignments use recent CI timings and converge as runs accumulate |
-| 5 | Risk-based lanes | `smoke`/`core`/`edge` markers are declared as P0/P1/P2 but CI ran everything on every PR | **PR**: lint, unit, integration, DB, Flutter, E2E `smoke or core` plus tests from affected epics. **Merge to master**: the full suite. **Nightly**: `edge`, the full mutation catalogue, mobile viewport, flake report | Typical PR E2E starts from 164 of 229 smoke/core tests; impacted epics add any required tests |
+| 4 | Shard balance | 1 min 52 s spread between shards. Balancing used local recorded runs, which hold only 115 of 250 E2E tests | Master CI ingests JUnit durations from every shard into a cache-backed `e2e_shard.py` store; PR shards restore the latest master store | Shard assignments use recent CI timings and converge |
+| 5 | Risk-based lanes | `smoke`/`core`/`edge` markers are declared as P0/P1/P2 but CI ran everything on every PR | **PR**: lint, unit, integration, DB, Flutter, E2E `smoke or core` plus tests from affected epics. **Merge to master**: the full suite. **Nightly**: `edge`, the full mutation catalogue, mobile viewport, flaky tests and random journeys | Faster PR feedback; full coverage still runs |
 | 6 | Change-based selection | `run_tests.py --changed` and `.specify/features/impact-map.json` existed but CI did not use them | `ci_e2e_plan.py` runs `feature_traceability.py affected` and skips E2E for PRs with no behaviour paths; shared code changes retain the full suite | Docs-only PRs skip E2E build and shards |
 | 7 | Rust test runner | `cargo test` over 41 separate integration-test binaries | `cargo nextest` (parallel per test, JUnit, retries reported as flaky) and merge `tests/*.rs` into one `tests/it/` crate with modules | Fewer link steps; nextest is commonly 2–3× faster on many-binary suites |
-| 8 | PostgreSQL tests | Each test creates a throwaway database and migrates it; 4 threads | Migrate once into a template, then `CREATE DATABASE … TEMPLATE sitepulse_tpl` per test; raise threads to the runner's cores | Per-test setup goes from a full migration run to a file copy |
+| 8 | PostgreSQL tests | Each test creates a throwaway database and migrates it; 4 threads | Migrate and seed once into a template database per nextest run, then `CREATE DATABASE … TEMPLATE …` per test; keep four concurrent DB tests | Per-test setup clones the migrated seed instead of rerunning migrations |
 | 9 | Mutation on PRs | Nightly only, about 24 min; a survivor stops the aggregator before it publishes | PR job: `cargo-mutants --in-diff` on changed `domain/` and `services/` files, 10-minute cap, non-blocking at first. Fix the aggregator to publish before failing | Mutation signal while the author is still on the change |
 | 10 | Retries and evidence | Flaky failures look like real failures | `pytest-rerunfailures --reruns 1` reported as FLAKY, never PASS; the flake rate feeds quarantine (suggestion 10) | Fewer red reruns without hiding flakes |
 | 11 | Backend profile (F) | E2E compiled a release backend next to the debug build every other gate uses | Implemented in #375. The shared E2E backend uses Cargo's dev profile. | Avoids release compilation and retains the dev profile's optimized password hashing |
@@ -245,8 +245,8 @@ Every test function was parsed from source (Rust attributes, Dart `test`/`testWi
 | Suite | Location | Tests | CI gate (group) | Runs in CI | Not run |
 | --- | --- | --- | --- | --- | --- |
 | Rust unit | `backend/src/**` `#[cfg(test)]` | 204 | `rust-test` (rust) | 204 | 0 |
-| Rust integration | `backend/tests/*.rs` | 401 | `rust-test` (rust) | 401 | 0 |
-| Rust PostgreSQL | `backend/tests/db_*`, `#[ignore]` + 2 env opt-ins | 68 | `rust-db-test` (rust) | 68 | 0 |
+| Rust integration | `backend/tests/it/*.rs` modules | 404 | `rust-test` (rust) | 404 | 0 |
+| Rust PostgreSQL | `backend/tests/it/db_*`, `#[ignore]` + 2 env opt-ins | 70 | `rust-db-test` (rust) | 70 | 0 |
 | Rust, never reached | `sale_clearance_tests`, `payments_phase2_tests`, `e2e_clock*` | 6 | none | 0 | **6** |
 | Flutter | `flutter/test/*_test.dart` | 366 | `flutter-test`, `money-fixtures` (flutter) | 366 | 0 |
 | Browser E2E | `e2e/tests/**` | 229 | `gui-e2e`, 8 shards (e2e) | 229 | 0 |

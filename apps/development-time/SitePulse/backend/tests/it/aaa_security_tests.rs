@@ -1,5 +1,5 @@
 //! Security regressions for the SPEC-007 implementation.
-mod support;
+use crate::support;
 use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},

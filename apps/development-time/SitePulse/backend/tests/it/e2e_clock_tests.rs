@@ -1,5 +1,3 @@
-#![cfg(feature = "e2e")]
-
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use sitepulse_backend::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};

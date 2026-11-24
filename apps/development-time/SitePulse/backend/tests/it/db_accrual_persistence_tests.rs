@@ -27,24 +27,7 @@ struct TestDb {
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let admin =
-            db::create_pool_for("postgres").expect("DB_PASS is required for PostgreSQL tests");
-        let suffix = uuid::Uuid::new_v4().simple().to_string();
-        let name = format!("sp_epic07_{tag}_{}_{suffix}", std::process::id());
-        let client = admin.get().await.expect("admin connection");
-        for sql in [
-            format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
-            format!("CREATE DATABASE {name}"),
-        ] {
-            client
-                .batch_execute(&sql)
-                .await
-                .expect("prepare scratch database");
-        }
-        drop(client);
-        let pool = db::create_pool_for(&name).expect("scratch database pool");
-        db::init_db(&pool).await.expect("apply migrations");
-        db::seed_test_data(&pool).await.expect("seed database");
+        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
         let client = pool.get().await.expect("test connection");
         let row = client
             .query_one(

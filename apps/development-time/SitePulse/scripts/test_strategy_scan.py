@@ -52,6 +52,10 @@ def inventory(repo: Path, sitepulse: Path | None = None) -> dict:
         )
         for target in re.findall(r'"--test", "(\w+)"', commands)
     }
+    FEATURE_ALL_TESTS = set(re.findall(r'"--features", "([\w-]+)"', GATES_SRC))
+    CONSOLIDATED_MODULES = set(re.findall(
+        r"^mod (\w+);$", (SP / "backend/tests/it.rs").read_text() if (SP / "backend/tests/it.rs").exists() else "", re.M
+    ))
     workflows = REPO / ".github/workflows"
     WORKFLOWS = "\n".join(p.read_text(errors="replace") for p in workflows.glob("*.yml"))
     nightly_workflow = workflows / "sitepulse-nightly.yml"
@@ -125,15 +129,20 @@ def inventory(repo: Path, sitepulse: Path | None = None) -> dict:
             name = fn.group(1)
             stem = path.stem
             in_src = "/src/" in rel(path)
-            if cfg and (cfg.group(1), stem) in FEATURE_GATED and not ignore:
+            consolidated_feature = (
+                path.parent.name == "it"
+                and stem in CONSOLIDATED_MODULES
+                and ((cfg.group(1), "it") in FEATURE_GATED or cfg.group(1) in FEATURE_ALL_TESTS)
+            ) if cfg else False
+            if cfg and ((cfg.group(1), stem) in FEATURE_GATED or consolidated_feature) and not ignore:
                 run, run_note = "ci", f"rust-test with --features {cfg.group(1)}"
-            elif cfg and (cfg.group(1), stem) not in FEATURE_GATED:
+            elif cfg and (cfg.group(1), stem) not in FEATURE_GATED and not consolidated_feature:
                 run, run_note = "never-in-ci", f"requires --features {cfg.group(1)}; no CI gate passes it"
             elif cfg:
                 run, run_note = "never-in-ci", f"#[ignore]; no CI gate runs the ignored {cfg.group(1)} cases"
             elif ignore:
-                if stem in DB_GATE_FILES:
-                    run, run_note = "ci-db-gate", "#[ignore], run by rust-db-test --ignored"
+                if stem in DB_GATE_FILES or (path.parent.name == "it" and "it" in DB_GATE_FILES):
+                    run, run_note = "ci-db-gate", "#[ignore], run by rust-db-test --run-ignored ignored-only"
                 else:
                     run, run_note = "never-in-ci", f"#[ignore] and {stem}.rs is not in the rust-db-test --test list"
             else:

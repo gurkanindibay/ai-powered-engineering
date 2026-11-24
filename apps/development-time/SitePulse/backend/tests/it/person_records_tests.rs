@@ -1,6 +1,6 @@
 //! Person module F7/F8/F9/F10: CSV import, duplicate detection and the routes that
 //! guard national IDs and contact preferences.
-mod support;
+use crate::support;
 use axum::{
     body::Body,
     http::{Request, StatusCode},

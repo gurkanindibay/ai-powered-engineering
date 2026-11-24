@@ -10,11 +10,11 @@
     "weak-only-tests": 6
   },
   "over_limit_tests": {
-    "apps/development-time/SitePulse/backend/tests/db_advance_exit_settlements_tests.rs::exit_settlement_payout_transfer_and_stale_balance_are_atomic": 4,
-    "apps/development-time/SitePulse/backend/tests/db_occupancy_transitions_tests.rs::when_command_is_illegal_for_the_state_then_nothing_changes": 7,
-    "apps/development-time/SitePulse/backend/tests/db_occupancy_transitions_tests.rs::when_tenant_is_replaced_then_outgoing_tenant_is_settled": 4,
-    "apps/development-time/SitePulse/backend/tests/db_occupancy_transitions_tests.rs::when_title_is_transferred_then_occupancy_follows_the_state_table": 5,
-    "apps/development-time/SitePulse/backend/tests/sale_clearance_tests.rs::only_an_approved_override_makes_the_seller_pay_later_installments": 4,
+    "apps/development-time/SitePulse/backend/tests/it/db_advance_exit_settlements_tests.rs::exit_settlement_payout_transfer_and_stale_balance_are_atomic": 4,
+    "apps/development-time/SitePulse/backend/tests/it/db_occupancy_transitions_tests.rs::when_command_is_illegal_for_the_state_then_nothing_changes": 7,
+    "apps/development-time/SitePulse/backend/tests/it/db_occupancy_transitions_tests.rs::when_tenant_is_replaced_then_outgoing_tenant_is_settled": 4,
+    "apps/development-time/SitePulse/backend/tests/it/db_occupancy_transitions_tests.rs::when_title_is_transferred_then_occupancy_follows_the_state_table": 5,
+    "apps/development-time/SitePulse/backend/tests/it/sale_clearance_tests.rs::only_an_approved_override_makes_the_seller_pay_later_installments": 4,
     "apps/development-time/SitePulse/e2e/tests/test_epic01_resident_dues.py::test_overdue_balance_matches_backend_total": 4,
     "apps/development-time/SitePulse/e2e/tests/test_epic12_unit_directory.py::test_residents_module_search_by_name_and_unit": 4,
     "apps/development-time/SitePulse/e2e/tests/test_journey_accruals_payments.py::test_multi_site_journey_accruals_and_mixed_payments": 7
