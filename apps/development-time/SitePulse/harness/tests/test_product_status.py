@@ -136,6 +136,8 @@ class DashboardTest(unittest.TestCase):
         self.assertIn("Demo &lt;epic&gt;", page)
         self.assertNotIn("Demo <epic>", page)
         self.assertIn("1 failing scenario", page)
+        self.assertIn("1 of 2 tests passed", page)
+        self.assertNotIn("0 tests failed", page)
         self.assertIn("+1 vs previous run", page)
         trends = ps.trend_series([legacy, first, second])
         self.assertEqual([(d["date"], d["passing"], d["failing"]) for d in trends["days"]],
