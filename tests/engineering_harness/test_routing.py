@@ -27,6 +27,7 @@ class RoutingTests(unittest.TestCase):
 
     def test_selective_roles_and_unresolved_targets(self):
         self.assertEqual(select_roles("low", scope="mechanical"), ["developer", "tester"])
+        self.assertEqual(plan("Change", roles=["coordinator", "developer", "tester"])["stages"][0]["role"], "coordinator")
         output = plan("New API feature", scope="backend")
         self.assertFalse(output["execution_ready"])
         self.assertNotIn("frontend_developer", [s["role"] for s in output["stages"]])

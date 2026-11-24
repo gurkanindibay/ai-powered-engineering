@@ -8,11 +8,13 @@ import sys
 request = json.load(sys.stdin)
 if request["action"] == "capabilities":
     result = {"schema_version": 1, "targets": [{"provider": "fixture", "model": "deterministic",
-              "tiers": ["low", "medium", "high", "critical"], "roles": ["product_owner", "business_analyst", "architect", "backend_developer", "frontend_developer", "developer", "tester"],
+              "tiers": ["low", "medium", "high", "critical"], "roles": ["coordinator", "product_owner", "business_analyst", "architect", "backend_developer", "frontend_developer", "developer", "tester"],
               "options": {}, "max_tokens": 1000, "input_per_million": "0", "output_per_million": "0",
               "price_date": "2026-11-08", "benchmark_id": "fixture-only"}]}
 else:
-    if request["role"] in ("developer", "backend_developer"):
+    if request["role"] == "coordinator":
+        artifacts = {"work_plan": ["Implement accepted scope", "Integrate and verify"], "coordination_risks": []}
+    elif request["role"] in ("developer", "backend_developer"):
         Path("src/value.py").write_text("VALUE = 1\n")
         artifacts = {"changes": ["src/value.py"], "tests": ["unit"]}
     elif request["role"] == "frontend_developer":

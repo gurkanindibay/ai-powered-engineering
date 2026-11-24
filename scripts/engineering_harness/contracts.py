@@ -111,6 +111,7 @@ def validate_policy(value: dict) -> dict:
 
 
 ROLE_ARTIFACTS = {
+    "coordinator": ("work_plan", "coordination_risks"),
     "product_owner": ("scope", "acceptance_criteria", "exclusions"),
     "business_analyst": ("domain_rules", "contracts", "edge_cases"),
     "architect": ("design", "risks"),
@@ -118,6 +119,7 @@ ROLE_ARTIFACTS = {
 }
 DEVELOPER_ARTIFACTS = ("changes", "tests")
 ARTIFACT_TYPES = {
+    "work_plan": list, "coordination_risks": list,
     "scope": str, "acceptance_criteria": list, "exclusions": list, "domain_rules": list,
     "contracts": dict, "edge_cases": list, "design": str, "risks": list, "criteria": dict,
     "verdict": str, "residual_risks": list, "changes": list, "tests": list,

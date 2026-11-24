@@ -27,6 +27,7 @@ def catalog(*, disable_codex=False, drop_haiku=False, codex_efforts=("low", "med
 def child_message(envelope, status="completed", **overrides):
     role = envelope["role"]
     artifacts = {
+        "coordinator": {"work_plan": ["Implement accepted scope", "Integrate and verify"], "coordination_risks": []},
         "tester": {"criteria": {c: "pass" for c in envelope["acceptance"]}, "verdict": "pass", "residual_risks": []},
     }.get(role, {"changes": ["src/value.py"], "tests": ["unit"]})
     body = {"status": status, "summary": f"{role} done", "artifacts": artifacts, "issues": [], **overrides}
