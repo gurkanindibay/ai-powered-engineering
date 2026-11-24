@@ -117,10 +117,12 @@ jobs:
         working-directory: apps/development-time/SitePulse/backend
         run: |
           mkdir -p "${{ runner.temp }}/sitepulse-suite-rust/coverage"
+          PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres \
+            -c "DROP DATABASE IF EXISTS sitepulse_cov;" -c "CREATE DATABASE sitepulse_cov;"
           cargo llvm-cov clean --workspace
           cargo llvm-cov --no-report --locked
           cargo llvm-cov --no-report --locked --features e2e --test e2e_clock_tests --test e2e_clock_reset_tests
-          cargo llvm-cov --no-report --locked \
+          DB_NAME=sitepulse_cov cargo llvm-cov --no-report --locked \
             --test db_tenant_isolation_tests \
             --test db_occupancy_transitions_tests \
             --test db_person_api_tests \
