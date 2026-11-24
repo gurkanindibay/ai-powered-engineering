@@ -193,7 +193,7 @@
       "stories_with_scenarios": 116
     },
     {
-      "automated": 437,
+      "automated": 439,
       "date": "2026-11-24",
       "epics": 13,
       "scenarios": 469,
@@ -201,7 +201,7 @@
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "32366b4b8eddcade2fe837e1cbe61fbdb20126b4",
+  "commit": "355edccefb277b5ec4abccc4aba42574f9ad51ca",
   "epics": [
     {
       "automated": 10,
@@ -260,13 +260,13 @@
       "title": "Digital Resident Self-Registration & Approval Queue"
     },
     {
-      "automated": 5,
+      "automated": 6,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-05",
-      "no_result": 5,
+      "no_result": 6,
       "passing": 0,
-      "planned": 1,
+      "planned": 0,
       "scenarios": 6,
       "stories": 6,
       "stories_passing": 0,
@@ -372,13 +372,13 @@
       "title": "Unified People and Unit Directory"
     },
     {
-      "automated": 130,
+      "automated": 131,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-13",
-      "no_result": 17,
+      "no_result": 18,
       "passing": 113,
-      "planned": 22,
+      "planned": 21,
       "scenarios": 152,
       "stories": 16,
       "stories_passing": 3,
@@ -386,18 +386,18 @@
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-24T16:33:56Z",
+  "generated_at": "2026-11-24T20:56:46Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
     "passed": 308,
-    "seconds": 2257.2,
+    "seconds": 2254.6,
     "skipped": 1,
     "tests": 309
   },
   "recent_changes": [],
-  "run_id": "20261124T163355Z-32366b4",
+  "run_id": "20261124T205645Z-355edcc",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -708,7 +708,7 @@
     "SC-05-02-01": {
       "epic": "EPIC-05",
       "name": "Prevent concurrent balance modification race conditions",
-      "state": "planned",
+      "state": "no_result",
       "story": "STORY-05-02"
     },
     "SC-05-03-01": {
@@ -2543,8 +2543,8 @@
     },
     "SC-13-03-14": {
       "epic": "EPIC-13",
-      "name": "SC-13-03-14",
-      "state": "planned",
+      "name": "A failed replacement rolls back occupancy and exit balance together",
+      "state": "no_result",
       "story": "STORY-13-03"
     },
     "SC-13-03-15": {
@@ -3217,14 +3217,14 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 437,
+    "automated": 439,
     "epics": 13,
     "epics_failing": 0,
     "epics_verified": 1,
     "failing": 0,
-    "no_result": 210,
+    "no_result": 212,
     "passing": 227,
-    "planned": 32,
+    "planned": 30,
     "scenarios": 469,
     "stories": 116,
     "stories_passing": 34,
