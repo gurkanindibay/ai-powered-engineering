@@ -6,6 +6,7 @@
       "provider": "claudeAgent",
       "model": "claude-haiku-5-5",
       "roles": [
+        "coordinator",
         "product_owner",
         "business_analyst",
         "backend_developer",
@@ -38,6 +39,7 @@
       "provider": "claudeAgent",
       "model": "claude-sonnet-5-5",
       "roles": [
+        "coordinator",
         "product_owner",
         "business_analyst",
         "architect",
@@ -79,6 +81,7 @@
       "provider": "claudeAgent",
       "model": "claude-opus-5-5",
       "roles": [
+        "coordinator",
         "product_owner",
         "business_analyst",
         "architect",
