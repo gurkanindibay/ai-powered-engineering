@@ -449,6 +449,23 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         api, owner_path + "/resend-activation?" + owner_query, second, first,
         {"role": "OWNER"}, success={200},
     )
+    person_query = urlencode({"site_id": ids["site"]})
+    person_path = "/api/v1/site-admin/persons/" + str(ids["person"])
+    preferences_path = person_path + "/preferences?" + person_query
+    assert_write_is_site_scoped(
+        api, preferences_path, second, first,
+        {"preferred_channel": "EMAIL", "preferred_language": "tr"}, success={200}, method="PUT",
+    )
+    card = api.call("GET", person_path + "/card?" + person_query, second.token)
+    assert_write_is_site_scoped(
+        api, person_path + "?" + person_query, second, first,
+        {"full_name": "Nightly Owner", "version": card["card"]["version"]},
+        success={200}, method="PATCH",
+    )
+    assert_write_is_site_scoped(
+        api, person_path + "/national-id?" + person_query, second, first,
+        {"national_id": None}, success={200}, method="PUT",
+    )
     site_query = urlencode({"site_id": ids["site"]})
     for template in SITE_QUERY_READ_CASES:
         assert_read_is_site_scoped(api, paths, template, f"{template}?{site_query}", second, first)

@@ -2069,7 +2069,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter person_id.",
       "evidence": "backend/src/app.rs: handlers::update_person (Require(PersonManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -2112,7 +2114,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter person_id.",
       "evidence": "backend/src/app.rs: handlers::set_person_national_id (Require(PersonIdentityManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "PUT",
@@ -2120,7 +2124,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter person_id.",
       "evidence": "backend/src/app.rs: handlers::update_person_preferences (Require(PersonManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
