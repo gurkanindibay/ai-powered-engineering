@@ -67,6 +67,18 @@ class TestQualityLintTests(unittest.TestCase):
         ])
         self.assertEqual(exceeded[0]["examples"][0]["line"], 12)
 
+    def test_improvement_requires_baseline_update_and_new_scenario_claim_has_rename_hint(self):
+        baseline = {
+            "counts": {"fixed-sleep-calls": 2},
+            "over_limit_tests": {"example.rs::old_name": 5},
+        }
+        exceeded = test_quality_lint.compare_to_baseline(
+            {"fixed-sleep-calls": 1}, {"example.rs::new_name": 5}, baseline, [],
+        )
+        self.assertEqual([item["rule"] for item in exceeded], ["fixed-sleep-calls", "scenarios-per-test"])
+        self.assertIn("--update-baseline", exceeded[0]["message"])
+        self.assertIn("renamed or moved", exceeded[1]["message"])
+
     def test_committed_workspace_baseline_passes(self):
         project = SCRIPT.parents[1]
         repo = project.parents[2]

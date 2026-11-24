@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Ratchet test-quality shortcuts so new weak assertions and timing dependencies fail CI.
 
-Counts are limited by ``test_quality_baseline.json``. Existing over-limit scenario claims are
-tracked per test; new claims or increases fail. Use ``--update-baseline`` only when intentionally
-accepting a reviewed baseline change.
+Counts are pinned by ``test_quality_baseline.json``. Increases and unrecorded decreases fail so
+improvements are locked in by updating the baseline. Existing over-limit scenario claims are
+tracked per test; new claims or increases fail. Use ``--update-baseline`` for reviewed changes.
 
 Usage:
     python3 scripts/test_quality_lint.py
@@ -159,6 +159,13 @@ def compare_to_baseline(
         for rule, count in counts.items()
         if count > int(allowed_counts.get(rule, 0))
     ]
+    decreased = [
+        {"rule": rule, "count": count, "baseline": int(allowed_counts[rule]),
+         "message": "Improvement detected; run --update-baseline and commit the reviewed baseline."}
+        for rule, count in counts.items()
+        if rule in allowed_counts and count < int(allowed_counts[rule])
+    ]
+    exceeded.extend(decreased)
     finding_rules = {
         "any-error-is-err-checks": "any-error-is-err",
         "unwrap-only-tests": "unwrap-only-test",
@@ -175,7 +182,10 @@ def compare_to_baseline(
     for key, count in overages.items():
         allowed = int(allowed_overages.get(key, 0))
         if count > allowed:
-            exceeded.append({"rule": "scenarios-per-test", "test": key, "count": count, "allowed": allowed})
+            exceeded.append({
+                "rule": "scenarios-per-test", "test": key, "count": count, "allowed": allowed,
+                "message": "New or increased over-cap claim; if this test was renamed or moved, review and run --update-baseline.",
+            })
     return exceeded
 
 
