@@ -65,6 +65,10 @@ SITE_QUERY_READ_CASES = (
 )
 
 PDF_ROUTE = "/api/v1/payments/receipts/{id}/pdf"
+IMPLICIT_WRITE_CASES = (
+    ("POST", "/api/v1/autopay/run", lambda: {"as_of": date.today().isoformat()}),
+    ("PUT", "/api/v1/operating-budgets/transition", lambda: {"transition_days": 30}),
+)
 SECOND_SITE_MARKER = "Nightly second-site scope marker"
 TEST_BANK_IBAN = "TR190020500009863791600001"
 
@@ -722,3 +726,19 @@ def test_implicit_reads_follow_manager_site(api, stack, two_sites, path, arrange
         foreign_privacy = json.loads(foreign_body)
         assert foreign_privacy["acknowledged"] is False
         assert next(c for c in foreign_privacy["consents"] if c["channel"] == "EMAIL")["granted"] is True
+
+
+@pytest.mark.parametrize("method,path,body_factory", IMPLICIT_WRITE_CASES, ids=[c[1] for c in IMPLICIT_WRITE_CASES])
+def test_implicit_writes_follow_manager_site(api, two_sites, method, path, body_factory):
+    first, second, _ = two_sites
+    paths = api.call("GET", "/api/v1/openapi.json")["paths"]
+    assert method.lower() in paths.get(path, {}), f"{method} {path} is missing from generated OpenAPI"
+    body = body_factory()
+
+    owner_status, owner_body = get_response(api, path, second.token, method=method, body=body)
+    assert owner_status == 200, f"Second-site {method} {path} returned {owner_status}"
+    assert json.loads(owner_body)["site_id"] == str(second.user["site_id"])
+
+    foreign_status, foreign_body = get_response(api, path, first.token, method=method, body=body)
+    assert foreign_status == 200, f"First-site {method} {path} returned {foreign_status}"
+    assert json.loads(foreign_body)["site_id"] == str(first.user["site_id"])
