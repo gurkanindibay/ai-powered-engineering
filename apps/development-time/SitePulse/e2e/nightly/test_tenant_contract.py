@@ -351,6 +351,13 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         }, success={200},
     )
     assert_write_is_site_scoped(
+        api, "/api/v1/bank/remembered-ibans", second, first,
+        {
+            "site_id": ids["site"], "unit_id": str(ids["unit"]),
+            "sender_iban": "TR110006200000000123456789", "sender_name": "Nightly scoped payer",
+        }, success={200},
+    )
+    assert_write_is_site_scoped(
         api, "/api/v1/payments/record", second, first,
         {
             "unit_id": str(ids["unit"]), "amount": "1.00",
