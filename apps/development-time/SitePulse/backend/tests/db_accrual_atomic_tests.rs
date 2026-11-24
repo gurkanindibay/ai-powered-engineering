@@ -448,6 +448,43 @@ async fn skipped_units_are_recorded_where_the_manager_can_read_them() {
     env.drop_db().await;
 }
 
+// covers: SC-07-08-04
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn empty_accrual_with_skipped_units_still_records_a_run() {
+    let env = Env::new("empty_skipped").await;
+    let site_id = env.site.to_string();
+    let period_key = "2099-03";
+    let due_date = NaiveDate::from_ymd_opt(2099, 3, 15).expect("fixture date");
+    let skipped = vec!["unit 123: no eligible tariff".to_string()];
+    let batch = db::AccrualBatch {
+        site_id: &site_id,
+        period_key,
+        period_label: period_key,
+        due_date,
+        source: "SCHEDULER",
+        dues: &[],
+        skipped: &skipped,
+    };
+
+    db::commit_accrual_batch(&env.pool, &batch)
+        .await
+        .expect("skipped-only accrual is recorded");
+
+    let client = env.pool.get().await.expect("connection");
+    let row = client
+        .query_one(
+            "SELECT accrued_count, skipped_units FROM dues_accrual_runs WHERE site_id = $1 AND period_key = $2",
+            &[&env.site, &period_key],
+        )
+        .await
+        .expect("skipped-only run exists");
+    assert_eq!(row.get::<_, i32>(0), 0);
+    assert_eq!(row.get::<_, Vec<String>>(1), skipped);
+    drop(client);
+    env.drop_db().await;
+}
+
 // covers: SC-07-08-03
 #[tokio::test]
 #[ignore = "needs PostgreSQL and DB_PASS"]
@@ -617,6 +654,88 @@ async fn a_first_accrual_batch_keeps_both_debtor_shares_and_blocks_a_rerun() {
         ))
         .await,
         2
+    );
+    env.drop_db().await;
+}
+
+// covers: SC-05-02-01
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn concurrent_accruals_for_one_unit_commit_once_and_leave_no_duplicate_balance() {
+    let env = Env::new("concurrent_unit").await;
+    let unit = env.int(&format!(
+        "SELECT id FROM units WHERE site_id = {} AND deleted_at IS NULL AND house_type_id IS NOT NULL ORDER BY id LIMIT 1",
+        env.site
+    )).await;
+    let site_id = env.site.to_string();
+    let unit_id = unit.to_string();
+    let period_key = "2099-02";
+    let due_date = NaiveDate::from_ymd_opt(2099, 2, 15).expect("fixture date");
+    let dues = vec![(
+        DuesLiability {
+            id: String::new(),
+            unit_id: unit_id.clone(),
+            period: period_key.to_string(),
+            principal_amount: Decimal::from(600),
+            delay_penalty: Decimal::ZERO,
+            total_amount: Decimal::from(600),
+            due_date,
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: DebtorType::Owner,
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: None,
+            grace_days: 0,
+            effective_due_date: None,
+            liable_person_id: None,
+        },
+        None,
+    )];
+    let batch = db::AccrualBatch {
+        site_id: &site_id,
+        period_key,
+        period_label: period_key,
+        due_date,
+        source: "SCHEDULER",
+        dues: &dues,
+        skipped: &[],
+    };
+    let (first, second) = tokio::join!(
+        db::commit_accrual_batch(&env.pool, &batch),
+        db::commit_accrual_batch(&env.pool, &batch),
+    );
+    let outcomes = [
+        first.expect("first transaction"),
+        second.expect("second transaction"),
+    ];
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|o| o.due_ids.iter().any(Option::is_some))
+            .count(),
+        1,
+        "exactly one transaction inserts the liability"
+    );
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|o| o.due_ids.iter().all(Option::is_none))
+            .count(),
+        1,
+        "the conflicting transaction is rejected as a clean no-op"
+    );
+    assert_eq!(env.int(&format!(
+        "SELECT count(*) FROM dues_liabilities WHERE unit_id = {unit} AND period_key = '{period_key}' AND capital_project_id IS NULL"
+    )).await, 1, "the unit balance is represented once");
+    assert_eq!(
+        env.int(&format!(
+        "SELECT count(*) FROM dues_accrual_runs WHERE site_id = {} AND period_key = '{period_key}'",
+        env.site
+    ))
+        .await,
+        1,
+        "the site period has a single committed run"
     );
     env.drop_db().await;
 }

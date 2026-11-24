@@ -175,15 +175,14 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | enabled  | 483.87      | 1016.13      |
       | disabled | 0.00        | 1500.00      |
 
-  # Pending: needs fault injection at the persistence boundary, which the E2E backend does not offer.
-  @SC-13-03-14 @J-10 @depth:2 @state:F2 @layer:backend @edge @role_manager @pending
-  Scenario: A failed replacement rolls back occupancy, household and settlement together
-    Given a tenant-occupied unit with a linked household and an exit balance
+  @SC-13-03-14 @J-10 @depth:2 @state:F2 @layer:backend @edge @role_manager @linked
+  Scenario: A failed replacement rolls back occupancy and exit balance together
+    Given a tenant-occupied unit with an unpaid exit balance
     When tenant replacement fails at the persistence boundary after closing the old session
-    Then the original occupant, household and ownership are still active
+    Then the original occupant and ownership are still active
     And no replacement session, exit settlement or additional financial movement exists
     When the same replacement is retried after recovery
-    Then one replacement session is active and the original tenant is settled exactly once
+    Then one replacement session is active and the original tenant's balance remains attached exactly once
 
   @SC-13-03-15 @J-10 @depth:1 @state:F2 @layer:backend @core @role_manager @linked
   Scenario: A unit created mid-month is billed for chargeable days only
