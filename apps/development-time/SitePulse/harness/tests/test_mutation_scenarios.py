@@ -357,6 +357,25 @@ class SummaryTest(unittest.TestCase):
 
 
 class SelectionAndStrictTest(unittest.TestCase):
+    def test_direct_only_selection_ignores_indirect_changes(self):
+        catalogue = ms.load_catalogue()
+        changed_target = "backend/src/services/dues_ledger.rs"
+        selected = ms.select(
+            catalogue, [], [], [],
+            changed_files={changed_target, "scripts/mutation_scenarios.py"},
+            direct_only=True,
+        )
+        expected = [scenario.id for scenario in catalogue.scenarios if scenario.file == changed_target]
+        self.assertTrue(expected)
+        self.assertEqual([scenario.id for scenario in selected], expected)
+        self.assertEqual(
+            ms.select(
+                catalogue, [], [], [],
+                changed_files={"scripts/mutation_scenarios.py"}, direct_only=True,
+            ),
+            [],
+        )
+
     def test_select_filters_by_changed_files(self):
         catalogue = ms.load_catalogue()
         self.assertGreater(len(catalogue.scenarios), 0)

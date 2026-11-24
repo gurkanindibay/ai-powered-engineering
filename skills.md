@@ -255,6 +255,17 @@ python3 apps/development-time/SitePulse/scripts/e2e_shard.py --json plan --shard
 
 The full catalogue and the promotion procedure are in the [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) skill. Shared Flutter components that the rules point to live in `flutter/lib/ui/design_system/` (`SpPageHeader`, `SpTone`, `SpMetricValue`/`SpIconMetric`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `SpMoneyFormField`/`MoneyInput`, `SpIbanCopyRow`/`spCopyToClipboard`), `ui/components/sp_dialog_pages.dart` (`showSpSelection<T>`), `ui/residents/resident_directory.dart` (`ResidentSummary`, `matchesResidentFilters`, `ResidentOccupancyStats`) and `domain/formatting/json_decimal.dart` (`readDecimal`).
 
+## 5b-3d. Test Quality Lint (`test_quality_lint.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/test_quality_lint.py](file:///apps/development-time/SitePulse/scripts/test_quality_lint.py) (symlinked to `scripts/test_quality_lint.py`)
+- **Purpose:** Ratchets weak `is_err()` assertions, unwrap-only and weak-only tests, wait-only GUI tests, fixed sleeps, environment mutation and `Utc::now()` reads in backend tests. The committed `test_quality_baseline.json` allows existing findings but rejects increased counts, new tests over the three-scenario claim limit, or increased claims in already over-limit tests. Gate `test-quality-lint` runs in the `lint` group and `run_tests.py`.
+
+```bash
+./scripts/test_quality_lint.py
+./scripts/test_quality_lint.py --json
+./scripts/test_quality_lint.py --update-baseline  # record an intentionally reviewed baseline change
+```
+
 ## 5b-4. GUI Traceability (`gui_traceability.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/gui_traceability.py](file:///apps/development-time/SitePulse/scripts/gui_traceability.py) (symlinked to `scripts/gui_traceability.py`)
@@ -334,19 +345,6 @@ python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py run --chan
 python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py run --area late-fee --markdown /tmp/mut.md --output /tmp/mut.json
 python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py restore   # after an interrupted run
 python3 apps/development-time/SitePulse/scripts/ci_mutation_report.py --reports-dir /tmp/shards --out /tmp/report
-```
-
-## 5b-10. Cucumber Pilot Safe Report (`cucumber_pilot_report.py`)
-
-- **Executable Script:** [apps/development-time/SitePulse/scripts/cucumber_pilot_report.py](file:///apps/development-time/SitePulse/scripts/cucumber_pilot_report.py)
-- **Purpose:** Reconciles the Cucumber pilot's native JUnit case totals with its private execution JSONL, then emits a fixed public-safe summary for the five pilot cases. It includes static labels, distinct outline example IDs, status, duration, comparison-only labels, and Actions run metadata; it never copies step text, failure bodies, example values, or raw JUnit fields. The opt-in workflow retains only this JSON as artifact `cucumber-pilot-results-<run-id>-<attempt>`.
-
-```bash
-python3 apps/development-time/SitePulse/scripts/cucumber_pilot_report.py --help
-python3 apps/development-time/SitePulse/scripts/cucumber_pilot_report.py \
-  --junit /tmp/junit-report.xml --executions /tmp/executions.jsonl \
-  --run-id 1234 --attempt 1 --commit 0123456789abcdef0123456789abcdef01234567 \
-  --repository owner/repository --out /tmp/cucumber-results.json --json
 ```
 
 ## 5c. Test Execution & Verification Run (`run_tests.py`)
@@ -439,6 +437,12 @@ python3 scripts/cargo_target_pool.py sweep --max-age-days 7
 python3 scripts/cargo_target_pool.py clean-worktree <worktree-path> --dry-run
 python3 -m unittest discover -s tests/cargo_target_pool
 ```
+
+Use [cargo_target_benchmark.py](scripts/cargo_target_benchmark.py) to compare the former and current
+SitePulse profiles at a fixed revision. It builds all backend test executables, samples disk use,
+and measures a warm target slot handoff across source trees. See the
+[Cargo target benchmark](apps/development-time/SitePulse/docs/engineering-process/cargo-target-benchmark.md)
+for results and prerequisites.
 
 ## 5c-4. PR Review Bot (`review_bot.py`)
 

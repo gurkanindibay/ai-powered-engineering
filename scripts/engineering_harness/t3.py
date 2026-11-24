@@ -20,10 +20,12 @@ RESULT_BEGIN = "<<<HARNESS_RESULT"
 RESULT_END = "HARNESS_RESULT>>>"
 CHILD_STATUSES = ("completed", "code_defect", "blocked")
 # delegate_task role enum; informs T3's UI and child setup, not harness permissions.
-T3_ROLES = {"product_owner": "design", "business_analyst": "research", "architect": "design",
+T3_ROLES = {"coordinator": "design", "product_owner": "design", "business_analyst": "research", "architect": "design",
             "backend_developer": "implementation", "frontend_developer": "implementation",
             "developer": "implementation", "tester": "test"}
 ARTIFACT_HINTS = {
+    "work_plan": "nonempty list of strings: ordered steps assigned to upcoming harness roles, including dependencies and handoff checkpoints",
+    "coordination_risks": "risks to monitor or escalate during execution",
     "scope": "string", "acceptance_criteria": "list of strings, exactly the accepted criteria below",
     "exclusions": "list of strings", "domain_rules": "nonempty list of strings",
     "contracts": "nonempty object (contract name -> description)", "edge_cases": "nonempty list of strings",

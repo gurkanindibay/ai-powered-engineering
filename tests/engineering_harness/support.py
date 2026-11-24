@@ -44,6 +44,7 @@ def repository(path: Path):
 def response(envelope):
     role = envelope["role"]
     artifacts = {
+        "coordinator": {"work_plan": ["Implement accepted scope", "Integrate and verify"], "coordination_risks": []},
         "product_owner": {"scope": "Implement bounded behavior", "acceptance_criteria": ["Behavior passes regression tests"], "exclusions": []},
         "business_analyst": {"domain_rules": ["Preserve data"], "contracts": {"v1": "Bounded behavior"}, "edge_cases": ["Empty input"]},
         "architect": {"design": "Layered architecture", "risks": []},

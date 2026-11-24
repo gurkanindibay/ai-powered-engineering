@@ -78,23 +78,23 @@ flowchart TD
 
 ### 3.1 Tier 1: Change-Aware Developer Gate & Targeted PR Tooling (`--changed`)
 - **Mechanism**: Extended `mutation_scenarios.py` with `--changed [BASE]` (matching `run_tests.py --changed` patterns).
-- **Filtering**: Compares working tree or branch against base (`origin/master...HEAD`). Matches modified files against scenario `file` attributes.
-- **Workflow Role**: Today, this operates as a fast developer verification tool prior to opening or updating a PR (`mutation_scenarios.py run --changed --strict`). If wired directly into automated PR CI in the future, the checkout step must set `fetch-depth: 0` so git can resolve `origin/master...HEAD`.
+- **Filtering**: On PRs, compares the merge checkout to the event base SHA and passes `--direct-only` to match scenario target paths exactly. Local `--changed` also uses the existing map of indirect changes.
+- **Workflow role**: PRs against `master` get a selection summary. Only layers with a changed target start a runner. Those jobs use a checkout with `fetch-depth: 0` and publish Markdown summaries and JSON artifacts, including on a strict mutation failure.
 - **Impact**: 
   - If a change edits `backend/src/services/dues_ledger.rs`, it runs only `MUT-RS-001` through `MUT-RS-010` (~2–3 minutes).
   - If a change touches documentation or unaffected modules, 0 mutants run (0 seconds overhead).
-- **Enforcement**: `--strict` flag causes non-zero exit code (exit 1 on survivors/unviable/timeouts, exit 2 on invalid git ref).
+- **Enforcement**: The runner uses `--strict` so survivors and inconclusive results appear as a failed runner outcome in the PR report. The PR step allows this outcome while the nightly lane enforces its strict verdict.
 
 ### 3.2 Tier 2: Dedicated Nightly & On-Demand Workflow (`mutation-testing.yml`)
 - **Triggers**: Nightly schedule (`cron: '0 2 * * *'`) and manual `workflow_dispatch`.
 - **Parallelization**: Shards execution by `--layer` (`python`, `flutter`, `rust`, `db`) across concurrent runners.
-- **Service Containers**: Spins up PostgreSQL 16 Alpine container only for the `db` layer.
+- **Service Containers**: Spins up PostgreSQL 16 Alpine container for the `rust` and `db` layers.
 - **Caching**: Utilizes `Swatinem/rust-cache` and `subosito/flutter-action` cache for fast compilation.
 - **Reporting & Observability**:
-  - `actions/download-artifact` uses `merge-multiple: true` and `ci_mutation_report.py` uses recursive globbing (`rglob`) to ingest all shards.
+  - `actions/download-artifact` uses `merge-multiple: false` and `ci_mutation_report.py` uses recursive globbing (`rglob`) to ingest all shards.
   - Aggregator runs with `--strict` to fail the nightly run if any mutant survives, times out, or fails to compile (active regression guard).
   - Exports Markdown report into `$GITHUB_STEP_SUMMARY`.
-  - Emits JSON summary and uploads consolidated `mutation-test-report` artifact.
+  - Emits JSON summary and uploads consolidated `mutation-test-report` artifact before enforcing the strict verdict.
 
 ---
 

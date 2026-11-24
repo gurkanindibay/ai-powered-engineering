@@ -69,8 +69,6 @@ class _PickerRepository implements PersonRepository {
 
 Widget _host(Widget child) => MaterialApp(theme: AppTheme.light(), home: child);
 
-// covers: SC-12-08-01
-// covers: SC-12-08-02
 void main() {
   late http.Client previousTransport;
   setUp(() {
@@ -93,6 +91,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // covers: SC-12-08-01
   testWidgets('merge asks for a password check and then sends the target version', (tester) async {
     final api = _MergeApi();
     await startMerge(tester, api, 9);
@@ -109,6 +108,7 @@ void main() {
     expect(api.merges, [(7, 9, 4)]);
   });
 
+  // covers: SC-12-08-02
   testWidgets('a card cannot be merged into itself', (tester) async {
     final api = _MergeApi();
     await startMerge(tester, api, 7);

@@ -9,7 +9,8 @@ Feature: Google ID token authentication and account linking
     Then the Google subject ID and avatar URL are linked to their account
     And an authenticated session is returned with auth_provider "GOOGLE"
 
-  @SC-06-03-02 @GUI-06-11 @linked @layer:gui @edge
+  # Pending: in-repo fake Google OIDC provider is planned for Phase 2/future E2E environment.
+  @SC-06-03-02 @GUI-06-11 @pending @layer:gui @edge
   Scenario: Google sign-in button starts the provider flow
     Given the login screen is shown
     When the user taps the Google sign-in button

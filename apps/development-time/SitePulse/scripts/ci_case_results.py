@@ -21,7 +21,6 @@ def expected_suites() -> list[dict[str, object]]:
         {"suite": "e2e", "runner": "pytest-playwright", "producer": "e2e", "shards": [f"{i}/8" for i in range(1, 9)]},
         {"suite": "rust", "runner": "cargo", "producer": "rust", "gate": "rust-test", "shards": ["rust-test"]},
         {"suite": "rust-db-test", "runner": "cargo", "producer": "rust", "gate": "rust-db-test", "shards": ["rust-db-test"]},
-        {"suite": "rust-db-opt-in", "runner": "cargo", "producer": "rust", "gate": "rust-db-test", "shards": ["accrual_corrections_tests::corrections_round_trip_through_postgresql", "finance_store_pg_tests::every_spec009_record_round_trips_through_postgresql"]},
         {"suite": "flutter", "runner": "flutter", "producer": "flutter", "gate": "flutter-test", "shards": ["flutter-test"]},
         {"suite": "money-fixtures", "runner": "cargo", "producer": "flutter", "gate": "money-fixtures", "shards": ["financial_fixtures"]},
         {"suite": "money-fixtures", "runner": "flutter", "producer": "flutter", "gate": "money-fixtures", "shards": ["test/financial_fixture_test.dart"]},
@@ -34,7 +33,7 @@ def expected_suites() -> list[dict[str, object]]:
 def expected_gates() -> dict[str, list[str]]:
     """Mirror CI's group partition so absent gate artifacts are visible in reports."""
     return {
-        "lint": ["harness-selftest", "persistence-lint", "rust-standards-lint", "tenant-lint", "lock-lint",
+        "lint": ["harness-selftest", "persistence-lint", "rust-standards-lint", "test-quality-lint", "tenant-lint", "lock-lint",
                  "testid-lint", "feature-traceability", "ui-style-lint", "flutter-reuse", "logging-standards-lint", "security-lint"],
         "rust": ["rust-build", "rust-clippy", "rust-test", "schema-integrity", "rust-db-test", "api-system"],
         "flutter": ["money-fixtures", "flutter-analyze", "flutter-test"],

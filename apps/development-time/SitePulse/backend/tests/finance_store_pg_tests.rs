@@ -6,8 +6,8 @@
 //! Run against a **scratch** database (it is migrated and seeded):
 //!
 //! ```text
-//! SITEPULSE_PG_TESTS=1 DB_PASS=... DB_NAME=sitepulse_finance_test \
-//!   cargo test --test finance_store_pg_tests -- --nocapture
+//! DB_PASS=... DB_NAME=sitepulse_finance_test \
+//!   cargo test --test finance_store_pg_tests -- --ignored --nocapture
 //! ```
 
 use chrono::{Days, Utc};
@@ -122,11 +122,8 @@ fn assert_same(memory: &FinanceBook, db: &FinanceBook) {
 }
 
 #[tokio::test]
+#[ignore = "needs PostgreSQL"]
 async fn every_spec009_record_round_trips_through_postgresql() {
-    if std::env::var("SITEPULSE_PG_TESTS").as_deref() != Ok("1") {
-        println!("SKIPPED finance_store_pg_tests: set SITEPULSE_PG_TESTS=1 and DB_* for a scratch database");
-        return;
-    }
     let pool = sitepulse_backend::db::create_pool()
         .unwrap()
         .expect("DB_PASS is set");

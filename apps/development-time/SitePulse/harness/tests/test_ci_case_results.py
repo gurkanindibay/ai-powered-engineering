@@ -20,12 +20,12 @@ import unittest_json_runner
 
 
 class CaseAdapterTests(unittest.TestCase):
-    def test_expected_manifest_includes_eight_shards_and_opt_in_database_cases(self):
+    def test_expected_manifest_includes_eight_shards_and_database_suite(self):
         manifest = cases.expected_suites()
         e2e = next(row for row in manifest if row["suite"] == "e2e")
         self.assertEqual(e2e["shards"], [f"{i}/8" for i in range(1, 9)])
-        db = next(row for row in manifest if row["suite"] == "rust-db-opt-in")
-        self.assertEqual(len(db["shards"]), 2)
+        db = next(row for row in manifest if row["suite"] == "rust-db-test")
+        self.assertEqual(db["shards"], ["rust-db-test"])
 
     def test_cargo_parser_keeps_doctest_names_and_ignored_status(self):
         output = """Running unittests src/lib.rs (target/debug/deps/sitepulse)

@@ -139,6 +139,7 @@ fn assert_only_original_owner_liability(due: &[DuesLiability]) {
     assert_eq!(due[0].principal_amount, amount("1400.00"));
 }
 
+// covers: SC-07-09-01
 #[tokio::test]
 async fn when_a_tenant_moves_in_mid_month_then_scheduler_splits_by_actual_days() {
     let state = state_with_unit(
@@ -169,6 +170,7 @@ async fn when_a_tenant_moves_in_mid_month_then_scheduler_splits_by_actual_days()
     );
 }
 
+// covers: SC-07-09-01
 #[tokio::test]
 async fn when_manual_accrual_runs_then_it_uses_the_same_occupancy_shares_as_the_scheduler() {
     let state = state_with_unit(
@@ -203,6 +205,7 @@ async fn when_manual_accrual_runs_then_it_uses_the_same_occupancy_shares_as_the_
     }));
 }
 
+// covers: SC-07-09-02
 #[tokio::test]
 async fn when_a_unit_is_created_mid_month_then_scheduler_charges_only_remaining_days() {
     let state = state_with_unit("1800.00", true, "2026-11-16", None, Vec::new()).await;
@@ -214,6 +217,7 @@ async fn when_a_unit_is_created_mid_month_then_scheduler_charges_only_remaining_
     assert_eq!(due[0].debtor_type, DebtorType::Owner);
 }
 
+// covers: SC-07-09-04
 #[tokio::test]
 async fn when_proration_is_disabled_then_scheduler_keeps_the_full_month_rule() {
     let state = state_with_unit(
@@ -232,6 +236,7 @@ async fn when_proration_is_disabled_then_scheduler_keeps_the_full_month_rule() {
     assert_eq!(due[0].debtor_type, DebtorType::Tenant);
 }
 
+// covers: SC-07-09-05
 #[tokio::test]
 async fn when_scheduler_retries_after_tenant_moves_in_then_existing_unit_charge_blocks_rerun() {
     for proration_enabled in [false, true] {
@@ -247,6 +252,7 @@ async fn when_scheduler_retries_after_tenant_moves_in_then_existing_unit_charge_
     }
 }
 
+// covers: SC-07-09-06
 #[tokio::test]
 async fn when_manual_accrual_retries_after_tenant_moves_in_then_existing_unit_charge_blocks_rerun()
 {

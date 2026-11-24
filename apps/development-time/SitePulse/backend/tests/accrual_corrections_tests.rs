@@ -793,14 +793,11 @@ async fn approving_the_same_correction_twice_concurrently_applies_it_once() {
     );
 }
 
-/// PostgreSQL round trip (opt-in, scratch database; see `finance_store_pg_tests`):
+/// PostgreSQL round trip (scratch database; see `finance_store_pg_tests`):
 /// the three corrections are stored, survive a reload and credit the advance in the database.
 #[tokio::test]
+#[ignore = "needs PostgreSQL"]
 async fn corrections_round_trip_through_postgresql() {
-    if std::env::var("SITEPULSE_PG_TESTS").as_deref() != Ok("1") {
-        println!("SKIPPED accrual_corrections_tests (pg): set SITEPULSE_PG_TESTS=1 and DB_*");
-        return;
-    }
     let pool = sitepulse_backend::db::create_pool()
         .unwrap()
         .expect("DB_PASS is set");

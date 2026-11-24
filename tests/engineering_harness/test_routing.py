@@ -27,6 +27,7 @@ class RoutingTests(unittest.TestCase):
 
     def test_selective_roles_and_unresolved_targets(self):
         self.assertEqual(select_roles("low", scope="mechanical"), ["developer", "tester"])
+        self.assertEqual(plan("Change", roles=["coordinator", "developer", "tester"])["stages"][0]["role"], "coordinator")
         output = plan("New API feature", scope="backend")
         self.assertFalse(output["execution_ready"])
         self.assertNotIn("frontend_developer", [s["role"] for s in output["stages"]])
@@ -54,6 +55,12 @@ class RoutingTests(unittest.TestCase):
             mutate(p)
             with self.assertRaises(HarnessError):
                 validate_policy(p)
+
+    def test_policy_defaults_missing_coordinator_path_for_older_policies(self):
+        value = policy()
+        del value["role_paths"]["coordinator"]
+        validated = validate_policy(value)
+        self.assertEqual(validated["role_paths"]["coordinator"], [])
 
     def test_money_rejects_binary_nonfinite_and_negative(self):
         for value in [0.1, "NaN", "Infinity", "-1", True, None]:

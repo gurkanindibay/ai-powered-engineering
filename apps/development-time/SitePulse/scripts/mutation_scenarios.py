@@ -244,6 +244,8 @@ def select(
     layers: Sequence[str],
     areas: Sequence[str],
     changed_files: Sequence[str] | set[str] | None = None,
+    *,
+    direct_only: bool = False,
 ) -> list[Scenario]:
     chosen = catalogue.scenarios
     if ids:
@@ -258,6 +260,8 @@ def select(
         chosen = [s for s in chosen if s.area in areas]
     if changed_files is not None:
         changed_set = set(changed_files)
+        if direct_only:
+            return [s for s in chosen if s.file in changed_set]
         direct_files = {s.file for s in catalogue.scenarios}
         indirect_inputs = changed_set - direct_files
         indirect_areas = _indirect_areas_for_changed_files(indirect_inputs)
@@ -602,11 +606,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="only run scenarios targeting files changed in git (optionally compared against BASE)",
     )
     parser.add_argument(
+        "--direct-only",
+        action="store_true",
+        help="with --changed, select only directly changed scenario target files",
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="exit with code 1 if any mutant survives, is unscored, times out, or fails to compile",
     )
     args = parser.parse_args(argv)
+    if args.direct_only and args.changed is None:
+        parser.error("--direct-only requires --changed")
 
     if args.command == "restore":
         restored = restore()
@@ -630,7 +641,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"error: {err}", file=sys.stderr)
             return 2
 
-    chosen = select(catalogue, args.id, args.layer, args.area, changed_files=changed_files)
+    chosen = select(
+        catalogue, args.id, args.layer, args.area,
+        changed_files=changed_files, direct_only=args.direct_only,
+    )
     if args.changed is not None and not chosen:
         if args.command == "list":
             if args.json:

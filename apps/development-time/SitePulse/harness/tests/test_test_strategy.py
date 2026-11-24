@@ -124,6 +124,18 @@ class TestScannerRuns(unittest.TestCase):
         # test that needs an identity-provider stub (roadmap phase 1).
         self.assertLessEqual(never, {"sample_receipt_pdf", "test_google_sign_in_redirects_to_the_provider"})
 
+    def test_scanner_collects_api_system_checks_and_excludes_helpers(self):
+        scanner = _load("_test_strategy_scan", PROJECT_ROOT / "scripts" / "test_strategy_scan.py")
+        result = scanner.scan(REPO_ROOT)
+        api_tests = [t for t in result["tests"] if t["file"].endswith("api_system_check.py")]
+        api_test_names = {t["name"] for t in api_tests}
+        self.assertIn("check_finance_desk", api_test_names)
+        self.assertIn("check_exit_settlement_self_approval_audited", api_test_names)
+        self.assertNotIn("login", api_test_names)
+        self.assertNotIn("seed", api_test_names)
+        self.assertNotIn("http", api_test_names)
+        self.assertTrue(all(t["run"] == "ci" for t in api_tests))
+
 
 if __name__ == "__main__":
     unittest.main()
