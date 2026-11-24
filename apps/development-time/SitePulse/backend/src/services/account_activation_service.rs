@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::Storage;
 use crate::domain::kvkk::DeliveryChannel;
-use crate::services::notification_service::{configured_sender, Recipient};
+use crate::services::notification_service::Recipient;
 use crate::state::AppState;
 
 /// How long an activation or confirmation link stays valid.
@@ -253,8 +253,10 @@ impl AccountActivationService {
             phone: None,
             has_app: false,
         };
-        let status = match configured_sender()
-            .and_then(|sender| sender.send(DeliveryChannel::Email, &recipient, subject, &body))
+        let status = match crate::services::notification_service::configured_sender_for(
+            &self.state.settings,
+        )
+        .and_then(|sender| sender.send(DeliveryChannel::Email, &recipient, subject, &body))
         {
             Ok(_) => "SENT",
             Err(e) => {
@@ -281,14 +283,17 @@ impl AccountActivationService {
             has_app: false,
         };
         let body = "Site yöneticiniz giriş e-posta adresinizin değiştirilmesini istedi. Değişiklik, yeni adres onaylandığında geçerli olur. Bu isteği siz yapmadıysanız site yönetiminize başvurun.";
-        if let Err(e) = configured_sender().and_then(|sender| {
-            sender.send(
-                DeliveryChannel::Email,
-                &recipient,
-                "SitePulse e-posta değişikliği isteği",
-                body,
-            )
-        }) {
+        if let Err(e) =
+            crate::services::notification_service::configured_sender_for(&self.state.settings)
+                .and_then(|sender| {
+                    sender.send(
+                        DeliveryChannel::Email,
+                        &recipient,
+                        "SitePulse e-posta değişikliği isteği",
+                        body,
+                    )
+                })
+        {
             tracing::warn!(recipient = %reference, error = %e, "Email change notice could not be delivered");
         }
     }

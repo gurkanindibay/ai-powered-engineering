@@ -98,9 +98,17 @@ fn route_inventory_and_permission_matrix_are_explicit() {
     ] {
         assert!(!admin.contains(&p));
     }
-    assert!(Role::parse("SUPER_ADMIN").is_err());
-    assert!(SiteId::parse("unit-5").is_err());
-    assert!(UnitId::parse("site-5").is_err());
+    assert!(Role::parse("SUPER_ADMIN")
+        .unwrap_err()
+        .contains("Unknown role"));
+    assert!(matches!(
+        SiteId::parse("unit-5"),
+        Err(sitepulse_backend::authorization::SecurityError::BadRequest)
+    ));
+    assert!(matches!(
+        UnitId::parse("site-5"),
+        Err(sitepulse_backend::authorization::SecurityError::BadRequest)
+    ));
     assert!(!auth::same_id("site-5", "unit-5"));
 }
 #[tokio::test]

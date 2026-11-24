@@ -44,9 +44,9 @@ pub fn route_policy(method: &str, path: &str) -> Option<RoutePolicy> {
 macro_rules! routes {
     ($( $method:ident $path:literal => $handler:path, $policy:expr; )*) => {
         pub const ROUTES:&[RouteSpec]=&[$(RouteSpec{method:stringify!($method),path:$path,policy:$policy}),*];
-        fn registered_routes()->Router<AppState>{
+        fn registered_routes(dev_routes: bool)->Router<AppState>{
             let mut app=Router::new();
-            $(if !matches!($policy,Development)||dev_routes_enabled(){app=app.route($path,$method($handler));})*
+            $(if !matches!($policy,Development)||dev_routes{app=app.route($path,$method($handler));})*
             app
         }
     }
@@ -347,7 +347,7 @@ routes! {
 }
 pub fn build_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
-        .allow_origin(cors_origins())
+        .allow_origin(cors_origins(&state.settings))
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -365,7 +365,7 @@ pub fn build_router(state: AppState) -> Router {
             HeaderName::from_static("x-request-id"),
         ])
         .expose_headers([HeaderName::from_static("x-request-id")]);
-    let routes = registered_routes();
+    let routes = registered_routes(state.settings.dev_routes_enabled);
     #[cfg(feature = "e2e")]
     let routes = if state.e2e_clock.is_some() {
         routes.route("/__e2e/clock", post(crate::e2e_clock::control))
@@ -382,7 +382,10 @@ pub fn build_router(state: AppState) -> Router {
             audit::security_boundary,
         ))
         .layer(cors)
-        .layer(middleware::from_fn(security_headers))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            security_headers,
+        ))
         .layer(middleware::from_fn(audit::correlate))
         .layer(tower_http::timeout::TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
@@ -407,6 +410,7 @@ fn max_concurrent_requests() -> usize {
 
 /// Adds the standard hardening headers to every response.
 async fn security_headers(
+    axum::extract::State(state): axum::extract::State<AppState>,
     req: axum::extract::Request,
     next: middleware::Next,
 ) -> axum::response::Response {
@@ -425,7 +429,7 @@ async fn security_headers(
         header::REFERRER_POLICY,
         HeaderValue::from_static("no-referrer"),
     );
-    if state::AppStateInner::is_production() {
+    if state.settings.production {
         h.insert(
             header::STRICT_TRANSPORT_SECURITY,
             HeaderValue::from_static("max-age=31536000; includeSubDomains"),
@@ -459,14 +463,9 @@ pub fn dev_routes_enabled() -> bool {
 }
 /// Origins allowed by CORS: `SITEPULSE_CORS_ORIGINS` (comma separated), plus
 /// localhost on any port outside production for local Flutter web development.
-fn cors_origins() -> AllowOrigin {
-    let configured: Vec<String> = std::env::var("SITEPULSE_CORS_ORIGINS")
-        .unwrap_or_default()
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    let allow_localhost = !state::AppStateInner::is_production();
+fn cors_origins(settings: &state::AppSettings) -> AllowOrigin {
+    let configured = settings.cors_origins.clone();
+    let allow_localhost = !settings.production;
     AllowOrigin::predicate(move |origin: &HeaderValue, _| {
         let Ok(o) = origin.to_str() else { return false };
         if configured.iter().any(|c| c == o) {

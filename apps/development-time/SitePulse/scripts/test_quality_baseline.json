@@ -1,13 +1,13 @@
 {
   "counts": {
-    "any-error-is-err-checks": 61,
-    "environment-mutations": 25,
+    "any-error-is-err-checks": 40,
+    "environment-mutations": 12,
     "fixed-sleep-calls": 29,
     "scenario-over-cap-tests": 8,
     "unwrap-only-tests": 3,
     "utc-now-backend-test-reads": 84,
     "wait-only-gui-tests": 3,
-    "weak-only-tests": 9
+    "weak-only-tests": 6
   },
   "over_limit_tests": {
     "apps/development-time/SitePulse/backend/tests/db_advance_exit_settlements_tests.rs::exit_settlement_payout_transfer_and_stale_balance_are_atomic": 4,

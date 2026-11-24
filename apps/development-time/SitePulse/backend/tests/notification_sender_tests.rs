@@ -82,8 +82,10 @@ fn resident() -> Recipient {
 
 #[test]
 fn production_refuses_a_plain_http_gateway_and_never_prints_credentials() {
-    assert!(WebhookSender::new("http://gw.example.test", None, true).is_err());
-    assert!(WebhookSender::new("", None, false).is_err());
+    let http_err = WebhookSender::new("http://gw.example.test", None, true).unwrap_err();
+    assert!(http_err.to_string().contains("https URL"));
+    let empty_err = WebhookSender::new("", None, false).unwrap_err();
+    assert!(empty_err.to_string().contains("https URL"));
     let sender = WebhookSender::new(
         "https://gw.example.test/k?key=SECRET",
         Some(TOKEN.into()),
@@ -98,15 +100,17 @@ fn production_refuses_a_plain_http_gateway_and_never_prints_credentials() {
 // covers: SC-02-04-02
 async fn when_a_reminder_is_delivered_then_the_gateway_receives_it_once_and_failures_are_recorded()
 {
-    let state = AppState::new_with_test_fixtures();
-    let service = NotificationService::new(&state);
-    std::env::set_var("SITEPULSE_NOTIFICATION_SENDER", "WEBHOOK");
-    std::env::set_var("SITEPULSE_NOTIFICATION_WEBHOOK_TOKEN", TOKEN);
+    let mut state = AppState::new_with_test_fixtures();
+    state.settings.notification_sender = "WEBHOOK".into();
+    state.settings.notification_webhook_token = Some(TOKEN.into());
 
     // Delivered: bearer token and payload reach the gateway, provider id is kept.
     let (url, handle) = gateway("200 OK", r#"{"id":"sms-123"}"#).await;
-    std::env::set_var("SITEPULSE_NOTIFICATION_WEBHOOK_URL", &url);
-    let sent = service.deliver(message("k-1"), &resident()).await.unwrap();
+    state.settings.notification_webhook_url = Some(url.clone());
+    let sent = NotificationService::new(&state)
+        .deliver(message("k-1"), &resident())
+        .await
+        .unwrap();
     assert_eq!(sent.status, NOTIFY_SENT);
     assert_eq!(sent.provider_ref.as_deref(), Some("sms-123"));
     let request = handle.await.unwrap();
@@ -114,24 +118,30 @@ async fn when_a_reminder_is_delivered_then_the_gateway_receives_it_once_and_fail
     assert!(request.contains("\"channel\":\"SMS\"") && request.contains("+90 555 000 00 00"));
 
     // Dedupe: the same key never reaches the gateway again (no listener is up).
-    let again = service.deliver(message("k-1"), &resident()).await.unwrap();
+    let again = NotificationService::new(&state)
+        .deliver(message("k-1"), &resident())
+        .await
+        .unwrap();
     assert_eq!(again.id, sent.id);
 
     // A gateway error is a FAILED row that leaks neither URL nor token.
     let (url, handle) = gateway("503 Service Unavailable", "{}").await;
-    std::env::set_var("SITEPULSE_NOTIFICATION_WEBHOOK_URL", &url);
-    let failed = service.deliver(message("k-2"), &resident()).await.unwrap();
+    state.settings.notification_webhook_url = Some(url.clone());
+    let failed = NotificationService::new(&state)
+        .deliver(message("k-2"), &resident())
+        .await
+        .unwrap();
     handle.await.unwrap();
     assert_eq!(failed.status, NOTIFY_FAILED);
     let reason = failed.block_reason.unwrap();
     assert!(reason.contains("503") && !reason.contains(&url) && !reason.contains(TOKEN));
 
     // An unreachable gateway is also recorded as FAILED.
-    std::env::set_var(
-        "SITEPULSE_NOTIFICATION_WEBHOOK_URL",
-        "http://127.0.0.1:1/send",
-    );
-    let down = service.deliver(message("k-3"), &resident()).await.unwrap();
+    state.settings.notification_webhook_url = Some("http://127.0.0.1:1/send".into());
+    let down = NotificationService::new(&state)
+        .deliver(message("k-3"), &resident())
+        .await
+        .unwrap();
     assert_eq!(down.status, NOTIFY_FAILED);
     assert!(!down.block_reason.unwrap().contains("127.0.0.1"));
 }

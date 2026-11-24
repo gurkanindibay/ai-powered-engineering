@@ -313,8 +313,8 @@ async fn profile_comes_from_the_token_not_the_query() {
 
 #[tokio::test]
 async fn system_routes_are_not_routed_unless_explicitly_enabled() {
-    let state = AppState::new_with_test_fixtures();
-    std::env::remove_var("SITEPULSE_ENABLE_DEV_ROUTES");
+    let mut state = AppState::new_with_test_fixtures();
+    state.settings.dev_routes_enabled = false;
     let admin = support::token(&state, "usr-test", Role::SaasAdmin, "", None).await;
     let (status, _) = call(
         build_router(state.clone()),
@@ -499,4 +499,194 @@ async fn profile_reports_role_unit_and_permissions_of_the_signed_in_owner() {
     assert_eq!(profile["unit_id"], "d-14");
     let permissions = profile["permissions"].as_array().unwrap();
     assert!(permissions.iter().any(|p| p == "UNIT_INVITE_CO_RESIDENT"));
+}
+
+/// Security regression S3: production mode is the default when APP_ENV is unset
+/// or unrecognised, startup validation rejects missing/unknown values, and
+/// development routes stay unrouted in production.
+#[tokio::test]
+async fn s3_production_mode_fails_closed_without_app_env_and_disables_dev_routes() {
+    use sitepulse_backend::state::AppStateInner;
+
+    assert!(AppStateInner::is_production_from(None, false));
+    assert!(AppStateInner::is_production_from(Some("staging"), false));
+    assert!(AppStateInner::is_production_from(Some("staging"), true));
+    assert!(!AppStateInner::is_production_from(
+        Some("development"),
+        false
+    ));
+    assert!(AppStateInner::is_production_from(Some("production"), false));
+
+    let unset_err = AppStateInner::validate_mode_from(None, false).unwrap_err();
+    assert!(unset_err.contains("APP_ENV is not set"), "got: {unset_err}");
+    let unknown_err = AppStateInner::validate_mode_from(Some("staging"), false).unwrap_err();
+    assert!(
+        unknown_err.contains("APP_ENV must be"),
+        "got: {unknown_err}"
+    );
+    assert_eq!(
+        AppStateInner::validate_mode_from(Some("development"), false),
+        Ok(())
+    );
+    assert_eq!(
+        AppStateInner::validate_mode_from(Some("production"), false),
+        Ok(())
+    );
+
+    let mut state = AppState::new_with_test_fixtures();
+    state.settings.production = true;
+    state.settings.dev_routes_enabled = false;
+    let admin = support::token(&state, "usr-test", Role::SaasAdmin, "", None).await;
+    let (status, _) = call(
+        build_router(state),
+        "POST",
+        "/api/v1/system/wipe-all-data",
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// Security regression S4: login throttling enforces per-client and
+/// per-client-account limits without locking out other clients.
+#[tokio::test]
+async fn s4_login_throttling_enforces_per_client_and_per_account_lockout() {
+    use axum::extract::ConnectInfo;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    async fn post_login(app: Router, ip: Ipv4Addr, email: &str) -> (StatusCode, String) {
+        let credential = format!("invalid-{}", uuid::Uuid::new_v4());
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/auth/login")
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({ "email": email, "password": credential }).to_string(),
+            ))
+            .unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::new(IpAddr::V4(ip), 12345)));
+        let resp = app.oneshot(req).await.unwrap();
+        let status = resp.status();
+        let bytes = to_bytes(resp.into_body(), 1024 * 1024).await.unwrap();
+        (status, String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    let state = AppState::new_with_test_fixtures();
+    let app = build_router(state);
+    let client_a = Ipv4Addr::new(203, 0, 113, 10);
+    let client_b = Ipv4Addr::new(198, 51, 100, 20);
+    let client_c = Ipv4Addr::new(203, 0, 113, 30);
+
+    // 10 attempts from client A against one account succeed in reaching auth (401);
+    // the 11th is throttled (429).
+    for _ in 0..10 {
+        let (status, _) = post_login(app.clone(), client_a, "victim@begonya.com").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+    let (status, body) = post_login(app.clone(), client_a, "victim@begonya.com").await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "body: {body}");
+
+    // Another client (client B) is not locked out for the same account.
+    let (status, _) = post_login(app.clone(), client_b, "victim@begonya.com").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    // Per-client limit across distinct emails: 120 requests allowed, 121st blocked.
+    for i in 0..120 {
+        let email = format!("probe-{i}@example.com");
+        let (status, _) = post_login(app.clone(), client_c, &email).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "failed on attempt {i}");
+    }
+    let (status, body) = post_login(app, client_c, "probe-120@example.com").await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "body: {body}");
+}
+
+/// Security regression S7: responses carry hardening headers and API docs
+/// endpoints return 404 in production unless explicitly enabled.
+#[tokio::test]
+async fn s7_security_headers_and_no_public_api_docs_in_production() {
+    let mut prod_state = AppState::new_with_test_fixtures();
+    prod_state.settings.production = true;
+    prod_state.settings.public_api_docs_enabled = false;
+    let prod_app = build_router(prod_state);
+
+    let health_resp = prod_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(health_resp.status(), StatusCode::OK);
+    let headers = health_resp.headers();
+    assert_eq!(headers.get("x-content-type-options").unwrap(), "nosniff");
+    assert_eq!(headers.get("x-frame-options").unwrap(), "DENY");
+    assert_eq!(headers.get("referrer-policy").unwrap(), "no-referrer");
+    assert_eq!(
+        headers.get("strict-transport-security").unwrap(),
+        "max-age=31536000; includeSubDomains"
+    );
+    assert_eq!(
+        headers.get("content-security-policy").unwrap(),
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+    );
+    assert_eq!(headers.get("cache-control").unwrap(), "no-store");
+
+    for path in [
+        "/api-docs/openapi.json",
+        "/api/v1/openapi.json",
+        "/openapi.json",
+        "/swagger-ui",
+        "/docs",
+        "/scalar",
+    ] {
+        let resp = prod_app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::NOT_FOUND,
+            "{path} must return 404 in production"
+        );
+    }
+
+    let mut dev_state = AppState::new_with_test_fixtures();
+    dev_state.settings.production = false;
+    dev_state.settings.public_api_docs_enabled = true;
+    let dev_app = build_router(dev_state);
+    let docs_resp = dev_app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/swagger-ui")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(docs_resp.status(), StatusCode::OK);
+    assert!(docs_resp
+        .headers()
+        .get("strict-transport-security")
+        .is_none());
+    let csp = docs_resp
+        .headers()
+        .get("content-security-policy")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(csp.contains("https://cdn.jsdelivr.net"), "got: {csp}");
 }
