@@ -6,7 +6,7 @@
 
 This is SitePulse's single test strategy and its current-state report. It replaces 15 separate testing documents (see Governance). The strategy sections come first; the assessment that justifies them follows.
 
-The suite is broad and well traced, but "traced" is not the same as "verified". 1,705 tests across Rust, Flutter, Python harness and browser E2E back 466 Gherkin scenarios, and the repo's own `feature_traceability.py check` passes. Following each link to its test and to how that test runs in CI shows that **409 scenarios (88%) are verified by a precise, running, asserting test**. The other 57 are not:
+The suite is broad and well traced, but "traced" is not the same as "verified". As assessed at `2f16868` (2026-11-23), 1,705 tests across Rust, Flutter, Python harness and browser E2E back 466 Gherkin scenarios, and the repo's own `feature_traceability.py check` passes. Following each link to its test and to how that test runs in CI shows that **409 scenarios (88%) are verified by a precise, running, asserting test**. The other 57 are not:
 
 - **30 pending** with no automation, including 2 `@smoke` and 13 `@core` (22 of them in EPIC-13 journeys). Seven are blocked by product gaps, not missing tests.
 - **16 mis-covered**: linked only to tests that never run or always skip in CI (4), only to a whole-suite wrapper (6), only to a file-level comment (2), only to a script (1), or only to a GUI check that waits but asserts nothing (3).
@@ -34,22 +34,26 @@ The suite is broad and well traced, but "traced" is not the same as "verified". 
 
 ## Governance: one strategy, fifteen documents retired or narrowed
 
-This document is the single test strategy for SitePulse. It absorbs 15 testing documents (about 2,700 lines) that had drifted apart. Each one is merged here, kept as a narrow reference that this strategy points to, or retired to git history. A change to how SitePulse is tested starts with an edit to this document.
+This document is the single test strategy for SitePulse. It absorbs 15 testing documents (about 2,700 lines) that had drifted apart. Each one is merged here, kept as a narrow reference that this strategy points to, or marked retired (its text stays behind a banner until roadmap phase 1 removes it). A change to how SitePulse is tested starts with an edit to this document.
 
 | Document | What it held | Disposition |
 | --- | --- | --- |
 | `docs/testing/TEST_PLAN_AND_EXECUTION_MATRIX.md` | Five principles, 6 functional areas, 6 execution cases | **Merged** (Principles, Lanes). The area map stays executable in `run_tests.py --area` |
-| `docs/testing/GUI_TEST_PLAN.md` | GUI-xx-nn catalogue, API data builders, phase logs from 2026-11-07 to 11-11 | **Narrowed** to the GUI-id ↔ SC-id map and data builders; phase logs and xfail statuses removed |
-| `docs/testing/GUI_AUTOMATION_PLAN.md` | Plan to build the browser suite (phases 0–4 done) | **Retired**: complete |
+| `docs/testing/GUI_TEST_PLAN.md` | GUI-xx-nn catalogue, API data builders, phase logs from 2026-11-07 to 11-11 | **Narrowed** to the GUI-id ↔ SC-id map and data builders; phase logs and xfail statuses marked historical by the banner; removed in roadmap item 4 |
+| `docs/testing/GUI_AUTOMATION_PLAN.md` | Plan to build the browser suite (phases 0–4 done) | **Retired** (banner now; removed in roadmap phase 1): complete |
 | `docs/testing/GUI_COVERAGE_GAPS.md` | About 20 UI features with no scenario; missing test kinds | **Merged** into the roadmap backlog |
 | `docs/testing/journey-plan/` (3 files) | Fixtures F0–F7, ledger invariants, isolation and teardown contract | **Kept** as the test-data reference (Test data section) |
 | `docs/testing/TEST_PLAN_EPIC_10_CAPITAL_EXPENDITURE.md` | EPIC-10 RTM, boundary partitions, teardown | **Narrowed** to its boundary data dictionary; the RTM is superseded by `.specify/features` traceability |
-| `docs/testing/test-coverage-assessment-2026-11-10.md` | Point-in-time assessment | **Retired**: superseded by the assessment here |
-| `docs/testing/mutation-testing-analysis.md`, `mutation-testing-ci-integration.md` | First mutation run; two-tier CI design | **Retired** to history; the design is adopted in Quality gates |
+| `docs/testing/test-coverage-assessment-2026-11-10.md` | Point-in-time assessment | **Retired** (banner now; removed in roadmap phase 1): superseded by the assessment here |
+| `docs/testing/mutation-testing-analysis.md`, `mutation-testing-ci-integration.md` | First mutation run; two-tier CI design | **Retired** (banner now; removed in roadmap phase 1); the design is adopted in Quality gates |
 | `docs/testing/mutation-coverage-improvement.md` | Live mutation score and 8 catalogue candidates | **Kept** as the mutation backlog |
 | `docs/testing/cucumber-serenity-migration-analysis.md` | Pilot arms A and B, results | **Decided** (Reporting): pytest-bdd stays canonical; arm B archived |
 | `docs/testing/test-reporting-pages-analysis.md` | One Pages dashboard for all suites | **Merged** (Reporting) |
 | `docs/engineering-process/test-time-analysis.md` | Measured CI time, steps A–N | **Merged**: done steps recorded, open steps in the roadmap |
+
+Until roadmap phase 1 removes retired content, every absorbed document keeps its text behind a banner that states its disposition; nothing has been deleted yet.
+
+Editing this strategy is operator or interactive work. Durable-harness workers read it through AGENTS.md but cannot write it (it is a protected path, like the gate catalogue); a worker whose change needs a strategy update reports that as a residual risk.
 
 Still authoritative and aligned to this strategy: `AGENTS.md` rules 3, 12 and 13, `.agents/rules/test-execution-records.md`, `.specify/agents/tester-agent.md` and `.specify/constitution.md`. The `docs/quality/` reports (security, code and database flaws, throughput, observability) are inputs: every open finding there gets a regression test id, and the observability SLOs become performance-test thresholds.
 
