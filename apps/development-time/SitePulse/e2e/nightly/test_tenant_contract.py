@@ -322,6 +322,25 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
         api, f"/api/v1/site-admin/bank-account/{ids['site']}", second, first,
         bank_account, success={200},
     )
+    assert_write_is_site_scoped(
+        api, "/api/v1/bank/statements/parse", second, first,
+        {
+            "site_id": ids["site"],
+            "content": "2026-11-01;Nightly tenant-scope transfer;1,00;TXN-SCOPE-001",
+        }, success={200},
+    )
+    assert_write_is_site_scoped(
+        api, "/api/v1/payments/record", second, first,
+        {
+            "unit_id": str(ids["unit"]), "amount": "1.00",
+            "payment_method": "MANUAL_CASH", "homeowner_name": "Nightly Owner",
+        }, success={201},
+    )
+    assert_write_is_site_scoped(
+        api, "/api/v1/payments/reverse", second, first,
+        {"receipt": str(ids["receipt"]), "reason": "Nightly cross-site rejection control"},
+        success={201},
+    )
     api.create_units(second, "B", unit_number=1)
     api.create_units(second, "B", unit_number=2)
     api.register_home_owner(second, "B", 1, "Nightly Scoped Owner", "nightly-scoped-owner@example.test")

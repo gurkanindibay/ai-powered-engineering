@@ -547,7 +547,9 @@
       "applicability": "tenant_reference",
       "reason": "ParseBankStatementRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::parse_bank_statement (Require(ReconciliationConfirm))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1369,7 +1371,9 @@
       "applicability": "tenant_reference",
       "reason": "RecordHomeownerPaymentRequest supplies a unit ID.",
       "evidence": "backend/src/app.rs: handlers::record_homeowner_payment (Require(PaymentRecordManual))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
@@ -1387,7 +1391,9 @@
       "applicability": "tenant_reference",
       "reason": "ReversePaymentRequest supplies a receipt and can supply a site ID.",
       "evidence": "backend/src/app.rs: handlers::reverse_payment (Require(PaymentReverse))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",

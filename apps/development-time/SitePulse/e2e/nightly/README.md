@@ -29,11 +29,11 @@ in the matrix.
 
 The static tenant operation inventory classifies all 275 generated OpenAPI
 operations against the Rust route table. The nightly runtime contract checks
-70 tenant-reference operations with same-site success controls before
+73 tenant-reference operations with same-site success controls before
 cross-site denial, and 36 implicit-scope reads with distinct second-site data
 visible only to that site's manager. It also runs the multi-resource scenarios
 in `tests/test_journey_tenant_isolation.py`. The inventory maps runtime test
-evidence for 117 of 208 tenant-applicable operations; the others remain visible
+evidence for 120 of 208 tenant-applicable operations; the others remain visible
 as uncovered rows. Classification completeness does not mean an operation has
 a runtime fixture.
 
