@@ -1,10 +1,12 @@
 """EPIC-06 Identity & authentication (GUI_TEST_PLAN.md §3)."""
+from decimal import Decimal
 import pytest
 from playwright.sync_api import expect
 
 from pages import ManagerCockpit, ResidentHome, SaasAdmin, Shell
 from support.api import ApiError
-from support.flutter import by_id, input_value, nav_tab_count
+from support.flutter import by_id, input_value, nav_tab_count, text_of
+from support.money import parse_try
 
 
 @pytest.mark.smoke
@@ -15,6 +17,9 @@ from support.flutter import by_id, input_value, nav_tab_count
 def test_manager_login_reaches_cockpit(login_as, page):
     login_as("manager")
     expect(by_id(page, "btn_open_unified_dues_center")).to_be_visible(timeout=20_000)
+    assert nav_tab_count(page) == 3
+    assert by_id(page, "btn_cockpit_manage_residents").is_visible()
+    assert parse_try(text_of(by_id(page, "cockpit_expected_amount"))) >= Decimal("0")
 
 
 @pytest.mark.smoke
@@ -24,6 +29,9 @@ def test_manager_login_reaches_cockpit(login_as, page):
 def test_homeowner_login_reaches_dashboard(login_as, page):
     login_as("homeowner")
     expect(by_id(page, "hero_balance_amount")).to_be_visible(timeout=20_000)
+    assert nav_tab_count(page) == 2
+    assert by_id(page, "btn_open_unified_dues_center").count() == 0
+    assert ResidentHome(page).balance() >= Decimal("0")
 
 
 @pytest.mark.smoke

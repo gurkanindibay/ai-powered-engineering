@@ -30,11 +30,84 @@ pub fn bootstrap_admin_password() -> String {
         .clone()
 }
 
+/// Runtime configuration injected into [`AppState`], defaulting to environment
+/// variables via [`AppSettings::from_env`] and overridable in tests without
+/// mutating process-wide environment variables.
+#[derive(Debug, Clone)]
+pub struct AppSettings {
+    pub production: bool,
+    pub dev_routes_enabled: bool,
+    pub public_api_docs_enabled: bool,
+    pub bank_webhook_secret: Option<String>,
+    pub allow_mock_google_tokens: bool,
+    pub google_client_id: Option<String>,
+    pub notification_sender: String,
+    pub notification_webhook_url: Option<String>,
+    pub notification_webhook_token: Option<String>,
+    pub cors_origins: Vec<String>,
+}
+
+impl AppSettings {
+    pub fn from_env() -> Self {
+        let production = AppStateInner::is_production();
+        let dev_routes_enabled = !production
+            && std::env::var("SITEPULSE_ENABLE_DEV_ROUTES")
+                .map(|v| v == "true")
+                .unwrap_or(false);
+        let public_api_docs_enabled =
+            !production || std::env::var("SITEPULSE_ENABLE_API_DOCS").is_ok_and(|v| v == "true");
+        let bank_webhook_secret = std::env::var("SITEPULSE_BANK_WEBHOOK_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let allow_mock_google_tokens = !production
+            && std::env::var("SITEPULSE_ALLOW_MOCK_GOOGLE_TOKENS")
+                .map(|v| v == "true")
+                .unwrap_or(false);
+        let google_client_id = std::env::var("GOOGLE_CLIENT_ID")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let notification_sender =
+            std::env::var("SITEPULSE_NOTIFICATION_SENDER").unwrap_or_else(|_| "LOG".into());
+        let notification_webhook_url = std::env::var("SITEPULSE_NOTIFICATION_WEBHOOK_URL")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let notification_webhook_token = std::env::var("SITEPULSE_NOTIFICATION_WEBHOOK_TOKEN")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let cors_origins = std::env::var("SITEPULSE_CORS_ORIGINS")
+            .unwrap_or_default()
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        Self {
+            production,
+            dev_routes_enabled,
+            public_api_docs_enabled,
+            bank_webhook_secret,
+            allow_mock_google_tokens,
+            google_client_id,
+            notification_sender,
+            notification_webhook_url,
+            notification_webhook_token,
+            cors_origins,
+        }
+    }
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self::from_env()
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub security: Arc<tokio::sync::Mutex<crate::security::MemorySecurity>>,
     pub inner: Arc<RwLock<AppStateInner>>,
     pub pool: Option<deadpool_postgres::Pool>,
+    pub clock: Arc<dyn crate::domain::clock::Clock>,
+    pub settings: AppSettings,
     #[cfg(feature = "e2e")]
     pub e2e_clock: Option<Arc<crate::e2e_clock::E2eClock>>,
 }
@@ -165,13 +238,11 @@ impl AppStateInner {
         }
     }
 
-    /// Declared runtime mode: `Some(Some(true))` production, `Some(Some(false))`
-    /// development, `Some(None)` an unrecognised value, `None` not declared.
-    fn declared_production_mode() -> Option<Option<bool>> {
-        let raw = std::env::var("APP_ENV")
-            .or_else(|_| std::env::var("ENVIRONMENT"))
-            .ok();
-        match raw.as_deref().map(str::to_ascii_lowercase).as_deref() {
+    /// Parses a declared `APP_ENV` / `ENVIRONMENT` value: `Some(Some(true))`
+    /// production, `Some(Some(false))` development, `Some(None)` unrecognised,
+    /// `None` not declared.
+    pub fn parse_production_mode(raw: Option<&str>) -> Option<Option<bool>> {
+        match raw.map(str::to_ascii_lowercase).as_deref() {
             Some("production" | "prod" | "live") => Some(Some(true)),
             Some("development" | "dev" | "local" | "test") => Some(Some(false)),
             Some(_) => Some(None),
@@ -179,14 +250,49 @@ impl AppStateInner {
         }
     }
 
+    /// Declared runtime mode from process env.
+    fn declared_production_mode() -> Option<Option<bool>> {
+        let raw = std::env::var("APP_ENV")
+            .or_else(|_| std::env::var("ENVIRONMENT"))
+            .ok();
+        Self::parse_production_mode(raw.as_deref())
+    }
+
+    /// Fails closed: production unless development was explicitly requested.
+    /// Test binaries that run against seeded fixtures count as development
+    /// when no mode is declared.
+    pub fn is_production_from(raw: Option<&str>, is_test_ctx: bool) -> bool {
+        match Self::parse_production_mode(raw) {
+            Some(Some(production)) => production,
+            Some(None) => true,
+            None => !is_test_ctx,
+        }
+    }
+
     /// Fails closed: production unless development was explicitly requested.
     /// Test binaries that run against seeded fixtures count as development
     /// when no mode is declared.
     pub fn is_production() -> bool {
-        match Self::declared_production_mode() {
-            Some(Some(production)) => production,
-            Some(None) => true,
-            None => !(cfg!(test) || Self::is_running_fixture_test_binary()),
+        let raw = std::env::var("APP_ENV")
+            .or_else(|_| std::env::var("ENVIRONMENT"))
+            .ok();
+        Self::is_production_from(
+            raw.as_deref(),
+            cfg!(test) || Self::is_running_fixture_test_binary(),
+        )
+    }
+
+    /// Validates a declared runtime mode without reading process env.
+    ///
+    /// # Errors
+    /// Returns a message when `raw` is `None` (outside tests) or unknown.
+    pub fn validate_mode_from(raw: Option<&str>, is_test_ctx: bool) -> Result<(), String> {
+        match Self::parse_production_mode(raw) {
+            Some(None) => Err("APP_ENV must be 'development' or 'production'".to_string()),
+            None if !is_test_ctx => {
+                Err("APP_ENV is not set; set it to 'development' or 'production'".to_string())
+            }
+            _ => Ok(()),
         }
     }
 
@@ -843,15 +949,21 @@ impl AppState {
         self.pool.as_ref()
     }
 
-    #[allow(dead_code)]
-    pub fn new() -> Self {
+    fn from_parts(inner: AppStateInner, pool: Option<deadpool_postgres::Pool>) -> Self {
         Self {
             security: Arc::default(),
-            inner: Arc::new(RwLock::new(AppStateInner::new())),
-            pool: None,
+            inner: Arc::new(RwLock::new(inner)),
+            pool,
+            clock: Arc::new(crate::domain::clock::SystemClock),
+            settings: AppSettings::from_env(),
             #[cfg(feature = "e2e")]
             e2e_clock: None,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn new() -> Self {
+        Self::from_parts(AppStateInner::new(), None)
     }
 
     pub fn with_pool(pool: Option<deadpool_postgres::Pool>) -> Self {
@@ -864,16 +976,38 @@ impl AppState {
             inner.house_types.clear();
             inner.blocks.clear();
         }
-        Self {
-            security: Arc::default(),
-            inner: Arc::new(RwLock::new(inner)),
-            pool,
-            #[cfg(feature = "e2e")]
-            e2e_clock: crate::e2e_clock::validate_e2e_configuration()
+        #[cfg_attr(not(feature = "e2e"), allow(unused_mut))]
+        let mut state = Self::from_parts(inner, pool);
+        #[cfg(feature = "e2e")]
+        {
+            state.e2e_clock = crate::e2e_clock::validate_e2e_configuration()
                 .ok()
                 .filter(|enabled| *enabled)
-                .map(|_| Arc::new(crate::e2e_clock::E2eClock::new(Utc::now().date_naive()))),
+                .map(|_| Arc::new(crate::e2e_clock::E2eClock::new(Utc::now().date_naive())));
         }
+        state
+    }
+
+    /// Overrides the clock used by this state (used in tests for deterministic time).
+    pub fn with_clock(mut self, clock: Arc<dyn crate::domain::clock::Clock>) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    /// Overrides the runtime settings used by this state (used in tests without env mutation).
+    pub fn with_settings(mut self, settings: AppSettings) -> Self {
+        self.settings = settings;
+        self
+    }
+
+    /// Returns the current UTC instant from the injected clock.
+    pub fn now(&self) -> chrono::DateTime<Utc> {
+        self.clock.now()
+    }
+
+    /// Returns today's calendar date in `timezone` from the injected clock.
+    pub fn today_in(&self, timezone: &str) -> NaiveDate {
+        self.clock.today_in(timezone)
     }
 
     /// Creates an in-memory state with an enabled E2E clock for deterministic tests.
@@ -908,26 +1042,14 @@ impl AppState {
     pub fn new_empty() -> Self {
         let mut inner = AppStateInner::new();
         inner.clear_all_data();
-        Self {
-            security: Arc::default(),
-            inner: Arc::new(RwLock::new(inner)),
-            pool: None,
-            #[cfg(feature = "e2e")]
-            e2e_clock: None,
-        }
+        Self::from_parts(inner, None)
     }
 
     #[allow(dead_code)]
     pub fn new_with_test_fixtures() -> Self {
         let mut inner = AppStateInner::new();
         inner.seed_test_fixtures();
-        Self {
-            security: Arc::default(),
-            inner: Arc::new(RwLock::new(inner)),
-            pool: None,
-            #[cfg(feature = "e2e")]
-            e2e_clock: None,
-        }
+        Self::from_parts(inner, None)
     }
 }
 
