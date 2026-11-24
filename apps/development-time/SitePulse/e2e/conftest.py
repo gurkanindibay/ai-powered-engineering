@@ -90,7 +90,9 @@ def fresh_data(stack):
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args, browser_name):
-    args = {**browser_context_args, "viewport": {"width": 1280, "height": 900}, "locale": "tr-TR"}
+    mobile_width = os.environ.get("SITEPULSE_E2E_VIEWPORT_WIDTH")
+    viewport = {"width": int(mobile_width), "height": 812} if mobile_width else {"width": 1280, "height": 900}
+    args = {**browser_context_args, "viewport": viewport, "locale": "tr-TR"}
     if browser_name == "chromium":
         args["permissions"] = ["clipboard-read", "clipboard-write"]
     return args

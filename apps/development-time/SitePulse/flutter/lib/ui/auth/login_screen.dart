@@ -1675,13 +1675,16 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: Row(
                 children: [
-                  Radio<SiteAdminActivePath>(
-                    value: SiteAdminActivePath.managerCockpit,
-                    groupValue: _selectedAdminPath,
-                    activeColor: AppColors.accentCyan,
-                    onChanged: (val) {
-                      if (val != null) setState(() => _selectedAdminPath = val);
-                    },
+                  Semantics(
+                    label: 'Site Yönetim Paneli',
+                    child: Radio<SiteAdminActivePath>(
+                      value: SiteAdminActivePath.managerCockpit,
+                      groupValue: _selectedAdminPath,
+                      activeColor: AppColors.accentCyan,
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedAdminPath = val);
+                      },
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Expanded(
@@ -1733,13 +1736,16 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: Row(
                 children: [
-                  Radio<SiteAdminActivePath>(
-                    value: SiteAdminActivePath.myFlatOwner,
-                    groupValue: _selectedAdminPath,
-                    activeColor: AppColors.accentCyan,
-                    onChanged: (val) {
-                      if (val != null) setState(() => _selectedAdminPath = val);
-                    },
+                  Semantics(
+                    label: 'Kendi Dairem (Kat Maliki)',
+                    child: Radio<SiteAdminActivePath>(
+                      value: SiteAdminActivePath.myFlatOwner,
+                      groupValue: _selectedAdminPath,
+                      activeColor: AppColors.accentCyan,
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedAdminPath = val);
+                      },
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Expanded(

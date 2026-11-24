@@ -55,8 +55,8 @@ class E2EClock:
         """Set an exact instant (RFC 3339, e.g. `2026-11-30T20:30:00Z`), for boundaries inside a UTC day."""
         return self.api.call("POST", "/__e2e/clock", body={"action": "set_instant", "at": value})
 
-    def tick(self) -> dict:
-        return self.api.call("POST", "/__e2e/clock", body={"action": "tick"})
+    def tick(self, *, timeout: float = 30) -> dict:
+        return self.api.call("POST", "/__e2e/clock", body={"action": "tick"}, timeout=timeout)
 
     def clear(self) -> dict:
         """Return the backend process to the system clock."""
@@ -70,14 +70,15 @@ class Api:
         self.clock = E2EClock(self)
         self.network_events: list[dict[str, str | int]] = []
 
-    def call(self, method: str, path: str, token: str | None = None, body: object | None = None) -> object:
+    def call(self, method: str, path: str, token: str | None = None,
+             body: object | None = None, *, timeout: float = 30) -> object:
         data = json.dumps(body).encode() if body is not None else (b"{}" if method in ("POST", "PUT") else None)
         req = urllib.request.Request(self.base + path, data=data, method=method)
         req.add_header("Content-Type", "application/json")
         if token:
             req.add_header("Authorization", f"Bearer {token}")
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 raw = resp.read().decode()
                 self.network_events.append({"method": method, "route": path.split("?", 1)[0], "status": resp.status})
         except urllib.error.HTTPError as exc:

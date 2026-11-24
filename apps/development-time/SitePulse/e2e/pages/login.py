@@ -30,7 +30,9 @@ class LoginPage:
         tab, prefix = ROLES[role]
         # A tab tap right after the first frame is occasionally dropped; retry until the panel shows.
         for attempt in range(3):
-            by_id(self.page, f"login_tab_{tab}").click()
+            tab_control = by_id(self.page, f"login_tab_{tab}")
+            tab_control.scroll_into_view_if_needed()
+            tab_control.click()
             try:
                 by_id(self.page, f"login_{prefix}_email").wait_for(timeout=8_000)
                 break

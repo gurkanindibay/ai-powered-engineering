@@ -1,0 +1,146 @@
+name: SitePulse nightly quality
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/sitepulse-nightly.yml
+      - apps/development-time/SitePulse/e2e/nightly/**
+      - apps/development-time/SitePulse/e2e/conftest.py
+      - apps/development-time/SitePulse/e2e/support/api.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sitepulse-nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: apps/development-time/SitePulse
+
+env:
+  DB_HOST: 127.0.0.1
+  DB_PORT: "5432"
+  DB_USER: sitepulse_user
+  DB_PASS: ci-only-password
+  CARGO_TERM_COLOR: never
+
+jobs:
+  quality:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: firefox-smoke
+            browser: firefox
+            selection: tests/ --ignore=tests/test_linked_backend_suites.py -m smoke
+          - name: webkit-smoke
+            browser: webkit
+            selection: tests/ --ignore=tests/test_linked_backend_suites.py -m smoke
+          - name: mobile-smoke
+            browser: chromium
+            width: "375"
+            selection: tests/ --ignore=tests/test_linked_backend_suites.py -m smoke
+          - name: accessibility
+            browser: chromium
+            selection: nightly/test_accessibility.py
+          - name: performance
+            browser: chromium
+            selection: nightly/test_performance.py
+          - name: tenant-authorization
+            browser: chromium
+            selection: nightly/test_tenant_contract.py tests/test_journey_tenant_isolation.py
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sitepulse_user
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: sitepulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sitepulse_user -d sitepulse"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: apps/development-time/SitePulse/backend
+          key: nightly-e2e
+          cache-on-failure: true
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/development-time/SitePulse/flutter/build/web-e2e
+          key: e2e-web-${{ hashFiles('apps/development-time/SitePulse/flutter/pubspec.*', 'apps/development-time/SitePulse/flutter/lib/**', 'apps/development-time/SitePulse/flutter/web/**', 'apps/development-time/SitePulse/flutter/assets/**') }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        env:
+          PLAYWRIGHT_BROWSER: ${{ matrix.browser }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          python3 -m pip install -r e2e/requirements.txt
+          python3 -m playwright install --with-deps "$PLAYWRIGHT_BROWSER"
+      - name: Install axe-core
+        if: matrix.name == 'accessibility'
+        run: npm install --prefix "$RUNNER_TEMP/sitepulse-axe" --ignore-scripts --no-audit --no-fund axe-core@4.10.3
+      - name: Run nightly tests
+        working-directory: apps/development-time/SitePulse/e2e
+        env:
+          PLAYWRIGHT_BROWSER: ${{ matrix.browser }}
+          TEST_SELECTION: ${{ matrix.selection }}
+          SITEPULSE_E2E_VIEWPORT_WIDTH: ${{ matrix.width }}
+          SITEPULSE_AXE_JS: ${{ runner.temp }}/sitepulse-axe/node_modules/axe-core/axe.min.js
+        run: |
+          read -r -a selection <<< "$TEST_SELECTION"
+          python3 -m pytest "${selection[@]}" --browser "$PLAYWRIGHT_BROWSER" \
+            -o junit_family=xunit1 --junitxml=.artifacts/junit.xml \
+            --output=.artifacts/playwright --tracing=retain-on-failure --screenshot=only-on-failure
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: nightly-${{ matrix.name }}-attempt-${{ github.run_attempt }}
+          path: apps/development-time/SitePulse/e2e/.artifacts/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
+  notify:
+    name: Report nightly failures
+    needs: quality
+    if: always() && needs.quality.result == 'failure' && github.event_name == 'schedule' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the nightly failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="SitePulse nightly quality checks failed"
+          body="At least one SitePulse nightly check failed. See the jobs and available artifacts in $RUN_URL (attempt $GITHUB_RUN_ATTEMPT)."
+          issue=$(gh issue list --state open --search "in:title \"$title\"" --json number,title \
+            --jq 'map(select(.title == "SitePulse nightly quality checks failed")) | first | .number // empty')
+          if [[ -n "$issue" ]]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+        working-directory: ${{ runner.temp }}
