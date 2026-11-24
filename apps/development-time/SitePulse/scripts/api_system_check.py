@@ -65,6 +65,20 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
+
+
+def backend_target_dir(env: Optional[Dict[str, str]] = None) -> Path:
+    """Where Cargo writes backend build output.
+
+    Agents may point CARGO_TARGET_DIR at a pooled slot (scripts/cargo_target_pool.py), so the
+    binary is not always under backend/target. Cargo resolves a relative value against the
+    directory it runs in, which is BACKEND here.
+    """
+    env = os.environ if env is None else env
+    configured = env.get("CARGO_TARGET_DIR") or env.get("CARGO_BUILD_TARGET_DIR")
+    return BACKEND / configured if configured else BACKEND / "target"
+
+
 APP_RS = BACKEND / "src" / "app.rs"
 TEST_SEED = BACKEND / "db" / "seed" / "02-test-seed.sql"
 WEBHOOK_SECRET = "api-system-check-webhook-secret"
@@ -186,7 +200,7 @@ class Backend:
         return f"http://127.0.0.1:{self.port}"
 
     def binary(self) -> Path:
-        path = BACKEND / "target" / self.profile / "sitepulse-backend"
+        path = backend_target_dir() / self.profile / "sitepulse-backend"
         argv = ["cargo", "build", "--locked", "--bin", "sitepulse-backend"]
         if self.profile == "release":
             argv.append("--release")

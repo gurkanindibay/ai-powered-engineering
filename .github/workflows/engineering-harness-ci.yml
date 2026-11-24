@@ -12,6 +12,8 @@ on:
       - 'scripts/team_orchestrator.py'
       - 'scripts/issue_claim.py'
       - 'tests/issue_claim/**'
+      - 'scripts/cargo_target_pool.py'
+      - 'tests/cargo_target_pool/**'
       - 'scripts/review_bot.py'
       - 'tests/review_bot/**'
       - 'tests/engineering_harness/**'
@@ -28,6 +30,8 @@ on:
       - 'scripts/engineering_harness/**'
       - 'scripts/development_harness.py'
       - 'scripts/team_orchestrator.py'
+      - 'scripts/cargo_target_pool.py'
+      - 'tests/cargo_target_pool/**'
       - 'scripts/review_bot.py'
       - 'tests/review_bot/**'
       - 'tests/engineering_harness/**'
@@ -54,6 +58,8 @@ jobs:
         run: python3 scripts/development_harness.py --json evaluate --cases config/engineering-harness/routing-cases.json
       - name: Issue claim label tests
         run: python3 -m unittest discover -s tests/issue_claim -v
+      - name: Cargo target pool tests
+        run: python3 -m unittest discover -s tests/cargo_target_pool -v
       - name: Review bot tests
         run: python3 -m unittest discover -s tests/review_bot -v
       - name: Review queue and watcher tests
