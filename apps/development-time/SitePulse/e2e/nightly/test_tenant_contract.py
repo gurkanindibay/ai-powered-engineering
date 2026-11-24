@@ -148,6 +148,22 @@ def assert_write_is_site_scoped(
     assert foreign_status in {403, 404}, f"Foreign {method} {path} returned {foreign_status}"
 
 
+def test_tenant_inventory_matches_live_openapi(api, record_property):
+    """Keep the reviewed tenant operation inventory aligned with the running API."""
+    inventory = json.loads(Path(__file__).with_name("tenant_operation_inventory.json").read_text())
+    operations = api.call("GET", "/api/v1/openapi.json")["paths"]
+    for row in inventory["operations"]:
+        methods = operations.get(row["path"], {})
+        assert row["method"].lower() in methods, (
+            f"{row['method']} {row['path']} is missing from generated OpenAPI"
+        )
+    scoped = [row for row in inventory["operations"]
+              if row["applicability"] in {"tenant_reference", "implicit_tenant_scope"}]
+    covered = sum(bool(row["runtime_tests"]) for row in scoped)
+    record_property("tenant_applicable_operations", len(scoped))
+    record_property("tenant_operations_with_runtime_evidence", covered)
+
+
 @pytest.fixture
 def two_sites(api, actors):
     platform = api.login(**actors["saas"])
@@ -357,6 +373,19 @@ def test_tenant_resources_require_membership(api, two_sites, record_property):
             {"category": "CLEANING", "annual_amount": "1200.00", "allocation_key": "EQUAL"},
         ]},
         success={201},
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/operating-budgets/policy?{query_site}", second, first,
+        {"site_id": ids["site"], "require_operating_budget": True},
+        success={200}, method="PUT",
+    )
+    assert_write_is_site_scoped(
+        api, f"/api/v1/payments/debt-aging/snapshot?{query_site}", second, first,
+        {}, success={200},
+    )
+    assert_write_is_site_scoped(
+        api, "/api/v1/payments/match-all", second, first,
+        {"site_id": ids["site"]}, success={200},
     )
     assert_write_is_site_scoped(
         api, "/api/v1/capital-projects", second, first,

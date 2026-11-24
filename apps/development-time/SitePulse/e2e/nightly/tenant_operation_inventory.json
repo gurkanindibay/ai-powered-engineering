@@ -1151,7 +1151,9 @@
       "applicability": "tenant_reference",
       "reason": "SiteQuery accepts a site selector.",
       "evidence": "backend/src/app.rs: handlers::set_budget_policy (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "PUT",
@@ -1305,7 +1307,9 @@
       "applicability": "tenant_reference",
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::snapshot_debt_aging (Require(LedgerManageAll))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
@@ -1331,7 +1335,9 @@
       "applicability": "tenant_reference",
       "reason": "MatchAllPaymentsRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::match_all_homeowner_payments (Require(PaymentRecordManual))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "POST",
