@@ -1,5 +1,7 @@
 # SitePulse mutation coverage and improvement plan
 
+> **Kept as reference by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** This is the live mutation backlog under the strategy.
+
 **Assessment date** 23 November 2026. **Code inspected** `b47d5802`. **Mutants measured** at `777f5eeb` in the [23 November nightly run](https://github.com/gurkanindibay/ai-powered-engineering/actions/runs/45156174074). The catalogue and mutation workflow were identical at those revisions. The test and product code differed.
 
 ## Measured coverage

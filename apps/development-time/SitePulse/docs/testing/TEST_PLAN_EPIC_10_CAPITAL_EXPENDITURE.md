@@ -1,4 +1,6 @@
 # SitePulse Master Test Plan & Requirements Traceability Matrix (RTM)
+
+> **Narrowed by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** Keep using its boundary data dictionary (§3). The RTM is superseded by `.specify/features` traceability.
 ## Capital Expenditure & Fixture Dues Management (EPIC-10)
 
 > **Document ID:** SITEPULSE-TP-EPIC-10  

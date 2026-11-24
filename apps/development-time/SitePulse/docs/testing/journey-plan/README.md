@@ -1,5 +1,7 @@
 # Site Admin interconnected journeys: test plan
 
+> **Kept as reference by the [SitePulse Test Strategy](../TEST_STRATEGY.md) (2026-11-24).** This is the test-data reference (fixtures F0–F7, ledger invariants, isolation) under the strategy.
+
 This document remains the reference for journey fixtures and invariants. The accepted scenarios
 for files 05, 09, and 11 live under `.specify/features/EPIC-13/`; their `@pending` and
 `@linked` tags record current automation status. Complements `GUI_TEST_PLAN.md` §12 (per-role

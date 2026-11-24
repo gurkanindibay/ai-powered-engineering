@@ -1,5 +1,7 @@
 # SitePulse GUI Automation: Plan to Build the Test Plan and Browser Test Suite
 
+> **Retired by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** The plan is complete. Open follow-ups are in the strategy roadmap.
+
 Status: v2. Phases 0–4 are done (all 83 scenarios automated; X-03 zero-data guidance is covered by GUI-03-03). Open: CI runner for the gui-e2e gate. Facts were checked against the code on 2026-11-07.
 
 **Goal:** a written GUI test plan, plus an automated suite that opens a real browser, logs in as each role and runs every user-facing scenario in the epics against the real backend and database.

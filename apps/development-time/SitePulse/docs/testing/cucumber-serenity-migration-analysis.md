@@ -1,5 +1,7 @@
 # SitePulse Cucumber and Serenity BDD migration analysis
 
+> **Decided by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** pytest-bdd stays the only browser runner; arm B is archived (strategy, Reporting and evidence).
+
 **Status** — Proposed for review, revised 20 November 2026
 
 ## Decision requested

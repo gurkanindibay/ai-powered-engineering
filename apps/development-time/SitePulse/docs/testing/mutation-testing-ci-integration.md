@@ -1,5 +1,7 @@
 # Mutation Testing CI/CD Integration Analysis & Architecture
 
+> **Retired by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** Its two-tier design is adopted in the strategy (Quality signals and gates).
+
 **Document Version**: 1.0  
 **Date**: November 2026  
 **Context**: SitePulse Engineering Harness & Verification Infrastructure  

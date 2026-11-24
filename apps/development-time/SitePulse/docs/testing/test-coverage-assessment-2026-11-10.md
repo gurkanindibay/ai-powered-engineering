@@ -1,5 +1,7 @@
 # Test Coverage Assessment — 2026-11-10
 
+> **Retired by the [SitePulse Test Strategy](TEST_STRATEGY.md) (2026-11-24).** Superseded by the current-state assessment in the strategy.
+
 ## Executive assessment
 
 The repository has broad test activity across unit, integration, widget, browser, financial fixture, security, and harness layers. The evidence does **not** support a numeric statement such as “X% code coverage”: none of the reviewed suites emitted line/branch coverage reports during this assessment, and the test projects do not establish a repository-wide coverage threshold. Coverage is therefore assessed as **case/behavior coverage**, using test declarations, runner mappings, traceability records, and recent execution results.
