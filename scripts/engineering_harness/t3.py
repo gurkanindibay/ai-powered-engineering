@@ -24,7 +24,7 @@ T3_ROLES = {"coordinator": "design", "product_owner": "design", "business_analys
             "backend_developer": "implementation", "frontend_developer": "implementation",
             "developer": "implementation", "tester": "test"}
 ARTIFACT_HINTS = {
-    "work_plan": "ordered steps assigned to upcoming harness roles, including dependencies and handoff checkpoints",
+    "work_plan": "nonempty list of strings: ordered steps assigned to upcoming harness roles, including dependencies and handoff checkpoints",
     "coordination_risks": "risks to monitor or escalate during execution",
     "scope": "string", "acceptance_criteria": "list of strings, exactly the accepted criteria below",
     "exclusions": "list of strings", "domain_rules": "nonempty list of strings",

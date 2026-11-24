@@ -44,6 +44,8 @@ def validate_policy(value: dict) -> dict:
     required = {"schema_version", "image", "bridge", "network", "limits", "role_paths", "protected_paths", "gates", "acceptance", "preferences"}
     if set(value) != required:
         raise HarnessError(f"Policy fields must be {sorted(required)}")
+    if isinstance(value["role_paths"], dict) and "coordinator" not in value["role_paths"]:
+        value = {**value, "role_paths": {**value["role_paths"], "coordinator": []}}
     image = value["image"]
     if not isinstance(image, str) or not re.fullmatch(r"(?:[^\s,]+@)?sha256:[0-9a-f]{64}", image):
         raise HarnessError("Container image must be pinned by sha256 digest")
@@ -153,7 +155,7 @@ def validate_result(result: dict, envelope: dict) -> dict:
     if result["status"] == "completed":
         if result["issues"] or not fields <= set(result["artifacts"]):
             raise HarnessError("Completed result has unresolved issues or missing role artifacts")
-        if any(not result["artifacts"][field] for field in fields - {"exclusions", "residual_risks", "risks"}):
+        if any(not result["artifacts"][field] for field in fields - {"exclusions", "residual_risks", "risks", "coordination_risks"}):
             raise HarnessError("Required role artifacts must not be empty")
         types = ARTIFACT_TYPES
         for field in fields:

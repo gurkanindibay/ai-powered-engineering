@@ -56,6 +56,12 @@ class RoutingTests(unittest.TestCase):
             with self.assertRaises(HarnessError):
                 validate_policy(p)
 
+    def test_policy_defaults_missing_coordinator_path_for_older_policies(self):
+        value = policy()
+        del value["role_paths"]["coordinator"]
+        validated = validate_policy(value)
+        self.assertEqual(validated["role_paths"]["coordinator"], [])
+
     def test_money_rejects_binary_nonfinite_and_negative(self):
         for value in [0.1, "NaN", "Infinity", "-1", True, None]:
             with self.assertRaises(HarnessError):

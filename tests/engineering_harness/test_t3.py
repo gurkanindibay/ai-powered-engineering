@@ -91,6 +91,26 @@ class T3EngineTests(unittest.TestCase):
         self.assertEqual(value["status"], "RUNNING")
         return value, self.store.attempt(value["attempt_id"])["envelope"]
 
+    def test_coordinator_result_and_handoff_complete_pipeline(self):
+        run_id = self.engine.create(self.repo, "Adjust value", self.policy, capabilities=capabilities(),
+                                   roles=["coordinator", "developer", "tester"])
+        first = self.engine.t3_dispatch(run_id, capabilities())
+        envelope = self.store.attempt(first["attempt_id"])["envelope"]
+        self.assertEqual(envelope["role"], "coordinator")
+        self.assertEqual(self.engine.t3_submit(run_id, first["attempt_id"], child_message(envelope)), "QUEUED")
+
+        developer = self.engine.t3_dispatch(run_id, capabilities())
+        envelope = self.store.attempt(developer["attempt_id"])["envelope"]
+        self.assertEqual(envelope["role"], "developer")
+        self.assertIn("Implement accepted scope", json.dumps(envelope["handoffs"]))
+        (self.workspace / "src" / "value.py").write_text("VALUE = 1\\n")
+        self.assertEqual(self.engine.t3_submit(run_id, developer["attempt_id"], child_message(envelope)), "QUEUED")
+
+        tester = self.engine.t3_dispatch(run_id, capabilities())
+        envelope = self.store.attempt(tester["attempt_id"])["envelope"]
+        self.assertEqual(self.engine.t3_submit(run_id, tester["attempt_id"], child_message(envelope)), "QUEUED")
+        self.assertEqual(self.engine.t3_dispatch(run_id, capabilities())["status"], "READY_FOR_REVIEW")
+
     def test_full_flow_dispatches_payloads_and_verifies(self):
         value, envelope = self.dispatch()
         payload = value["delegate_task"]
