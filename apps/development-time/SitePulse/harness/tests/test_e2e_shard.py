@@ -75,6 +75,35 @@ class LoadDurationsTests(unittest.TestCase):
     def test_committed_history_is_readable(self):
         self.assertIsInstance(shard.load_durations(), dict)
 
+    def test_junit_durations_are_normalized_to_pytest_node_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            junit = Path(tmp) / "1" / "junit.xml"
+            junit.parent.mkdir()
+            junit.write_text(
+                '<testsuite><testcase classname="tests.test_payments" name="test_pays[chromium]" time="2.75" />'
+                '<testcase classname="tests.test_payments" name="test_skip" time="0.1"><skipped /></testcase>'
+                '<testcase classname="tests.test_payments" name="test_bad" time="NaN" /></testsuite>',
+                encoding="utf-8",
+            )
+            self.assertEqual(shard.junit_durations(Path(tmp)), {
+                "tests/test_payments.py::test_pays[chromium]": 2.75,
+            })
+
+    def test_ingest_junit_updates_compact_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            junit = root / "shards" / "1" / "junit.xml"
+            junit.parent.mkdir(parents=True)
+            junit.write_text(
+                '<testsuite><testcase classname="tests.test_login" name="test_login" time="4.5" /></testsuite>',
+                encoding="utf-8",
+            )
+            store = runs / "ci-cache" / "durations.jsonl"
+            result = shard.update_duration_store(junit.parent.parent, store)
+            self.assertEqual(result["tests/test_login.py::test_login"], 4.5)
+            self.assertEqual(shard.load_durations(runs)["tests/test_login.py::test_login"], 4.5)
+
 
 if __name__ == "__main__":
     unittest.main()
