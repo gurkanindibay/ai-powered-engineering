@@ -71,7 +71,9 @@
       "applicability": "tenant_reference",
       "reason": "CreateExpenseRequest can supply a vendor ID.",
       "evidence": "backend/src/app.rs: handlers::create_expense (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "POST",
@@ -151,7 +153,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_vendor (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
@@ -195,7 +199,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::update_accrual_schedule (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
@@ -291,7 +297,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_meeting (Require(GovernanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
@@ -451,7 +459,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "Derives the ledger site from the caller for the supplied statement lines.",
       "evidence": "backend/src/app.rs: handlers::daily_reconciliation (Require(ReconciliationConfirm))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
@@ -469,7 +479,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "Creates the feed in the caller's site using a bank account number, without selecting a SitePulse site or existing resource.",
       "evidence": "backend/src/app.rs: handlers::create_bank_feed (Require(ReconciliationConfirm))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "POST",
@@ -806,7 +818,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::set_dunning_policy (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "POST",
@@ -814,7 +828,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::run_dunning (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
@@ -840,7 +856,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_heat_period (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
@@ -973,7 +991,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::publish_privacy_notice (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
@@ -1210,7 +1230,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_plan (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "POST",
