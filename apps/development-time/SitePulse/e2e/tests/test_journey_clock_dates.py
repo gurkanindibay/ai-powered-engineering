@@ -104,6 +104,18 @@ def outstanding(entry: dict) -> tuple[Decimal, Decimal]:
     return D(str(entry["principal_outstanding"])), D(str(entry["penalty_outstanding"]))
 
 
+@pytest.mark.covers("SC-13-02-12")
+@pytest.mark.edge
+@pytest.mark.role_manager
+def test_e2e_clock_survives_backend_restart(clock_site):
+    journey = clock_site(start="2026-11-19")
+    before = outstanding(tenant_item(journey, 2))
+
+    journey.stack.restart_backend()
+
+    assert outstanding(tenant_item(journey, 2)) == before
+
+
 @pytest.mark.covers("SC-13-04-10")
 @pytest.mark.edge
 @pytest.mark.role_manager

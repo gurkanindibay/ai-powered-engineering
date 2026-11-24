@@ -102,3 +102,9 @@ Feature: Accrual histories F4, F5 and F7
     Then the "Eylül 2026" liability is settled
     And the payment is booked in the open November period and the September snapshot is unchanged
     And the ledger invariants hold
+
+  @SC-13-02-12 @J-08 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked
+  Scenario: SQL setup restarts preserve the scenario clock
+    Given the site is in state F5 with the clock at "2026-11-19"
+    When the backend restarts to reload SQL setup
+    Then liabilities retain their "2026-11-19" penalty calculations

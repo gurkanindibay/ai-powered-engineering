@@ -651,7 +651,7 @@ def teardown_sites(stack: E2EStack, manifest: JourneyManifest, *, restart: bool 
         stack.restart_backend()
     elif manifest.site_ids:
         # Without a restart the backend process survives, so release its frozen fixture date.
-        Api().clock.clear()
+        Api(stack=stack).clock.clear()
     manifest.teardown_completed = True
     manifest.save()
     manifest.release_lock()

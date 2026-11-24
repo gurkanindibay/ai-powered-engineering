@@ -122,6 +122,7 @@ class E2EStack:
                 "SITEPULSE_SEED_TEST_DATA": "false",
             })
         self.web = WebServer()
+        self.e2e_clock_override: dict[str, str] | None = None
 
     # -- lifecycle -------------------------------------------------------
     def start(self) -> None:
@@ -146,6 +147,7 @@ class E2EStack:
         The backend keeps state in memory and loads it at boot, so a restart
         is what makes the reset visible to the UI.
         """
+        self.e2e_clock_override = None
         self.backend.stop()
         tables = [t for t in self.sql(
             "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;").split("\n")
@@ -170,6 +172,7 @@ class E2EStack:
         """
         if not self.db_name.startswith("sitepulse_e2e_"):
             raise RuntimeError(f"Refusing to empty a non-E2E database: {self.db_name}")
+        self.e2e_clock_override = None
         self.backend.stop()
         tables = [t for t in self.sql(
             "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;").split("\n")
@@ -185,6 +188,34 @@ class E2EStack:
     def restart_backend(self) -> None:
         """Reload backend memory after an Arrange step wrote SQL directly."""
         self.backend.restart()
+        if self.e2e_clock_override is not None:
+            status, body = asc.http(
+                "POST",
+                self.backend.base + "/__e2e/clock",
+                body=self.e2e_clock_override,
+            )
+            if status != 200:
+                raise SetupError(
+                    "could not restore the E2E clock after backend restart: "
+                    f"{status} {body[:200]}"
+                )
+
+    def remember_e2e_clock(self, command: dict[str, object]) -> None:
+        """Keep the current deterministic instant available across backend restarts."""
+        action = command.get("action")
+        if action == "clear":
+            self.e2e_clock_override = None
+        elif action in {"set_date", "advance_to"}:
+            date = command.get("date")
+            if isinstance(date, str):
+                self.e2e_clock_override = {
+                    "action": "set_instant",
+                    "at": f"{date}T00:00:00Z",
+                }
+        elif action == "set_instant":
+            instant = command.get("at")
+            if isinstance(instant, str):
+                self.e2e_clock_override = {"action": "set_instant", "at": instant}
 
     # -- helpers -----------------------------------------------------------
     def sql(self, statement: str) -> str:

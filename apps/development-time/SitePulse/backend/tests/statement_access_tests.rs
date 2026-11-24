@@ -12,6 +12,7 @@ use axum::http::{Request, StatusCode};
 use axum::Router;
 use chrono::{Days, Utc};
 use rust_decimal::Decimal;
+use sitepulse_backend::services::finance_common::site_today;
 use sitepulse_backend::{app::build_router, models::*, state::AppState};
 use tower::ServiceExt;
 
@@ -132,7 +133,7 @@ async fn state_after_move_out() -> AppState {
             "Selin Arslan",
             Role::HomeResident,
         ));
-        let today = Utc::now().date_naive();
+        let today = site_today(&inner, SITE);
         let unit = inner
             .units
             .iter_mut()
@@ -189,7 +190,7 @@ async fn state_after_sale() -> AppState {
         inner
             .users
             .push(person("person-300", 300, "Gül Tanrıverdi", Role::HomeOwner));
-        let today = Utc::now().date_naive();
+        let today = site_today(&inner, SITE);
         let unit = inner
             .units
             .iter_mut()
@@ -244,7 +245,7 @@ async fn state_for_statement_liability_probes() -> AppState {
     let state = state_after_sale().await;
     {
         let mut inner = state.inner.write().await;
-        let today = Utc::now().date_naive();
+        let today = site_today(&inner, SITE);
         for (due_id, principal, penalty) in [
             ("due-ben-dec", "600.00", "12.00"),
             ("due-gul-dec", "700.00", "14.00"),
@@ -296,7 +297,7 @@ async fn state_after_joint_only_former_owner() -> AppState {
         inner
             .users
             .push(person("person-300", 300, "Gül Tanrıverdi", Role::HomeOwner));
-        let today = Utc::now().date_naive();
+        let today = site_today(&inner, SITE);
         let unit = inner
             .units
             .iter_mut()
@@ -346,7 +347,7 @@ async fn state_after_former_owner_rents_back() -> AppState {
         inner
             .users
             .push(person("person-300", 300, "Gül Tanrıverdi", Role::HomeOwner));
-        let today = Utc::now().date_naive();
+        let today = site_today(&inner, SITE);
         let unit = inner
             .units
             .iter_mut()

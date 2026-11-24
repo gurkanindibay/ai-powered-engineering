@@ -12,6 +12,7 @@ E2E = Path(__file__).resolve().parents[2] / "e2e"
 sys.path.insert(0, str(E2E))
 
 from support.api import Api  # noqa: E402
+from support.stack import E2EStack  # noqa: E402
 from support.journey_attempts import (  # noqa: E402
     JourneyClock,
     JourneyFixturePending,
@@ -41,6 +42,36 @@ class FakeStack:
 
 
 class JourneyAttemptTests(unittest.TestCase):
+    def test_backend_restart_restores_the_active_e2e_clock(self) -> None:
+        class FakeBackend:
+            base = "http://127.0.0.1:8180"
+
+            def restart(self) -> None:
+                self.restarted = True
+
+        stack = E2EStack.__new__(E2EStack)
+        stack.backend = FakeBackend()
+        stack.e2e_clock_override = None
+        stack.remember_e2e_clock({"action": "set_date", "date": "2026-11-19"})
+
+        with patch("support.stack.asc.http", return_value=(200, "{}")) as http:
+            stack.restart_backend()
+
+        self.assertTrue(stack.backend.restarted)
+        http.assert_called_once_with(
+            "POST",
+            "http://127.0.0.1:8180/__e2e/clock",
+            body={"action": "set_instant", "at": "2026-11-19T00:00:00Z"},
+        )
+
+    def test_clear_e2e_clock_is_not_restored_after_restart(self) -> None:
+        stack = E2EStack.__new__(E2EStack)
+        stack.e2e_clock_override = {"action": "set_instant", "at": "2026-11-19T00:00:00Z"}
+
+        stack.remember_e2e_clock({"action": "clear"})
+
+        self.assertIsNone(stack.e2e_clock_override)
+
     def test_clock_client_uses_e2e_control_endpoint_and_enforces_monotonic_advance(self) -> None:
         api = Api("http://127.0.0.1")
         with patch.object(api, "call", return_value={"action": "date_set"}) as call:

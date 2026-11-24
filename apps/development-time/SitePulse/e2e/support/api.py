@@ -64,8 +64,9 @@ class E2EClock:
 
 
 class Api:
-    def __init__(self, base: str | None = None):
+    def __init__(self, base: str | None = None, stack: E2EStack | None = None):
         self.base = base or api_base()
+        self.stack = stack
         self.clock = E2EClock(self)
         self.network_events: list[dict[str, str | int]] = []
 
@@ -82,7 +83,11 @@ class Api:
         except urllib.error.HTTPError as exc:
             self.network_events.append({"method": method, "route": path.split("?", 1)[0], "status": exc.code})
             raise ApiError(f"{method} {path} -> {exc.code}: {exc.read().decode()[:300]}") from None
-        return json.loads(raw) if raw else None
+        result = json.loads(raw) if raw else None
+        if method == "POST" and path == "/__e2e/clock" and isinstance(body, dict):
+            if self.stack is not None:
+                self.stack.remember_e2e_clock(body)
+        return result
 
     def login(self, email: str, password: str) -> Session:
         out = self.call("POST", "/api/v1/auth/login", body={"email": email, "password": password})
