@@ -21,6 +21,6 @@ Feature: Material 3 resident dashboard screens
     And unapproved sub-meter features "Sayaç Gir" and "Rezervasyon" are hidden
 
   @SC-01-04-04 @layer:gui @linked @role_homeowner
-  Scenario: Resident dashboard text controls have accessible names
-    When the resident opens the dashboard
-    Then text entry controls expose their visible labels to assistive technology
+  Scenario: Resident issue form text controls have accessible names
+    When the resident opens the request form from the dashboard
+    Then the issue description field exposes its visible label to assistive technology

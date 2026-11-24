@@ -192,7 +192,7 @@ class DuesManagement:
         return by_id_prefix(self.page, "segment_tab_").count()
 
     # -- period accrual (STORY-07-07) --------------------------------------
-    def accrue_selected_period(self) -> tuple[str, str]:
+    def accrue_selected_period(self, expected_message: str | None = None) -> tuple[str, str]:
         """Run 'Toplu Aidat Tahakkuku'; returns (period shown in the dialog, result message)."""
         by_id(self.page, "btn_open_accrual_dialog").click()
         by_id(self.page, "btn_confirm_period_accrual").wait_for(timeout=10_000)
@@ -200,8 +200,12 @@ class DuesManagement:
         by_id(self.page, "btn_confirm_period_accrual").click()
         message = by_id(self.page, "snackbar_accrual_result")
         message.wait_for(timeout=15_000)
-        expect(message).to_have_text(re.compile(r".*\S.*"), timeout=15_000)
-        text = text_of(message)
+        if expected_message:
+            expect(message).to_contain_text(expected_message, timeout=15_000)
+            text = expected_message
+        else:
+            expect(message).to_have_text(re.compile(r".*\S.*"), timeout=15_000)
+            text = message.inner_text().strip()
         message.wait_for(state="detached", timeout=15_000)  # let the snackbar go before the next action
         return period, text
 

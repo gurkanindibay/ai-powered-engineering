@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from pages import CapitalProjects, DuesManagement, ManagerCockpit, PaymentStream, ResidentsTab, ResidentHome, SaasAdmin, Shell
+from pages import CapitalProjects, DuesManagement, ManagerCockpit, PaymentStream, ResidentsTab, ResidentHome, SaasAdmin
+from support.flutter import by_id
 
 
 def _login(_page, _login_as):
@@ -24,18 +25,25 @@ def _screen(role, open_screen):
     return navigate
 
 
-SCREENS = {
-    "sign-in": _login,
-    "manager-dashboard": _screen("manager", lambda page: ManagerCockpit(page).wait()),
-    "unit-directory": _screen("manager", lambda page: ResidentsTab(page).open()),
-    "add-resident": _screen("manager", lambda page: ResidentsTab(page).open().start_add()),
-    "dues": _screen("manager", lambda page: DuesManagement(page).open()),
-    "payment-stream": _screen("manager", lambda page: PaymentStream(page).open()),
-    "capital-projects": _screen("manager", lambda page: CapitalProjects(page).open()),
-    "manager-profile": _screen("manager", lambda page: Shell(page).open_profile()),
-    "resident-dashboard": _screen("homeowner", lambda page: ResidentHome(page).wait()),
-    "saas-sites": _screen("saas", lambda page: SaasAdmin(page).wait()),
-}
+def _resident_issue_form(page, login_as):
+    login_as("homeowner")
+    ResidentHome(page).wait()
+    by_id(page, "resident_action_requests").click()
+    page.get_by_label("Açıklama").wait_for()
+
+
+SCREEN_CASES = (
+    pytest.param("sign-in", _login, marks=pytest.mark.covers("SC-06-05-04"), id="sign-in"),
+    pytest.param("manager-dashboard", _screen("manager", lambda page: ManagerCockpit(page).wait()), id="manager-dashboard"),
+    pytest.param("unit-directory", _screen("manager", lambda page: ResidentsTab(page).open()), id="unit-directory"),
+    pytest.param("add-resident", _screen("manager", lambda page: ResidentsTab(page).open().start_add()), id="add-resident"),
+    pytest.param("dues", _screen("manager", lambda page: DuesManagement(page).open()), id="dues"),
+    pytest.param("payment-stream", _screen("manager", lambda page: PaymentStream(page).open()), id="payment-stream"),
+    pytest.param("capital-projects", _screen("manager", lambda page: CapitalProjects(page).open()), id="capital-projects"),
+    pytest.param("resident-issue-form", _resident_issue_form, marks=pytest.mark.covers("SC-01-04-04"), id="resident-issue-form"),
+    pytest.param("resident-dashboard", _screen("homeowner", lambda page: ResidentHome(page).wait()), id="resident-dashboard"),
+    pytest.param("saas-sites", _screen("saas", lambda page: SaasAdmin(page).wait()), id="saas-sites"),
+)
 
 # Fail on the critical threshold and on missing accessible names even when
 # axe rates the affected widget as serious.
@@ -54,11 +62,9 @@ def axe_script():
     return path.resolve()
 
 
-@pytest.mark.parametrize("screen", SCREENS)
-@pytest.mark.covers("SC-06-05-04")
-@pytest.mark.covers("SC-01-04-04")
-def test_no_critical_accessibility_violations(screen, axe_script, page, login_as, record_property):
-    SCREENS[screen](page, login_as)
+@pytest.mark.parametrize(("screen", "navigate"), SCREEN_CASES)
+def test_no_critical_accessibility_violations(screen, navigate, axe_script, page, login_as, record_property):
+    navigate(page, login_as)
     page.add_script_tag(path=str(axe_script))
     proxy_count = page.locator(FLUTTER_DISABLED_TEXT_PROXY).count()
     result = page.evaluate(

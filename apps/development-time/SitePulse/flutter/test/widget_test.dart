@@ -32,7 +32,7 @@ void main() {
     expect(find.text('Kat Maliki Olarak Gir'), findsOneWidget);
   });
 
-  // covers: SC-06-05-04, SC-01-04-04
+  // covers: SC-06-05-04
   testWidgets('Selecting Site Admin shows dual path options and logging in as Kat Maliki enters own flat view', (WidgetTester tester) async {
     final controller = _createTestController(startAuthenticated: false);
     await tester.pumpWidget(SitePulseApp(controller: controller));

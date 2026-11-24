@@ -80,8 +80,7 @@ def test_period_accrual_charges_every_unit_once(login_as, page, api, manager_ses
     assert f"{units} daireye" in message, message
     assert stack.sql(f"SELECT count(*) FROM dues_liabilities WHERE period = '{PERIOD}';") == str(units)
 
-    _, message = dues.accrue_selected_period()
-    assert "Mükerrer tahakkuk engellendi" in message, message
+    dues.accrue_selected_period("Mükerrer tahakkuk engellendi")
     assert stack.sql(f"SELECT count(*) FROM dues_liabilities WHERE period = '{PERIOD}';") == str(units)
 
 

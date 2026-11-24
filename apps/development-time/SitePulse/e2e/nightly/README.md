@@ -27,10 +27,13 @@ maximum latency. This run uses deterministic synthetic data and reports a
 point-in-time smoke measurement. Production SLOs use the observation windows
 in the matrix.
 
-The authorization suite checks reviewed fixtures. It uses the live OpenAPI
-document to ensure each route remains part of the API. Its coverage is limited to
-the routes listed in the test. Existing mutation and list isolation scenarios
-remain in `tests/test_journey_tenant_isolation.py`.
+The authorization suite checks six reviewed resource routes and uses the live
+OpenAPI document to ensure each route remains part of the API. It provides
+same-site success controls before checking cross-site denial. The nightly job
+also runs the multi-resource cross-site scenarios in
+`tests/test_journey_tenant_isolation.py`. These fixtures are not exhaustive
+coverage of every tenant-bearing operation; the broader OpenAPI operation
+inventory remains outstanding.
 
 ## Local runs
 
