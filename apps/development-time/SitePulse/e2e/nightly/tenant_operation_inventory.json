@@ -1954,7 +1954,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::delete_home_owner (Require(PersonManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "PUT",
@@ -2002,7 +2004,9 @@
       "applicability": "tenant_reference",
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::delete_house_type (Require(SiteManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_resources_require_membership"
+      ]
     },
     {
       "method": "GET",
