@@ -117,7 +117,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_journal_entry (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
@@ -1029,7 +1031,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::set_retention_policy (Require(FinanceManage))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "POST",
@@ -1095,7 +1099,9 @@
       "applicability": "implicit_tenant_scope",
       "reason": "Derives the broadcast site from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::broadcast_notification (Require(AnnouncementBroadcast))",
-      "runtime_tests": []
+      "runtime_tests": [
+        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+      ]
     },
     {
       "method": "GET",
