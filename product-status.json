@@ -201,7 +201,7 @@
       "stories_with_scenarios": 116
     },
     {
-      "automated": 446,
+      "automated": 447,
       "date": "2026-11-25",
       "epics": 13,
       "scenarios": 471,
@@ -209,7 +209,7 @@
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "29434fd4a8467a0ed9895baf9d9000da9dbf6da6",
+  "commit": "40b99ee8f6d211bd4947c2131d73b644fdd4b3ae",
   "epics": [
     {
       "automated": 10,
@@ -226,16 +226,16 @@
       "title": "Resident Dues Management & Financial Transparency"
     },
     {
-      "automated": 16,
+      "automated": 17,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-02",
       "no_result": 1,
-      "passing": 15,
-      "planned": 1,
+      "passing": 16,
+      "planned": 0,
       "scenarios": 17,
       "stories": 5,
-      "stories_passing": 3,
+      "stories_passing": 4,
       "stories_with_scenarios": 5,
       "title": "Site Manager Financial Oversight & Community Operations"
     },
@@ -394,18 +394,18 @@
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-25T13:40:10Z",
+  "generated_at": "2026-11-25T14:05:12Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
-    "passed": 312,
-    "seconds": 2065.8,
+    "passed": 313,
+    "seconds": 1993.4,
     "skipped": 1,
-    "tests": 313
+    "tests": 314
   },
   "recent_changes": [],
-  "run_id": "20261125T134007Z-29434fd",
+  "run_id": "20261125T140510Z-40b99ee",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -541,8 +541,8 @@
     },
     "SC-02-03-05": {
       "epic": "EPIC-02",
-      "name": "Registration shows generated temporary credentials",
-      "state": "planned",
+      "name": "Registration hands off a one-time activation link",
+      "state": "passing",
       "story": "STORY-02-03"
     },
     "SC-02-04-01": {
@@ -3237,17 +3237,17 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 446,
+    "automated": 447,
     "epics": 13,
     "epics_failing": 0,
     "epics_verified": 1,
     "failing": 0,
     "no_result": 214,
-    "passing": 232,
-    "planned": 25,
+    "passing": 233,
+    "planned": 24,
     "scenarios": 471,
     "stories": 116,
-    "stories_passing": 37,
+    "stories_passing": 38,
     "stories_with_scenarios": 116
   }
 }
