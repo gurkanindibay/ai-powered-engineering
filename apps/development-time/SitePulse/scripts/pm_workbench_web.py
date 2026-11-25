@@ -46,6 +46,9 @@ try:
 except Exception:
     ISTANBUL_TZ = timezone(timedelta(hours=3))
 
+# Upper bound for a single Time Machine advance step (one year of days).
+MAX_ADVANCE_DAYS = 366
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -454,6 +457,20 @@ class WorkbenchService:
                 "status": "FALLBACK",
             }
 
+    def _parse_advance_days(self, raw_days: Any) -> int:
+        """Validates the `days` step for an advance action (bounded so it stays useful)."""
+        try:
+            days = int(raw_days)
+        except (TypeError, ValueError) as err:
+            raise InvalidRequestError(
+                f"Invalid 'days' value {raw_days!r}; expected a whole number."
+            ) from err
+        if not 1 <= days <= MAX_ADVANCE_DAYS:
+            raise InvalidRequestError(
+                f"'days' must be between 1 and {MAX_ADVANCE_DAYS}, got {days}."
+            )
+        return days
+
     def control_clock(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Executes a Time Machine action against the E2E clock."""
         action = payload.get("action")
@@ -469,7 +486,7 @@ class WorkbenchService:
 
         backend_payload: dict[str, Any]
         if action == "advance":
-            days = int(payload.get("days", 1))
+            days = self._parse_advance_days(payload.get("days", 1))
             target_date = cur_date + timedelta(days=days)
             backend_payload = {"action": "advance_to", "date": target_date.isoformat()}
         elif action in ("jump_due_day", "jump_to_due_day"):

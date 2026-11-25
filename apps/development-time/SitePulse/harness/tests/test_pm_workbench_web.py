@@ -689,6 +689,37 @@ class TimeMachineEndpointTests(unittest.TestCase):
         self.assertEqual(payload["date"], "2026-11-29")
         self.assertEqual(harness.clock_action_calls[-1], {"action": "advance_to", "date": "2026-11-29"})
 
+    def test_advance_clock_rejects_a_non_numeric_step(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/clock",
+                method="POST",
+                body={"action": "advance", "days": "x"},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+            self.assertEqual(
+                [c for c in harness.clock_action_calls if c["action"] == "advance_to"], []
+            )
+        self.assertEqual(status, 400)
+        self.assertIn("days", payload["error"])
+
+    def test_advance_clock_rejects_an_out_of_range_step(self) -> None:
+        for days in (0, -1, 367):
+            with self.subTest(days=days):
+                with Harness() as harness:
+                    status, payload = harness.json(
+                        "/api/clock",
+                        method="POST",
+                        body={"action": "advance", "days": days},
+                        headers={"Origin": harness.url(""), "Accept": "application/json"},
+                    )
+                    self.assertEqual(
+                        [c for c in harness.clock_action_calls if c["action"] == "advance_to"],
+                        [],
+                    )
+                self.assertEqual(status, 400)
+                self.assertIn("between 1 and", payload["error"])
+
     def test_jump_to_due_day(self) -> None:
         # Current simulated clock is 2026-11-19 (past the 10th), so jump_due_day jumps to 2026-12-10
         with Harness() as harness:

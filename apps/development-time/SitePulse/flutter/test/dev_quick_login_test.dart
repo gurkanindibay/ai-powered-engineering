@@ -43,7 +43,7 @@ void main() {
       expect(DevQuickLoginGate.allowed, isFalse);
 
       final controller = DashboardController(startAuthenticated: false);
-      final uri = Uri.parse('/?quick_login=true&email=yonetici@begonya.com&password=Password123');
+      final uri = Uri.parse('/#/quick-login?quick_login=true&email=yonetici@begonya.com&password=Password123');
 
       final result = await DevQuickLoginGate.tryHandleQuickLogin(
         uri: uri,
@@ -73,7 +73,7 @@ void main() {
       expect(find.byType(DashboardScreen), findsNothing);
 
       // Attempt navigation with quick-login params
-      final uri = Uri.parse('/quick-login?email=yonetici@begonya.com&password=Password123');
+      final uri = Uri.parse('/#/quick-login?email=yonetici@begonya.com&password=Password123');
       await delegate.setNewRoutePath(uri);
       await tester.pumpAndSettle();
 
@@ -91,7 +91,7 @@ void main() {
 
       final controller = DashboardController(isTestMode: true, startAuthenticated: false);
       final uri = Uri.parse(
-        '/?quick_login=true&email=yonetici@begonya.com&password=Password123&target=/manager/home',
+        '/#/quick-login?quick_login=true&email=yonetici@begonya.com&password=Password123&target=/manager/home',
       );
 
       final result = await DevQuickLoginGate.tryHandleQuickLogin(
@@ -141,7 +141,7 @@ void main() {
       expect(find.byType(LoginScreen), findsOneWidget);
 
       final uri = Uri.parse(
-        '/?quick_login=true&email=yonetici@begonya.com&password=Password123&target=/manager/home',
+        '/#/quick-login?quick_login=true&email=yonetici@begonya.com&password=Password123&target=/manager/home',
       );
       await delegate.setNewRoutePath(uri);
       await tester.pumpAndSettle();
@@ -186,12 +186,25 @@ void main() {
       expect(AppRoutes.pathFor(controller, result!).path, startsWith('/resident/'));
     });
 
-    test('a path-style quick-login URL lands the manager on the manager route', () async {
+    test('credentials in the query string are never honoured', () async {
       DevQuickLoginGate.debugEnabledOverride = true;
       final controller = DashboardController(isTestMode: true, startAuthenticated: false);
 
       final handled = await DevQuickLoginGate.tryHandleQuickLogin(
-        uri: Uri.parse('/quick-login?email=yonetici@begonya.com&password=Password123&role=SITE_MANAGER'),
+        uri: Uri.parse('/?quick_login=true&email=yonetici@begonya.com&password=Password123'),
+        controller: controller,
+      );
+
+      expect(handled, isNull);
+      expect(controller.isAuthenticated, isFalse);
+    });
+
+    test('a fragment quick-login URL lands the manager on the manager route', () async {
+      DevQuickLoginGate.debugEnabledOverride = true;
+      final controller = DashboardController(isTestMode: true, startAuthenticated: false);
+
+      final handled = await DevQuickLoginGate.tryHandleQuickLogin(
+        uri: Uri.parse('/#/quick-login?email=yonetici@begonya.com&password=Password123&role=SITE_MANAGER'),
         controller: controller,
       );
 

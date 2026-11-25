@@ -16,8 +16,13 @@ class DevQuickLoginGate {
   const DevQuickLoginGate._();
 
   /// Production/release builds, where the handoff must never run.
+  ///
+  /// The real build marker wins over the test seam, so no override can make a
+  /// release/product build look like a development one.
   static bool get isProduction =>
-      debugProductionOverride ?? (kReleaseMode || const bool.fromEnvironment('dart.vm.product'));
+      kReleaseMode ||
+      const bool.fromEnvironment('dart.vm.product') ||
+      (debugProductionOverride ?? false);
 
   /// Whether the environment permits the developer handoff at all.
   static bool get isEnabled => !isProduction && kShowDevTools;
@@ -47,13 +52,15 @@ class DevQuickLoginGate {
       return null;
     }
 
-    // 2. Extract parameters from query string and hash fragment.
-    final params = _extractParams(uri);
+    // 2. Read handoff parameters from the URL fragment only. A query string would
+    //    send the persona password to the web server, its access log and any
+    //    `Referer`, so a hand-made `?password=...` link is deliberately ignored.
+    final params = _fragmentParams(uri);
     final isQuickLogin = uri.path == AppRoutes.quickLogin ||
         _fragmentPath(uri) == AppRoutes.quickLogin ||
         params['quick_login'] == 'true' ||
         params.containsKey('quick_login_email') ||
-        (params.containsKey('email') && params.containsKey('password') && params.containsKey('quick_login'));
+        (params.containsKey('email') && params.containsKey('password'));
 
     if (!isQuickLogin) {
       return null;
@@ -124,20 +131,21 @@ class DevQuickLoginGate {
     return path.isEmpty ? null : path;
   }
 
-  static Map<String, String> _extractParams(Uri uri) {
-    final map = Map<String, String>.from(uri.queryParameters);
-    // Parse query parameters embedded inside hash fragment e.g. /#/?quick_login=true&email=...
-    if (uri.fragment.isNotEmpty && uri.fragment.contains('=')) {
-      final fragmentPart = uri.fragment;
-      final queryIndex = fragmentPart.indexOf('?');
-      final rawQuery = queryIndex >= 0 ? fragmentPart.substring(queryIndex + 1) : fragmentPart;
-      try {
-        final parsed = Uri.splitQueryString(rawQuery);
-        map.addAll(parsed);
-      } on FormatException {
-        // A malformed fragment is ignored; the query string still applies.
-      }
+  /// Parses handoff parameters from the URL fragment only.
+  ///
+  /// Query-string credentials are intentionally not read: they reach the dev web
+  /// server, its access log and any `Referer` header.
+  static Map<String, String> _fragmentParams(Uri uri) {
+    final fragment = uri.fragment;
+    if (fragment.isEmpty) return const {};
+    final queryIndex = fragment.indexOf('?');
+    final rawQuery = queryIndex >= 0 ? fragment.substring(queryIndex + 1) : fragment;
+    if (rawQuery.isEmpty) return const {};
+    try {
+      return Uri.splitQueryString(rawQuery);
+    } on FormatException {
+      // A malformed fragment is ignored; the request is simply not a handoff.
+      return const {};
     }
-    return map;
   }
 }
