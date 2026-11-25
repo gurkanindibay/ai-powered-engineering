@@ -210,7 +210,9 @@ class _PersonImportPageState extends State<PersonImportPage> {
               _summary(report),
               label: report.committed
                   ? '${report.created} / ${report.total} kayıt eklendi; ${report.invalid} satır hatalı.'
-                  : '${report.invalid} satırda hata var.',
+                  : report.invalid == 0
+                      ? '${report.total} satır kaydedilmeye hazır.'
+                      : '${report.invalid} satırda hata var.',
             ),
             const SizedBox(height: AppSpacing.sm),
             for (final row in report.rows)
