@@ -8,6 +8,49 @@ from support.flutter import by_id
 from support.money import last_amount
 
 
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-02-03")
+@pytest.mark.covers("SC-02-03-05")
+def test_manual_owner_registration_hands_off_an_activation_link(login_as, page, stack):
+    """SC-02-03-05: a manually registered owner gets a one-time activation link, not a password."""
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    ResidentsTab(page).open()
+    units_before = int(stack.sql("SELECT count(*) FROM units WHERE site_id = 1;"))
+
+    ResidentsTab(page).start_add().fill(
+        unit_no="25", full_name="Fatma Şahin", email="fatma.activation@e2e.test",
+        phone="05321234567")
+    by_id(page, "module_save_new_resident_btn").click()
+    close = by_id(page, "btn_close_resident_provisioned")
+    confirm = by_id(page, "btn_confirmation_confirm")
+    confirm.or_(close).first.wait_for(timeout=15_000)
+    if confirm.count() > 0:
+        confirm.click()
+    close.wait_for(timeout=15_000)
+
+    by_id(page, "resident_activation_status").wait_for(timeout=15_000)
+    status_text = text_of(by_id(page, "resident_activation_status"))
+    assert "etkinleştirme bağlantısı gönderildi" in status_text, (
+        f"the registration dialog must confirm the activation link, got {status_text!r}"
+    )
+    assert by_id(page, "site_credentials_password").count() == 0, (
+        "the activation flow must not expose a generated temporary password"
+    )
+    close.click()
+    close.wait_for(state="detached", timeout=10_000)
+    UnitWorkspace(page).close()
+
+    assert int(stack.sql("SELECT count(*) FROM units WHERE site_id = 1;")) == units_before + 1
+    assert stack.sql(
+        "SELECT count(*) FROM account_activations activations "
+        "JOIN users u ON u.id = activations.user_id "
+        "WHERE lower(u.email) = 'fatma.activation@e2e.test' "
+        "AND activations.purpose = 'ACTIVATE' AND activations.used_at IS NULL;"
+    ) == "1", "the new account must hold one unused activation token"
+
+
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-03")
