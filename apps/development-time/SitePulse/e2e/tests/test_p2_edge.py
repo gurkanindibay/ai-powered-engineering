@@ -1,6 +1,7 @@
 """P2 (edge) scenarios across epics: GUI_TEST_PLAN.md §3, priority P2."""
 import re
 import os
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -89,6 +90,7 @@ def test_offline_state_shows_a_banner_and_keeps_the_balance(login_as, page, cont
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-06")
 def test_penalty_detail_shows_days_and_the_penalty_amount(login_as, page, builders, api, actors):
+    api.clock.set_date(date.today())
     builders.overdue_dues(principal=Decimal("1400.00"), days_overdue=10)
     dashboard = api.resident_dashboard(api.login(**actors["homeowner"]))
     expected_penalty = Decimal(str(dashboard["total_debt"])) - Decimal("1400.00")

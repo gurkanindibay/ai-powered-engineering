@@ -279,6 +279,14 @@ impl OperatingBudgetService {
             .collect::<BudgetResult<Vec<_>>>()?;
         let total: Decimal = lines.iter().map(|l| l.annual_amount).sum();
 
+        // With PostgreSQL the in-memory unit list can hold rows that are not this
+        // site's units in the database; share the budget only across the canonical
+        // tenant-scoped inventory so every share has a unit that can be served.
+        let canonical_units =
+            crate::db::unit_repository::canonical_unit_ids(self.state.db_pool(), site_id)
+                .await
+                .map_err(storage)?;
+
         let mut budget = {
             let inner = self.state.inner.read().await;
             if !inner
@@ -291,12 +299,25 @@ impl OperatingBudgetService {
                     site_id
                 )));
             }
-            let mut units: Vec<IndependentUnit> = inner
+            let mut units: Vec<IndependentUnit> = Vec::new();
+            for u in inner
                 .units
                 .iter()
                 .filter(|u| crate::auth::same_id(&u.site_id, site_id))
-                .cloned()
-                .collect();
+            {
+                if canonical_units
+                    .as_ref()
+                    .is_none_or(|ids| ids.contains(&u.id))
+                {
+                    units.push(u.clone());
+                } else {
+                    tracing::warn!(
+                        site_id = %site_id,
+                        unit_id = %u.id,
+                        "Unit is outside the canonical database inventory; excluded from budget share calculation"
+                    );
+                }
+            }
             if units.is_empty() {
                 return Err(BudgetError::Conflict(
                     "The site has no units to share the budget".into(),

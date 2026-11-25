@@ -215,6 +215,8 @@ def test_operational_and_capital_balances_separate_for_tenant(request, api, acto
         stmt_final = api.resident_statement(manager, a2)
         tenant_final = next(d for d in stmt_final["debtors"] if d["debtor_type"] == "TENANT")
         owner_final = next(d for d in stmt_final["debtors"] if d["debtor_type"] == "OWNER")
+        # The committed DB liability ID must also update the matching in-memory row.
+        assert money(rec_cap["allocated_principal"]) == D("400.00")
         assert money(owner_final["total_outstanding"]) == D("600.00")
         assert money(tenant_final["total_outstanding"]) == ZERO
 

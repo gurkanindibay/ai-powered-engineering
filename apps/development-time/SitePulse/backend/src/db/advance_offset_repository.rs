@@ -25,7 +25,9 @@ pub struct OffsetCandidate {
     pub advance: Decimal,
 }
 
-/// Debtors that have a positive advance and an open liability of their own.
+/// Debtors that have a positive spendable advance (balance minus the amount reserved by
+/// pending advance-exit settlements, as the transfer itself computes it) and an open
+/// liability of their own.
 /// `site_id` scopes the search to one tenant; `None` is the platform-wide
 /// sweep (scheduler only).
 pub async fn units_with_offsettable_advance(
@@ -35,10 +37,17 @@ pub async fn units_with_offsettable_advance(
     let client = pool.get().await?;
     let rows = client
         .query(
-            "SELECT u.site_id, u.id, ab.debtor_type, ab.balance
+            "SELECT u.site_id, u.id, ab.debtor_type,
+                    (ab.balance - COALESCE((SELECT SUM(s.amount) FROM advance_exit_settlements s
+                                             WHERE s.unit_id = ab.unit_id
+                                               AND s.source_debtor = ab.debtor_type
+                                               AND s.status = 'PENDING'), 0))::NUMERIC(15,2)
                FROM advance_balances ab
                JOIN units u ON u.id = ab.unit_id
-              WHERE ab.balance > 0
+              WHERE (ab.balance - COALESCE((SELECT SUM(s.amount) FROM advance_exit_settlements s
+                                             WHERE s.unit_id = ab.unit_id
+                                               AND s.source_debtor = ab.debtor_type
+                                               AND s.status = 'PENDING'), 0)) > 0
                 AND ($1::BIGINT IS NULL OR u.site_id = $1)
                 AND EXISTS (SELECT 1 FROM dues_liabilities d
                              WHERE d.unit_id = ab.unit_id
