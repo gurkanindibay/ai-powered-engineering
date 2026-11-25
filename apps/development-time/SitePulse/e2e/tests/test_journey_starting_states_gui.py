@@ -485,6 +485,10 @@ def test_first_manager_sign_in_unlocks_the_site_after_password_change(
         requests: list[str] = []
         page.on("request", lambda r: requests.append(r.url) if "/api/v1/" in r.url else None)
         page.goto(f"{login_page.base_url.rstrip('/')}/#/manager/dues")
+        # Let the router and its fetches settle before judging the request list; a route handler
+        # can fire a request a few frames after the change screen is already visible.
+        page.wait_for_load_state("networkidle")
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
         by_id(page, "screen_force_password_change").wait_for(timeout=15_000)
         business = [url for url in requests
                     if any(marker in url for marker in ("/dues", "/payments", "/residents", "/site-admin"))]
