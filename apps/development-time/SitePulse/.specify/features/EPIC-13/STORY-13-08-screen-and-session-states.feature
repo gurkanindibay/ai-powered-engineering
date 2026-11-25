@@ -18,7 +18,7 @@ Feature: Manager screen and session states
     And no business request is refused with PASSWORD_CHANGE_REQUIRED
 
   # Verified by focused HTTP failure and recovery journeys for the three surfaces.
-  @SC-13-08-02 @J-15 @depth:3 @state:F5 @layer:gui @core @role_manager
+  @SC-13-08-02 @J-15 @depth:3 @state:F5 @layer:gui @core @role_manager @linked
   Scenario Outline: Loading, failure and recovery are distinguishable from an empty site
     Given the manager is signed in to a site in state F5
     And the first data request for "<surface>" is held
@@ -61,7 +61,7 @@ Feature: Manager screen and session states
     And reopening the accrual form allows the manager to confirm it successfully once
 
   # Verified by a committed payment whose confirmation response is deliberately lost.
-  @SC-13-08-06 @J-15 @depth:1 @state:F5 @layer:gui @core @role_manager
+  @SC-13-08-06 @J-15 @depth:1 @state:F5 @layer:gui @core @role_manager @linked
   Scenario: Refreshing a payment after a lost response shows the committed result
     Given the manager enters a 1675.00 payment for unit "A-3" in state F5
     When the server commits the payment but the confirmation response is lost
@@ -70,7 +70,7 @@ Feature: Manager screen and session states
     And the screen never reports a second successful payment
 
   # Verified by two managers submitting against the same vacant unit state.
-  @SC-13-08-07 @J-15 @depth:1 @state:F5 @layer:gui @core @role_manager
+  @SC-13-08-07 @J-15 @depth:1 @state:F5 @layer:gui @core @role_manager @linked
   Scenario: A stale unit action refreshes after another manager updates occupancy
     Given two managers have opened the same vacant owned unit "A-3" in state F5
     When the first manager moves a tenant into the unit and the second submits a stale move-in action
