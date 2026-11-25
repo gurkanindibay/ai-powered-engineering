@@ -4,7 +4,8 @@
 Each inventory entry describes how an operation relates to tenant scope and
 lists any mapped runtime tests. A mapped test is written as
 ``e2e/<file>.py::<test function>`` and must exist; it is counted without assuming
-it has run or passed.
+it has run or passed. Only module-level test functions resolve, not methods of a
+test class.
 """
 from __future__ import annotations
 
@@ -90,7 +91,10 @@ def registered_operations(source: str) -> Counter[Operation]:
 
 @lru_cache(maxsize=None)
 def _test_functions(path: Path) -> frozenset[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except SyntaxError as error:
+        raise ValueError(f"syntax error in {path}, line {error.lineno}: {error.msg}") from error
     return frozenset(
         node.name for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_")

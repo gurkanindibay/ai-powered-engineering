@@ -138,6 +138,17 @@ class TenantOperationInventoryTests(unittest.TestCase):
             self.assertTrue(result["ok"])
             self.assertEqual(result["unresolved_runtime_tests"], [])
 
+    def test_syntax_error_in_mapped_test_file_names_the_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "e2e").mkdir()
+            (root / "e2e" / "test_broken.py").write_text("def test_known(:\n", encoding="utf-8")
+            operations = {("GET", "/known")}
+            rows = [entry("GET", "/known", runtime_tests=["e2e/test_broken.py::test_known"])]
+            with self.assertRaisesRegex(ValueError, r"syntax error in .*test_broken\.py, line 1"):
+                inventory.validate(
+                    {"version": 1, "operations": rows}, operations, Counter(operations), test_root=root)
+
     def test_checked_in_inventory_references_resolve(self):
         root = SCRIPTS.parent
         document = inventory._load_json(root / "e2e/nightly/tenant_operation_inventory.json")
