@@ -1066,6 +1066,7 @@ def test_multi_site_journey_accruals_through_march_first(request, api, actors, s
 
 @pytest.mark.covers("SC-13-13-02")
 @pytest.mark.covers("SC-13-13-05")
+@pytest.mark.covers("SC-13-14-10")
 @pytest.mark.covers("SC-13-26-02")
 @pytest.mark.covers("SC-13-25-02")
 @pytest.mark.covers("SC-13-25-03")

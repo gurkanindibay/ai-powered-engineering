@@ -103,10 +103,9 @@ Feature: Liability follows titles, vacancies and move-ins across four billing pe
       | B2-01 | Mart   | 750.00    | 38.75 |
     And Site A has 5450.00 principal and 354.09 fees open and Site B has 2500.00 principal and 161.67 fees open
 
-  # Pending: the jointly liable owner (KMK m.22/1) of a tenant's charge is listed only for tenant rows that carry
-  # a joint-liability record; the journey's accrual does not create one, so Cara's 1223.75 and Ivan's 1612.50
-  # exposure cannot be asserted yet (see the pending joint liability scenarios of STORY-13-03).
-  @SC-13-14-10 @layer:backend @core @role_manager @pending
+  # Verified in the live journey by test_multi_site_journey_accruals_and_mixed_payments, which
+  # reconciles each owner's statement (primary debt and jointly liable total) with the independent model.
+  @SC-13-14-10 @layer:backend @core @role_manager @linked
   Scenario: Owners keep joint exposure to their tenants' open charges without double counting
     Given the April 10 receipts were posted
     Then "Cara Cetin" has 1051.67 of total open primary debt and joint exposure to 1223.75 of tenant debt
