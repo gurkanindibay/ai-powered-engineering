@@ -64,6 +64,8 @@ If a wake-up turns out to need nothing (the PR changed again meanwhile), restart
    | Fine, with small non-blocking notes (naming, comment wording, nits) | `APPROVE`, list the notes under "Minor notes". The author fixes them and merges without another round |
    | Fine | `APPROVE` with a short "Approved" body naming what was verified |
 
+   When a subagent is delegated to fix a review finding, run it on Sonnet 5.5 (`claude-sonnet-5-5`; `model: "sonnet"`), set explicitly. The review itself stays on Opus.
+
    ```bash
    python3 scripts/review_bot.py review <n> --event APPROVE --body-file review.md --commit <sha>
    ```
