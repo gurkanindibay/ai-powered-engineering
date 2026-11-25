@@ -491,7 +491,7 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
     )
     assert_write_is_site_scoped(
         api, "/api/v1/dues/accrue-period", second, first,
-        {"site_id": ids["site"], "period": "Ekim 2026", "amount": "1.00", "due_date": "2026-10-15"},
+        {"site_id": ids["site"], "period": "2025-10", "amount": "1.00", "due_date": "2025-10-15"},
         success={200},
     )
     assert_write_is_site_scoped(
@@ -861,6 +861,7 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     paths = api.call("GET", "/api/v1/openapi.json")["paths"]
 
     meeting = api.call("POST", "/api/v1/assembly/meetings", second.token, body={
+        "call_number": 2,
         "scheduled_at": "2026-11-20T10:00:00Z",
         "location": "Nightly tenant authorization meeting",
         "agenda": [{"title": "Authorization contract"}],
