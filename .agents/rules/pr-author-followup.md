@@ -41,11 +41,11 @@ Query GitHub **at the moment you report or act on a PR's approval state**: on ev
 ```bash
 gh pr view <pr> --json state,headRefOid,reviewDecision,mergeable
 gh api --paginate repos/{owner}/{repo}/pulls/<pr>/reviews --jq '.[] | [.submitted_at, .user.login, .state, .commit_id] | @tsv'
-gh api --paginate repos/{owner}/{repo}/issues/<pr>/comments --jq '.[] | select(.body | startswith("APPROVED")) | [.created_at, .user.login] | @tsv'
+gh api --paginate repos/{owner}/{repo}/issues/<pr>/comments --jq '.[] | select(.user.login == "local-reviewer-agent[bot]" and (.body | startswith("APPROVED"))) | [.created_at, .user.login] | @tsv'
 gh pr checks <pr>
 ```
 
-- **An empty `reviewDecision` does not mean "not approved".** GitHub can leave it empty although an `APPROVED` review exists (seen on PR 412), so always read the reviews list. The second and third commands are the evidence for the rules in [What counts as approved](#what-counts-as-approved).
+- **An empty `reviewDecision` does not mean "not approved".** GitHub can leave it empty although an `APPROVED` review exists (seen on PR 412), so always read the reviews list. The second and third commands are the evidence for the rules in [What counts as approved](#what-counts-as-approved). If the user named another reviewer for this PR, add that login to the third command's filter.
 - For each reviewer, take their newest `APPROVED`, `CHANGES_REQUESTED` or `DISMISSED` review. A later `COMMENTED` review does not cancel an approval. Compare its `commit_id` with `headRefOid`.
 - **Do not infer the state from older text or other signals.** A review saying "I'll approve once CI is green" describes what the reviewer intended then; the approval may have arrived since. Green checks, an earlier report, a CI event or a subagent's summary say nothing about the current reviews.
 - A host's PR monitor (for example Auto-fix, which reports CI failures, merge conflicts and review comments) does not replace the `--author-pr` watcher in [The loop](#the-loop): do not rely on it to wake you for an approval.
