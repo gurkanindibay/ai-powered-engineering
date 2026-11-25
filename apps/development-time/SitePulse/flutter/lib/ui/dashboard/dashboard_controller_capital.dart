@@ -1,7 +1,73 @@
 part of 'dashboard_controller.dart';
 
+class ResidentCapitalProjectDetails {
+  final CapitalProjectItem project;
+  final List<CapitalProjectInstallmentItem> installments;
+
+  const ResidentCapitalProjectDetails({required this.project, required this.installments});
+}
+
 /// Capital expenditures, fixtures, contractor installments and disbursement tracking.
 extension DashboardControllerCapital on DashboardController {
+  Future<List<CapitalProjectItem>> fetchResidentCapitalProjects(String siteId) async {
+    if (siteId.isEmpty) return const [];
+    if (isTestMode) {
+      _residentCapitalProjects = _getTestFixtureCapitalProjects()
+          .where((project) => project.status == 'ACTIVE')
+          .toList();
+      notify();
+      return _residentCapitalProjects;
+    }
+
+    try {
+      final uri = ApiClient.uri('/api/v1/capital-projects', {'site_id': siteId});
+      final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
+      if (response.statusCode != 200) {
+        _residentCapitalProjects = [];
+        notify();
+        return _residentCapitalProjects;
+      }
+      final raw = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+      _residentCapitalProjects = raw
+          .map((item) => CapitalProjectItem.fromJson(item as Map<String, dynamic>))
+          .where((project) => project.status == 'ACTIVE')
+          .toList();
+    } catch (_) {
+      _residentCapitalProjects = [];
+    }
+    notify();
+    return _residentCapitalProjects;
+  }
+
+  Future<ResidentCapitalProjectDetails?> fetchResidentCapitalProjectDetails(String projectId) async {
+    if (isTestMode) {
+      final project = _getTestFixtureCapitalProjects().where((item) => item.id == projectId).firstOrNull;
+      if (project == null) return null;
+      return ResidentCapitalProjectDetails(
+        project: project,
+        installments: _getTestFixtureCapitalInstallments(project.id),
+      );
+    }
+
+    try {
+      final responses = await Future.wait([
+        ApiClient.get(ApiClient.uri('/api/v1/capital-projects/$projectId')),
+        ApiClient.get(ApiClient.uri('/api/v1/capital-projects/$projectId/installments')),
+      ]).timeout(const Duration(seconds: 4));
+      if (responses.any((response) => response.statusCode != 200)) return null;
+      final projectJson = json.decode(utf8.decode(responses[0].bodyBytes)) as Map<String, dynamic>;
+      final installmentsJson = json.decode(utf8.decode(responses[1].bodyBytes)) as List<dynamic>;
+      return ResidentCapitalProjectDetails(
+        project: CapitalProjectItem.fromJson(projectJson),
+        installments: installmentsJson
+            .map((item) => CapitalProjectInstallmentItem.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<CapitalProjectItem>> fetchCapitalProjects({String? siteId}) async {
     _isLoadingCapitalProjects = true;
     _capitalProjectError = null;

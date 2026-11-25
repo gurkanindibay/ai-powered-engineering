@@ -277,6 +277,8 @@ class DashboardController extends ChangeNotifier {
   List<DuesLiability> _managerDuesList = [];
   List<CapitalDuesSummary> _capitalDues = [];
   List<CapitalDuesSummary> get capitalDues => List.unmodifiable(_capitalDues);
+  List<CapitalProjectItem> _residentCapitalProjects = [];
+  List<CapitalProjectItem> get residentCapitalProjects => List.unmodifiable(_residentCapitalProjects);
   List<DuesLiability> get duesList {
     if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
       return _managerDuesList;
@@ -1323,6 +1325,10 @@ class DashboardController extends ChangeNotifier {
             .map((item) => CapitalDuesSummary.fromJson(item as Map<String, dynamic>))
             .where((item) => item.outstandingBalance > Decimal.zero)
             .toList();
+
+        if (_userSession.role == UserRole.homeResident) {
+          unawaited(fetchResidentCapitalProjects(_activeUnit.siteId));
+        }
 
         final viban = data['virtual_iban'] as String?;
         final advance = readDecimal(data, 'advance_payment');

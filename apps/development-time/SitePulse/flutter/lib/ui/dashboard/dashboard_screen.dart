@@ -15,6 +15,7 @@ import '../components/announcement_composer_page.dart';
 import '../components/payment_checkout_dialog.dart';
 import '../components/profile_role_sheet.dart';
 import '../components/resident_actions_row.dart';
+import '../components/resident_capital_project_pages.dart';
 import '../components/saas_admin_view.dart';
 import '../components/unit_matching_criteria_card.dart';
 import '../components/virtual_iban_card.dart';
@@ -572,9 +573,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         advancePayment: unit.advancePayment,
         virtualIban: unit.virtualIban,
         capitalDues: isOwner ? widget.controller.capitalDues : const [],
+        onCapitalProjectPressed: isOwner ? _openCapitalProjectDetails : null,
         onPayPressed: () => _showPaymentDialog(dues),
         onDetailPressed: () => _showDuesDetailDialog(dues),
       ),
+      if (!isOwner) ...[
+        const SizedBox(height: 12),
+        TenantCapitalProjectsGuidance(projects: widget.controller.residentCapitalProjects),
+      ],
       const SizedBox(height: 16),
       ResidentActionsRow(
         isOwner: isOwner,
@@ -1439,6 +1445,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Future<void> _openCapitalProjectDetails(CapitalDuesSummary summary) async {
+    final details = await widget.controller.fetchResidentCapitalProjectDetails(summary.projectId);
+    if (!mounted) return;
+    if (details == null) {
+      SpToast.error(context, 'Demirbaş proje detayları şu anda alınamıyor.');
+      return;
+    }
+    await AppFullscreenPage.push<void>(
+      context: context,
+      builder: (_) => ResidentCapitalProjectDetailsPage(
+        details: details,
+        outstandingBalance: summary.outstandingBalance,
       ),
     );
   }
