@@ -39,6 +39,12 @@ REFERENCE_CLOCKS = {
     "F5": "2026-11-19",
     "F6": "2026-11-19",
     "F7": "2026-11-19",
+    "F8": "2026-11-19",
+    "F8_CAPITAL": "2026-11-19",
+    "F9": "2026-11-19",
+    "F9_RECON": "2026-11-19",
+    "F10": "2026-11-19",
+    "F10_GOVERNANCE": "2026-11-19",
 }
 
 EXPECTED_TOTALS: dict[str, dict[str, Any]] = {
@@ -90,7 +96,39 @@ EXPECTED_TOTALS: dict[str, dict[str, Any]] = {
         "overdue": Decimal("4567.50"), "advance": Decimal("1250.00"),
         "total_overdue": "4567.50", "total_advance": "1250.00",
     },
+    "F8": {
+        "blocks": 1, "units": 7, "people": 7, "accounts": 7,
+        "periods": 3, "liabilities": 25, "receipts": 9,
+        "overdue": Decimal("4567.50"), "advance": Decimal("1250.00"),
+        "total_overdue": "4567.50", "total_advance": "1250.00",
+        "capital_projects": 1,
+        "capital_budget": Decimal("105000.00"),
+        "capital_installments": 3,
+        "capital_accrued": Decimal("35000.00"),
+    },
+    "F9": {
+        "blocks": 1, "units": 7, "people": 11, "accounts": 7,
+        "periods": 3, "liabilities": 21, "receipts": 0,
+        "overdue": Decimal("9750.00"), "advance": Decimal("0.00"),
+        "total_overdue": "9750.00", "total_advance": "0.00",
+        "virtual_ibans_assigned": 7,
+        "duplicate_candidates": 1,
+    },
+    "F10": {
+        "blocks": 1, "units": 7, "people": 7, "accounts": 7,
+        "periods": 4, "liabilities": 8, "receipts": 0,
+        "overdue": Decimal("11600.00"), "advance": Decimal("0.00"),
+        "total_overdue": "11600.00", "total_advance": "0.00",
+        "sites": 2,
+        "severe_arrears_units": 1,
+        "active_payment_plans": 1,
+        "heat_cost_periods": 1,
+        "scheduled_meetings": 1,
+    },
 }
+EXPECTED_TOTALS["F8_CAPITAL"] = EXPECTED_TOTALS["F8"]
+EXPECTED_TOTALS["F9_RECON"] = EXPECTED_TOTALS["F9"]
+EXPECTED_TOTALS["F10_GOVERNANCE"] = EXPECTED_TOTALS["F10"]
 
 EXPECTED_UNIT_BALANCES: dict[str, list[dict[str, Any]]] = {
     "F0": [],
@@ -145,7 +183,101 @@ EXPECTED_UNIT_BALANCES: dict[str, list[dict[str, Any]]] = {
         {"unit_number": 6, "unit": "A-6", "house_type": "Large flat", "amount_due": "0.00", "advance_balance": "1250.00", "is_paid": True},
         {"unit_number": 7, "unit": "A-7", "house_type": "Flat", "amount_due": "0.00", "advance_balance": "0.00", "is_paid": True},
     ],
+    "F8": [
+        {"unit_number": 1, "unit": "A-1", "house_type": "Flat", "amount_due": "0.00", "advance_balance": "0.00", "is_paid": True, "capital_due": "5000.00"},
+        {"unit_number": 2, "unit": "A-2", "house_type": "Flat", "amount_due": "1522.50", "advance_balance": "0.00", "is_paid": False, "capital_due": "5000.00"},
+        {"unit_number": 3, "unit": "A-3", "house_type": "Flat", "amount_due": "0.00", "advance_balance": "0.00", "is_paid": True, "capital_due": "5000.00"},
+        {"unit_number": 4, "unit": "A-4", "house_type": "Flat", "amount_due": "1522.50", "advance_balance": "0.00", "is_paid": False, "capital_due": "5000.00"},
+        {"unit_number": 5, "unit": "A-5", "house_type": "Flat", "amount_due": "1522.50", "advance_balance": "0.00", "is_paid": False, "capital_due": "5000.00"},
+        {"unit_number": 6, "unit": "A-6", "house_type": "Large flat", "amount_due": "0.00", "advance_balance": "1250.00", "is_paid": True, "capital_due": "5000.00"},
+        {"unit_number": 7, "unit": "A-7", "house_type": "Flat", "amount_due": "0.00", "advance_balance": "0.00", "is_paid": True, "capital_due": "5000.00"},
+    ],
+    "F9": [
+        {"unit_number": 1, "unit": "A-1", "house_type": "Flat", "amount_due": "1500.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 2, "unit": "A-2", "house_type": "Flat", "amount_due": "1500.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 3, "unit": "A-3", "house_type": "Flat", "amount_due": "1500.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 4, "unit": "A-4", "house_type": "Flat", "amount_due": "1500.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 5, "unit": "A-5", "house_type": "Flat", "amount_due": "1500.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 6, "unit": "A-6", "house_type": "Large flat", "amount_due": "2250.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 7, "unit": "A-7", "house_type": "Flat", "amount_due": "0.00", "advance_balance": "0.00", "is_paid": True},
+    ],
+    "F10": [
+        {"unit_number": 1, "unit": "A-1", "house_type": "Flat", "amount_due": "1500.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 2, "unit": "A-2", "house_type": "Flat", "amount_due": "3350.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 3, "unit": "A-3", "house_type": "Flat", "amount_due": "1500.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 4, "unit": "A-4", "house_type": "Flat", "amount_due": "1500.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 5, "unit": "A-5", "house_type": "Flat", "amount_due": "1500.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 6, "unit": "A-6", "house_type": "Large flat", "amount_due": "2250.00", "advance_balance": "0.00", "is_paid": False},
+        {"unit_number": 7, "unit": "A-7", "house_type": "Flat", "amount_due": "0.00", "advance_balance": "0.00", "is_paid": True},
+    ],
 }
+EXPECTED_UNIT_BALANCES["F8_CAPITAL"] = EXPECTED_UNIT_BALANCES["F8"]
+EXPECTED_UNIT_BALANCES["F9_RECON"] = EXPECTED_UNIT_BALANCES["F9"]
+EXPECTED_UNIT_BALANCES["F10_GOVERNANCE"] = EXPECTED_UNIT_BALANCES["F10"]
+
+PM_CHECKLISTS: dict[str, list[str]] = {
+    "F0": [
+        "Verify clean site creation with no initial blocks or units",
+        "Test initial site wizard and block creation workflow",
+    ],
+    "F1": [
+        "Verify 7 units created in A Blok with assigned tariffs and land shares",
+        "Test resident invitation and vacancy assignment",
+    ],
+    "F2": [
+        "Verify resident accounts and credentials activated for 7 personas",
+        "Test resident login and profile navigation",
+    ],
+    "F3": [
+        "Verify period 'Ekim 2026' created in OPEN status without prior residents",
+        "Test tariff calculation and accrual preview on unassigned units",
+    ],
+    "F4": [
+        "Verify single period 'Ekim 2026' with ₺8,800.00 total overdue",
+        "Verify A-1 paid in full (₺1,500.00) with verified receipt TAH-2026-000001",
+        "Test delay penalty calculation across overdue units",
+    ],
+    "F5": [
+        "Verify multi-period accruals (Eylül, Ekim, Kasım 2026) with ₺4,567.50 overdue",
+        "Verify unit A-6 holding ₺1,250.00 operational advance balance",
+        "Test FIFO allocation and advance balance utilization",
+    ],
+    "F6": [
+        "Verify changing occupancy lifecycle across three periods",
+        "Verify multi-debtor status on unit A-2 (Ahmet Yılmaz, Selin Demir, Mert Kılıç)",
+        "Test pro-rata dues split approval workflow with four-eyes reviewer",
+    ],
+    "F7": [
+        "Verify historical period 'Eylül 2026' is CLOSED with immutable snapshot",
+        "Verify Ekim and Kasım 2026 remain ACTIVE",
+        "Test period re-open request and audit trail",
+    ],
+    "F8": [
+        "Verify capital project 'Exterior Facade Insulation' with ₺105,000.00 total budget",
+        "Verify 1st installment accrued (₺35,000.00) across 7 units (₺5,000.00 per unit)",
+        "Verify unit A-6 holds ₺1,250.00 operational advance ready for inter-ledger virman",
+        "Verify contractor 'Özkan Yalıtım İnşaat A.Ş.' record ready for milestone disbursement",
+        "Test inter-ledger virman from operational advance to capital debt",
+    ],
+    "F9": [
+        "Verify deterministic Virtual IBANs (TR...) assigned to all 7 units",
+        "Verify multi-debtor history on unit A-2 (owner Ahmet, former tenant Selin, tenant Mert)",
+        "Test bank statement import and automated reconciliation matching via Virtual IBAN",
+        "Identify duplicate candidate person in directory matching phone '+90 532 111 22 33'",
+        "Execute person-card merge into canonical record and verify historical ledger preservation",
+    ],
+    "F10": [
+        "Verify multi-site tenant isolation between Begonya Sitesi and Kardelen Rezidans",
+        "Verify unit A-2 has severe >90-day arrears from Haziran 2026 (₺1,850.00 overdue)",
+        "Test legal dunning notice generation and collection case creation for severe arrears",
+        "Verify active 3-installment payment plan on unit A-4 with four-eyes approvals",
+        "Inspect heating meter readings and verify 70/30 consumption cost distribution",
+        "Review scheduled General Assembly meeting and agenda items for voting",
+    ],
+}
+PM_CHECKLISTS["F8_CAPITAL"] = PM_CHECKLISTS["F8"]
+PM_CHECKLISTS["F9_RECON"] = PM_CHECKLISTS["F9"]
+PM_CHECKLISTS["F10_GOVERNANCE"] = PM_CHECKLISTS["F10"]
 
 PERSONAS: dict[str, list[dict[str, str | None]]] = {
     "reference_residents": [
@@ -198,6 +330,7 @@ class ScenarioManifest:
     expected_site_totals: dict[str, Any]
     unit_by_unit_expected_balances: list[dict[str, Any]]
     personas: list[dict[str, Any]]
+    pm_checklist: list[str] = field(default_factory=list)
 
     @property
     def unit_balances(self) -> list[dict[str, Any]]:
@@ -206,6 +339,10 @@ class ScenarioManifest:
     @property
     def persona_accounts(self) -> list[dict[str, Any]]:
         return self.personas
+
+    @property
+    def pm_checklists(self) -> list[str]:
+        return self.pm_checklist
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -218,6 +355,8 @@ class ScenarioManifest:
             "unit_balances": self.unit_by_unit_expected_balances,
             "personas": self.personas,
             "persona_accounts": self.personas,
+            "pm_checklist": self.pm_checklist,
+            "pm_checklists": self.pm_checklist,
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -538,6 +677,200 @@ def close_september_sql(site_id: str | int) -> str:
     )
 
 
+def build_f8_sql(site_id: str | int, unit_ids: tuple[str, ...]) -> str:
+    site = safe_id(site_id)
+    u_ids = tuple(safe_id(uid) for uid in unit_ids)
+    statements = [
+        "BEGIN;",
+        f"INSERT INTO capital_projects (site_id, title, category, description, total_budget, allocation_basis, target_start_date, target_completion_date, contractor_name, contractor_tax_no, contractor_iban, contract_amount, status) "
+        f"VALUES ({site}, 'Exterior Facade Insulation', 'FACADE_INSULATION', 'Comprehensive exterior insulation and thermal wrapping project', 105000.00, 'BY_LAND_SHARE', DATE '2026-11-01', DATE '2027-02-28', 'Özkan Yalıtım İnşaat A.Ş.', '1234567890', 'TR330006100519786457841326', 105000.00, 'ACTIVE');",
+        f"INSERT INTO capital_project_installments (project_id, installment_number, total_installments, due_date, installment_budget, percentage, is_accrued, accrued_at) "
+        f"SELECT id, 1, 3, DATE '2026-11-30', 35000.00, 33.34, TRUE, TIMESTAMPTZ '2026-11-19 10:00:00+03' "
+        f"FROM capital_projects WHERE site_id = {site} AND title = 'Exterior Facade Insulation';",
+        f"INSERT INTO capital_project_installments (project_id, installment_number, total_installments, due_date, installment_budget, percentage, is_accrued) "
+        f"SELECT id, 2, 3, DATE '2026-12-31', 35000.00, 33.33, FALSE "
+        f"FROM capital_projects WHERE site_id = {site} AND title = 'Exterior Facade Insulation';",
+        f"INSERT INTO capital_project_installments (project_id, installment_number, total_installments, due_date, installment_budget, percentage, is_accrued) "
+        f"SELECT id, 3, 3, DATE '2027-01-31', 35000.00, 33.33, FALSE "
+        f"FROM capital_projects WHERE site_id = {site} AND title = 'Exterior Facade Insulation';",
+    ]
+    for uid in u_ids:
+        statements.append(
+            f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, capital_project_id, installment_number, created_at) "
+            f"SELECT {uid}, 'Kasım 2026', 'OWNER', 'CAPITAL_DUES', u.owner_person_id, 5000.00, DATE '2026-11-30', DATE '2026-11-30', 'PENDING', 0.00, 0.00, 0.00, 0.00, cp.id, 1, TIMESTAMPTZ '2026-11-19 10:00:00+03' "
+            f"FROM units u, capital_projects cp WHERE u.id = {uid} AND cp.site_id = {site} AND cp.title = 'Exterior Facade Insulation';"
+        )
+    statements.append("COMMIT;")
+    return " ".join(statements)
+
+
+def build_f9_sql(site_id: str | int, unit_ids: tuple[str, ...], attempt_slug: str, password_hash: str) -> str:
+    site = safe_id(site_id)
+    u_ids = tuple(safe_id(uid) for uid in unit_ids)
+    u1, u2, u3, u4, u5, u6, u7 = u_ids
+    attempt = slug(attempt_slug)
+
+    viban_updates = " ".join(
+        f"UPDATE units SET virtual_iban = '{make_viban('00205', site, 'A', unit_no)}' WHERE site_id = {site} AND unit_number = {unit_no};"
+        for unit_no in range(1, 8)
+    )
+
+    statements = [
+        "BEGIN;",
+        f"INSERT INTO persons (site_id, full_name, email, phone, person_type) VALUES "
+        f"({site}, 'Mert Kılıç', '{attempt}.mert@journey.e2e.test', '+90 533 000 00 01', 'HOME_RESIDENT'), "
+        f"({site}, 'Oya Çelik', '{attempt}.oya@journey.e2e.test', '+90 533 000 00 02', 'HOME_RESIDENT'), "
+        f"({site}, 'Gül Tanrıverdi', '{attempt}.gul@journey.e2e.test', '+90 533 000 00 03', 'HOME_OWNER'), "
+        f"({site}, 'Ahmet Yılmaz', '{attempt}.ahmet.duplicate@journey.e2e.test', '+90 532 111 22 33', 'HOME_OWNER');",
+        f"INSERT INTO users (site_id, email, password_hash, role, is_active, must_change_password) VALUES "
+        f"({site}, 'journey.reviewer.{attempt[:8]}@e2e.test', '{password_hash}', 'SITE_MANAGER', TRUE, FALSE);",
+        f"UPDATE unit_occupancies SET is_active = FALSE, end_date = DATE '2026-11-15' WHERE unit_id = {u2};",
+        f"INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active) "
+        f"SELECT {u2}, id, 'TENANT', DATE '2026-11-15', TRUE FROM persons WHERE site_id = {site} AND full_name = 'Mert Kılıç' LIMIT 1;",
+        f"UPDATE units SET tenant_person_id = (SELECT id FROM persons WHERE site_id = {site} AND full_name = 'Mert Kılıç' LIMIT 1), occupancy_status = 'TENANT_OCCUPIED' WHERE id = {u2};",
+        f"INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active) "
+        f"SELECT {u3}, id, 'TENANT', DATE '2026-11-18', TRUE FROM persons WHERE site_id = {site} AND full_name = 'Oya Çelik' LIMIT 1;",
+        f"UPDATE units SET tenant_person_id = (SELECT id FROM persons WHERE site_id = {site} AND full_name = 'Oya Çelik' LIMIT 1), occupancy_status = 'TENANT_OCCUPIED' WHERE id = {u3};",
+        f"UPDATE unit_ownerships SET is_active = FALSE, end_date = DATE '2026-11-05' WHERE unit_id = {u4};",
+        f"INSERT INTO unit_ownerships (unit_id, person_id, share_numerator, share_denominator, start_date, is_active) "
+        f"SELECT {u4}, id, 1, 1, DATE '2026-11-05', TRUE FROM persons WHERE site_id = {site} AND full_name = 'Gül Tanrıverdi' LIMIT 1;",
+        f"UPDATE units SET owner_person_id = (SELECT id FROM persons WHERE site_id = {site} AND full_name = 'Gül Tanrıverdi' LIMIT 1), occupancy_status = 'OWNER_OCCUPIED' WHERE id = {u4};",
+        viban_updates,
+        f"INSERT INTO dues_periods (site_id, period_name, due_date, status) VALUES "
+        f"({site}, 'Eylül 2026', DATE '2026-09-10', 'ACTIVE'), "
+        f"({site}, 'Ekim 2026', DATE '2026-10-10', 'ACTIVE'), "
+        f"({site}, 'Kasım 2026', DATE '2026-11-10', 'ACTIVE');",
+    ]
+
+    for uid in u_ids:
+        statements.append(
+            f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, created_at) "
+            f"SELECT {uid}, 'Eylül 2026', 'OWNER', 'OPERATIONAL_DUES', u.owner_person_id, 0.00, DATE '2026-09-10', DATE '2026-09-10', 'CANCELLED', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-09-01 08:00:00+03' "
+            f"FROM units u WHERE u.id = {uid};"
+        )
+    for uid in u_ids:
+        statements.append(
+            f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, created_at) "
+            f"SELECT {uid}, 'Ekim 2026', 'OWNER', 'OPERATIONAL_DUES', u.owner_person_id, 0.00, DATE '2026-10-10', DATE '2026-10-10', 'CANCELLED', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-10-01 08:00:00+03' "
+            f"FROM units u WHERE u.id = {uid};"
+        )
+
+    nov_liabilities = [
+        (u1, "OWNER", "1500.00", "OVERDUE", "u.owner_person_id"),
+        (u2, "TENANT", "1500.00", "OVERDUE", "u.tenant_person_id"),
+        (u3, "TENANT", "1500.00", "OVERDUE", "u.tenant_person_id"),
+        (u4, "OWNER", "1500.00", "OVERDUE", "u.owner_person_id"),
+        (u5, "TENANT", "1500.00", "OVERDUE", "u.tenant_person_id"),
+        (u6, "OWNER", "2250.00", "OVERDUE", "u.owner_person_id"),
+        (u7, "OWNER", "0.00", "PENDING", "u.owner_person_id"),
+    ]
+    for uid, debtor, amount, status, person_expr in nov_liabilities:
+        statements.append(
+            f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, created_at) "
+            f"SELECT {uid}, 'Kasım 2026', '{debtor}', 'OPERATIONAL_DUES', {person_expr}, {amount}, DATE '2026-11-10', DATE '2026-11-10', '{status}', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-11-01 08:00:00+03' "
+            f"FROM units u WHERE u.id = {uid};"
+        )
+
+    statements.append("COMMIT;")
+    return " ".join(statements)
+
+
+def build_f10_sql(
+    site_id: str | int,
+    unit_ids: tuple[str, ...],
+    attempt_slug: str,
+    password_hash: str,
+    kardelen_site_id: str | int | None = None,
+) -> str:
+    site = safe_id(site_id)
+    u_ids = tuple(safe_id(uid) for uid in unit_ids)
+    u1, u2, u3, u4, u5, u6, u7 = u_ids
+    attempt = slug(attempt_slug)
+
+    k_site_sql = (
+        f"INSERT INTO sites (site_name, proration_enabled, created_at) VALUES ('Kardelen Rezidans', TRUE, TIMESTAMPTZ '2026-09-01 00:00:00+00'); "
+        "INSERT INTO blocks (site_id, block_name, total_floors) SELECT id, 'K Blok', 4 FROM sites WHERE site_name = 'Kardelen Rezidans' ORDER BY id DESC LIMIT 1; "
+        "INSERT INTO house_types (site_id, type_name, dues_amount, description) SELECT id, 'Flat', 1500.00, 'Kardelen tariff' FROM sites WHERE site_name = 'Kardelen Rezidans' ORDER BY id DESC LIMIT 1; "
+        "INSERT INTO units (block_id, site_id, unit_number, floor, land_share, occupancy_status, house_type, house_type_id, created_at) "
+        "SELECT b.id, s.id, n.n, 1, 1, 'VACANT', h.type_name, h.id, TIMESTAMPTZ '2026-09-01 00:00:00+00' "
+        "FROM sites s JOIN blocks b ON b.site_id = s.id JOIN house_types h ON h.site_id = s.id "
+        "CROSS JOIN (VALUES (1), (2), (3), (4)) AS n(n) "
+        "WHERE s.site_name = 'Kardelen Rezidans' ORDER BY s.id DESC LIMIT 4;"
+    ) if kardelen_site_id is None else (
+        f"INSERT INTO blocks (site_id, block_name, total_floors) VALUES ({safe_id(kardelen_site_id)}, 'K Blok', 4); "
+        f"INSERT INTO house_types (site_id, type_name, dues_amount, description) VALUES ({safe_id(kardelen_site_id)}, 'Flat', 1500.00, 'Kardelen tariff'); "
+        f"INSERT INTO units (block_id, site_id, unit_number, floor, land_share, occupancy_status, house_type, house_type_id, created_at) "
+        f"SELECT b.id, {safe_id(kardelen_site_id)}, n.n, 1, 1, 'VACANT', h.type_name, h.id, TIMESTAMPTZ '2026-09-01 00:00:00+00' "
+        f"FROM blocks b JOIN house_types h ON h.site_id = b.site_id CROSS JOIN (VALUES (1), (2), (3), (4)) AS n(n) "
+        f"WHERE b.site_id = {safe_id(kardelen_site_id)} ORDER BY n.n;"
+    )
+
+    statements = [
+        "BEGIN;",
+        f"UPDATE sites SET site_name = 'Begonya Sitesi' WHERE id = {site};",
+        k_site_sql,
+        f"INSERT INTO dues_periods (site_id, period_name, due_date, status) VALUES "
+        f"({site}, 'Haziran 2026', DATE '2026-06-10', 'ACTIVE'), "
+        f"({site}, 'Eylül 2026', DATE '2026-09-10', 'ACTIVE'), "
+        f"({site}, 'Ekim 2026', DATE '2026-10-10', 'ACTIVE'), "
+        f"({site}, 'Kasım 2026', DATE '2026-11-10', 'ACTIVE');",
+        f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, penalty_accrued_through, created_at) "
+        f"SELECT {u2}, 'Haziran 2026', 'OWNER', 'OPERATIONAL_DUES', u.owner_person_id, 1500.00, DATE '2026-06-10', DATE '2026-06-10', 'OVERDUE', 350.00, 0.00, 0.00, 0.00, DATE '2026-11-19', TIMESTAMPTZ '2026-06-01 08:00:00+03' "
+        f"FROM units u WHERE u.id = {u2};",
+        f"INSERT INTO late_fee_accruals (site_id, due_id, accrual_date, outstanding_principal, segment_start, segment_base, cumulative_fee, daily_amount) "
+        f"SELECT {site}, d.id, DATE '2026-11-19', 1500.00, DATE '2026-06-10', 0.00, 350.00, 2.50 "
+        f"FROM dues_liabilities d WHERE d.unit_id = {u2} AND d.period = 'Haziran 2026';",
+        f"INSERT INTO debt_aging_snapshots (site_id, unit_id, debtor_type, current_due, overdue_1_30_days, overdue_31_60_days, overdue_60_plus_days, accrued_delay_penalty, total_outstanding, as_of_date) "
+        f"VALUES ({site}, {u2}, 'OWNER', 1500.00, 0.00, 0.00, 1500.00, 350.00, 3350.00, DATE '2026-11-19');",
+        f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, principal_amount, due_date, effective_due_date, status, delay_penalty, paid_principal, paid_penalty, paid_amount, created_at) VALUES "
+        f"({u1}, 'Kasım 2026', 'OWNER', 'OPERATIONAL_DUES', (SELECT owner_person_id FROM units WHERE id = {u1}), 1500.00, DATE '2026-11-10', DATE '2026-11-10', 'OVERDUE', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-11-01 08:00:00+03'), "
+        f"({u2}, 'Kasım 2026', 'OWNER', 'OPERATIONAL_DUES', (SELECT owner_person_id FROM units WHERE id = {u2}), 1500.00, DATE '2026-11-10', DATE '2026-11-10', 'OVERDUE', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-11-01 08:00:00+03'), "
+        f"({u3}, 'Kasım 2026', 'OWNER', 'OPERATIONAL_DUES', (SELECT owner_person_id FROM units WHERE id = {u3}), 1500.00, DATE '2026-11-10', DATE '2026-11-10', 'OVERDUE', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-11-01 08:00:00+03'), "
+        f"({u4}, 'Kasım 2026', 'OWNER', 'OPERATIONAL_DUES', (SELECT owner_person_id FROM units WHERE id = {u4}), 1500.00, DATE '2026-11-10', DATE '2026-11-10', 'OVERDUE', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-11-01 08:00:00+03'), "
+        f"({u5}, 'Kasım 2026', 'OWNER', 'OPERATIONAL_DUES', (SELECT owner_person_id FROM units WHERE id = {u5}), 1500.00, DATE '2026-11-10', DATE '2026-11-10', 'OVERDUE', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-11-01 08:00:00+03'), "
+        f"({u6}, 'Kasım 2026', 'OWNER', 'OPERATIONAL_DUES', (SELECT owner_person_id FROM units WHERE id = {u6}), 2250.00, DATE '2026-11-10', DATE '2026-11-10', 'OVERDUE', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-11-01 08:00:00+03'), "
+        f"({u7}, 'Kasım 2026', 'OWNER', 'OPERATIONAL_DUES', (SELECT owner_person_id FROM units WHERE id = {u7}), 0.00, DATE '2026-11-10', DATE '2026-11-10', 'PENDING', 0.00, 0.00, 0.00, 0.00, TIMESTAMPTZ '2026-11-01 08:00:00+03');",
+        f"INSERT INTO payment_plans (site_id, unit_id, debtor_type, due_ids, total_amount, installment_count, first_due_date, grace_days, waive_penalty_on_completion, status, opened_on, created_by, approved_by, note) "
+        f"VALUES ({site}, {u4}, 'OWNER', '[]'::jsonb, 1500.00, 3, DATE '2026-11-15', 5, FALSE, 'ACTIVE', DATE '2026-11-01', 'manager', 'board_president', 'Kasım aidatı 3 taksit yapılandırma planı');",
+        f"INSERT INTO payment_plan_installments (plan_id, seq, due_date, amount) "
+        f"SELECT id, 1, DATE '2026-11-15', 500.00 FROM payment_plans WHERE site_id = {site} AND unit_id = {u4} ORDER BY id DESC LIMIT 1;",
+        f"INSERT INTO payment_plan_installments (plan_id, seq, due_date, amount) "
+        f"SELECT id, 2, DATE '2026-12-15', 500.00 FROM payment_plans WHERE site_id = {site} AND unit_id = {u4} ORDER BY id DESC LIMIT 1;",
+        f"INSERT INTO payment_plan_installments (plan_id, seq, due_date, amount) "
+        f"SELECT id, 3, DATE '2027-01-15', 500.00 FROM payment_plans WHERE site_id = {site} AND unit_id = {u4} ORDER BY id DESC LIMIT 1;",
+        f"INSERT INTO heat_cost_periods (site_id, label, period_start, period_end, total_cost, consumption_share_percent, due_date, status, approved_by, approved_at, created_by, created_at) "
+        f"VALUES ({site}, 'Kasım 2026 Isı Paylaşımı', DATE '2026-11-01', DATE '2026-11-30', 14000.00, 70.00, DATE '2026-12-10', 'APPROVED', 'manager', TIMESTAMPTZ '2026-11-19 10:00:00+03', 'manager', TIMESTAMPTZ '2026-11-19 09:00:00+03');",
+    ]
+
+    for idx, uid in enumerate(u_ids, start=1):
+        prev = f"{100.000 + (idx * 10):.3f}"
+        curr = f"{150.000 + (idx * 15):.3f}"
+        statements.append(
+            f"INSERT INTO heat_meter_readings (period_id, unit_id, area_weight, previous_reading, current_reading) "
+            f"SELECT id, {uid}, 100, {prev}, {curr} FROM heat_cost_periods WHERE site_id = {site} AND label = 'Kasım 2026 Isı Paylaşımı' ORDER BY id DESC LIMIT 1;"
+        )
+
+    statements.extend([
+        f"INSERT INTO assembly_meetings (site_id, kind, call_number, scheduled_at, location, status, created_by, created_at) "
+        f"VALUES ({site}, 'ORDINARY', 1, TIMESTAMPTZ '2026-12-05 14:00:00+03', 'Site Toplantı Salonu', 'PLANNED', 'manager', TIMESTAMPTZ '2026-11-19 09:00:00+03');",
+        f"INSERT INTO assembly_agenda_items (meeting_id, seq, title, description, rule, status) "
+        f"SELECT id, 1, 'Açılış ve Divan Heyeti Seçimi', 'Toplantı açılışı, yoklama ve divan seçimi', 'SIMPLE', 'OPEN' "
+        f"FROM assembly_meetings WHERE site_id = {site} AND status = 'PLANNED' ORDER BY id DESC LIMIT 1;",
+        f"INSERT INTO assembly_agenda_items (meeting_id, seq, title, description, rule, status) "
+        f"SELECT id, 2, '2026 Yılı Faaliyet ve Denetim Raporlarının Okunması', 'Geçmiş dönem faaliyet raporunun sunumu ve ibrası', 'SIMPLE', 'OPEN' "
+        f"FROM assembly_meetings WHERE site_id = {site} AND status = 'PLANNED' ORDER BY id DESC LIMIT 1;",
+        f"INSERT INTO assembly_agenda_items (meeting_id, seq, title, description, rule, status) "
+        f"SELECT id, 3, '2027 Yılı İşletme Projesinin Görüşülmesi ve Karara Bağlanması', 'Tahmini bütçe ve aidat artış oranlarının müzakeresi', 'SIMPLE', 'OPEN' "
+        f"FROM assembly_meetings WHERE site_id = {site} AND status = 'PLANNED' ORDER BY id DESC LIMIT 1;",
+        f"INSERT INTO assembly_agenda_items (meeting_id, seq, title, description, rule, status) "
+        f"SELECT id, 4, 'Yeni Yönetim ve Denetim Kurulunun Seçilmesi', 'Gelecek çalışma dönemi için kurul üye seçimleri', 'SIMPLE', 'OPEN' "
+        f"FROM assembly_meetings WHERE site_id = {site} AND status = 'PLANNED' ORDER BY id DESC LIMIT 1;",
+        "COMMIT;",
+    ])
+
+    return " ".join(statements)
+
+
 # ---------------------------------------------------------------------------
 # High-Level Seeding Handlers
 # ---------------------------------------------------------------------------
@@ -822,12 +1155,12 @@ def seed_preset(
         person_ids = ()
         site = safe_id(site_id)
 
-        # F0–F5, F7, or standalone F6
+        # F0–F5, F7, or standalone F6, F8, F9, F10
         if preset == "F0":
             sql_fn(delete_blocks_sql(site))
-        if preset in {"F1", "F2", "F3", "F4", "F5", "F7"}:
+        if preset in {"F1", "F2", "F3", "F4", "F5", "F7", "F8", "F8_CAPITAL", "F9", "F9_RECON", "F10", "F10_GOVERNANCE"}:
             unit_ids = create_structure(sql_fn, site_id, manifest)
-        if preset in {"F2", "F4", "F5", "F7"}:
+        if preset in {"F2", "F4", "F5", "F7", "F8", "F8_CAPITAL", "F9", "F9_RECON", "F10", "F10_GOVERNANCE"}:
             person_ids = create_residents(sql_fn, site_id, manager_user_id, manifest, attempt_slug=attempt)
         if preset == "F3":
             sql_fn(create_period_no_residents_sql(site_id))
@@ -837,6 +1170,16 @@ def seed_preset(
             sql_fn(build_f5_sql(site_id, unit_ids))
             if preset == "F7":
                 sql_fn(close_september_sql(site_id))
+        elif preset in {"F8", "F8_CAPITAL"}:
+            sql_fn(build_f5_sql(site_id, unit_ids))
+            sql_fn(build_f8_sql(site_id, unit_ids))
+        elif preset in {"F9", "F9_RECON"}:
+            password_hash = sql_fn(f"SELECT password_hash FROM users WHERE id = {safe_id(manager_user_id)};").strip() or "$argon2id$mocked_hash"
+            sql_fn(build_f9_sql(site_id, unit_ids, attempt_slug=attempt, password_hash=password_hash))
+        elif preset in {"F10", "F10_GOVERNANCE"}:
+            site_name = "Begonya Sitesi"
+            password_hash = sql_fn(f"SELECT password_hash FROM users WHERE id = {safe_id(manager_user_id)};").strip() or "$argon2id$mocked_hash"
+            sql_fn(build_f10_sql(site_id, unit_ids, attempt_slug=attempt, password_hash=password_hash))
 
         # Synchronize backend state with database
         if reload_fn is not None:
@@ -848,7 +1191,7 @@ def seed_preset(
 
         # Determine whether to set clock
         if set_clock is None:
-            should_set_clock = (preset in {"F4", "F5", "F6", "F7"}) if stack is not None else True
+            should_set_clock = (preset in {"F4", "F5", "F6", "F7", "F8", "F8_CAPITAL", "F9", "F9_RECON", "F10", "F10_GOVERNANCE"}) if stack is not None else True
         else:
             should_set_clock = bool(set_clock)
 
@@ -876,7 +1219,7 @@ def seed_preset(
             "password": manager_password,
         }
     ]
-    if preset in {"F2", "F4", "F5", "F7"}:
+    if preset in {"F2", "F4", "F5", "F7", "F8", "F8_CAPITAL", "F10", "F10_GOVERNANCE"}:
         for p in PERSONAS["reference_residents"]:
             personas_list.append({
                 "role": p["role"],
@@ -885,7 +1228,7 @@ def seed_preset(
                 "email": f"{attempt}.{p['key']}@journey.e2e.test",
                 "password": manager_password,
             })
-    elif preset == "F6":
+    elif preset in {"F6", "F9", "F9_RECON"}:
         personas_list.append({
             "role": "SITE_MANAGER",
             "name": "Second Manager (Reviewer)",
@@ -901,6 +1244,14 @@ def seed_preset(
                 "email": f"{attempt}.{p['key']}@journey.e2e.test",
                 "password": manager_password,
             })
+        if preset in {"F9", "F9_RECON"}:
+            personas_list.append({
+                "role": "HOME_OWNER",
+                "name": "Ahmet Yılmaz (Duplicate)",
+                "unit": None,
+                "email": f"{attempt}.ahmet.duplicate@journey.e2e.test",
+                "password": manager_password,
+            })
 
     # Build Scenario Manifest
     scenario_manifest = ScenarioManifest(
@@ -911,6 +1262,7 @@ def seed_preset(
         expected_site_totals=EXPECTED_TOTALS[preset],
         unit_by_unit_expected_balances=EXPECTED_UNIT_BALANCES[preset],
         personas=personas_list,
+        pm_checklist=PM_CHECKLISTS.get(preset, []),
     )
 
     fixture = JourneyFixture(
@@ -932,21 +1284,22 @@ def seed_preset(
 # ---------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    valid_presets = [f"F{i}" for i in range(11)] + ["F8_CAPITAL", "F9_RECON", "F10_GOVERNANCE"]
     parser = argparse.ArgumentParser(
-        description="SitePulse Product Manager Scenario Seeder (F0–F7)",
+        description="SitePulse Product Manager Scenario Seeder (F0–F10)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "preset",
         nargs="?",
         default="F4",
-        choices=[f"F{i}" for i in range(8)],
-        help="Scenario preset to seed (F0-F7)",
+        choices=valid_presets,
+        help="Scenario preset to seed (F0-F10)",
     )
     parser.add_argument(
         "--preset",
         dest="opt_preset",
-        choices=[f"F{i}" for i in range(8)],
+        choices=valid_presets,
         help="Scenario preset to seed (alternative to positional argument)",
     )
     parser.add_argument(
@@ -1020,6 +1373,10 @@ def main(argv: list[str] | None = None) -> int:
             for u in m.unit_by_unit_expected_balances:
                 paid = "PAID" if u["is_paid"] else "OVERDUE"
                 print(f"  Unit {u['unit']} ({u['house_type']}): Due={u['amount_due']} TRY, Advance={u['advance_balance']} TRY [{paid}]")
+        if m.pm_checklist:
+            print("\nPM Checklist:")
+            for item in m.pm_checklist:
+                print(f"  [ ] {item}")
         print("=" * 60)
 
     return 0
