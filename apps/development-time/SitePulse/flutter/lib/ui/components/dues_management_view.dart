@@ -1446,14 +1446,17 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   color: flat.isPaid ? AppColors.accentGreen.withOpacity(0.15) : AppColors.accentRed.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(
-                  flat.isPaid
-                      ? (flat.amountDue == Decimal.zero ? 'BORÇ YOK' : 'ÖDENDİ (${flat.paidDateStr ?? "Banka"})')
-                      : '${flat.daysOverdue} Gün Gecikti',
-                  style: TextStyle(
-                    color: flat.isPaid ? AppColors.successText(context) : AppColors.dangerText(context),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+                child: testId(
+                  'dues_status_badge_${flat.id}',
+                  Text(
+                    flat.isPaid
+                        ? (flat.amountDue == Decimal.zero ? 'BORÇ YOK' : 'ÖDENDİ (${flat.paidDateStr ?? "Banka"})')
+                        : '${flat.daysOverdue} Gün Gecikti',
+                    style: TextStyle(
+                      color: flat.isPaid ? AppColors.successText(context) : AppColors.dangerText(context),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
