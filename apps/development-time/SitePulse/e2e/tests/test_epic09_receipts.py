@@ -77,7 +77,7 @@ def test_tenant_statement_lists_operational_items_only(login_as, page, api, acto
     api.move_in(manager, b3, "Selin Demir", "selin.demir@e2e.test")
     builders.tenant_debt(b3, Decimal("1500.00"))
     stack.sql(f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type) "
-              f"VALUES ({int(b3)}, 'Asansör Taksit 1', 700.00, CURRENT_DATE + 10, 'PENDING', 'OWNER', 'CAPITAL_DUES');")
+              f"VALUES ({int(b3)}, 'Asansör Taksit 1', 700.00, DATE '{stack.fixture_today}' + 10, 'PENDING', 'OWNER', 'CAPITAL_DUES');")
     stack.restart_backend()
     login_as("manager")
     ManagerCockpit(page).wait()

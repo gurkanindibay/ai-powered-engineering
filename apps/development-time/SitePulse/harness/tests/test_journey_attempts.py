@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import warnings
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -87,17 +88,20 @@ class JourneyAttemptTests(unittest.TestCase):
             stack = E2EStack.__new__(E2EStack)
             stack.backend = FakeBackend()
             stack.e2e_clock_override = None
+            stack.fixture_instant = datetime(2026, 11, 24, 9, tzinfo=timezone.utc)
             stack.remember_e2e_clock({"action": "set_date", "date": "2026-11-19"})
             statements: list[str] = []
             stack.sql = lambda statement: statements.append(statement)
 
-            with patch("support.stack.asc.http") as http:
+            with patch("support.stack.asc.http", return_value=(200, "")) as http:
                 teardown_sites(stack, manifest)
 
             self.assertTrue(stack.backend.restarted)
             self.assertEqual(len(statements), 1)
             self.assertIsNone(stack.e2e_clock_override)
-            http.assert_not_called()
+            # The test's own date is dropped; the run's frozen fixture instant is pinned instead.
+            http.assert_called_once()
+            self.assertEqual(http.call_args.kwargs["body"], {"action": "set_instant", "at": "2026-11-24T09:00:00Z"})
 
     def test_clock_client_uses_e2e_control_endpoint_and_enforces_monotonic_advance(self) -> None:
         api = Api("http://127.0.0.1")
