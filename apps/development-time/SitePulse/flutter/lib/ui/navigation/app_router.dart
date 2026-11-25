@@ -115,6 +115,9 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
       );
       if (quickLoginTab != null) {
         _tab = quickLoginTab;
+        // The handoff fully replaces any earlier deep link, and the rebuild reports
+        // the clean tab URL, so credential parameters leave the address bar.
+        _pendingDeepLink = null;
         _sessionIdentity = (controller.userRole, controller.siteAdminPath);
         notifyListeners();
         return;

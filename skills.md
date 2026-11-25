@@ -553,7 +553,7 @@ python3 -I scripts/test_strategy_scan.py --output scan.json  # every test and sc
   - `down`: Cleanly stops all workbench processes recorded in the pidfile, including the Workbench Web UI (`--stop-db` to also stop database containers).
   - `serve`: Runs only the Workbench Web UI in the foreground (`--ui-port`, `--api-url`, `--state-file`).
   - `seed <preset>`: Seeds scenario presets (`F0`–`F7` and later `F8`–`F10`) via `pm_scenarios.seeder`, sets `/api/e2e/clock` to the preset's reference date, and outputs a formatted Cheat Sheet table or structured JSON.
-  - `clock <set|advance|tick|reset>`: CLI wrapper calling `/api/e2e/clock` for deterministic test time advancement.
+  - `clock <set|advance|tick|reset|status>`: CLI wrapper calling `/api/e2e/clock` (`status`/`get` read it with `GET`) for deterministic test time advancement.
   - `status`: Inspects live workbench processes, PID state, backend API health and Workbench UI health.
 - **Safety Guardrail:** Strictly refuses execution if `APP_ENV=production` or `ENVIRONMENT=production`.
 - **Output:** Supports `--help` and `--json` on all subcommands. Zero floating-point arithmetic for financial figures.
@@ -564,7 +564,9 @@ python3 -I scripts/test_strategy_scan.py --output scan.json  # every test and sc
 - **Scenario Gallery:** Presets grouped into packs A–F with a one-click **Prepare Scenario** button per preset; the button seeds the preset and pins the simulated clock to its reference date.
 - **Active Scenario Cheat Sheet:** Site name and ID, simulated reference date, expected site totals, unit-by-unit expected balances, persona credentials and the focused PM checklist.
 - **Reset Current Scenario:** Re-provisions the active preset exactly as it was first prepared.
-- **JSON API:** `GET /api/presets` (gallery), `POST /api/seed` (`{"preset": "F5"}`), `GET /api/active` (cheat sheet or `null`), `POST /api/reset` (re-provision), `GET /healthz`.
+- **Time Machine Bar:** Shows the live simulated clock and advances it without leaving the page (`+1`, `+10`, due-day, month-end, a custom date, and a scheduler tick); reads the clock through `GET /api/clock` and writes through `POST /api/clock`.
+- **Persona Quick-Launch Panel:** One-click sign-in as any persona of the active scenario in a new tab. The handoff is a developer-only deep link carrying the persona credentials in the **URL fragment** (`/#/quick-login?...`), so no password reaches a web server, its access log or a `Referer` header; the Flutter app consumes it, replaces the address bar with the clean tab URL, and stays structurally disabled in production/release builds.
+- **JSON API:** `GET /api/presets` (gallery), `POST /api/seed` (`{"preset": "F5"}`), `GET /api/active` (cheat sheet or `null`), `POST /api/reset` (re-provision), `GET /api/clock` (simulated clock), `POST /api/clock` (`{"action": "advance", "date": "..."}`), `GET /healthz`.
 - **Single source of truth:** Clocks, totals, unit balances and checklists come from `pm_scenarios`, so the UI cannot drift from the seeder the E2E suite uses.
 - **Active state:** Stored in `~/.sitepulse/workbench-active.json` so a UI restart keeps showing the last prepared scenario.
 - **Same-origin guardrails:** the UI accepts only loopback `Host` headers (so a DNS-rebinding page cannot read the cheat sheet), rejects a foreign `Origin`, and requires `Content-Type: application/json` on `POST` (which forces a CORS preflight this server never approves). It binds to loopback and refuses a non-loopback bind unless `--allow-remote` is given.

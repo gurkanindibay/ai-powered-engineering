@@ -776,6 +776,24 @@ class TimeMachineEndpointTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertIn("Cross-origin", json.loads(raw.decode("utf-8"))["error"])
 
+    def test_get_clock_falls_back_when_the_clock_backend_is_unavailable(self) -> None:
+        """The Time Machine bar still renders a usable date when the clock cannot be read."""
+        with tempfile.TemporaryDirectory() as tmp:
+
+            def broken_clock(_payload: dict[str, Any]) -> Any:
+                raise RuntimeError("clock backend is down")
+
+            service = web.WorkbenchService(
+                clock_action_fn=broken_clock,
+                state_path=Path(tmp) / "active.json",
+            )
+            payload = service.get_clock()
+
+        self.assertEqual(payload["action"], "current")
+        self.assertRegex(payload["date"], r"^\d{4}-\d{2}-\d{2}$")
+        self.assertEqual(payload["timezone"], "Europe/Istanbul")
+        self.assertEqual(payload["status"], "FALLBACK")
+
 
 class PersonaQuickLaunchTests(unittest.TestCase):
     """The Persona Quick-Launch Panel and pre-authenticated Flutter handoff."""
@@ -812,7 +830,15 @@ class PersonaQuickLaunchTests(unittest.TestCase):
         self.assertIn("Persona Quick-Launch Panel", markup)
         self.assertIn("open-persona", markup)
         self.assertIn("copy-btn", markup)
-        self.assertIn("quick_login=true", markup)
+        self.assertIn("quick_login", markup)
+
+    def test_quick_login_handoff_keeps_credentials_out_of_the_query_string(self) -> None:
+        """Persona passwords travel in the URL fragment only, never the query string."""
+        markup = (SCRIPTS_DIR / "pm_workbench_ui.html").read_text(encoding="utf-8")
+        self.assertIn("/#/quick-login?", markup)
+        self.assertNotIn("/?quick_login=", markup)
+        # Cross-window handles must not leak the app window either.
+        self.assertIn('"noopener,noreferrer"', markup)
 
 
 if __name__ == "__main__":

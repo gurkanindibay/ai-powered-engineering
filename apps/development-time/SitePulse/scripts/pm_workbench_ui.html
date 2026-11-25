@@ -469,12 +469,18 @@ function fallbackCopy(text, callback) {
 function openAppAsPersona(persona) {
   const webBase = (state.active && state.active.web_url) || "http://localhost:9090";
   const target = persona.role === "SITE_MANAGER" ? "/manager/home" : (persona.role === "SAAS_ADMIN" ? "/admin/home" : "/resident/home");
-  const email = encodeURIComponent(persona.email || "");
-  const password = encodeURIComponent(persona.password || "");
-  const role = encodeURIComponent(persona.role || "");
-  const targetEncoded = encodeURIComponent(target);
-  const url = `${webBase}/?quick_login=true&email=${email}&password=${password}&role=${role}&target=${targetEncoded}`;
-  window.open(url, "_blank");
+  // The whole handoff lives in the URL fragment (Flutter's hash strategy), so the
+  // persona password never reaches a web server, its logs, or a Referer header.
+  // The app replaces the fragment with the clean tab URL once it consumes it.
+  const params = new URLSearchParams({
+    quick_login: "true",
+    email: persona.email || "",
+    password: persona.password || "",
+    role: persona.role || "",
+    target: target
+  });
+  const url = webBase.replace(/\/+$/, "") + "/#/quick-login?" + params.toString();
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 async function prepare(preset) {

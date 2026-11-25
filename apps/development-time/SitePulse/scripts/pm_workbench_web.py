@@ -413,16 +413,19 @@ class WorkbenchService:
                 clock_info = active.clock or {}
                 ref_date = clock_info.get("reference_date") or active.manifest.get("reference_clock")
             if not ref_date:
-                try:
-                    ref_date = datetime.now(ISTANBUL_TZ).date().isoformat()
-                except Exception:
-                    ref_date = datetime.now(timezone.utc).date().isoformat()
+                ref_date = datetime.now(ISTANBUL_TZ).date().isoformat()
 
+            try:
+                midnight = datetime.fromisoformat(f"{ref_date}T00:00:00").replace(tzinfo=ISTANBUL_TZ)
+            except ValueError:
+                # A malformed cached/manifest date must not break the UI: report the real date.
+                midnight = datetime.now(ISTANBUL_TZ)
+                ref_date = midnight.date().isoformat()
             return {
                 "action": "current",
                 "date": ref_date,
-                "time": "00:00:00",
-                "iso": f"{ref_date}T00:00:00+03:00",
+                "time": midnight.strftime("%H:%M:%S"),
+                "iso": midnight.isoformat(),
                 "timezone": "Europe/Istanbul",
                 "status": "FALLBACK",
             }

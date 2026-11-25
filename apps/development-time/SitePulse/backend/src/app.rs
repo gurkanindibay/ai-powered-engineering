@@ -33,13 +33,23 @@ pub fn route_policy(method: &str, path: &str) -> Option<RoutePolicy> {
         return policy;
     }
     #[cfg(feature = "e2e")]
-    if (path == "/__e2e/clock"
-        || path == "/api/e2e/clock"
-        || path == "/api/e2e/reload-state"
-        || path == "/__e2e/reload-state")
-        && method.eq_ignore_ascii_case("POST")
-        && crate::e2e_clock::validate_e2e_configuration().unwrap_or(false)
-    {
+    if crate::e2e_clock::validate_e2e_configuration().unwrap_or(false) {
+        if let Some(policy) = e2e_route_policy(method, path) {
+            return Some(policy);
+        }
+    }
+    None
+}
+
+/// Policies for the private E2E routes: the clock endpoint is readable (`GET`, used
+/// by the PM Workbench Time Machine) and writable (`POST`); reloading state is POST only.
+#[cfg(feature = "e2e")]
+pub fn e2e_route_policy(method: &str, path: &str) -> Option<RoutePolicy> {
+    let is_clock = path == "/__e2e/clock" || path == "/api/e2e/clock";
+    let is_reload = path == "/api/e2e/reload-state" || path == "/__e2e/reload-state";
+    let is_get = method.eq_ignore_ascii_case("GET");
+    let is_post = method.eq_ignore_ascii_case("POST");
+    if (is_clock && (is_get || is_post)) || (is_reload && is_post) {
         return Some(Public);
     }
     None

@@ -6,6 +6,10 @@ use chrono::{DateTime, Utc};
 #[cfg(feature = "e2e")]
 static FIXTURE_NOW: RwLock<Option<DateTime<Utc>>> = RwLock::new(None);
 
+/// Time zone the simulated clock is reported in (matches the demo site default).
+#[cfg(feature = "e2e")]
+const REPORTING_TIMEZONE: &str = "Europe/Istanbul";
+
 /// Current instant for date-dependent reads and writes.
 ///
 /// Returns the E2E fixture time once a runner has set the clock through the control endpoint,
@@ -301,17 +305,7 @@ pub async fn control(
             let report = crate::scheduler::run_e2e_tick(&state).await?;
             ClockResponse::Ticked { date, report }
         }
-        ClockRequest::Get => {
-            let now = clock.now()?;
-            let local = now.with_timezone(&chrono_tz::Europe::Istanbul);
-            ClockResponse::Current {
-                utc: now,
-                date: local.date_naive(),
-                time: local.format("%H:%M:%S").to_string(),
-                iso: local.to_rfc3339(),
-                timezone: "Europe/Istanbul".to_string(),
-            }
-        }
+        ClockRequest::Get => current_clock_response(clock)?,
     };
     if publishes_fixture_time {
         let fixture = clock.now()?;
@@ -322,7 +316,21 @@ pub async fn control(
     Ok(axum::Json(response))
 }
 
-/// Returns the current simulated Europe/Istanbul clock state.
+/// Snapshots the simulated clock in the reporting timezone (Europe/Istanbul).
+#[cfg(feature = "e2e")]
+fn current_clock_response(clock: &E2eClock) -> Result<ClockResponse, E2eClockError> {
+    let now = clock.now()?;
+    let local = now.with_timezone(&chrono_tz::Europe::Istanbul);
+    Ok(ClockResponse::Current {
+        utc: now,
+        date: local.date_naive(),
+        time: local.format("%H:%M:%S").to_string(),
+        iso: local.to_rfc3339(),
+        timezone: REPORTING_TIMEZONE.to_string(),
+    })
+}
+
+/// Handles the read-only E2E clock endpoint used by the PM Workbench Time Machine.
 #[cfg(feature = "e2e")]
 pub async fn get_clock(
     axum::extract::State(state): axum::extract::State<crate::state::AppState>,
@@ -330,15 +338,7 @@ pub async fn get_clock(
     let Some(clock) = state.e2e_clock.as_ref() else {
         return Err(E2eClockError::Disabled);
     };
-    let now = clock.now()?;
-    let local = now.with_timezone(&chrono_tz::Europe::Istanbul);
-    Ok(axum::Json(ClockResponse::Current {
-        utc: now,
-        date: local.date_naive(),
-        time: local.format("%H:%M:%S").to_string(),
-        iso: local.to_rfc3339(),
-        timezone: "Europe/Istanbul".to_string(),
-    }))
+    Ok(axum::Json(current_clock_response(clock)?))
 }
 
 /// Handles the private E2E state reload endpoint to synchronize in-memory state with PostgreSQL.
@@ -412,6 +412,32 @@ mod tests {
         );
         assert_eq!(clock.set_date(date(2)), Ok(()));
         assert_eq!(clock.now().map(|now| now.date_naive()), Ok(date(2)));
+    }
+
+    #[test]
+    fn get_clock_reports_the_simulated_state_in_istanbul_time() {
+        let clock = E2eClock::new(date(19));
+        let Ok(ClockResponse::Current {
+            utc,
+            date: local_date,
+            time,
+            iso,
+            timezone,
+        }) = current_clock_response(&clock)
+        else {
+            panic!("the clock snapshot must be a Current response");
+        };
+        assert_eq!(local_date, date(19));
+        assert_eq!(timezone, REPORTING_TIMEZONE);
+        assert_eq!(
+            local_date,
+            crate::domain::clock::local_date(REPORTING_TIMEZONE, utc)
+        );
+        assert!(
+            iso.starts_with(&date(19).to_string()),
+            "unexpected iso: {iso}"
+        );
+        assert_eq!(time.len(), 8, "time must be HH:MM:SS, got {time}");
     }
 
     #[tokio::test]

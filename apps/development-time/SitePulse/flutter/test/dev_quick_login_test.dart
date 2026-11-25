@@ -6,19 +6,40 @@ import 'package:sitepulse/ui/auth/login_screen.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_screen.dart';
 import 'package:sitepulse/ui/navigation/app_router.dart';
+import 'package:sitepulse/ui/navigation/app_routes.dart';
 
 void main() {
   setUp(() {
-    DevQuickLoginGate.overrideEnabled = null;
+    DevQuickLoginGate.debugEnabledOverride = null;
+    DevQuickLoginGate.debugProductionOverride = null;
   });
 
   tearDown(() {
-    DevQuickLoginGate.overrideEnabled = null;
+    DevQuickLoginGate.debugEnabledOverride = null;
+    DevQuickLoginGate.debugProductionOverride = null;
   });
 
   group('DevQuickLoginGate production enforcement', () {
+    test('no override can enable the handoff in a production build', () async {
+      DevQuickLoginGate.debugProductionOverride = true;
+      DevQuickLoginGate.debugEnabledOverride = true;
+
+      expect(DevQuickLoginGate.isProduction, isTrue);
+      expect(DevQuickLoginGate.isEnabled, isFalse);
+      expect(DevQuickLoginGate.allowed, isFalse);
+
+      final controller = DashboardController(startAuthenticated: false);
+      final result = await DevQuickLoginGate.tryHandleQuickLogin(
+        uri: Uri.parse('/#/quick-login?email=yonetici@begonya.com&password=Password123'),
+        controller: controller,
+      );
+
+      expect(result, isNull);
+      expect(controller.isAuthenticated, isFalse);
+    });
+
     test('strictly disabled when production flag is simulated', () async {
-      DevQuickLoginGate.overrideEnabled = false;
+      DevQuickLoginGate.debugEnabledOverride = false;
       expect(DevQuickLoginGate.allowed, isFalse);
 
       final controller = DashboardController(startAuthenticated: false);
@@ -34,7 +55,7 @@ void main() {
     });
 
     testWidgets('router ignores quick login when production gate is disabled', (tester) async {
-      DevQuickLoginGate.overrideEnabled = false;
+      DevQuickLoginGate.debugEnabledOverride = false;
       final controller = DashboardController(startAuthenticated: false);
       final delegate = AppRouterDelegate(controller);
 
@@ -65,7 +86,7 @@ void main() {
 
   group('DevQuickLoginGate dev-mode behavior', () {
     test('authenticates persona and targets manager cockpit in test mode', () async {
-      DevQuickLoginGate.overrideEnabled = true;
+      DevQuickLoginGate.debugEnabledOverride = true;
       expect(DevQuickLoginGate.allowed, isTrue);
 
       final controller = DashboardController(isTestMode: true, startAuthenticated: false);
@@ -85,7 +106,7 @@ void main() {
     });
 
     test('supports hash-fragment query parameters', () async {
-      DevQuickLoginGate.overrideEnabled = true;
+      DevQuickLoginGate.debugEnabledOverride = true;
 
       final controller = DashboardController(isTestMode: true, startAuthenticated: false);
       final uri = Uri.parse(
@@ -103,7 +124,7 @@ void main() {
     });
 
     testWidgets('router transitions to DashboardScreen when dev quick-login succeeds', (tester) async {
-      DevQuickLoginGate.overrideEnabled = true;
+      DevQuickLoginGate.debugEnabledOverride = true;
       final controller = DashboardController(isTestMode: true, startAuthenticated: false);
       final delegate = AppRouterDelegate(controller);
 
@@ -128,6 +149,54 @@ void main() {
       expect(controller.isAuthenticated, isTrue);
       expect(find.byType(DashboardScreen), findsOneWidget);
       expect(find.byType(LoginScreen), findsNothing);
+    });
+
+    test('a malformed role parameter never breaks the handoff', () async {
+      DevQuickLoginGate.debugEnabledOverride = true;
+      final controller = DashboardController(isTestMode: true, startAuthenticated: false);
+      final uri = Uri.parse(
+        '/#/quick-login?email=yonetici@begonya.com&password=Password123&role=NOT_A_ROLE',
+      );
+
+      final result = await DevQuickLoginGate.tryHandleQuickLogin(
+        uri: uri,
+        controller: controller,
+      );
+
+      expect(result, isNotNull);
+      expect(controller.isAuthenticated, isTrue);
+      // The role falls back to the email-derived one instead of throwing.
+      expect(controller.userRole, UserRole.siteManager);
+    });
+
+    test('a resident persona is not given a manager landing path', () async {
+      DevQuickLoginGate.debugEnabledOverride = true;
+      final controller = DashboardController(isTestMode: true, startAuthenticated: false);
+      final uri = Uri.parse(
+        '/#/quick-login?email=ahmet.yilmaz@begonya.com&password=Password123&role=HOME_OWNER&target=/resident/home',
+      );
+
+      final result = await DevQuickLoginGate.tryHandleQuickLogin(
+        uri: uri,
+        controller: controller,
+      );
+
+      expect(result, isNotNull);
+      expect(controller.userRole, UserRole.homeOwner);
+      expect(AppRoutes.pathFor(controller, result!).path, startsWith('/resident/'));
+    });
+
+    test('a path-style quick-login URL lands the manager on the manager route', () async {
+      DevQuickLoginGate.debugEnabledOverride = true;
+      final controller = DashboardController(isTestMode: true, startAuthenticated: false);
+
+      final handled = await DevQuickLoginGate.tryHandleQuickLogin(
+        uri: Uri.parse('/quick-login?email=yonetici@begonya.com&password=Password123&role=SITE_MANAGER'),
+        controller: controller,
+      );
+
+      expect(AppRoutes.pathFor(controller, handled!).path, '/manager/home');
+      expect(controller.userRole, UserRole.siteManager);
     });
   });
 }

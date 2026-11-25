@@ -7,24 +7,33 @@ import '../navigation/app_routes.dart';
 
 /// Strictly developer-only quick-login handoff for manual testing and the PM workbench.
 ///
-/// Gated by [kDebugMode] / explicit non-production flag ([kShowDevTools]),
-/// and strictly disabled in production/release builds ([kReleaseMode] / `dart.vm.product`).
+/// The handoff is a deep link carrying persona credentials in the URL fragment
+/// (never the query string, so they cannot reach server logs or the `Referer`
+/// header). It is gated by [kShowDevTools] and is structurally impossible in a
+/// production/release build: [isProduction] is checked before any test seam, so
+/// no override can enable the handoff there.
 class DevQuickLoginGate {
   const DevQuickLoginGate._();
 
-  /// Whether the environment permits developer quick-login handoff.
-  /// Strictly false in production/release builds.
-  static bool get isEnabled =>
-      (kDebugMode || kE2E || const bool.fromEnvironment('SITEPULSE_DEV_TOOLS')) &&
-      !kReleaseMode &&
-      !const bool.fromEnvironment('dart.vm.product');
+  /// Production/release builds, where the handoff must never run.
+  static bool get isProduction =>
+      debugProductionOverride ?? (kReleaseMode || const bool.fromEnvironment('dart.vm.product'));
 
-  /// For testing the release/production gate in unit tests.
+  /// Whether the environment permits the developer handoff at all.
+  static bool get isEnabled => !isProduction && kShowDevTools;
+
+  /// Test seams only. [debugProductionOverride] simulates a production build so a
+  /// test can prove [allowed] stays false there; [debugEnabledOverride] simulates
+  /// a debug build without dev tools. Neither can enable the handoff in production.
   @visibleForTesting
-  static bool? overrideEnabled;
+  static bool? debugEnabledOverride;
 
-  /// Effective gate: uses [overrideEnabled] when set in tests, otherwise [isEnabled].
-  static bool get allowed => overrideEnabled ?? isEnabled;
+  @visibleForTesting
+  static bool? debugProductionOverride;
+
+  /// Effective gate: always false in production, otherwise [debugEnabledOverride]
+  /// when a test set it, else [isEnabled].
+  static bool get allowed => !isProduction && (debugEnabledOverride ?? isEnabled);
 
   /// Attempts a developer quick-login handoff from an incoming [uri].
   ///
@@ -41,6 +50,7 @@ class DevQuickLoginGate {
     // 2. Extract parameters from query string and hash fragment.
     final params = _extractParams(uri);
     final isQuickLogin = uri.path == AppRoutes.quickLogin ||
+        _fragmentPath(uri) == AppRoutes.quickLogin ||
         params['quick_login'] == 'true' ||
         params.containsKey('quick_login_email') ||
         (params.containsKey('email') && params.containsKey('password') && params.containsKey('quick_login'));
@@ -49,28 +59,22 @@ class DevQuickLoginGate {
       return null;
     }
 
-    final email = params['email'] ?? params['quick_login_email'];
+    final email = (params['email'] ?? params['quick_login_email'])?.trim();
     final password = params['password'] ?? params['quick_login_password'] ?? '';
 
-    if (email == null || email.trim().isEmpty) {
+    if (email == null || email.isEmpty) {
       return null;
     }
 
-    // 3. Perform login with credentials
+    // 3. Resolve the persona role and landing path before signing in, so the
+    //    manager-only admin path is never set on a resident or admin session.
     final targetPath = params['target'];
-    SiteAdminActivePath? adminPath;
-    if (targetPath != null && targetPath.contains('my-flat')) {
-      adminPath = SiteAdminActivePath.myFlatOwner;
-    } else {
-      adminPath = SiteAdminActivePath.managerCockpit;
-    }
-
-    final roleParam = params['role'];
-    final targetRole = roleParam != null ? UserRole.fromApi(roleParam) : null;
+    final targetRole = _parseRole(params['role']);
+    final adminPath = _adminPathFor(targetRole, targetPath);
 
     final success = await controller.loginWithPassword(
-      email.trim(),
-      password.trim(),
+      email,
+      password,
       targetRole: targetRole,
       adminPath: adminPath,
     );
@@ -91,6 +95,35 @@ class DevQuickLoginGate {
     return 0;
   }
 
+  /// Parses the optional `role` parameter, tolerating an unknown value instead of
+  /// throwing: the URL is untrusted input and must never break navigation.
+  static UserRole? _parseRole(String? rawRole) {
+    if (rawRole == null || rawRole.trim().isEmpty) return null;
+    try {
+      return UserRole.fromApi(rawRole.trim().toUpperCase());
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// Picks the manager landing path; other roles keep the controller default.
+  static SiteAdminActivePath? _adminPathFor(UserRole? role, String? targetPath) {
+    final isManager = role == null || role == UserRole.siteManager;
+    if (!isManager) return null;
+    return targetPath != null && targetPath.contains('my-flat')
+        ? SiteAdminActivePath.myFlatOwner
+        : SiteAdminActivePath.managerCockpit;
+  }
+
+  /// The route path inside a hash fragment, e.g. `/#/quick-login?...` → `/quick-login`.
+  static String? _fragmentPath(Uri uri) {
+    final fragment = uri.fragment;
+    if (fragment.isEmpty) return null;
+    final queryIndex = fragment.indexOf('?');
+    final path = queryIndex >= 0 ? fragment.substring(0, queryIndex) : fragment;
+    return path.isEmpty ? null : path;
+  }
+
   static Map<String, String> _extractParams(Uri uri) {
     final map = Map<String, String>.from(uri.queryParameters);
     // Parse query parameters embedded inside hash fragment e.g. /#/?quick_login=true&email=...
@@ -101,7 +134,9 @@ class DevQuickLoginGate {
       try {
         final parsed = Uri.splitQueryString(rawQuery);
         map.addAll(parsed);
-      } catch (_) {}
+      } on FormatException {
+        // A malformed fragment is ignored; the query string still applies.
+      }
     }
     return map;
   }
