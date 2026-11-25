@@ -5,8 +5,19 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
   void _openMoveOut(HomeOwnerItem ho) {
     final notesCtrl = TextEditingController();
     final advanceAmountCtrl = TextEditingController();
-    final statementFuture = ho.isTenantOccupied
-        ? PaymentsPhase2Api.statement(ho.unitId)
+    final Future<ResidentStatement>? statementFuture = ho.isTenantOccupied
+        ? PaymentsPhase2Api.statement(ho.unitId).then(
+            (statement) => statement,
+            onError: (Object error, StackTrace stackTrace) {
+              AppLogger.warn(
+                'Unable to load tenant debt for move-out',
+                tag: 'Residents',
+                error: error,
+                context: {'unit_id': ho.unitId},
+              );
+              Error.throwWithStackTrace(error, stackTrace);
+            },
+          )
         : null;
     var effectiveDate = DateTime.now();
     var settlementChoice = AdvanceExitSettlementChoice.keep;
@@ -106,12 +117,6 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                     );
                   }
                   if (snapshot.hasError || snapshot.data == null) {
-                    AppLogger.warn(
-                      'Unable to load tenant debt for move-out',
-                      tag: 'Residents',
-                      error: snapshot.error,
-                      context: {'unit_id': ho.unitId},
-                    );
                     return testId('checkout_debt_error', const Text('Kiracı borç özeti yüklenemedi.'));
                   }
                   StatementDebtor? tenant;
@@ -132,7 +137,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Açık kiracı borcu · ${tenant.name}'),
+                            Text('Açık kiracı borcu · ${tenant.name} (sayfa açıldığındaki tutar)'),
                             const SizedBox(height: 8),
                             testId('checkout_debt_principal', Text('Anapara: ${formatTry(tenant.principalOutstanding)}')),
                             testId('checkout_debt_late_fee', Text('Gecikme tazminatı: ${formatTry(tenant.penaltyOutstanding)}')),
