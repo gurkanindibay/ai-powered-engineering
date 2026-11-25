@@ -48,6 +48,10 @@ pub struct AppSettings {
 }
 
 impl AppSettings {
+    pub fn is_production(&self) -> bool {
+        self.production
+    }
+
     pub fn from_env() -> Self {
         let production = AppStateInner::is_production();
         let dev_routes_enabled = !production
@@ -949,7 +953,7 @@ impl AppState {
         self.pool.as_ref()
     }
 
-    fn from_parts(inner: AppStateInner, pool: Option<deadpool_postgres::Pool>) -> Self {
+    pub fn from_parts(inner: AppStateInner, pool: Option<deadpool_postgres::Pool>) -> Self {
         Self {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),

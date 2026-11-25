@@ -70,5 +70,10 @@ pub use residents::*;
 mod openapi;
 pub use openapi::*;
 
+#[cfg(feature = "e2e")]
+pub mod e2e_control;
+#[cfg(feature = "e2e")]
+pub use e2e_control::*;
+
 pub use crate::services::advance_offset_service::{settle_advances, OffsetScope};
 pub use crate::services::ledger_application::apply_advance_payments_offset;
