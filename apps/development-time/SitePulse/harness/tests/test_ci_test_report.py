@@ -180,6 +180,17 @@ class CiTestReportTest(unittest.TestCase):
                          ["pager shows the next range", "pager shows the next range", "check_desk"])
         self.assertEqual(links["SC-01-01-03"][0]["case_id"], "desk_over_http")
 
+    def test_public_inventory_keeps_every_dict_case_in_order_for_evidence_matching(self):
+        # `_evidence_cases` appends the legacy cases by position, so a filter added here must fail a test.
+        collected = [{"native_id": "first", "shard": "1"}, "not a case", {}, None, {"native_id": None, "shard": "3"},
+                     {"native_id": "x" * 200, "shard": "4"}]
+        public = ctr._public_inventory([], [], collected)["cases"]
+        legacy = {"native_id": "legacy", "shard": "5"}
+
+        self.assertEqual([case["shard"] for case in public], ["1", "unknown", "3", "4"])
+        self.assertEqual(ctr._evidence_cases(collected, public + [legacy]),
+                         [case for case in collected if isinstance(case, dict)] + [legacy])
+
     def test_incomplete_suite_count_includes_mixed_and_reused_evidence(self):
         suites = [
             {"status": "collected"},
