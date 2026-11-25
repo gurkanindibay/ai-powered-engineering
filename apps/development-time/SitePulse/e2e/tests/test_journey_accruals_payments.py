@@ -1543,6 +1543,8 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         # SC-13-25-07: the manager statements show exactly the eleven open rows and the model's site totals.
         # Each row's debtor is the name on its own statement section, including a former holder's (#295);
         # test_unit_statement_attributes_open_items_to_former_debtors pins that attribution.
+        # The same reconciliation pins each owner's joint exposure (SC-13-14-10) and the site totals
+        # that count every receivable once (SC-13-25-03).
         detailed = {("A", label): j.unit_a(label) for label in ("A-01", "A-02", "A-03")}
         detailed |= {("B", label): j.unit_b(label) for label in ("B1-01", "B2-01")}
         assert_statements_match_model(api, {"A": j.manager_a, "B": j.manager_b}, detailed)
