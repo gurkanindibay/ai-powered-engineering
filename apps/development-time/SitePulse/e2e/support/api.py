@@ -172,11 +172,13 @@ class Api:
             "unit_no": unit_no, "floor": floor, "is_resident": is_resident})
 
     def move_in(self, session: Session, unit_id: str, full_name: str, email: str, role: str = "TENANT",
-                phone: str = "+90 533 000 00 00") -> dict:
+                phone: str = "+90 533 000 00 00", effective_date: str | None = None) -> dict:
         """Moves a tenant in with the command the unit's state allows (EPIC-08 §3.3).
 
         An owner-occupied unit is rented out (C2) and a tenant-occupied one gets a
         replacement tenant (C1); an owner move-in takes no person data (T3).
+        `effective_date` dates the transition explicitly: the endpoint otherwise defaults
+        to the wall clock rather than the E2E time machine, which a back-dated journey needs.
         Returns the opened occupancy session.
         """
         site = session.user["site_id"]
@@ -189,6 +191,8 @@ class Api:
             command = {"OWNER_OCCUPIED": "OWNER_RENTS_OUT",
                        "TENANT_OCCUPIED": "REPLACE_TENANT"}.get(state.get("occupancy"), "TENANT_MOVE_IN")
             body = {"command": command, "full_name": full_name, "email": email, "phone": phone}
+        if effective_date:
+            body["effective_date"] = effective_date
         result = self.call("POST", f"/api/v1/site-admin/units/{unit_id}/occupancy-transitions?site_id={site}",
                            session.token, body=body)
         return result.get("opened") or {}

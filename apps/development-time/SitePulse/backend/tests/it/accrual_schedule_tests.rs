@@ -157,6 +157,43 @@ async fn when_the_scheduler_was_off_then_it_accrues_the_missed_periods_oldest_fi
     assert_eq!(site_dues(&state).await.len(), 4);
 }
 
+// covers: SC-13-01-08
+#[tokio::test]
+async fn when_proration_is_enabled_then_a_unit_without_a_titled_owner_is_not_accrued() {
+    let state = clean_site(AccrualSchedule::default()).await;
+    {
+        let mut inner = state.inner.write().await;
+        let site = inner
+            .sites
+            .iter_mut()
+            .find(|s| s.id == SITE)
+            .expect("the test site");
+        site.proration_enabled = true;
+        let mut ownerless = inner
+            .units
+            .iter()
+            .find(|u| u.id == "d-14")
+            .cloned()
+            .expect("d-14");
+        ownerless.id = "d-15".to_string();
+        ownerless.unit_number = 15;
+        ownerless.owner_user_id = None;
+        ownerless.tenant_user_id = None;
+        inner.units.push(ownerless);
+    }
+    run_accrual_with_report(&state, at(2026, 11, 2)).await;
+
+    let dues = site_dues(&state).await;
+    assert!(
+        dues.iter().all(|x| x.unit_id != "d-15"),
+        "a unit no one owns must not accrue a liability: {dues:?}"
+    );
+    assert!(
+        dues.iter().any(|x| x.unit_id == "d-14"),
+        "the owned unit is still charged: {dues:?}"
+    );
+}
+
 // covers: SC-07-10-04
 #[tokio::test]
 async fn when_catch_up_reaches_the_limit_then_older_periods_are_reported_not_accrued() {

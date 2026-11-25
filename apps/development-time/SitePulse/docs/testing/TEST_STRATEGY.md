@@ -343,7 +343,6 @@ Three systemic gaps sit behind these:
 
 | Scenario | Priority | Layer | Blocker (from the feature file's `Pending:` note) |
 | --- | --- | --- | --- |
-| SC-13-06-01 Manager grows a site, collects dues, closes a period | smoke | gui | 8-checkpoint lifecycle chain not automated |
 | SC-13-08-01 First sign-in unlocks a populated site after password change | smoke | gui | Journey automation pending |
 | SC-13-03-02 Tenant replaced mid-month keeps the old debt | core | backend | **Product gap**: accrual splits by role, not person |
 | SC-13-03-21 Every liability row names who owes it | core | backend | **Product gap**: owner and split rows carry no liable person id |
