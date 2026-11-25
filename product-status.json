@@ -199,9 +199,17 @@
       "scenarios": 469,
       "stories": 116,
       "stories_with_scenarios": 116
+    },
+    {
+      "automated": 440,
+      "date": "2026-11-25",
+      "epics": 13,
+      "scenarios": 470,
+      "stories": 116,
+      "stories_with_scenarios": 116
     }
   ],
-  "commit": "a8e9c7903b4d73df0140c8abe1ef3338003e96a7",
+  "commit": "8910a94d0676859a7dece623f5b3533193b20e1b",
   "epics": [
     {
       "automated": 10,
@@ -372,32 +380,32 @@
       "title": "Unified People and Unit Directory"
     },
     {
-      "automated": 131,
+      "automated": 132,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-13",
-      "no_result": 18,
+      "no_result": 19,
       "passing": 113,
       "planned": 21,
-      "scenarios": 152,
+      "scenarios": 153,
       "stories": 16,
       "stories_passing": 3,
       "stories_with_scenarios": 16,
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-25T04:59:22Z",
+  "generated_at": "2026-11-25T05:22:27Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
     "passed": 308,
-    "seconds": 1985.5,
+    "seconds": 1810.4,
     "skipped": 1,
     "tests": 309
   },
   "recent_changes": [],
-  "run_id": "20261125T045920Z-a8e9c79",
+  "run_id": "20261125T052225Z-8910a94",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -2793,6 +2801,12 @@
       "state": "passing",
       "story": "STORY-13-05"
     },
+    "SC-13-05-19": {
+      "epic": "EPIC-13",
+      "name": "SC-13-05-19",
+      "state": "no_result",
+      "story": "STORY-13-05"
+    },
     "SC-13-06-01": {
       "epic": "EPIC-13",
       "name": "SC-13-06-01",
@@ -3217,15 +3231,15 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 439,
+    "automated": 440,
     "epics": 13,
     "epics_failing": 0,
     "epics_verified": 1,
     "failing": 0,
-    "no_result": 212,
+    "no_result": 213,
     "passing": 227,
     "planned": 30,
-    "scenarios": 469,
+    "scenarios": 470,
     "stories": 116,
     "stories_passing": 34,
     "stories_with_scenarios": 116
