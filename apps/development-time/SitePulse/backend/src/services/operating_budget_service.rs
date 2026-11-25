@@ -279,6 +279,14 @@ impl OperatingBudgetService {
             .collect::<BudgetResult<Vec<_>>>()?;
         let total: Decimal = lines.iter().map(|l| l.annual_amount).sum();
 
+        // With PostgreSQL the in-memory unit list can hold rows that are not this
+        // site's units in the database; share the budget only across the canonical
+        // tenant-scoped inventory so every share has a unit that can be served.
+        let canonical_units =
+            crate::db::unit_repository::canonical_unit_ids(self.state.db_pool(), site_id)
+                .await
+                .map_err(storage)?;
+
         let mut budget = {
             let inner = self.state.inner.read().await;
             if !inner
@@ -295,6 +303,11 @@ impl OperatingBudgetService {
                 .units
                 .iter()
                 .filter(|u| crate::auth::same_id(&u.site_id, site_id))
+                .filter(|u| {
+                    canonical_units
+                        .as_ref()
+                        .is_none_or(|ids| ids.contains(&u.id))
+                })
                 .cloned()
                 .collect();
             if units.is_empty() {

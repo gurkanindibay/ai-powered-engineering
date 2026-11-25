@@ -871,6 +871,16 @@ def test_inter_ledger_transfer_is_site_scoped(api, stack, two_sites):
 def test_additional_tenant_resource_reads_require_membership(api, stack, actors, two_sites):
     """Exercise resource reads that need domain-specific nightly arrangements."""
     first, second, ids = two_sites
+    # Four-eyes controls forbid the recorder from approving their own record, so
+    # approvals and decisions in this test come from a second same-site manager.
+    approver_email = f"nightly-approver-{ids['site']}@example.test"
+    stack.sql(
+        "INSERT INTO users (site_id, email, password_hash, role, is_active, must_change_password) "
+        f"SELECT site_id, '{approver_email}', password_hash, 'SITE_MANAGER', TRUE, FALSE "
+        f"FROM users WHERE id = {int(second.user['id'])};"
+    )
+    stack.restart_backend()
+    approver = api.login(approver_email, "Nightly-Manager-2026!")
     paths = api.call("GET", "/api/v1/openapi.json")["paths"]
 
     meeting = api.call("POST", "/api/v1/assembly/meetings", second.token, body={
@@ -888,6 +898,13 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     assert_write_is_site_scoped(
         api, project_path + "/accrue-installment?site_id=" + str(ids["site"]),
         second, first, {"installment_number": 1}, success={200},
+    )
+    # The certificate exists only for a tenant's payment of the owner's items:
+    # move a tenant in and let them settle the owner's capital installment.
+    api.move_in(second, str(ids["unit"]), "Nightly Tenant", "nightly-rent-tenant@example.test")
+    rent_receipt = api.record_manual_payment(
+        second, ids["unit"], Decimal("1.00"), "Nightly Tenant", payer_role="TENANT",
+        settles_owner_capital_dues=True, idempotency_key="nightly-rent-deduction",
     )
     assert_write_is_site_scoped(
         api, project_path + "/disbursements", second, first,
@@ -949,9 +966,10 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     arrangements = [
         ("/api/v1/assembly/meetings/{id}", str(meeting["id"])),
         ("/api/v1/heat-share/periods/{id}", str(heat_period["id"])),
-        ("/api/v1/payments/receipts/{id}/rent-deduction-certificate", str(ids["receipt"])),
+        ("/api/v1/payments/receipts/{id}/rent-deduction-certificate", str(rent_receipt["id"])),
     ]
 
+    arrangement_period_id = ids["period"]
     assert_write_is_site_scoped(
         api, "/api/v1/dues/accrue-period", second, first,
         {"site_id": ids["site"], "period": "2027-01", "amount": "1.00", "due_date": "2027-01-31"},
@@ -990,10 +1008,23 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         f"Foreign POST {reopen_path} returned {foreign_reopen_status}"
     )
     reopen_id = json.loads(reopen_response)["id"]
-    assert_write_is_site_scoped(
-        api, f"/api/v1/dues/period-reopen-requests/{reopen_id}/decide",
-        second, first, {"approve": False, "decision_note": "Nightly rejection"},
-        success={200},
+    reopen_decision_path = f"/api/v1/dues/period-reopen-requests/{reopen_id}/decide"
+    reopen_decision_body = {"approve": False, "decision_note": "Nightly rejection"}
+    same_site_reopen_status, same_site_reopen_body = get_response(
+        api, reopen_decision_path, second.token, method="POST", body=reopen_decision_body,
+    )
+    assert same_site_reopen_status == 403, (
+        f"Same-site reopen decision should enforce four-eyes approval, got "
+        f"{same_site_reopen_status}: {same_site_reopen_body[:300]}"
+    )
+    assert b"cannot approve their own" in same_site_reopen_body.lower(), (
+        "Same-site reopen decision was rejected for a reason other than the four-eyes control"
+    )
+    foreign_reopen_decision_status, _ = get_response(
+        api, reopen_decision_path, first.token, method="POST", body=reopen_decision_body,
+    )
+    assert foreign_reopen_decision_status in {403, 404}, (
+        f"Foreign POST {reopen_decision_path} returned {foreign_reopen_decision_status}"
     )
     ids["period"] = arrangement_period_id
     due_id, _ = arrange_open_due(api, stack, ids)
@@ -1011,7 +1042,7 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     )
     assert_write_is_site_scoped(
         api, f"/api/v1/accounting/expenses/{payable_expense['id']}/approve",
-        second, first, None, success={200},
+        approver, first, None, success={200},
     )
     assert_write_is_site_scoped(
         api, f"/api/v1/accounting/expenses/{payable_expense['id']}/payments",
@@ -1049,6 +1080,21 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
             "method": "E_NOTIFICATION", "served_on": service_date.isoformat(),
         }, success={200},
     )
+    # Finalizing requires the budget to be served on every active unit of the site.
+    other_unit_ids = [
+        int(row) for row in stack.sql(
+            f"SELECT id FROM units WHERE site_id = {int(ids['site'])} "
+            f"AND deleted_at IS NULL AND id <> {int(ids['unit'])} ORDER BY id;"
+        ).split()
+    ]
+    for other_unit_id in other_unit_ids:
+        api.call(
+            "POST", budget_path + "/service" + budget_query, second.token,
+            body={
+                "unit_id": str(other_unit_id), "recipient_name": "Nightly Resident",
+                "method": "E_NOTIFICATION", "served_on": service_date.isoformat(),
+            },
+        )
     assert_write_is_site_scoped(
         api, budget_path + "/objections" + budget_query, second, first,
         {
@@ -1146,7 +1192,7 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     )
     adjustment_id = json.loads(adjustment_response)["id"]
     assert_write_is_site_scoped(
-        api, f"/api/v1/adjustments/{adjustment_id}/decide", second, first,
+        api, f"/api/v1/adjustments/{adjustment_id}/decide", approver, first,
         {"approve": False, "note": "Nightly scope rejection"}, success={200},
     )
     correction_body = {
@@ -1167,7 +1213,7 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     )
     correction_id = json.loads(correction_response)["id"]
     assert_write_is_site_scoped(
-        api, f"/api/v1/accrual-corrections/{correction_id}/decide", second, first,
+        api, f"/api/v1/accrual-corrections/{correction_id}/decide", approver, first,
         {"approve": False, "note": "Nightly scope rejection"}, success={200},
     )
     arrangements.extend((
@@ -1178,7 +1224,7 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     platform = api.login(**actors["saas"])
     company = api.call("POST", "/api/v1/saas/companies", platform.token, body={
         "name": "Nightly tenant authorization company",
-        "tax_id": "9912384721", "tax_office": "Nightly",
+        "tax_id": "9912384727", "tax_office": "Nightly",
     })
     api.call("POST", f"/api/v1/saas/companies/{company['id']}/sites", platform.token, body={
         "site_id": ids["site"], "monthly_fee": "100.00",
@@ -1197,7 +1243,7 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         f"AND site_id = {int(ids['site'])};"
     )
     stack.restart_backend()
-    second_owner = api.login("nightly-payment-owner@example.test", actors["manager"]["password"])
+    second_owner = api.login("nightly-payment-owner@example.test", "Nightly-Manager-2026!")
     first_owner = api.login(**actors["homeowner"])
     second_owner_unit = str(second_owner.user["unit_id"])
     first_owner_unit = str(first_owner.user["unit_id"])
@@ -1262,10 +1308,12 @@ def arrange_open_due(api, stack, ids) -> tuple[str, date]:
     row = stack.sql(f"""
         INSERT INTO dues_liabilities (
             unit_id, period, period_key, dues_period_id, debtor_type, expense_type,
-            liable_person_id, principal_amount, due_date, effective_due_date, status, created_at
+            liable_person_id, principal_amount, due_date, effective_due_date, status, created_at,
+            operating_budget_id
         )
         SELECT u.id, p.period_name, p.period_key, p.id, 'OWNER', 'OPERATIONAL_DUES',
-               u.owner_person_id, 327.41, p.due_date, p.due_date, 'PENDING', p.due_date
+               u.owner_person_id, 327.41, p.due_date, p.due_date, 'PENDING', p.due_date,
+               {int(ids["budget"])}
           FROM units u
           JOIN dues_periods p ON p.site_id = u.site_id
          WHERE u.site_id = {int(ids["site"])}
