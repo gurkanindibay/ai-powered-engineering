@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -48,10 +50,10 @@ if str(E2E_DIR) not in sys.path:
     sys.path.insert(0, str(E2E_DIR))
 
 import pm_workbench_web as web
+from pm_scenarios.seeder import make_viban
 from support.bank_files import (
     DEFAULT_RESIDENT_IMPORT_COLUMNS,
     build_companion_statement_rows,
-    make_viban,
     resident_import_xlsx,
     statement_csv,
     statement_mt940,
@@ -178,6 +180,19 @@ class CompanionTestHarness:
 
 
 class CompanionFilesTest(unittest.TestCase):
+    def test_bank_file_support_imports_without_scripts_pythonpath(self) -> None:
+        environment = os.environ.copy()
+        environment.pop("PYTHONPATH", None)
+        result = subprocess.run(
+            [sys.executable, "-c", "import support.bank_files"],
+            cwd=E2E_DIR,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_bank_statement_csv_endpoint_with_active_manifest(self) -> None:
         with CompanionTestHarness(active_manifest=F9_TEST_MANIFEST) as h:
             status, headers, body = h.get("/api/companion/bank-statement?format=csv")

@@ -5,7 +5,6 @@ Provides:
 - `statement_csv`: semicolon-separated bank statement CSV (Tarih;Referans;Açıklama;Tutar)
 - `statement_mt940`: SWIFT MT940 statement with :61: statement lines and :86: narratives
 - `resident_import_xlsx`: resident directory Excel import (.xlsx) compatible with PersonImportXlsx
-- `make_viban`: deterministic flat Virtual IBAN generator matching VirtualIbanService
 - `build_companion_statement_rows`: dynamically builds the 4 companion statement transactions
 - `DEFAULT_RESIDENT_IMPORT_ROWS`: 5 sample rows + 1 invalid row + 1 repeated-email row
 """
@@ -23,9 +22,6 @@ try:
     from .money import format_try
 except ImportError:
     from support.money import format_try
-
-from pm_scenarios.seeder import make_viban
-
 
 @dataclass(frozen=True)
 class StatementRow:
@@ -243,6 +239,11 @@ def build_companion_statement_rows(manifest: dict[str, Any] | None = None) -> li
       3. Duplicate bank transaction ID (idempotency check matching transaction 1)
       4. Unknown Virtual IBAN
     """
+    # This helper is used by the Workbench, which adds scripts/ to sys.path.
+    # Keep the seeder import lazy so ordinary E2E test collection can import this
+    # module with only e2e/ on sys.path.
+    from pm_scenarios.seeder import make_viban
+
     site_id = str(manifest.get("site_id", "1")) if manifest else "1"
     ref_clock = str(manifest.get("reference_clock", "2026-11-19")) if manifest else "2026-11-19"
     clock_parts = ref_clock.split("-")
