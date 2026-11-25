@@ -201,7 +201,7 @@
       "stories_with_scenarios": 116
     },
     {
-      "automated": 443,
+      "automated": 446,
       "date": "2026-11-25",
       "epics": 13,
       "scenarios": 471,
@@ -209,7 +209,7 @@
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "57dde4604736bca79b6f0fb52aef1eab715a8656",
+  "commit": "29434fd4a8467a0ed9895baf9d9000da9dbf6da6",
   "epics": [
     {
       "automated": 10,
@@ -226,16 +226,16 @@
       "title": "Resident Dues Management & Financial Transparency"
     },
     {
-      "automated": 15,
+      "automated": 16,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-02",
       "no_result": 1,
-      "passing": 14,
-      "planned": 2,
+      "passing": 15,
+      "planned": 1,
       "scenarios": 17,
       "stories": 5,
-      "stories_passing": 2,
+      "stories_passing": 3,
       "stories_with_scenarios": 5,
       "title": "Site Manager Financial Oversight & Community Operations"
     },
@@ -380,32 +380,32 @@
       "title": "Unified People and Unit Directory"
     },
     {
-      "automated": 133,
+      "automated": 135,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-13",
       "no_result": 19,
-      "passing": 114,
-      "planned": 20,
+      "passing": 116,
+      "planned": 18,
       "scenarios": 153,
       "stories": 16,
-      "stories_passing": 4,
+      "stories_passing": 5,
       "stories_with_scenarios": 16,
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-25T12:31:26Z",
+  "generated_at": "2026-11-25T13:40:10Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
-    "passed": 309,
-    "seconds": 1802.5,
+    "passed": 312,
+    "seconds": 2065.8,
     "skipped": 1,
-    "tests": 310
+    "tests": 313
   },
   "recent_changes": [],
-  "run_id": "20261125T123124Z-57dde46",
+  "run_id": "20261125T134007Z-29434fd",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -566,7 +566,7 @@
     "SC-02-05-02": {
       "epic": "EPIC-02",
       "name": "Announcement appears on the resident feed",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-02-05"
     },
     "SC-03-01-01": {
@@ -2678,7 +2678,7 @@
     "SC-13-04-13": {
       "epic": "EPIC-13",
       "name": "A resident's confirmed payment appears in their statement and the admin view",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-13-04"
     },
     "SC-13-04-14": {
@@ -2756,7 +2756,7 @@
     "SC-13-05-10": {
       "epic": "EPIC-13",
       "name": "An Excel import with one bad row imports the good rows and reports the bad one",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-13-05"
     },
     "SC-13-05-11": {
@@ -3237,17 +3237,17 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 443,
+    "automated": 446,
     "epics": 13,
     "epics_failing": 0,
     "epics_verified": 1,
     "failing": 0,
     "no_result": 214,
-    "passing": 229,
-    "planned": 28,
+    "passing": 232,
+    "planned": 25,
     "scenarios": 471,
     "stories": 116,
-    "stories_passing": 35,
+    "stories_passing": 37,
     "stories_with_scenarios": 116
   }
 }
