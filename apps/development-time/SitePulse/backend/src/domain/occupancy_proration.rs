@@ -38,9 +38,10 @@ pub enum ProrationError {
 
 /// Returns the period's liability shares. With proration disabled, the party
 /// responsible on `accrued_on` owes the full month (existing SitePulse policy).
-/// With proration enabled, unit creation limits chargeable days and tenant
+/// With proration enabled, the chargeable days start at unit creation, or at the
+/// owner's start residing date when that owner opens the history, and tenant
 /// sessions split the remaining days from the owner. A session end date is
-/// exclusive; uncovered days are assigned to the owner.
+/// exclusive; uncovered days after a session are assigned to the owner.
 pub fn split_monthly_dues(
     monthly_amount: Decimal,
     period_start: NaiveDate,
@@ -59,7 +60,16 @@ pub fn split_monthly_dues(
         return Ok(Vec::new());
     };
     let days_in_month = i64::from(period_end.day());
-    let charge_start = unit_created_on.unwrap_or(period_start).max(period_start);
+    let mut charge_start = unit_created_on.unwrap_or(period_start).max(period_start);
+    // A unit whose first responsible party is its owner is charged from that owner's
+    // start residing date (journey plan Q4): the days before it had a party to bill.
+    // A tenant's first span keeps the days before it with the owner (Q9), so only an
+    // owner span that opens the history moves the window.
+    if let Some(first) = spans.iter().min_by_key(|span| span.starts_on) {
+        if first.party == ResponsibleParty::Owner {
+            charge_start = charge_start.max(first.starts_on);
+        }
+    }
     if charge_start > period_end {
         return Ok(Vec::new());
     }
@@ -263,6 +273,71 @@ mod tests {
                 party: ResponsibleParty::Owner,
                 amount: money("900.00")
             }]
+        );
+    }
+
+    #[test]
+    fn a_primary_resident_who_starts_mid_month_is_charged_from_that_day() {
+        // F3: A-1 gets its first owner with a start residing date of 2026-11-02, and
+        // Kasım 2026 is accrued afterwards. The day before had no responsible party.
+        let spans = [OccupancySpan {
+            party: ResponsibleParty::Owner,
+            starts_on: date("2026-11-02"),
+            ends_before: None,
+        }];
+        let shares = split_monthly_dues(
+            money("1500.00"),
+            date("2026-11-01"),
+            None,
+            &spans,
+            true,
+            date("2026-11-02"),
+        )
+        .expect("valid amount");
+        assert_eq!(
+            shares,
+            vec![ProratedShare {
+                party: ResponsibleParty::Owner,
+                amount: money("1450.00")
+            }]
+        );
+    }
+
+    #[test]
+    fn days_before_a_tenant_start_stay_with_the_owner_who_opened_the_month() {
+        let spans = [
+            OccupancySpan {
+                party: ResponsibleParty::Owner,
+                starts_on: date("2026-10-01"),
+                ends_before: Some(date("2026-10-11")),
+            },
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                starts_on: date("2026-10-11"),
+                ends_before: None,
+            },
+        ];
+        let shares = split_monthly_dues(
+            money("1500.00"),
+            date("2026-10-01"),
+            None,
+            &spans,
+            true,
+            date("2026-10-20"),
+        )
+        .expect("valid amount");
+        assert_eq!(
+            shares,
+            vec![
+                ProratedShare {
+                    party: ResponsibleParty::Owner,
+                    amount: money("483.87")
+                },
+                ProratedShare {
+                    party: ResponsibleParty::Tenant,
+                    amount: money("1016.13")
+                },
+            ]
         );
     }
 

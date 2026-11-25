@@ -3329,6 +3329,19 @@ async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_pre
     };
     let owner = service.register_home_owner("site-1", req1).await.unwrap();
 
+    // The unit was created on 2026-09-01; registering another party on it must not move
+    // that date, because proration starts its chargeable window there (STORY-07-09).
+    let created_on = NaiveDate::from_ymd_opt(2026, 9, 1).unwrap();
+    {
+        let mut inner = state.inner.write().await;
+        let unit = inner
+            .units
+            .iter_mut()
+            .find(|u| u.id == owner.unit_id)
+            .expect("registered unit exists");
+        unit.created_on = Some(created_on);
+    }
+
     // Verify initial occupancy history has Kemal Sunal as active
     let hist1 = service
         .get_unit_occupancy_history("site-1", &owner.unit_id)
@@ -3360,6 +3373,21 @@ async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_pre
     };
     let tenant = service.register_home_owner("site-1", req2).await.unwrap();
     assert_eq!(tenant.unit_id, owner.unit_id);
+
+    let registered = {
+        let inner = state.inner.read().await;
+        inner
+            .units
+            .iter()
+            .find(|u| u.id == owner.unit_id)
+            .map(|u| u.created_on)
+            .expect("registered unit exists")
+    };
+    assert_eq!(
+        registered,
+        Some(created_on),
+        "registering a tenant must keep the unit's creation date"
+    );
 
     // 3. Verify history now has 2 entries: Kemal Sunal is inactive (archived), Halit Akçatepe is active
     let hist2 = service
