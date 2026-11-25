@@ -37,11 +37,28 @@ from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+
+E2E_DIR = SCRIPT_DIR.parent / "e2e"
+if str(E2E_DIR) not in sys.path:
+    sys.path.insert(0, str(E2E_DIR))
+
+try:
+    from support.bank_files import (
+        build_companion_statement_rows,
+        resident_import_xlsx,
+        statement_csv,
+        statement_mt940,
+    )
+except ImportError:
+    build_companion_statement_rows = None  # type: ignore[assignment]
+    resident_import_xlsx = None  # type: ignore[assignment]
+    statement_csv = None  # type: ignore[assignment]
+    statement_mt940 = None  # type: ignore[assignment]
 
 from pm_scenarios import (  # noqa: E402  (sys.path is set up above)
     EXPECTED_TOTALS,
@@ -394,6 +411,26 @@ class WorkbenchService:
         }
         return json_safe(payload)
 
+    # -- companion files ---------------------------------------------------
+
+    def companion_bank_csv(self) -> str:
+        """Returns the dynamically populated companion bank statement CSV."""
+        active = self.active()
+        manifest = active.manifest if active else None
+        rows = build_companion_statement_rows(manifest)
+        return statement_csv(rows)
+
+    def companion_bank_mt940(self) -> str:
+        """Returns the dynamically populated companion bank statement MT940."""
+        active = self.active()
+        manifest = active.manifest if active else None
+        rows = build_companion_statement_rows(manifest)
+        return statement_mt940(rows)
+
+    def companion_resident_xlsx(self) -> bytes:
+        """Returns the companion resident directory Excel (.xlsx) file bytes."""
+        return resident_import_xlsx()
+
 
 def render_index_html() -> str:
     """Returns the single-page UI markup served at the root path."""
@@ -410,7 +447,22 @@ def render_index_html() -> str:
         )
 
 
-GET_ROUTES = ("/", "/index.html", "/api/presets", "/api/active", "/healthz")
+GET_ROUTES = (
+    "/",
+    "/index.html",
+    "/api/presets",
+    "/api/active",
+    "/healthz",
+    "/api/companion/bank-statement.csv",
+    "/api/companion/bank-csv",
+    "/api/companion/bank-statement.mt940",
+    "/api/companion/bank-statement.sta",
+    "/api/companion/bank-mt940",
+    "/api/companion/bank-statement",
+    "/api/companion/resident-import.xlsx",
+    "/api/companion/resident-import",
+    "/api/companion/resident-xlsx",
+)
 POST_ROUTES = ("/api/seed", "/api/reset")
 
 
@@ -575,6 +627,70 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
                 )
             elif path == "/healthz":
                 self._send_json(200, {"status": "ok", "service": "pm-workbench-web"})
+            elif path in ("/api/companion/bank-statement.csv", "/api/companion/bank-csv"):
+                csv_bytes = service.companion_bank_csv().encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", 'attachment; filename="bank-statement.csv"')
+                self.send_header("Content-Length", str(len(csv_bytes)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(csv_bytes)
+            elif path in (
+                "/api/companion/bank-statement.mt940",
+                "/api/companion/bank-statement.sta",
+                "/api/companion/bank-mt940",
+            ):
+                mt940_bytes = service.companion_bank_mt940().encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Disposition", 'attachment; filename="bank-statement.mt940"')
+                self.send_header("Content-Length", str(len(mt940_bytes)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(mt940_bytes)
+            elif path == "/api/companion/bank-statement":
+                query = parse_qs(urlparse(self.path).query)
+                fmt = (query.get("format", ["csv"])[0]).lower()
+                if fmt in ("mt940", "sta"):
+                    mt940_bytes = service.companion_bank_mt940().encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.send_header("Content-Disposition", 'attachment; filename="bank-statement.mt940"')
+                    self.send_header("Content-Length", str(len(mt940_bytes)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    if self.command != "HEAD":
+                        self.wfile.write(mt940_bytes)
+                else:
+                    csv_bytes = service.companion_bank_csv().encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/csv; charset=utf-8")
+                    self.send_header("Content-Disposition", 'attachment; filename="bank-statement.csv"')
+                    self.send_header("Content-Length", str(len(csv_bytes)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    if self.command != "HEAD":
+                        self.wfile.write(csv_bytes)
+            elif path in (
+                "/api/companion/resident-import.xlsx",
+                "/api/companion/resident-import",
+                "/api/companion/resident-xlsx",
+            ):
+                xlsx_bytes = service.companion_resident_xlsx()
+                self.send_response(200)
+                self.send_header(
+                    "Content-Type",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                self.send_header("Content-Disposition", 'attachment; filename="resident-import.xlsx"')
+                self.send_header("Content-Length", str(len(xlsx_bytes)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(xlsx_bytes)
             elif path in POST_ROUTES:
                 self._method_not_allowed("POST")
             else:
