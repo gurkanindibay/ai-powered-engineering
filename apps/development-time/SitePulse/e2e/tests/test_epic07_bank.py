@@ -5,6 +5,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
+from playwright.sync_api import expect
 
 from pages import DuesManagement, ImportSummary, ManagerCockpit
 from support.bank_files import StatementRow, kuveyt_xlsx
@@ -184,7 +185,8 @@ def test_excel_bank_samples_download_as_parser_compatible_workbooks(login_as, pa
         "kuveyt_turk": ("Kuveyt Türk Katılım Bankası", "SAMPLE-KUVEYT_TURK-001"),
         "yapi_kredi": ("Yapı Kredi Bankası", "SAMPLE-YAPI_KREDI-001"),
     }
-    assert by_id_prefix(page, "btn_download_bank_sample_").count() == len(samples)
+    # The sample buttons appear only after the bank catalogue has loaded.
+    expect(by_id_prefix(page, "btn_download_bank_sample_")).to_have_count(len(samples), timeout=15_000)
     sample_to_upload = None
     for bank_code, (bank_name, reference) in samples.items():
         with page.expect_download() as download_info:

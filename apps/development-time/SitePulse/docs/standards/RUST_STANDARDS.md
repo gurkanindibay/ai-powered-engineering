@@ -302,6 +302,7 @@ Rules 5–8 are enforced by `tenant_isolation_lint.py` (gate `tenant-lint`); rul
 | `non-english-identifier` | hard | workspace English-only rule |
 | `domain-unformatted` | hard | §8 formatting policy |
 | `query-flatten` | hard | a struct extracted with `Query<T>` declares its fields inline: `#[serde(flatten)]` makes `serde_urlencoded` pass values as strings, so `page=1` fails with "expected i64". Flatten in JSON bodies is fine |
+| `utc-today` | hard | "today" is never `Utc::now().date_naive()` (a day behind the site between 21:00 and 24:00 UTC); use `finance_common::site_today` / `site_today_in_state` or `domain::clock::local_date` |
 | `unwrap`, `expect`, `string-error`, `pool-branch`, `unformatted-file` | ratchet | counts in `scripts/rust_standards_baseline.json` may only go down |
 
 After paying down debt, lower the ratchet with `python3 scripts/rust_standards_lint.py --update-baseline`. Never raise a count with `--force` to make a change pass.

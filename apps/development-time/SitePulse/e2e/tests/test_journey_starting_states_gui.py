@@ -172,7 +172,7 @@ def test_f0_every_page_shows_an_empty_state(request, api, actors, stack, page, l
         for index, name in enumerate(("collection", "live cash", "aging", "unmatched")):
             open_dues_segment(page, index)
             shown[name] = page_lines_until(page, EMPTY_STATE)
-        _units_page_lines(page)
+        _units_page_lines(page)  # opens the Residents tab; lines are read again once the empty state paints
         shown["units"] = page_lines_until(page, EMPTY_STATE)
         open_people_directory(page)
         shown["people"] = page_lines_until(page, EMPTY_STATE)

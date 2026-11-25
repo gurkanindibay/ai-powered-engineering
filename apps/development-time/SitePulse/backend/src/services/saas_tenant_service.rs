@@ -62,7 +62,10 @@ impl SaasTenantService {
                 .as_deref()
                 .map(PlanType::from_str_loose)
                 .unwrap_or(PlanType::Standard);
-            let license_end = Utc::now().date_naive() + chrono::Days::new(365);
+            let license_end = crate::domain::clock::default_license_end(
+                &crate::models::default_site_timezone(),
+                crate::e2e_clock::now_utc(),
+            );
 
             let blocks_list: Vec<String> = match request.blocks {
                 Some(b) => b,

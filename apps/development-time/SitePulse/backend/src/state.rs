@@ -987,7 +987,13 @@ impl AppState {
             state.e2e_clock = crate::e2e_clock::validate_e2e_configuration()
                 .ok()
                 .filter(|enabled| *enabled)
-                .map(|_| Arc::new(crate::e2e_clock::E2eClock::new(Utc::now().date_naive())));
+                .map(|_| {
+                    Arc::new(crate::e2e_clock::E2eClock::new(
+                        Utc::now()
+                            .with_timezone(&crate::domain::clock::DEFAULT_TIMEZONE)
+                            .date_naive(),
+                    ))
+                });
         }
         state
     }

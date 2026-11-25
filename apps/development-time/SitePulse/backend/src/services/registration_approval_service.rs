@@ -365,6 +365,7 @@ impl RegistrationApprovalService {
                 u.owner_user_id = Some(id);
             }
         } else {
+            let created_on = crate::services::finance_common::site_today(&inner, &req.site_id);
             inner.units.push(crate::models::IndependentUnit {
                 id: unit_id.clone(),
                 site_id: req.site_id.clone(),
@@ -381,7 +382,7 @@ impl RegistrationApprovalService {
                 virtual_iban: None,
                 house_type: None,
                 monthly_tariff_override: None,
-                created_on: Some(Utc::now().date_naive()),
+                created_on: Some(created_on),
             });
         }
         inner.pending_registrations[index].status = RegistrationStatus::Approved;

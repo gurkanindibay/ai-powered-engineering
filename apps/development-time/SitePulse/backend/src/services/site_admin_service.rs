@@ -872,6 +872,7 @@ impl SiteAdminService {
 
         // 3. Update in-memory state
         let mut inner = self.state.inner.write().await;
+        let site_today = crate::services::finance_common::site_today(&inner, site_id);
 
         let user_id = if user_numeric_id > 0 {
             user_numeric_id.to_string()
@@ -1067,7 +1068,7 @@ impl SiteAdminService {
                 virtual_iban: Some(viban),
                 house_type: effective_house_type.clone(),
                 monthly_tariff_override: custom_tariff_override,
-                created_on: Some(Utc::now().date_naive()),
+                created_on: Some(site_today),
             };
 
             // Insert or update in-memory unit
@@ -1122,7 +1123,7 @@ impl SiteAdminService {
             for item in history_list.iter_mut() {
                 if item.is_active {
                     item.is_active = false;
-                    item.end_date = Some(Utc::now().date_naive().to_string());
+                    item.end_date = Some(site_today.to_string());
                     item.notes = Some(format!(
                         "{} • Ayrıldı (Yeni sakin devri)",
                         item.notes.as_deref().unwrap_or("")
@@ -1138,7 +1139,7 @@ impl SiteAdminService {
                     person_phone: request.tenant_phone.clone(),
                     person_email: request.tenant_email.clone(),
                     role: DebtorType::Tenant,
-                    start_date: Utc::now().date_naive().to_string(),
+                    start_date: site_today.to_string(),
                     end_date: None,
                     is_active: true,
                     exit_balance: Decimal::ZERO,
@@ -1154,7 +1155,7 @@ impl SiteAdminService {
                     person_phone: Some(request.phone.clone()),
                     person_email: Some(email_norm.clone()),
                     role: DebtorType::from_str_loose(occ_type),
-                    start_date: Utc::now().date_naive().to_string(),
+                    start_date: site_today.to_string(),
                     end_date: None,
                     is_active: true,
                     exit_balance: Decimal::ZERO,
@@ -2911,6 +2912,7 @@ impl SiteAdminService {
             // Also keep in-memory cache in sync without overwriting occupied units
             {
                 let mut inner = self.state.inner.write().await;
+                let site_today = crate::services::finance_common::site_today(&inner, site_id);
                 if let Some(first) = result_dtos.first() {
                     let block_id_str = &first.block_id;
                     let actual_block_name = &first.block_name;
@@ -2939,7 +2941,7 @@ impl SiteAdminService {
                             virtual_iban: dto.virtual_iban.clone(),
                             house_type: req.house_type.clone(),
                             monthly_tariff_override: None,
-                            created_on: Some(chrono::Utc::now().date_naive()),
+                            created_on: Some(site_today),
                         };
                         if !inner.units.iter().any(|u| u.id == dto.id) {
                             inner.units.push(ind_unit);
@@ -2952,6 +2954,7 @@ impl SiteAdminService {
         }
 
         let mut inner = self.state.inner.write().await;
+        let site_today = crate::services::finance_common::site_today(&inner, site_id);
         let existing_block = inner
             .blocks
             .iter()
@@ -3019,7 +3022,7 @@ impl SiteAdminService {
                 virtual_iban: viban.clone(),
                 house_type: req.house_type.clone(),
                 monthly_tariff_override: None,
-                created_on: Some(chrono::Utc::now().date_naive()),
+                created_on: Some(site_today),
             };
 
             inner.units.push(ind_unit);

@@ -115,6 +115,21 @@ class RustStandardsLintTests(unittest.TestCase):
         self.assertEqual(_rules(report), [])
         self.assertEqual(report["counts"]["unwrap"], 0)
 
+    def test_utc_today_is_reported_in_every_spelling(self):
+        source = (
+            "fn a() { let d = Utc::now().date_naive(); }\n"
+            "fn b() { let d = chrono::Utc::now().date_naive(); }\n"
+            "fn c() { let d = chrono::Utc::now()\n        .date_naive(); }\n"
+            "fn d() { let d = Utc::now() . date_naive(); }\n"
+            "// Utc::now().date_naive() in a comment\n"
+            "fn e() -> &'static str { \"Utc::now().date_naive()\" }\n"
+            "fn f() { let t = Utc::now(); let d = local_date(tz, t); }\n"
+            "#[cfg(test)]\nmod tests {\n    fn t() { let d = Utc::now().date_naive(); }\n}\n"
+        )
+        report = _lint({"src/a.rs": source})
+        self.assertEqual(_rules(report), ["utc-today"] * 4)
+        self.assertEqual([f["line"] for f in report["findings"]], [1, 2, 3, 5])
+
     def test_ratchet_fails_only_when_count_rises(self):
         source = "fn f() { a.unwrap(); b.unwrap(); }\n"
         self.assertTrue(_lint({"src/a.rs": source}, {"unwrap": 2})["passed"])
