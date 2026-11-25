@@ -138,11 +138,14 @@ pub async fn run_accrual_with_report(
     now: chrono::DateTime<Utc>,
 ) -> AccrualRunReport {
     let mut report = AccrualRunReport::default();
-    // Occupancy from PostgreSQL when available: a tenant without a user account
-    // is not visible on the in-memory unit.
-    let tenanted = match state.pool {
-        Some(ref pool) => match crate::db::tenanted_unit_ids(pool, "").await {
-            Ok(t) => Some(t),
+    // Occupancy and title from PostgreSQL when available, like the manual run: a tenant without
+    // a user account is not visible on the in-memory unit, and its owner can lag the units table.
+    let (tenanted, owned) = match state.pool {
+        Some(ref pool) => match tokio::try_join!(
+            crate::db::tenanted_unit_ids(pool, ""),
+            crate::db::owned_unit_ids(pool, "")
+        ) {
+            Ok((tenanted, owned)) => (Some(tenanted), Some(owned)),
             Err(e) => {
                 tracing::error!(
                     "[Scheduler] Occupancy could not be read; accrual skipped: {}",
@@ -151,7 +154,7 @@ pub async fn run_accrual_with_report(
                 return report;
             }
         },
-        None => None,
+        None => (None, None),
     };
     // 1. Inspect state with a READ lock and plan one batch per site and period.
     let batches: Vec<SiteBatch> = {
@@ -226,7 +229,11 @@ pub async fn run_accrual_with_report(
                     // manual run reports such units separately (units_without_owner) and leaves
                     // them uncharged, so a unit no one owns must not accrue a debt the scheduler
                     // would then allocate to nobody.
-                    if proration_enabled && unit.owner_user_id.is_none() {
+                    let is_owned = owned
+                        .as_ref()
+                        .map(|o| o.contains(&unit.id))
+                        .unwrap_or(unit.owner_user_id.is_some());
+                    if proration_enabled && !is_owned {
                         batch.skipped.push(format!(
                             "{}: no titled owner",
                             inner.unit_label(&unit.block_id, unit.unit_number)
