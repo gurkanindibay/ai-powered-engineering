@@ -31,7 +31,7 @@ While it is off, the report comes from CI (`.github/workflows/sitepulse-ci.yml`)
 - job `test-report` merges them with `scripts/ci_test_report.py`, writes the stats and the run to the job summary,
   and uploads artifact **`e2e-test-report`**: `test-report.md`, `feature-report.html` (dashboard: committed history plus this run),
   `executions.jsonl`, `summary.json`, and `product-status.json` / `product-status.html` (coverage per epic).
-- On pushes to `master`, Pages build/deploy jobs store sanitized archive state on `gh-pages` and publish an Actions artifact through
+- On pushes to `master`, Pages build/deploy jobs store sanitized archive state on `gh-pages-archive` (a single replaced commit; `gh-pages` is no longer written) and publish an Actions artifact through
   the `github-pages` environment when repository variable `SITEPULSE_PAGES_ACTIONS_ENABLED` is `true`. The Pages `index.html`
   is the product status dashboard, `latest.html` is the newest reviewed report and `history.html` lists the archived runs. PR runs
   remain available as `e2e-test-report` artifacts and do not deploy.

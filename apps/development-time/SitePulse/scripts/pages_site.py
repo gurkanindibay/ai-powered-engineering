@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build and verify the public-safe SitePulse GitHub Pages artifact.
 
-The `gh-pages` branch is retained as archive storage after Pages switches to
-Actions. This tool migrates that state by discarding rendered HTML and raw
+The `gh-pages-archive` branch is archive storage after Pages switches to
+Actions (see `pages_archive.py`). This tool migrates that state by discarding rendered HTML and raw
 Markdown, then rebuilding stable URLs from a strict JSON allowlist. New detailed
 case and gate data uses the optional `public-report.json` contract documented in
 `docs/testing/test-reporting-pages-analysis.md`; without it, the report page is

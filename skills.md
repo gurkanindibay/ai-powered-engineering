@@ -339,6 +339,16 @@ python3 apps/development-time/SitePulse/scripts/pages_site.py --help
 python3 apps/development-time/SitePulse/scripts/pages_site.py --json verify-local --site /tmp/pages-site
 ```
 
+## 5b-7b. Pages Archive Branch (`pages_archive.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/pages_archive.py](file:///apps/development-time/SitePulse/scripts/pages_archive.py)
+- **Purpose:** Restores the Pages archive state as a git worktree and publishes it to `gh-pages-archive` as one parentless commit, so old report trees do not grow git history. It seeds from `gh-pages` (never written) while the archive branch does not exist, and refuses to publish if an archived report is missing or the branch changed since the restore. `publish` rewrites the remote branch; `build-pages` in `sitepulse-ci.yml` runs it.
+
+```bash
+python3 apps/development-time/SitePulse/scripts/pages_archive.py --help
+python3 apps/development-time/SitePulse/scripts/pages_archive.py --json restore --site /tmp/pages-state
+```
+
 ## 5b-8. Product Status Dashboard (`product_status.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/product_status.py](file:///apps/development-time/SitePulse/scripts/product_status.py) (symlinked to `scripts/product_status.py`)
