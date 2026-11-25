@@ -776,15 +776,25 @@ _STATUS_PATTERN = re.compile(r"^[45][0-9]{2}$")
 
 
 def read_log_tail(path: Path, max_bytes: int = DEFAULT_LOG_TAIL_BYTES) -> str:
-    """Reads at most ``max_bytes`` from the end of the backend log."""
+    """Reads at most ``max_bytes`` from the end of the backend log.
+
+    A bounded read usually starts in the middle of a line, so the partial first
+    line is dropped instead of being parsed as a truncated record. When the seek
+    lands at the start of the file there is no partial line and nothing is lost.
+    """
     try:
         with path.open("rb") as handle:
             handle.seek(0, 2)
             size = handle.tell()
-            handle.seek(max(0, size - max_bytes))
-            return handle.read().decode("utf-8", errors="replace")
+            offset = max(0, size - max_bytes)
+            handle.seek(offset)
+            raw = handle.read().decode("utf-8", errors="replace")
     except OSError:
         return ""
+    if offset == 0:
+        return raw
+    first_newline = raw.find("\n")
+    return raw[first_newline + 1 :] if first_newline != -1 else ""
 
 
 def parse_error_entries(raw: str, *, limit: int = DEFAULT_MAX_ERROR_ENTRIES) -> list[dict[str, str]]:

@@ -312,6 +312,27 @@ class BackendLogParsingTests(unittest.TestCase):
         self.assertEqual(health.read_log_tail(missing), "")
         self.assertEqual(health.parse_error_entries(""), [])
 
+    def test_tail_read_drops_the_partial_first_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log = Path(tmpdir) / "backend.log"
+            lines = [
+                f"request: request_id=req-{index} method=GET path=/api/x status=500 latency_ms=1"
+                for index in range(5)
+            ]
+            log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            # A window that starts inside the second entry must not yield a
+            # truncated record, and must still keep every later entry.
+            window = 3 * len(lines[0])
+            tail = health.read_log_tail(log, max_bytes=window)
+        self.assertTrue(tail.startswith(lines[3]), tail[:60])
+        self.assertEqual([entry["request_id"] for entry in health.parse_error_entries(tail)], ["req-3", "req-4"])
+
+    def test_tail_read_from_the_start_keeps_the_first_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log = Path(tmpdir) / "backend.log"
+            log.write_text(self.LOG_LINE + "\n", encoding="utf-8")
+            self.assertEqual(health.read_log_tail(log, max_bytes=1_000_000), self.LOG_LINE + "\n")
+
 
 class BugBundleTests(unittest.TestCase):
     """The Markdown bundle is self-contained and redacted."""
