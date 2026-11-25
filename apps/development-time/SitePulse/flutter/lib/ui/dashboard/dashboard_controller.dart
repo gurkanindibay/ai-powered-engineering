@@ -82,8 +82,8 @@ class DashboardController extends ChangeNotifier {
     _offlineSubscription = platformOfflineChanges().listen(setNetworkOffline);
     _sessionSubscription = ApiClient.sessionExpired.listen((_) {
       if (kE2E) writePreference(_e2eSessionKey, null);
+      _clearSessionAndSiteData();
       _isAuthenticated = false;
-      _userSession = _userSession.copyWith(permissions: const []);
       _authMessage = 'Session expired. Please sign in again.';
       notifyListeners();
     });

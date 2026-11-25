@@ -43,8 +43,7 @@ Feature: Manager screen and session states
     When the manager clears the search
     Then A-1 through A-7 reappear and the site count remains 7
 
-  # Pending: GUI journey automation for expired session and cross-manager isolation is pending.
-  @SC-13-08-04 @J-15 @depth:2 @state:F5 @layer:gui @core @role_manager @pending
+  @SC-13-08-04 @J-15 @depth:2 @state:F5 @layer:gui @core @role_manager @linked
   Scenario: An expired session cannot reveal a previous manager's data
     Given a manager has opened the collection dashboard of a site in state F5
     And a different manager has a separate site in state F4

@@ -86,7 +86,7 @@ void main() {
     await started.future;
     ApiClient.clearSession();
     finish.complete();
-    await pending;
+    await expectLater(pending, throwsA(isA<AuthException>()));
     expect(ApiClient.accessToken, isNull);
   });
 
@@ -102,8 +102,28 @@ void main() {
     final request = ApiClient.get(ApiClient.uri('/api/v1/audit/events'));
     await started.future;
     ApiClient.setSession({'access_token': 'bob', 'refresh_token': 'bob-refresh'});
-    finish.complete(); await request;
+    finish.complete();
+    await expectLater(request, throwsA(isA<AuthException>()));
     expect(calls, 1);
+    expect(ApiClient.accessToken, 'bob');
+  });
+
+  test('a successful response from a previous identity is discarded', () async {
+    ApiClient.setSession({'access_token': 'alice', 'refresh_token': 'alice-refresh'});
+    final started = Completer<void>();
+    final finish = Completer<void>();
+    ApiClient.transport = MockClient((_) async {
+      started.complete();
+      await finish.future;
+      return http.Response('{"private_balance":"4500.00"}', 200);
+    });
+
+    final request = ApiClient.get(ApiClient.uri('/api/v1/residents/unit-a/statement'));
+    await started.future;
+    ApiClient.setSession({'access_token': 'bob', 'refresh_token': 'bob-refresh'});
+    finish.complete();
+
+    await expectLater(request, throwsA(isA<AuthException>()));
     expect(ApiClient.accessToken, 'bob');
   });
 

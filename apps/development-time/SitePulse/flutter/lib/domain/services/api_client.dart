@@ -144,6 +144,10 @@ class ApiClient {
       rethrow;
     }
 
+    // A successful response can still belong to a prior identity. Do not let
+    // an in-flight request update the UI after logout or a different sign-in.
+    _ensureSessionUnchanged(epoch, attemptedToken);
+
     stopwatch.stop();
     final respTraceId = response.headers['x-request-id'] ?? traceId;
     if (response.statusCode >= 500) {
@@ -182,9 +186,6 @@ class ApiClient {
         }.contains(url.path)) {
       return response;
     }
-    if (_sessionEpoch != epoch) {
-      return response;
-    }
     if (_accessToken != attemptedToken && _accessToken != null) {
       return _retry(send, headers);
     }
@@ -193,6 +194,7 @@ class ApiClient {
     if (identical(_renewal, renewal)) {
       _renewal = null;
     }
+    _ensureSessionUnchanged(epoch, attemptedToken);
     if (renewed) {
       return _retry(send, headers);
     }
@@ -264,6 +266,7 @@ class ApiClient {
     final token = _accessToken;
     final epoch = _sessionEpoch;
     final response = await send(_headers(headers));
+    _ensureSessionUnchanged(epoch, token);
     if (response.statusCode == 401 &&
         _sessionEpoch == epoch &&
         _accessToken == token) {
@@ -271,6 +274,12 @@ class ApiClient {
       _expired.add(null);
     }
     return response;
+  }
+
+  static void _ensureSessionUnchanged(int epoch, String? sessionToken) {
+    if (sessionToken != null && _sessionEpoch != epoch) {
+      throw const AuthException();
+    }
   }
 
   static Map<String, String> _headers(Map<String, String>? headers) {
