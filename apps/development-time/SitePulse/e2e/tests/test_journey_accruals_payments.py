@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from support.api import ApiError
-from support.flutter import by_id, text_of
+from support.flutter import ID_ATTR, by_id, text_of
 from support.journey_attempts import (
     JourneyManifest,
     ledger_invariants,
@@ -30,8 +30,14 @@ from support.journey_attempts import (
     teardown_with_evidence,
 )
 from support.journey_gui import amount_of
-from support.journey_live_reconciliation import assert_cash_matches_model, assert_statements_match_model, posted_cash
+from support.journey_live_reconciliation import (
+    PERIOD_LABELS,
+    assert_cash_matches_model,
+    assert_statements_match_model,
+    posted_cash,
+)
 from support.journey_multi_site import build_multi_site_journey
+from support.journey_reconciliation import CHECKPOINTS, reconcile
 from support.money import format_try
 from support.journey_reconciliation import CHECKPOINTS
 from support.journey_snapshots import current_section
@@ -40,6 +46,25 @@ from pages.manager import PaymentStream, ResidentsTab
 from pages.person import UnitWorkspace
 
 E2E = Path(__file__).resolve().parents[1]
+
+
+def _wait_for_semantics_text(page, test_id: str, expected: str, timeout_ms: int = 15_000) -> None:
+    """Wait until the widget tagged `test_id` exposes `expected`.
+
+    A tagged widget can be attached before its child text paints, especially on slow engines;
+    waiting on the expected value avoids reading the semantics tree one frame too early.
+    """
+    page.wait_for_function(
+        """([attribute, id, text]) => {
+            const element = document.querySelector(`[${attribute}="${id}"]`);
+            const content = element
+                ? (element.getAttribute('aria-label') || element.textContent || '')
+                : '';
+            return content.includes(text);
+        }""",
+        arg=[ID_ATTR, test_id, expected],
+        timeout=timeout_ms,
+    )
 
 
 @pytest.mark.covers("SC-13-02-03")
@@ -1531,7 +1556,8 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
 
         # Manager browser evidence (SC-13-13-05): each manager sees only their own site, the
         # four-period journey's unit statement renders the ledger's payer identity, open period
-        # history and exact totals, and the cash view renders the same posted site cash.
+        # history and exact totals, and the cash view lists posted receipts whose stream total
+        # reconciles to the ledger's posted site cash.
         login_page.login("manager", j.manager_a.user["email"], j.manager_a_password)
         ResidentsTab(page).open()
         units_a = set(ResidentsTab(page).unit_card_ids())
@@ -1544,6 +1570,22 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         by_id(page, "statement_debtor_owner").wait_for(timeout=15_000)
         statement_a = api.resident_statement(j.manager_a, unit_id_a)
         owner_a = next(d for d in statement_a["debtors"] if d["debtor_type"] == "OWNER")
+        # A-03 is paid in January and April, so February and March stay open. The independent
+        # journey model pins the periods and their exact principal-plus-fee totals; the API
+        # statement is reconciled to the same model just above.
+        ledger = reconcile()
+        expected_a = {
+            PERIOD_LABELS[row.period]: row.total
+            for row in ledger.open_rows()
+            if (row.site, row.unit) == ("A", "A-03")
+        }
+        assert expected_a == {
+            "Şubat 2027": Decimal("1098.33"),
+            "Mart 2027": Decimal("1051.67"),
+        }, f"the journey model pins A-03's two unpaid periods and totals, got {expected_a}"
+        for period, total in expected_a.items():
+            _wait_for_semantics_text(page, "statement_debtor_owner", period)
+            _wait_for_semantics_text(page, "statement_debtor_owner", format_try(total))
         owner_section_a = text_of(by_id(page, "statement_debtor_owner"))
         assert f"{owner_a['name']} · Kat maliki" in owner_section_a, (
             f"Site A, April 2027, unit A-03 ({unit_id_a}): the statement should name the "
@@ -1553,21 +1595,19 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
             f"Site A, April 2027, unit A-03 ({unit_id_a}): the owner-paid unit has no tenant "
             "debtor, so the statement must not render a tenant section"
         )
-        # A-03 is paid in January and April, so February and March stay open in the period history.
-        assert [item["period"] for item in owner_a["open_items"]] == ["Şubat 2027", "Mart 2027"], (
-            f"Site A, April 2027, unit A-03 ({unit_id_a}): expected the unpaid February and March "
-            f"periods, got {[item['period'] for item in owner_a['open_items']]}"
-        )
-        for item in owner_a["open_items"]:
-            assert item["period"] in owner_section_a, (
-                f"Site A, unit A-03: period {item['period']!r} missing from the owner section"
+        for period, total in expected_a.items():
+            assert period in owner_section_a, (
+                f"Site A, unit A-03: period {period!r} missing from the owner section"
             )
-            assert format_try(Decimal(str(item["total_outstanding"]))) in owner_section_a, (
-                f"Site A, unit A-03, {item['period']}: open amount "
-                f"{format_try(Decimal(str(item['total_outstanding'])))} missing from the owner section"
+            assert format_try(total) in owner_section_a, (
+                f"Site A, unit A-03, {period}: open amount {format_try(total)} missing from "
+                "the owner section"
             )
-        assert amount_of(page, "statement_total_owner") == Decimal(str(owner_a["total_outstanding"])), (
-            f"Site A, April 2027, unit A-03 ({unit_id_a}): statement total does not match the ledger"
+        expected_total_a = sum(expected_a.values(), Decimal("0.00"))
+        _wait_for_semantics_text(page, "statement_total_owner", format_try(expected_total_a))
+        assert amount_of(page, "statement_total_owner") == expected_total_a, (
+            f"Site A, April 2027, unit A-03 ({unit_id_a}): statement total does not match "
+            f"the ledger total {format_try(expected_total_a)}"
         )
         assert statement_a["receipts"], f"Site A, unit A-03 ({unit_id_a}) should list its paid periods"
         for receipt in statement_a["receipts"]:
@@ -1599,27 +1639,39 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
             by_id(manager_b_page, "statement_debtor_tenant").wait_for(timeout=15_000)
             statement_b = api.resident_statement(j.manager_b, unit_id_b)
             tenant_b = next(d for d in statement_b["debtors"] if d["debtor_type"] == "TENANT")
+            # B2-01 is paid in January and April, so February and March stay open. The model
+            # pins Juno's two unpaid periods and their principal-plus-fee totals.
+            expected_b = {
+                PERIOD_LABELS[row.period]: row.total
+                for row in ledger.open_rows()
+                if (row.site, row.unit) == ("B", "B2-01")
+            }
+            assert expected_b == {
+                "Şubat 2027": Decimal("823.75"),
+                "Mart 2027": Decimal("788.75"),
+            }, f"the journey model pins B2-01's two unpaid periods and totals, got {expected_b}"
+            for period, total in expected_b.items():
+                _wait_for_semantics_text(manager_b_page, "statement_debtor_tenant", period)
+                _wait_for_semantics_text(manager_b_page, "statement_debtor_tenant", format_try(total))
             tenant_section_b = text_of(by_id(manager_b_page, "statement_debtor_tenant"))
             assert f"{tenant_b['name']} · Kiracı" in tenant_section_b, (
                 f"Site B, April 2027, unit B2-01 ({unit_id_b}): the statement should name the "
                 f"tenant payer {tenant_b['name']!r}; it showed {tenant_section_b!r}"
             )
-            # B2-01 is paid in January and April, so February and March stay open.
-            assert [item["period"] for item in tenant_b["open_items"]] == ["Şubat 2027", "Mart 2027"], (
-                f"Site B, April 2027, unit B2-01 ({unit_id_b}): expected the unpaid February and "
-                f"March periods, got {[item['period'] for item in tenant_b['open_items']]}"
+            for period, total in expected_b.items():
+                assert period in tenant_section_b, (
+                    f"Site B, unit B2-01: period {period!r} missing from the tenant section"
+                )
+                assert format_try(total) in tenant_section_b, (
+                    f"Site B, unit B2-01, {period}: open amount {format_try(total)} missing from "
+                    "the tenant section"
+                )
+            expected_total_b = sum(expected_b.values(), Decimal("0.00"))
+            _wait_for_semantics_text(manager_b_page, "statement_total_tenant", format_try(expected_total_b))
+            assert amount_of(manager_b_page, "statement_total_tenant") == expected_total_b, (
+                f"Site B, April 2027, unit B2-01 ({unit_id_b}): statement total does not match "
+                f"the ledger total {format_try(expected_total_b)}"
             )
-            for item in tenant_b["open_items"]:
-                assert item["period"] in tenant_section_b, (
-                    f"Site B, unit B2-01: period {item['period']!r} missing from the tenant section"
-                )
-                assert format_try(Decimal(str(item["total_outstanding"]))) in tenant_section_b, (
-                    f"Site B, unit B2-01, {item['period']}: open amount "
-                    f"{format_try(Decimal(str(item['total_outstanding'])))} missing from the tenant section"
-                )
-            assert amount_of(manager_b_page, "statement_total_tenant") == Decimal(
-                str(tenant_b["total_outstanding"])
-            ), f"Site B, April 2027, unit B2-01 ({unit_id_b}): statement total does not match the ledger"
             assert statement_b["receipts"], f"Site B, unit B2-01 ({unit_id_b}) should list its paid periods"
             for receipt in statement_b["receipts"]:
                 by_id(manager_b_page, f"statement_receipt_{receipt['receipt_number']}").wait_for(timeout=15_000)
