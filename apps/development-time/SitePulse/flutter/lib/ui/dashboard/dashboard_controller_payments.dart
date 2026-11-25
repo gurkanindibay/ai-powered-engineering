@@ -129,6 +129,7 @@ extension DashboardControllerPayments on DashboardController {
     String? siteId,
   }) async {
     _isPaymentStreamLoading = true;
+    _paymentStreamError = null;
     notify();
 
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
@@ -148,12 +149,15 @@ extension DashboardControllerPayments on DashboardController {
         if (response.statusCode == 200) {
           final jsonMap = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           _paymentStream = PaymentStreamResponseDto.fromJson(jsonMap);
+          _paymentStreamError = null;
           _isPaymentStreamLoading = false;
           notify();
           return _paymentStream!;
         }
+        _paymentStreamError = Exception('Tahsilat akışı yüklenemedi. Lütfen tekrar deneyin.');
       } catch (e) {
         AppLogger.warn('fetchPaymentStream error', tag: 'PaymentsController', error: e);
+        _paymentStreamError = e;
       }
     }
 
@@ -213,25 +217,28 @@ extension DashboardControllerPayments on DashboardController {
         unmatchedVolume: Decimal.zero,
         totalCount: 3,
       );
+      _paymentStreamError = null;
       _isPaymentStreamLoading = false;
       notify();
       return _paymentStream!;
     }
 
-    _paymentStream = PaymentStreamResponseDto(
+    _isPaymentStreamLoading = false;
+    notify();
+    return _paymentStream ?? PaymentStreamResponseDto(
       entries: const [],
       totalVolume: Decimal.zero,
       settledVolume: Decimal.zero,
       unmatchedVolume: Decimal.zero,
       totalCount: 0,
     );
-    _isPaymentStreamLoading = false;
-    notify();
-    return _paymentStream!;
   }
 
   Future<DebtAgingReportDto> fetchDebtAgingReport({String? siteId}) async {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
+    _isDebtAgingLoading = true;
+    _debtAgingError = null;
+    notify();
     if (!isTestMode) {
       try {
         final uri = Uri.parse('${ApiClient.baseUrl}/api/v1/payments/debt-aging?site_id=$effectiveSiteId');
@@ -239,12 +246,31 @@ extension DashboardControllerPayments on DashboardController {
         if (response.statusCode == 200) {
           final jsonMap = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           _debtAgingReport = DebtAgingReportDto.fromJson(jsonMap);
+          _debtAgingError = null;
+          _isDebtAgingLoading = false;
           notify();
           return _debtAgingReport!;
         }
+        _debtAgingError = Exception('Borç yaşlandırma raporu yüklenemedi. Lütfen tekrar deneyin.');
       } catch (e) {
         AppLogger.warn('fetchDebtAgingReport error', tag: 'PaymentsController', error: e);
+        _debtAgingError = e;
       }
+    }
+
+    if (!isTestMode) {
+      _isDebtAgingLoading = false;
+      notify();
+      return _debtAgingReport ?? DebtAgingReportDto(
+        asOfDate: DateTime.now(),
+        totalCurrent: Decimal.zero,
+        total1to30Days: Decimal.zero,
+        total31to60Days: Decimal.zero,
+        total60PlusDays: Decimal.zero,
+        totalPenalty: Decimal.zero,
+        grandTotal: Decimal.zero,
+        brackets: const [],
+      );
     }
 
     _debtAgingReport = DebtAgingReportDto(
@@ -270,6 +296,8 @@ extension DashboardControllerPayments on DashboardController {
         ),
       ],
     );
+    _debtAgingError = null;
+    _isDebtAgingLoading = false;
     notify();
     return _debtAgingReport!;
   }

@@ -407,6 +407,8 @@ extension DashboardControllerResidents on DashboardController {
     if (!isTestMode && !canReadSiteDirectory) return;
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     _isLoadingHomeOwners = true;
+    _homeOwnersError = null;
+    notify();
 
     if (!isTestMode) {
       try {
@@ -426,12 +428,21 @@ extension DashboardControllerResidents on DashboardController {
             result.add(ho);
           }
           _homeOwners = result;
+          _homeOwnersError = null;
           _isLoadingHomeOwners = false;
           notify();
           return;
         }
+        _homeOwnersError = Exception('Daire dizini yüklenemedi. Lütfen tekrar deneyin.');
+        _isLoadingHomeOwners = false;
+        notify();
+        return;
       } catch (e) {
-        debugPrint('fetchHomeOwners network error: $e');
+        AppLogger.warn('Resident directory request failed', tag: 'Residents', error: e);
+        _homeOwnersError = e;
+        _isLoadingHomeOwners = false;
+        notify();
+        return;
       }
     }
 

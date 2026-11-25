@@ -533,6 +533,8 @@ class DashboardController extends ChangeNotifier {
 
   bool _isLoadingHomeOwners = false;
   bool get isLoadingHomeOwners => _isLoadingHomeOwners;
+  Object? _homeOwnersError;
+  Object? get homeOwnersError => _homeOwnersError;
 
   // SaaS Admin & Managed Site state
   List<TenantSiteItem> _saasSites = [];
@@ -1860,9 +1862,15 @@ class DashboardController extends ChangeNotifier {
   // Payment Tracking & Unified Treasury Streams (STORY-09-01 .. STORY-09-07)
   PaymentStreamResponseDto? _paymentStream;
   PaymentStreamResponseDto? get paymentStream => _paymentStream;
+  Object? _paymentStreamError;
+  Object? get paymentStreamError => _paymentStreamError;
 
   DebtAgingReportDto? _debtAgingReport;
   DebtAgingReportDto? get debtAgingReport => _debtAgingReport;
+  Object? _debtAgingError;
+  Object? get debtAgingError => _debtAgingError;
+  bool _isDebtAgingLoading = false;
+  bool get isDebtAgingLoading => _isDebtAgingLoading;
 
   PaymentReceiptDto? _selectedReceipt;
   PaymentReceiptDto? get selectedReceipt => _selectedReceipt;
