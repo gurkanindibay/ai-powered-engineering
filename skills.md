@@ -460,6 +460,18 @@ python3 scripts/cargo_target_pool.py clean-worktree <worktree-path> --dry-run
 python3 -m unittest discover -s tests/cargo_target_pool
 ```
 
+## 5c-3e. Unused Worktree Cleanup (`cleanup_unused_worktrees.py`)
+
+- **Executable Script:** [scripts/cleanup_unused_worktrees.py](scripts/cleanup_unused_worktrees.py)
+- **Purpose:** Removes linked worktrees that are no longer needed, without losing work. A worktree is removed only if it is not locked, was not touched within `--grace-minutes` (default 60), has no running process inside it (Linux `/proc`), is clean (no modified or untracked files), and its work is delivered: HEAD is an ancestor of `origin/<base>`, or its branch has a MERGED or CLOSED PR and no unpushed commits. Branches are kept. It never uses `--force`. Dry run by default; `--apply` removes.
+- **Scheduling:** a session-only `CronCreate` job runs `--apply --json` every 30 minutes (minutes :17 and :47). It dies with the Claude session.
+
+```bash
+python3 scripts/cleanup_unused_worktrees.py            # dry run
+python3 scripts/cleanup_unused_worktrees.py --json     # dry run, JSON
+python3 scripts/cleanup_unused_worktrees.py --apply    # remove eligible worktrees
+```
+
 Use [cargo_target_benchmark.py](scripts/cargo_target_benchmark.py) to compare the former and current
 SitePulse profiles at a fixed revision. It builds all backend test executables, samples disk use,
 and measures a warm target slot handoff across source trees. See the
