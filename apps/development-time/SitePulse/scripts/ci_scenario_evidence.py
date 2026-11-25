@@ -12,7 +12,7 @@ import html
 import json
 import re
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import feature_traceability as ft
@@ -78,20 +78,50 @@ def _case_matches(ref: dict, case: dict) -> bool:
     return stem in native and test in components
 
 
+def _markdown_cell(value: object) -> str:
+    return str(value).replace("|", r"\|").replace("`", r"\`").replace("\n", " ")
+
+
 def build_evidence(scenarios: dict, cases: list[dict], links: dict[str, list[dict]],
                    run_id: object = None, commit: object = None) -> dict:
+    by_test: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    by_flutter_stem: dict[str, list[int]] = defaultdict(list)
+    by_explicit_scenario: dict[str, list[int]] = defaultdict(list)
+    for index, case in enumerate(cases):
+        native_id = str(case.get("native_id", ""))
+        producer = str(case.get("producer", ""))
+        components = {_normalize(part) for part in re.split(r"::|[./]", native_id)}
+        for component in components:
+            by_test[component].append((producer, index))
+        if producer == "flutter":
+            by_flutter_stem[_normalize(Path(native_id.split("::", 1)[0]).stem)].append(index)
+        scenario_ids = case.get("scenario_ids", [])
+        if isinstance(scenario_ids, list):
+            for scenario_id in scenario_ids:
+                by_explicit_scenario[str(scenario_id)].append(index)
+
     by_scenario: dict[str, dict] = {}
     for scenario_id in sorted(scenarios):
         refs = links.get(scenario_id, [])
-        matched = []
-        for case in cases:
-            # Browser records already carry an explicit scenario id; all other lanes use their
-            # declared test link because the CI adapters preserve stable native test names.
-            if scenario_id in case.get("scenario_ids", []) or any(_case_matches(ref, case) for ref in refs):
-                matched.append({"producer": case.get("producer", "unknown"),
-                                "suite": case.get("suite", "unknown"),
-                                "native_id": case.get("native_id", ""),
-                                "status": CASE_STATUSES.get(str(case.get("status", "")).lower(), "unresolved")})
+        matched_indexes = set(by_explicit_scenario.get(scenario_id, []))
+        for ref in refs:
+            test = _normalize(ref.get("test", ""))
+            stem = _normalize(Path(str(ref.get("file", ""))).stem)
+            if not test:
+                continue
+            for producer, index in by_test.get(test, []):
+                if producer != "flutter" and _case_matches(ref, cases[index]):
+                    matched_indexes.add(index)
+            # Flutter native IDs include the full source path plus group and test title; a title
+            # may be part of a longer native ID, so filter the much smaller same-file index.
+            for index in by_flutter_stem.get(stem, []):
+                if _case_matches(ref, cases[index]):
+                    matched_indexes.add(index)
+        matched = [{"producer": cases[index].get("producer", "unknown"),
+                    "suite": cases[index].get("suite", "unknown"),
+                    "native_id": cases[index].get("native_id", ""),
+                    "status": CASE_STATUSES.get(str(cases[index].get("status", "")).lower(), "unresolved")}
+                   for index in sorted(matched_indexes)]
         state = scenarios[scenario_id].get("state", "unresolved")
         if matched:
             statuses = {item["status"] for item in matched}
@@ -135,8 +165,9 @@ def render_markdown(report: dict) -> str:
     if unresolved:
         lines.extend(["| Scenario | Declared test links |", "| --- | --- |"])
         for item in unresolved:
-            refs = "; ".join(f"`{ref['file']}:{ref['line']}` {ref['test']}" for ref in item["links"])
-            lines.append(f"| `{item['scenario_id']}` | {refs or 'No declared test link'} |")
+            refs = "; ".join(f"`{_markdown_cell(ref['file'])}:{ref['line']}` {_markdown_cell(ref['test'])}"
+                              for ref in item["links"])
+            lines.append(f"| `{_markdown_cell(item['scenario_id'])}` | {refs or 'No declared test link'} |")
     else:
         lines.append("No unresolved scenario links.")
     return "\n".join(lines) + "\n"

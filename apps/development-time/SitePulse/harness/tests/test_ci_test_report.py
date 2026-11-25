@@ -26,26 +26,40 @@ def _record(scenario: str, status: str) -> dict:
 class CiTestReportTest(unittest.TestCase):
     def test_scenario_evidence_distinguishes_ci_outcomes_scheduled_and_unresolved(self):
         scenarios = {sid: {"state": "no_result"} for sid in
-                     ("SC-01-01-01", "SC-01-01-02", "SC-01-01-03", "SC-01-01-04")}
+                     ("SC-01-01-01", "SC-01-01-02", "SC-01-01-03", "SC-01-01-04",
+                      "SC-01-01-06", "SC-01-01-07")}
         scenarios["SC-01-01-05"] = {"state": "planned"}
         links = {
             "SC-01-01-01": [{"file": "backend/tests/example.rs", "line": 1, "test": "works"}],
             "SC-01-01-02": [{"file": "backend/tests/example.rs", "line": 2, "test": "fails"}],
             "SC-01-01-03": [{"file": "e2e/nightly/test_later.py", "line": 3, "test": "test_later"}],
-            "SC-01-01-04": [{"file": "harness/tests/test_missing.py", "line": 4, "test": "test_missing"}],
+            "SC-01-01-04": [{"file": "harness/tests/test_missing.py", "line": 4,
+                             "test": "missing | `case`"}],
+            "SC-01-01-06": [{"file": "flutter/test/people_widget_test.dart", "line": 6,
+                             "test": "Resident detail"}],
+            "SC-01-01-07": [{"file": "harness/tests/test_people.py", "line": 7,
+                             "test": "test_disable"}],
         }
         cases = [
             {"producer": "rust", "suite": "rust-test", "native_id": "example::works", "status": "passed"},
             {"producer": "rust", "suite": "rust-test", "native_id": "example::fails", "status": "failed"},
+            {"producer": "flutter", "suite": "flutter-test",
+             "native_id": "flutter/test/people_widget_test.dart::Resident details show occupancy", "status": "passed"},
+            {"producer": "lint", "suite": "harness-selftest",
+             "native_id": "test_people.PersonTests.test_disable", "status": "passed"},
         ]
 
         report = cse.build_evidence(scenarios, cases, links, "run-1", "commit-1")
 
         self.assertEqual(report["evidence_counts"],
-                         {"failing": 1, "passing": 1, "planned": 1, "scheduled": 1, "unresolved": 1})
+                         {"failing": 1, "passing": 2, "planned": 1, "scheduled": 1, "unresolved": 2})
         self.assertEqual(report["scenarios"]["SC-01-01-03"]["evidence"], "scheduled")
         self.assertEqual(report["scenarios"]["SC-01-01-04"]["evidence"], "unresolved")
-        self.assertEqual(report["unresolved_links"][0]["scenario_id"], "SC-01-01-04")
+        self.assertEqual(report["scenarios"]["SC-01-01-06"]["evidence"], "unresolved")
+        self.assertEqual(report["scenarios"]["SC-01-01-07"]["evidence"], "passing")
+        self.assertIn(r"missing \| \`case\`", cse.render_markdown(report))
+        self.assertEqual({item["scenario_id"] for item in report["unresolved_links"]},
+                         {"SC-01-01-04", "SC-01-01-06"})
 
     def test_incomplete_suite_count_includes_mixed_and_reused_evidence(self):
         suites = [
