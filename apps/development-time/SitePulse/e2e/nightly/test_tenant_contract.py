@@ -497,11 +497,14 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
     active_period = next(
         (
             item for item in api.list_periods(second, site_id=ids["site"])
-            if item.get("period_name") == "Ekim 2025" and item.get("status") in {"OPEN", "ACTIVE"}
+            if str(item.get("site_id")) == str(second.user["site_id"])
+            and item.get("period_name") == "Ekim 2025"
+            and item.get("status") in {"OPEN", "ACTIVE"}
         ),
         None,
     )
     assert active_period is not None, "Accruing 2025-10 should open its dues period"
+    assert str(ids["site"]) == str(second.user["site_id"]), "Period fixture must use the close caller's site"
     ids["period"] = active_period["id"]
     assert_write_is_site_scoped(
         api, f"/api/v1/operating-budgets?{query_site}", second, first,
@@ -948,6 +951,13 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         ("/api/v1/payments/receipts/{id}/rent-deduction-certificate", str(ids["receipt"])),
     ]
 
+    summary = api.call(
+        "GET", f"/api/v1/dues/periods/{ids['period']}/summary", second.token,
+    )
+    assert summary["status"] in {"OPEN", "ACTIVE"}, (
+        f"Same-site close target is not open: site={second.user['site_id']} "
+        f"period={ids['period']} summary={summary}"
+    )
     api.close_period(second, ids["period"])
     reopen_body = {"reason": "Nightly tenant-scope reopen"}
     reopen_path = f"/api/v1/dues/periods/{ids['period']}/reopen"
