@@ -712,6 +712,24 @@ pub async fn heat_share_inventory_from_db(
     Ok(units)
 }
 
+/// Canonical active unit ids of a site when PostgreSQL is enabled, `None` otherwise. In-memory
+/// unit lists can hold stale rows, so callers that write unit-owned rows filter by this set.
+pub async fn canonical_unit_ids(
+    pool: Option<&Pool>,
+    site_id: &str,
+) -> DbResult<Option<std::collections::HashSet<String>>> {
+    match pool {
+        Some(pool) => Ok(Some(
+            heat_share_inventory_from_db(pool, site_id)
+                .await?
+                .into_iter()
+                .map(|(id, _label)| id)
+                .collect(),
+        )),
+        None => Ok(None),
+    }
+}
+
 pub async fn create_units_in_db(
     pool: &Pool,
     site_id: &str,

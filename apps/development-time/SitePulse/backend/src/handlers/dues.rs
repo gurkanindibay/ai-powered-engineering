@@ -302,6 +302,24 @@ pub async fn accrue_monthly_dues(
         None => (None, None),
     };
 
+    // With PostgreSQL the in-memory unit list can hold stale rows (their ids may
+    // not exist, or belong to another site, in the database). Accrue only against
+    // the canonical tenant-scoped inventory so every insert satisfies row-level
+    // security instead of failing the whole batch.
+    let canonical =
+        crate::db::unit_repository::canonical_unit_ids(state.db_pool(), &payload.site_id)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    crate::error::sanitized("Database unavailable", &e),
+                )
+            })?;
+    let planned: Vec<_> = planned
+        .into_iter()
+        .filter(|(unit, ..)| canonical.as_ref().is_none_or(|ids| ids.contains(&unit.id)))
+        .collect();
+
     let period_already_exists = {
         let inner = state.inner.read().await;
         inner.dues_periods.iter().any(|p| {
