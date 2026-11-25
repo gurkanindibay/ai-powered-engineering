@@ -494,6 +494,15 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
         {"site_id": ids["site"], "period": "2025-10", "amount": "1.00", "due_date": "2025-10-15"},
         success={200},
     )
+    active_period = next(
+        (
+            item for item in api.list_periods(second, site_id=ids["site"])
+            if item.get("period_name") == "Ekim 2025" and item.get("status") in {"OPEN", "ACTIVE"}
+        ),
+        None,
+    )
+    assert active_period is not None, "Accruing 2025-10 should open its dues period"
+    ids["period"] = active_period["id"]
     assert_write_is_site_scoped(
         api, f"/api/v1/operating-budgets?{query_site}", second, first,
         {"fiscal_year": 2027, "lines": [
