@@ -7,16 +7,21 @@ A worktree is removed only when ALL of these hold:
     so a live session is not pulled out from under its agent;
   * its working tree is clean (no modified or untracked files);
   * its branch has no open PR;
-  * its work is delivered: the HEAD commit is an ancestor of origin/<base>,
-    or its branch has a PR that is MERGED or CLOSED;
+  * its work is finished: it is on a branch with a PR that is MERGED or CLOSED.
+    Being contained in the base branch is not evidence: a task worktree that was
+    just created from origin/master looks exactly like that. Detached worktrees
+    are therefore always kept;
   * the branch has no commits ahead of its upstream (a branch whose upstream
     was deleted cannot be compared; its commits stay on the kept branch);
   * `git worktree remove` (never --force) accepts it.
 
 Branches are kept; only the worktree directory is removed. Files that git
 ignores (build output, local .env files) are deleted with the directory. The
-default mode is a dry run, which changes no repository state apart from fetching
-origin/<base>; pass --apply to remove eligible worktrees and prune stale entries.
+default mode is a dry run, which changes no repository state; pass --apply to
+remove eligible worktrees and prune stale entries.
+
+The grace period only sees the top-level directory, the index and HEAD. Edits in
+subdirectories are caught by the clean-tree check, so keep both.
 
 Usage:
   python3 scripts/cleanup_unused_worktrees.py            # dry run, text
@@ -37,7 +42,7 @@ from pathlib import Path
 from typing import Optional
 
 DEFAULT_GRACE_MINUTES = 60
-DEFAULT_BASE = "master"
+MIN_GRACE_MINUTES = 5
 
 
 @dataclass
@@ -140,13 +145,6 @@ def is_clean(worktree: Path) -> bool:
     return result.returncode == 0 and result.stdout.strip() == ""
 
 
-def is_delivered_to_base(repo: Path, head: str, base: str) -> bool:
-    if not head:
-        return False
-    result = run_git(repo, "merge-base", "--is-ancestor", head, f"origin/{base}")
-    return result.returncode == 0
-
-
 def pr_states(repo: Path, branch: str) -> list[str]:
     try:
         result = subprocess.run(
@@ -176,8 +174,7 @@ def has_unpushed_commits(worktree: Path, branch: str) -> Optional[bool]:
     return ahead.returncode != 0 or ahead.stdout.strip() != "0"
 
 
-def evaluate(repo: Path, entry: WorktreeEntry, base: str, grace_seconds: float,
-             now: float) -> Decision:
+def evaluate(repo: Path, entry: WorktreeEntry, grace_seconds: float, now: float) -> Decision:
     path = Path(entry.path)
     branch = entry.branch
 
@@ -198,26 +195,21 @@ def evaluate(repo: Path, entry: WorktreeEntry, base: str, grace_seconds: float,
     if not is_clean(path):
         return Decision(entry.path, branch, "kept", "uncommitted or untracked changes")
 
-    delivered = is_delivered_to_base(repo, entry.head, base)
-    states: list[str] = []
-    unpushed: Optional[bool] = None
-    if branch:
-        states = pr_states(repo, branch)
-        unpushed = has_unpushed_commits(path, branch)
-    pr_done = any(state in ("MERGED", "CLOSED") for state in states)
+    if not branch:
+        return Decision(entry.path, branch, "kept", "detached HEAD (no PR to prove the work is finished)")
 
-    details = {"delivered_to_base": delivered, "pr_states": states, "unpushed": unpushed}
+    states = pr_states(repo, branch)
+    unpushed = has_unpushed_commits(path, branch)
+    details = {"pr_states": states, "unpushed": unpushed}
 
     if "OPEN" in states:
         return Decision(entry.path, branch, "kept", "branch has an open PR", details)
-    if not delivered:
-        if not (pr_done and unpushed is not True):
-            return Decision(entry.path, branch, "kept",
-                            "work not delivered (no merged commit and no finished PR)", details)
-    elif unpushed is True:
+    if not any(state in ("MERGED", "CLOSED") for state in states):
+        return Decision(entry.path, branch, "kept", "no merged or closed PR", details)
+    if unpushed is True:
         return Decision(entry.path, branch, "kept", "commits not pushed to upstream", details)
 
-    return Decision(entry.path, branch, "would_remove", "delivered and clean", details)
+    return Decision(entry.path, branch, "would_remove", "finished PR and clean", details)
 
 
 def remove(repo: Path, decision: Decision) -> Decision:
@@ -232,14 +224,15 @@ def remove(repo: Path, decision: Decision) -> Decision:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Remove unused, clean, delivered git worktrees (dry run unless --apply).")
+        description="Remove unused, clean, finished git worktrees (dry run unless --apply).")
     parser.add_argument("--apply", action="store_true", help="actually remove eligible worktrees")
     parser.add_argument("--json", action="store_true", help="print the report as JSON")
-    parser.add_argument("--base", default=DEFAULT_BASE,
-                        help=f"base branch on origin (default: {DEFAULT_BASE})")
     parser.add_argument("--grace-minutes", type=float, default=DEFAULT_GRACE_MINUTES,
-                        help=f"skip worktrees active within this many minutes (default: {DEFAULT_GRACE_MINUTES})")
+                        help=f"skip worktrees active within this many minutes "
+                             f"(default: {DEFAULT_GRACE_MINUTES}, minimum: {MIN_GRACE_MINUTES})")
     args = parser.parse_args(argv)
+    if not args.grace_minutes >= MIN_GRACE_MINUTES:
+        parser.error(f"--grace-minutes must be at least {MIN_GRACE_MINUTES}")
 
     repo = Path(__file__).resolve().parent.parent
     listing = run_git(repo, "worktree", "list", "--porcelain")
@@ -252,13 +245,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     now = time.time()
     grace = args.grace_minutes * 60
 
-    run_git(repo, "fetch", "--quiet", "origin", args.base)
-
     decisions: list[Decision] = []
     for entry in entries:
         if entry.path == main_path:
             continue
-        decision = evaluate(repo, entry, args.base, grace, now)
+        decision = evaluate(repo, entry, grace, now)
         if decision.action == "would_remove" and args.apply:
             decision = remove(repo, decision)
         decisions.append(decision)

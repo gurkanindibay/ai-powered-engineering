@@ -59,11 +59,27 @@ class CleanupTest(unittest.TestCase):
     def decide(self, path: Path, now: float | None = None) -> cleanup.Decision:
         listing = git(self.repo, "worktree", "list", "--porcelain")
         entry = next(e for e in cleanup.parse_worktree_list(listing) if e.path == str(path))
-        return cleanup.evaluate(self.repo, entry, "master", GRACE,
+        return cleanup.evaluate(self.repo, entry, GRACE,
                                 time.time() + 2 * GRACE if now is None else now)
 
-    def test_idle_clean_delivered_worktree_is_eligible(self) -> None:
-        self.assertEqual(self.decide(self.add_worktree("done")).action, "would_remove")
+    def finished_worktree(self, name: str) -> Path:
+        path = self.add_worktree(name, commit=True, push=True)
+        self.states = ["MERGED"]
+        return path
+
+    def test_just_created_task_worktree_is_kept(self) -> None:
+        decision = self.decide(self.add_worktree("not-started"))
+        self.assertEqual((decision.action, decision.reason), ("kept", "no merged or closed PR"))
+
+    def test_detached_worktree_is_kept(self) -> None:
+        path = self.root / "detached"
+        git(self.repo, "worktree", "add", "-q", "--detach", str(path), "origin/master")
+        self.assertIn("detached HEAD", self.decide(path).reason)
+
+    def test_closed_pr_is_eligible(self) -> None:
+        path = self.add_worktree("closed", commit=True, push=True)
+        self.states = ["CLOSED"]
+        self.assertEqual(self.decide(path).action, "would_remove")
 
     def test_recently_active_worktree_is_kept(self) -> None:
         decision = self.decide(self.add_worktree("fresh"), now=time.time())
@@ -124,13 +140,21 @@ class CleanupTest(unittest.TestCase):
     def run_main(self, *argv: str) -> dict:
         output = io.StringIO()
         fake_script = self.repo / "scripts" / "cleanup_unused_worktrees.py"
+        later = time.time() + 2 * GRACE
         with mock.patch.object(cleanup, "__file__", str(fake_script)), \
+                mock.patch.object(cleanup.time, "time", return_value=later), \
                 contextlib.redirect_stdout(output):
-            self.assertEqual(cleanup.main(["--json", "--grace-minutes", "0", *argv]), 0)
+            self.assertEqual(cleanup.main(["--json", *argv]), 0)
         return json.loads(output.getvalue())
 
+    def test_grace_below_the_minimum_is_rejected(self) -> None:
+        for value in ("0", "-1", "4", "nan"):
+            with self.subTest(value=value), contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit):
+                cleanup.main(["--grace-minutes", value])
+
     def test_dry_run_removes_and_prunes_nothing(self) -> None:
-        kept = self.add_worktree("eligible")
+        kept = self.finished_worktree("eligible")
         gone = self.add_worktree("deleted-by-hand")
         shutil.rmtree(gone)
         self.run_main()
@@ -138,7 +162,7 @@ class CleanupTest(unittest.TestCase):
         self.assertIn(str(gone), git(self.repo, "worktree", "list", "--porcelain"))
 
     def test_apply_removes_the_worktree_and_keeps_its_branch(self) -> None:
-        path = self.add_worktree("eligible")
+        path = self.finished_worktree("eligible")
         report = self.run_main("--apply")
         self.assertEqual([d["action"] for d in report["decisions"]], ["removed"])
         self.assertFalse(path.exists())
