@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/account_link_screen.dart';
+import '../auth/dev_quick_login.dart';
 import '../auth/force_password_change_screen.dart';
 import '../auth/login_screen.dart';
 import '../dashboard/dashboard_controller.dart';
@@ -108,7 +109,18 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
       return;
     }
     if (!controller.isAuthenticated) {
-      final isLogin = configuration.path == AppRoutes.login || configuration.path == AppRoutes.changePassword || configuration.path == '/' || configuration.path.isEmpty;
+      final quickLoginTab = await DevQuickLoginGate.tryHandleQuickLogin(
+        uri: configuration,
+        controller: controller,
+      );
+      if (quickLoginTab != null) {
+        _tab = quickLoginTab;
+        _sessionIdentity = (controller.userRole, controller.siteAdminPath);
+        notifyListeners();
+        return;
+      }
+
+      final isLogin = configuration.path == AppRoutes.login || configuration.path == AppRoutes.quickLogin || configuration.path == AppRoutes.changePassword || configuration.path == '/' || configuration.path.isEmpty;
       _pendingDeepLink = isLogin ? null : configuration;
       notifyListeners();
       return;

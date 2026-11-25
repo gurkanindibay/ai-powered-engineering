@@ -372,8 +372,14 @@ pub fn build_router(state: AppState) -> Router {
     #[cfg(feature = "e2e")]
     let routes = if state.e2e_clock.is_some() {
         routes
-            .route("/__e2e/clock", post(crate::e2e_clock::control))
-            .route("/api/e2e/clock", post(crate::e2e_clock::control))
+            .route(
+                "/__e2e/clock",
+                post(crate::e2e_clock::control).get(crate::e2e_clock::get_clock),
+            )
+            .route(
+                "/api/e2e/clock",
+                post(crate::e2e_clock::control).get(crate::e2e_clock::get_clock),
+            )
             .route(
                 "/api/e2e/reload-state",
                 post(crate::e2e_clock::reload_state),

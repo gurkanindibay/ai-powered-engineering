@@ -159,6 +159,75 @@
   ul.checklist { margin: 0; padding-left: 20px; color: var(--text); font-size: 13px; }
   ul.checklist li { margin-bottom: 5px; }
   code { font-family: var(--mono); font-size: 12.5px; }
+
+  /* Time Machine Bar styles */
+  .time-machine-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .time-machine-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .time-machine-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .custom-date-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .custom-date-group input[type="date"] {
+    font: inherit;
+    font-size: 13px;
+    font-family: var(--mono);
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  .tick-report {
+    margin-top: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--mono);
+  }
+  .copy-btn {
+    padding: 2px 7px;
+    font-size: 11px;
+    margin-left: 6px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .copy-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .cell-flex {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
 </style>
 </head>
 <body>
@@ -169,6 +238,29 @@
 </header>
 <main>
   <div id="banner" role="alert"></div>
+
+  <!-- Time Machine Bar -->
+  <section id="time-machine" aria-labelledby="tm-title" style="margin-bottom: 28px;">
+    <div class="time-machine-bar">
+      <div class="time-machine-left">
+        <span style="font-size: 16px;">⏱️</span>
+        <h2 id="tm-title" style="margin:0; font-size:14px; font-weight:600;">Time Machine</h2>
+        <span id="clock-display" class="pill ok">Simulated: -- (Europe/Istanbul)</span>
+      </div>
+      <div class="time-machine-controls">
+        <button data-action="clock-plus-1">+1 Day</button>
+        <button data-action="clock-plus-10">+10 Days</button>
+        <button data-action="clock-due-day">Jump to Due Day (10th)</button>
+        <button data-action="clock-month-end">Jump to Month End</button>
+        <div class="custom-date-group">
+          <input type="date" id="custom-date-input" aria-label="Custom Date" />
+          <button data-action="clock-custom-jump">Set Date</button>
+        </div>
+        <button class="primary" data-action="clock-tick" title="Advance date-driven scheduled jobs (accruals, late fees, aging, reminders)">Run Scheduler Tick</button>
+      </div>
+    </div>
+    <div id="tick-report" class="tick-report" style="display:none;" role="status"></div>
+  </section>
 
   <section aria-labelledby="gallery-title">
     <h2 id="gallery-title">Scenario gallery</h2>
@@ -186,7 +278,7 @@
 <script>
 "use strict";
 
-const state = { presets: null, active: null, busy: false };
+const state = { presets: null, active: null, clock: null, busy: false };
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -245,6 +337,146 @@ function setBusy(busy) {
   });
 }
 
+async function loadClock() {
+  try {
+    const data = await api("/api/clock");
+    state.clock = data;
+    updateClockDisplay(data);
+  } catch (err) {
+    const display = document.getElementById("clock-display");
+    if (display) {
+      display.textContent = "Clock: unavailable (" + err.message + ")";
+      display.className = "pill bad";
+    }
+  }
+}
+
+function updateClockDisplay(data) {
+  const display = document.getElementById("clock-display");
+  if (!display) return;
+  if (!data || !data.date) {
+    display.textContent = "Simulated: -- (Europe/Istanbul)";
+    return;
+  }
+  const timeStr = data.time && data.time !== "00:00:00" ? " " + data.time : "";
+  display.textContent = "Simulated: " + data.date + timeStr + " (" + (data.timezone || "Europe/Istanbul") + ")";
+  display.className = "pill ok";
+  const dateInput = document.getElementById("custom-date-input");
+  if (dateInput && !dateInput.value) {
+    dateInput.value = data.date;
+  }
+}
+
+async function runClockAction(action, extraPayload) {
+  if (state.busy) return;
+  setBusy(true);
+  showBanner("");
+  const tickBox = document.getElementById("tick-report");
+  if (tickBox) tickBox.style.display = "none";
+  try {
+    const payload = Object.assign({ action: action }, extraPayload || {});
+    const res = await api("/api/clock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (res.date) {
+      state.clock = res;
+      updateClockDisplay(res);
+      const dateInput = document.getElementById("custom-date-input");
+      if (dateInput) dateInput.value = res.date;
+    } else {
+      await loadClock();
+    }
+    if (action === "tick" && res.report && tickBox) {
+      const rep = res.report;
+      tickBox.textContent = "✅ Scheduler Tick [" + (rep.date || res.date) + "]: " +
+        rep.accrued_sites + " site(s) accrued, " +
+        rep.accrued_liabilities + " dues liabilities, " +
+        rep.late_fee_liabilities + " late fee(s), " +
+        rep.aging_rows + " aging row(s), " +
+        rep.reminders_sent + " reminder(s) sent.";
+      tickBox.style.display = "block";
+    } else if (action === "tick" && tickBox) {
+      tickBox.textContent = "✅ Scheduler Tick completed successfully.";
+      tickBox.style.display = "block";
+    }
+    if (state.active) {
+      await loadActive();
+    }
+  } catch (err) {
+    showBanner("Time Machine error: " + err.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function initClockControls() {
+  const p1 = document.querySelector("button[data-action='clock-plus-1']");
+  if (p1) p1.addEventListener("click", function() { runClockAction("advance", { days: 1 }); });
+  const p10 = document.querySelector("button[data-action='clock-plus-10']");
+  if (p10) p10.addEventListener("click", function() { runClockAction("advance", { days: 10 }); });
+  const due = document.querySelector("button[data-action='clock-due-day']");
+  if (due) due.addEventListener("click", function() { runClockAction("jump_due_day"); });
+  const me = document.querySelector("button[data-action='clock-month-end']");
+  if (me) me.addEventListener("click", function() { runClockAction("jump_month_end"); });
+  const custom = document.querySelector("button[data-action='clock-custom-jump']");
+  if (custom) custom.addEventListener("click", function() {
+    const val = document.getElementById("custom-date-input").value;
+    if (!val) { showBanner("Please select a date first."); return; }
+    runClockAction("set_date", { date: val });
+  });
+  const tick = document.querySelector("button[data-action='clock-tick']");
+  if (tick) tick.addEventListener("click", function() { runClockAction("tick"); });
+}
+
+function copyToClipboard(text, btn) {
+  if (!text) return;
+  function markCopied() {
+    const orig = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.style.borderColor = "var(--ok)";
+    btn.style.color = "var(--ok)";
+    setTimeout(function() {
+      btn.textContent = orig;
+      btn.style.borderColor = "";
+      btn.style.color = "";
+    }, 1500);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(markCopied).catch(function() {
+      fallbackCopy(text, markCopied);
+    });
+  } else {
+    fallbackCopy(text, markCopied);
+  }
+}
+
+function fallbackCopy(text, callback) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand("copy");
+    if (callback) callback();
+  } catch (_) {}
+  document.body.removeChild(ta);
+}
+
+function openAppAsPersona(persona) {
+  const webBase = (state.active && state.active.web_url) || "http://localhost:9090";
+  const target = persona.role === "SITE_MANAGER" ? "/manager/home" : (persona.role === "SAAS_ADMIN" ? "/admin/home" : "/resident/home");
+  const email = encodeURIComponent(persona.email || "");
+  const password = encodeURIComponent(persona.password || "");
+  const role = encodeURIComponent(persona.role || "");
+  const targetEncoded = encodeURIComponent(target);
+  const url = `${webBase}/?quick_login=true&email=${email}&password=${password}&role=${role}&target=${targetEncoded}`;
+  window.open(url, "_blank");
+}
+
 async function prepare(preset) {
   if (state.busy) return;
   setBusy(true);
@@ -258,6 +490,7 @@ async function prepare(preset) {
     });
     state.active = manifest;
     renderActive();
+    await loadClock();
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     if (manifest.clock && manifest.clock.status !== "SET") {
       showBanner("Scenario " + manifest.preset + " seeded in " + seconds + "s, but the E2E clock could not be set: " + (manifest.clock.error || "unknown error"), "warn");
@@ -276,6 +509,7 @@ async function resetActive() {
   try {
     state.active = await api("/api/reset", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: "{}" });
     renderActive();
+    await loadClock();
   } catch (err) {
     showBanner("Could not reset the active scenario: " + err.message);
   } finally {
@@ -380,7 +614,7 @@ function renderPersonas(personas) {
   const wrap = el("div", "scroll");
   const table = el("table");
   const headRow = el("tr");
-  ["Role", "Name", "Unit", "Email", "Password"].forEach(function (title) {
+  ["Role", "Name", "Unit", "Email", "Password", "Quick Launch"].forEach(function (title) {
     headRow.appendChild(el("th", null, title));
   });
   table.appendChild(headRow);
@@ -389,12 +623,53 @@ function renderPersonas(personas) {
     row.appendChild(el("td", null, labelize(persona.role)));
     row.appendChild(el("td", null, persona.name));
     row.appendChild(el("td", null, persona.unit || "—"));
+
+    // Email cell with Copy button
     const emailCell = el("td");
-    emailCell.appendChild(el("code", null, persona.email));
+    const emailBox = el("div", "cell-flex");
+    emailBox.appendChild(el("code", null, persona.email));
+    const copyEmailBtn = el("button", "copy-btn", "Copy");
+    copyEmailBtn.title = "Copy email to clipboard";
+    copyEmailBtn.dataset.action = "copy-email";
+    copyEmailBtn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      copyToClipboard(persona.email, copyEmailBtn);
+    });
+    emailBox.appendChild(copyEmailBtn);
+    emailCell.appendChild(emailBox);
     row.appendChild(emailCell);
+
+    // Password cell with Copy button
     const passwordCell = el("td");
-    passwordCell.appendChild(el("code", null, persona.password || "—"));
+    const passwordBox = el("div", "cell-flex");
+    passwordBox.appendChild(el("code", null, persona.password || "—"));
+    if (persona.password) {
+      const copyPasswordBtn = el("button", "copy-btn", "Copy");
+      copyPasswordBtn.title = "Copy password to clipboard";
+      copyPasswordBtn.dataset.action = "copy-password";
+      copyPasswordBtn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        copyToClipboard(persona.password, copyPasswordBtn);
+      });
+      passwordBox.appendChild(copyPasswordBtn);
+    }
+    passwordCell.appendChild(passwordBox);
     row.appendChild(passwordCell);
+
+    // One-click Open App as Persona button
+    const launchCell = el("td");
+    const btnLabel = "Open as " + (persona.name || labelize(persona.role));
+    const launchBtn = el("button", "primary", btnLabel);
+    launchBtn.title = "Open App as Persona";
+    launchBtn.dataset.action = "open-persona";
+    launchBtn.dataset.personaName = persona.name || "";
+    launchBtn.dataset.role = persona.role || "";
+    launchBtn.addEventListener("click", function() {
+      openAppAsPersona(persona);
+    });
+    launchCell.appendChild(launchBtn);
+    row.appendChild(launchCell);
+
     table.appendChild(row);
   });
   wrap.appendChild(table);
@@ -435,7 +710,7 @@ function renderActive() {
   body.appendChild(renderTotals(active.expected_site_totals));
   body.appendChild(el("h4", null, "Unit-by-unit expected balances"));
   body.appendChild(renderUnitBalances(active.unit_by_unit_expected_balances));
-  body.appendChild(el("h4", null, "Persona credentials"));
+  body.appendChild(el("h4", null, "Persona Quick-Launch Panel (Accounts & One-Click Launch)"));
   body.appendChild(renderPersonas(active.personas));
   body.appendChild(el("h4", null, "PM test checklist"));
   body.appendChild(renderChecklist(active.pm_checklist));
@@ -469,6 +744,8 @@ async function boot() {
   } catch (_err) {
     setConnection("bad", "disconnected");
   }
+  initClockControls();
+  await loadClock();
   await loadPresets();
   await loadActive();
 }

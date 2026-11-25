@@ -95,10 +95,13 @@ class Harness:
         seed_manifests: dict[str, dict[str, Any]] | None = None,
         seed_error: Exception | None = None,
         clock_error: Exception | None = None,
+        clock_action_fn: Callable[[dict[str, Any]], Any] | None = None,
         state_path: Path | None = None,
+        web_url: str = web.DEFAULT_WEB_URL,
     ) -> None:
         self.seed_calls: list[str] = []
         self.clock_calls: list[str] = []
+        self.clock_action_calls: list[dict[str, Any]] = []
         self._seed_error = seed_error
         self._clock_error = clock_error
         self._manifests = seed_manifests or {}
@@ -118,11 +121,43 @@ class Harness:
                 raise self._clock_error
             return {"action": "set_date", "date": reference_date, "status": "ok"}
 
+        def default_clock_action_fn(payload: dict[str, Any]) -> dict[str, Any]:
+            self.clock_action_calls.append(payload)
+            action = payload.get("action")
+            if action == "get":
+                return {
+                    "action": "current",
+                    "date": "2026-11-19",
+                    "time": "00:00:00",
+                    "iso": "2026-11-19T00:00:00+03:00",
+                    "timezone": "Europe/Istanbul",
+                }
+            if action == "tick":
+                return {
+                    "action": "ticked",
+                    "date": payload.get("date", "2026-11-19"),
+                    "report": {
+                        "date": payload.get("date", "2026-11-19"),
+                        "accrued_sites": 1,
+                        "accrued_liabilities": 7,
+                        "late_fee_liabilities": 2,
+                        "aging_rows": 1,
+                        "reminders_sent": 0,
+                    },
+                }
+            if action == "set_date":
+                return {"action": "date_set", "date": payload["date"]}
+            if action == "advance_to":
+                return {"action": "advanced", "date": payload["date"]}
+            return {"action": action, "status": "ok"}
+
         self._tmpdir = tempfile.TemporaryDirectory()
         self.service = web.WorkbenchService(
             seed_fn=seed_fn,
             clock_fn=clock_fn,
+            clock_action_fn=clock_action_fn or default_clock_action_fn,
             state_path=state_path or Path(self._tmpdir.name) / "active.json",
+            web_url=web_url,
         )
         self.server = web.create_server(self.service, host="127.0.0.1", port=0)
         self.port = self.server.server_address[1]
@@ -615,6 +650,169 @@ class GuardrailTests(unittest.TestCase):
         self.assertEqual(status, 500)
         self.assertNotIn("secret", payload["error"])
         self.assertIn("request_id", payload)
+
+
+class TimeMachineEndpointTests(unittest.TestCase):
+    """GET and POST /api/clock power the Workbench Time Machine."""
+
+    def test_get_clock_returns_current_simulated_time(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json("/api/clock")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["action"], "current")
+        self.assertEqual(payload["date"], "2026-11-19")
+        self.assertEqual(payload["timezone"], "Europe/Istanbul")
+
+    def test_advance_clock_one_day(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/clock",
+                method="POST",
+                body={"action": "advance", "days": 1},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["action"], "advanced")
+        self.assertEqual(payload["date"], "2026-11-20")
+        self.assertEqual(harness.clock_action_calls[-1], {"action": "advance_to", "date": "2026-11-20"})
+
+    def test_advance_clock_ten_days(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/clock",
+                method="POST",
+                body={"action": "advance", "days": 10},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["action"], "advanced")
+        self.assertEqual(payload["date"], "2026-11-29")
+        self.assertEqual(harness.clock_action_calls[-1], {"action": "advance_to", "date": "2026-11-29"})
+
+    def test_jump_to_due_day(self) -> None:
+        # Current simulated clock is 2026-11-19 (past the 10th), so jump_due_day jumps to 2026-12-10
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/clock",
+                method="POST",
+                body={"action": "jump_due_day"},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["date"], "2026-12-10")
+        self.assertEqual(harness.clock_action_calls[-1], {"action": "set_date", "date": "2026-12-10"})
+
+    def test_jump_to_month_end(self) -> None:
+        # Current simulated clock is 2026-11-19, so jump_month_end jumps to 2026-11-30
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/clock",
+                method="POST",
+                body={"action": "jump_month_end"},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["date"], "2026-11-30")
+        self.assertEqual(harness.clock_action_calls[-1], {"action": "set_date", "date": "2026-11-30"})
+
+    def test_set_custom_date(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/clock",
+                method="POST",
+                body={"action": "set_date", "date": "2026-12-25"},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["action"], "date_set")
+        self.assertEqual(payload["date"], "2026-12-25")
+        self.assertEqual(harness.clock_action_calls[-1], {"action": "set_date", "date": "2026-12-25"})
+
+    def test_set_date_rejects_invalid_date_format(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/clock",
+                method="POST",
+                body={"action": "set_date", "date": "not-a-date"},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+        self.assertEqual(status, 400)
+        self.assertIn("Invalid date format", payload["error"])
+
+    def test_run_scheduler_tick(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/clock",
+                method="POST",
+                body={"action": "tick"},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["action"], "ticked")
+        self.assertIn("report", payload)
+        self.assertEqual(payload["report"]["accrued_sites"], 1)
+        self.assertEqual(payload["report"]["accrued_liabilities"], 7)
+        self.assertEqual(payload["report"]["late_fee_liabilities"], 2)
+
+    def test_clock_post_requires_action(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/clock",
+                method="POST",
+                body={},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+        self.assertEqual(status, 400)
+        self.assertIn("A clock action is required", payload["error"])
+
+    def test_clock_post_rejects_foreign_origin(self) -> None:
+        with Harness() as harness:
+            status, _headers, raw = harness.request(
+                "/api/clock",
+                method="POST",
+                body={"action": "tick"},
+                headers={"Origin": "https://malicious.example"},
+            )
+        self.assertEqual(status, 403)
+        self.assertIn("Cross-origin", json.loads(raw.decode("utf-8"))["error"])
+
+
+class PersonaQuickLaunchTests(unittest.TestCase):
+    """The Persona Quick-Launch Panel and pre-authenticated Flutter handoff."""
+
+    def test_active_payload_includes_web_url_and_personas(self) -> None:
+        with Harness(web_url="http://localhost:9090") as harness:
+            harness.json(
+                "/api/seed",
+                method="POST",
+                body={"preset": "F5"},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+            status, payload = harness.json("/api/active")
+        self.assertEqual(status, 200)
+        active = payload["active"]
+        self.assertIsNotNone(active)
+        self.assertEqual(active["web_url"], "http://localhost:9090")
+        personas = active["personas"]
+        self.assertTrue(len(personas) > 0)
+        self.assertTrue(any(p["role"] == "SITE_MANAGER" for p in personas))
+
+    def test_ui_html_contains_time_machine_controls_and_persona_switcher(self) -> None:
+        markup = (SCRIPTS_DIR / "pm_workbench_ui.html").read_text(encoding="utf-8")
+        # Time machine controls
+        self.assertIn("Time Machine", markup)
+        self.assertIn("clock-display", markup)
+        self.assertIn("clock-plus-1", markup)
+        self.assertIn("clock-plus-10", markup)
+        self.assertIn("clock-due-day", markup)
+        self.assertIn("clock-month-end", markup)
+        self.assertIn("custom-date-input", markup)
+        self.assertIn("clock-tick", markup)
+        # Persona switcher and quick-login handoff
+        self.assertIn("Persona Quick-Launch Panel", markup)
+        self.assertIn("open-persona", markup)
+        self.assertIn("copy-btn", markup)
+        self.assertIn("quick_login=true", markup)
 
 
 if __name__ == "__main__":

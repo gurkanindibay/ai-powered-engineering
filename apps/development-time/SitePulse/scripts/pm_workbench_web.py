@@ -26,18 +26,25 @@ Safety:
 from __future__ import annotations
 
 import argparse
+import calendar
 import json
 import logging
 import sys
 import threading
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
+
+try:
+    from zoneinfo import ZoneInfo
+    ISTANBUL_TZ = ZoneInfo("Europe/Istanbul")
+except Exception:
+    ISTANBUL_TZ = timezone(timedelta(hours=3))
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -55,6 +62,7 @@ LOGGER = logging.getLogger("pm_workbench_web")
 DEFAULT_UI_HOST = "127.0.0.1"
 DEFAULT_UI_PORT = 9095
 DEFAULT_API_URL = "http://localhost:8080"
+DEFAULT_WEB_URL = "http://localhost:9090"
 DEFAULT_STATE_PATH = Path.home() / ".sitepulse" / "workbench-active.json"
 UI_HTML_PATH = SCRIPT_DIR / "pm_workbench_ui.html"
 MAX_REQUEST_BYTES = 64 * 1024
@@ -242,8 +250,10 @@ class WorkbenchService:
         *,
         seed_fn: Callable[[str], Any] | None = None,
         clock_fn: Callable[[str], Any] | None = None,
+        clock_action_fn: Callable[[dict[str, Any]], Any] | None = None,
         state_path: Path | str | None = None,
         api_url: str = DEFAULT_API_URL,
+        web_url: str = DEFAULT_WEB_URL,
         db_name: str = "sitepulse",
         saas_email: str = "admin@sitepulse.io",
         saas_password: str = "E2E-Bootstrap-Admin-1",
@@ -251,8 +261,10 @@ class WorkbenchService:
     ) -> None:
         self._seed_fn = seed_fn
         self._clock_fn = clock_fn
+        self._clock_action_fn = clock_action_fn
         self._state_path = Path(state_path) if state_path else DEFAULT_STATE_PATH
         self._api_url = api_url
+        self._web_url = web_url
         self._db_name = db_name
         self._saas_email = saas_email
         self._saas_password = saas_password
@@ -260,6 +272,7 @@ class WorkbenchService:
         self._lock = threading.RLock()
         self._active: ActiveScenario | None = None
         self._loaded = False
+        self._cached_clock_date: str | None = None
 
     # -- catalogue ---------------------------------------------------------
 
@@ -357,6 +370,7 @@ class WorkbenchService:
 
     def _pin_clock(self, preset: str) -> dict[str, Any]:
         reference_date = REFERENCE_CLOCKS[preset]
+        self._cached_clock_date = reference_date
         try:
             if self._clock_fn is not None:
                 response = self._clock_fn(reference_date)
@@ -373,6 +387,135 @@ class WorkbenchService:
 
         return call_clock_api(self._api_url, {"action": "set_date", "date": reference_date})
 
+    def get_clock(self) -> dict[str, Any]:
+        """Returns the current simulated Europe/Istanbul date and time."""
+        with self._lock:
+            if self._clock_action_fn is not None:
+                try:
+                    res = self._clock_action_fn({"action": "get"})
+                    if isinstance(res, dict):
+                        return json_safe(res)
+                except Exception as err:
+                    LOGGER.warning("Injected clock action function failed on get: %s", err)
+            else:
+                from pm_workbench import call_clock_api
+                try:
+                    res = call_clock_api(self._api_url, {"action": "get"})
+                    if isinstance(res, dict) and res.get("action") == "current":
+                        self._cached_clock_date = res.get("date")
+                        return json_safe(res)
+                except Exception as err:
+                    LOGGER.debug("Could not fetch clock from backend %s: %s", self._api_url, err)
+
+            active = self.active()
+            ref_date = self._cached_clock_date
+            if not ref_date and active:
+                clock_info = active.clock or {}
+                ref_date = clock_info.get("reference_date") or active.manifest.get("reference_clock")
+            if not ref_date:
+                try:
+                    ref_date = datetime.now(ISTANBUL_TZ).date().isoformat()
+                except Exception:
+                    ref_date = datetime.now(timezone.utc).date().isoformat()
+
+            return {
+                "action": "current",
+                "date": ref_date,
+                "time": "00:00:00",
+                "iso": f"{ref_date}T00:00:00+03:00",
+                "timezone": "Europe/Istanbul",
+                "status": "FALLBACK",
+            }
+
+    def control_clock(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Executes a Time Machine action against the E2E clock."""
+        action = payload.get("action")
+        if not action:
+            raise InvalidRequestError("A clock action is required.")
+
+        current = self.get_clock()
+        cur_date_str = str(current.get("date", ""))
+        try:
+            cur_date = datetime.strptime(cur_date_str, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            cur_date = datetime.now(timezone.utc).date()
+
+        backend_payload: dict[str, Any]
+        if action == "advance":
+            days = int(payload.get("days", 1))
+            target_date = cur_date + timedelta(days=days)
+            backend_payload = {"action": "advance_to", "date": target_date.isoformat()}
+        elif action in ("jump_due_day", "jump_to_due_day"):
+            # Due date is the 10th of the month.
+            if cur_date.day < 10:
+                target_date = date(cur_date.year, cur_date.month, 10)
+            else:
+                next_y = cur_date.year + (1 if cur_date.month == 12 else 0)
+                next_m = 1 if cur_date.month == 12 else cur_date.month + 1
+                target_date = date(next_y, next_m, 10)
+            backend_payload = {"action": "set_date", "date": target_date.isoformat()}
+        elif action in ("jump_month_end", "jump_to_month_end"):
+            num_days = calendar.monthrange(cur_date.year, cur_date.month)[1]
+            month_end = date(cur_date.year, cur_date.month, num_days)
+            if cur_date < month_end:
+                target_date = month_end
+            else:
+                next_y = cur_date.year + (1 if cur_date.month == 12 else 0)
+                next_m = 1 if cur_date.month == 12 else cur_date.month + 1
+                next_days = calendar.monthrange(next_y, next_m)[1]
+                target_date = date(next_y, next_m, next_days)
+            backend_payload = {"action": "set_date", "date": target_date.isoformat()}
+        elif action == "set_date":
+            date_val = payload.get("date")
+            if not date_val:
+                raise InvalidRequestError("Action 'set_date' requires a 'date' string (YYYY-MM-DD).")
+            try:
+                datetime.strptime(date_val, "%Y-%m-%d")
+            except ValueError as err:
+                raise InvalidRequestError(f"Invalid date format {date_val!r}; expected YYYY-MM-DD.") from err
+            backend_payload = {"action": "set_date", "date": date_val}
+        elif action == "advance_to":
+            date_val = payload.get("date")
+            if not date_val:
+                raise InvalidRequestError("Action 'advance_to' requires a 'date' string (YYYY-MM-DD).")
+            backend_payload = {"action": "advance_to", "date": date_val}
+        elif action == "tick":
+            backend_payload = {"action": "tick"}
+        elif action in ("clear", "reset"):
+            backend_payload = {"action": "clear"}
+        elif action in ("get", "status"):
+            return self.get_clock()
+        else:
+            raise InvalidRequestError(f"Unknown clock action {action!r}.")
+
+        with self._lock:
+            if self._clock_action_fn is not None:
+                resp = self._clock_action_fn(backend_payload)
+            elif self._clock_fn is not None and backend_payload.get("action") == "set_date":
+                resp = self._clock_fn(backend_payload["date"])
+            else:
+                from pm_workbench import call_clock_api
+                try:
+                    resp = call_clock_api(self._api_url, backend_payload)
+                except Exception as err:
+                    raise WorkbenchWebError(f"Clock action {action} failed: {err}") from err
+
+            if isinstance(resp, dict):
+                target_date_str = resp.get("date") or backend_payload.get("date")
+                if target_date_str:
+                    self._cached_clock_date = str(target_date_str)
+                if self._active:
+                    new_clock = dict(self._active.clock or {})
+                    if target_date_str:
+                        new_clock["reference_date"] = str(target_date_str)
+                        new_clock["status"] = "SET"
+                    if resp.get("report"):
+                        new_clock["last_tick_report"] = resp.get("report")
+                    self._active.clock = new_clock
+                    self._write_state(self._active)
+
+            return json_safe(resp if isinstance(resp, dict) else {"status": "OK"})
+
     def payload(self, active: ActiveScenario) -> dict[str, Any]:
         """Flattens the active scenario into the cheat-sheet shape the UI renders."""
         manifest = active.manifest
@@ -382,6 +525,7 @@ class WorkbenchService:
             "label": PRESET_LABELS.get(active.preset, active.preset),
             "seeded_at": active.seeded_at,
             "clock": clock,
+            "web_url": self._web_url,
             "site_id": manifest.get("site_id"),
             "site_name": manifest.get("site_name"),
             "reference_clock": manifest.get("reference_clock") or clock.get("reference_date"),
@@ -410,8 +554,8 @@ def render_index_html() -> str:
         )
 
 
-GET_ROUTES = ("/", "/index.html", "/api/presets", "/api/active", "/healthz")
-POST_ROUTES = ("/api/seed", "/api/reset")
+GET_ROUTES = ("/", "/index.html", "/api/presets", "/api/active", "/api/clock", "/healthz")
+POST_ROUTES = ("/api/seed", "/api/reset", "/api/clock")
 
 
 def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
@@ -573,6 +717,8 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
                     200,
                     {"active": service.payload(active) if active else None},
                 )
+            elif path == "/api/clock":
+                self._send_json(200, service.get_clock())
             elif path == "/healthz":
                 self._send_json(200, {"status": "ok", "service": "pm-workbench-web"})
             elif path in POST_ROUTES:
@@ -589,6 +735,10 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
                 self._read_json_body()  # body optional; validated when present
                 active = service.reset()
                 self._send_json(200, service.payload(active))
+            elif path == "/api/clock":
+                payload = self._read_json_body()
+                resp = service.control_clock(payload)
+                self._send_json(200, resp)
             elif path in GET_ROUTES:
                 self._method_not_allowed("GET")
             else:
@@ -655,6 +805,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow binding a non-loopback host (exposes persona credentials)",
     )
     parser.add_argument("--api-url", default=DEFAULT_API_URL, help="Backend API base URL")
+    parser.add_argument("--web-url", default=DEFAULT_WEB_URL, help="Flutter Web client base URL")
     parser.add_argument("--db-name", default="sitepulse", help="PostgreSQL database name")
     parser.add_argument("--saas-email", default="admin@sitepulse.io", help="SaaS bootstrap admin email")
     parser.add_argument("--saas-password", default="E2E-Bootstrap-Admin-1", help="SaaS bootstrap admin password")
@@ -669,6 +820,7 @@ def main(argv: list[str] | None = None) -> int:
     service = WorkbenchService(
         state_path=args.state_file,
         api_url=args.api_url,
+        web_url=args.web_url,
         db_name=args.db_name,
         saas_email=args.saas_email,
         saas_password=args.saas_password,

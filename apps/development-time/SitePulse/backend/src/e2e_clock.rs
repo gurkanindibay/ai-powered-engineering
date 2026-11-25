@@ -224,6 +224,7 @@ pub enum ClockRequest {
     /// Returns the process to the system clock until the next date is set.
     Clear,
     Tick,
+    Get,
 }
 
 #[derive(Debug, Serialize)]
@@ -243,6 +244,13 @@ pub enum ClockResponse {
     Ticked {
         date: NaiveDate,
         report: crate::scheduler::E2eTickReport,
+    },
+    Current {
+        utc: DateTime<Utc>,
+        date: NaiveDate,
+        time: String,
+        iso: String,
+        timezone: String,
     },
 }
 
@@ -293,6 +301,17 @@ pub async fn control(
             let report = crate::scheduler::run_e2e_tick(&state).await?;
             ClockResponse::Ticked { date, report }
         }
+        ClockRequest::Get => {
+            let now = clock.now()?;
+            let local = now.with_timezone(&chrono_tz::Europe::Istanbul);
+            ClockResponse::Current {
+                utc: now,
+                date: local.date_naive(),
+                time: local.format("%H:%M:%S").to_string(),
+                iso: local.to_rfc3339(),
+                timezone: "Europe/Istanbul".to_string(),
+            }
+        }
     };
     if publishes_fixture_time {
         let fixture = clock.now()?;
@@ -301,6 +320,25 @@ pub async fn control(
             .map_err(|_| E2eClockError::LockUnavailable)? = Some(fixture);
     }
     Ok(axum::Json(response))
+}
+
+/// Returns the current simulated Europe/Istanbul clock state.
+#[cfg(feature = "e2e")]
+pub async fn get_clock(
+    axum::extract::State(state): axum::extract::State<crate::state::AppState>,
+) -> Result<axum::Json<ClockResponse>, E2eClockError> {
+    let Some(clock) = state.e2e_clock.as_ref() else {
+        return Err(E2eClockError::Disabled);
+    };
+    let now = clock.now()?;
+    let local = now.with_timezone(&chrono_tz::Europe::Istanbul);
+    Ok(axum::Json(ClockResponse::Current {
+        utc: now,
+        date: local.date_naive(),
+        time: local.format("%H:%M:%S").to_string(),
+        iso: local.to_rfc3339(),
+        timezone: "Europe/Istanbul".to_string(),
+    }))
 }
 
 /// Handles the private E2E state reload endpoint to synchronize in-memory state with PostgreSQL.
