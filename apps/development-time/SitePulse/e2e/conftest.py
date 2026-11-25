@@ -137,13 +137,25 @@ def _is_password_gate(resp) -> bool:
 
 
 @pytest.fixture(autouse=True)
-def page_guard(request, page):
+def page_guard(request, page, browser_name):
     """Fail on uncaught JS errors, backend 5xx and calls refused by the password gate; other 4xx are recorded only."""
     errors: list[str] = []
     client_errors: list[str] = []
     gate_errors: list[str] = []
     page_errors: list[str] = []
-    page.on("pageerror", lambda exc: page_errors.append(describe_page_error(exc)))
+    ignored_page_errors: list[str] = []
+
+    def on_page_error(exc):
+        described = describe_page_error(exc)
+        # WebKit raises an occasional empty pageerror from inside its own Flutter rasteriser
+        # (no name, message or application frame); it is unactionable and failed the whole
+        # nightly lane (#474). Keep it as evidence, but still fail on every named error.
+        if browser_name == "webkit" and described.startswith("pageerror: <empty message:"):
+            ignored_page_errors.append(described)
+            return
+        page_errors.append(described)
+
+    page.on("pageerror", on_page_error)
     # A crashed renderer makes every later call hang until its timeout; say so instead.
     page.on("crash", lambda _page: errors.append("page crashed: the browser's renderer process died"))
 
@@ -161,6 +173,8 @@ def page_guard(request, page):
     page.on("response", on_response)
     yield
     request.node.user_properties.append(("client_errors", "; ".join(sorted(set(client_errors)))))
+    if ignored_page_errors:
+        request.node.user_properties.append(("ignored_page_errors", "; ".join(ignored_page_errors)))
     if "allow_server_errors" in request.keywords:
         errors, page_errors = [], []
     if "allow_password_gate" not in request.keywords:
