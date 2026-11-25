@@ -186,8 +186,8 @@ pub enum StatementAccess {
 ///
 /// A current owner, tenant or household member may read it, and so may a former
 /// owner or tenant whose only remaining tie to the unit is a charge they still
-/// owe (after a move-out or a sale), because the statement then returns only
-/// that person's own liabilities. Every other unit endpoint keeps the
+/// owe (after a move-out or a sale), or whose advance is held after the change,
+/// because the statement then returns only that person's own section. Every other unit endpoint keeps the
 /// current-relationship rule of [`unit`] through the response for this one.
 ///
 /// # Errors
@@ -218,7 +218,9 @@ pub async fn statement_unit(
                     SELECT 1 FROM dues_liability_joint_owners j \
                     JOIN dues_liabilities d ON d.id=j.due_id WHERE d.unit_id=u.id \
                     AND j.owner_person_id=actor.person_id \
-                    AND d.status IN ('PENDING','OVERDUE')))",
+                    AND d.status IN ('PENDING','OVERDUE')) OR EXISTS ( \
+                    SELECT 1 FROM person_advance_holds h WHERE h.unit_id=u.id \
+                    AND h.person_id=actor.person_id AND h.balance > 0))",
                 &[&unit_id.0, &site.0, &user],
             )
             .await
@@ -238,7 +240,7 @@ pub async fn statement_unit(
         .iter()
         .find(|u| crate::auth::same_id(&u.id, &claims.sub))
         .and_then(|u| u.person_id);
-    let owes_on_unit = person_id.is_some_and(|pid| {
+    let has_history_on_unit = person_id.is_some_and(|pid| {
         inner.dues.iter().any(|due| {
             same_unit(&due.unit_id, &target.id)
                 && due.status.is_collectable()
@@ -247,9 +249,16 @@ pub async fn statement_unit(
                         .joint_liability_owners
                         .get(&due.id)
                         .is_some_and(|owners| owners.iter().any(|o| o.person_id == pid)))
-        })
+        }) || inner
+            .person_advance_holds
+            .iter()
+            .any(|((held_unit, held_person, _), balance)| {
+                same_unit(held_unit, &target.id)
+                    && held_person == &pid.to_string()
+                    && *balance > rust_decimal::Decimal::ZERO
+            })
     });
-    if owes_on_unit {
+    if has_history_on_unit {
         Ok(StatementAccess::Historical)
     } else {
         Err(SecurityError::NotFound)

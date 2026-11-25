@@ -367,6 +367,9 @@ pub struct StatementDebtor {
     pub penalty_outstanding: Decimal,
     pub total_outstanding: Decimal,
     pub advance_balance: Decimal,
+    /// Advance still held for this former debtor after an ownership or occupancy change.
+    #[serde(default)]
+    pub held_advance_balance: Decimal,
     pub open_items: Vec<StatementOpenItem>,
     /// Tenant liabilities for which this owner is jointly liable. These are
     /// presented separately and do not inflate this debtor's ledger totals.

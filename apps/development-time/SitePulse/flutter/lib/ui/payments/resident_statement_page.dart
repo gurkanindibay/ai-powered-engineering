@@ -64,6 +64,7 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
       }
       cards.add(_DebtorCard(
         debtor: debtor,
+        unitLabel: statement.unitLabel,
         sectionIndex: index,
         duplicateJointDueIds: debtor.liablePersonId == null
             ? const <String>{}
@@ -122,10 +123,12 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
 
 class _DebtorCard extends StatelessWidget {
   final StatementDebtor debtor;
+  final String unitLabel;
   final int sectionIndex;
   final Set<String> duplicateJointDueIds;
   const _DebtorCard({
     required this.debtor,
+    required this.unitLabel,
     required this.sectionIndex,
     required this.duplicateJointDueIds,
   });
@@ -192,6 +195,8 @@ class _DebtorCard extends StatelessWidget {
           _line(context, 'Gecikme tazminatı', debtor.penaltyOutstanding),
           _line(context, 'Toplam borç', debtor.totalOutstanding, bold: true, id: 'statement_total_$roleKey$idSuffix'),
           if (debtor.advanceBalance > Decimal.zero) _line(context, 'Avans bakiyesi', debtor.advanceBalance),
+          if (debtor.heldAdvanceBalance > Decimal.zero)
+            _line(context, 'Bu bölümde tutulan avans · $unitLabel', debtor.heldAdvanceBalance),
           if (debtor.openItems.isNotEmpty) ...[
             const Divider(height: 20),
             for (final i in debtor.openItems)

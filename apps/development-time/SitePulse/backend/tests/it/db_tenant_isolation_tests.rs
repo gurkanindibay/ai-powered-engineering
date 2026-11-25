@@ -812,6 +812,7 @@ async fn statement_access_grants_former_debtors_in_postgresql() {
         .await;
     let former = seed_resident(&t, site, "Eski Kiraci", "former@sitepulse.test").await;
     let joint = seed_resident(&t, site, "Ortak Malik", "joint@sitepulse.test").await;
+    let held_owner = seed_resident(&t, site, "Onceki Malik", "held-owner@sitepulse.test").await;
     seed_resident(&t, site, "Ilgisiz Kisi", "stranger@sitepulse.test").await;
     let tenant_due = t
         .scalar_i64(&format!(
@@ -833,6 +834,11 @@ async fn statement_access_grants_former_debtors_in_postgresql() {
         "INSERT INTO dues_liability_joint_owners \
             (site_id, due_id, owner_person_id, tenant_person_id, liable_from, liable_through) \
          VALUES ({site}, {joint_due}, {joint}, {former}, CURRENT_DATE - 60, CURRENT_DATE + 30)"
+    ))
+    .await;
+    t.exec(&format!(
+        "INSERT INTO person_advance_holds (site_id, unit_id, person_id, debtor_type, balance) \
+         VALUES ({site}, {unit}, {held_owner}, 'OWNER', 425.75)"
     ))
     .await;
 
@@ -906,6 +912,31 @@ async fn statement_access_grants_former_debtors_in_postgresql() {
         StatusCode::NOT_FOUND,
         "a settled joint liability closes the statement: {}",
         body
+    );
+
+    // covers: SC-13-03-22 (Issue #489: a held advance grants only its owner's section)
+    let held_owner_token = login(&app, "held-owner@sitepulse.test", resident_password()).await;
+    let (status, body) = call(&app, "GET", &statement_uri, &held_owner_token, None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "held former owner statement: {body}"
+    );
+    let debtors = body["debtors"].as_array().expect("debtors");
+    assert_eq!(debtors.len(), 1, "only held owner's section: {body}");
+    assert_eq!(
+        debtors[0]["liable_person_id"], held_owner,
+        "person scope: {body}"
+    );
+    assert_eq!(
+        debtors[0]["held_advance_balance"], "425.75",
+        "hold amount: {body}"
+    );
+    let (status, body) = call(&app, "GET", &dashboard_uri, &held_owner_token, None).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "hold does not widen unit access: {body}"
     );
 
     t.drop_db().await;
