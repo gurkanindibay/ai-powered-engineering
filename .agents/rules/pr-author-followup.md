@@ -34,7 +34,7 @@ Then act on exactly one of these cases:
    - If you disagree with a note, do not silently skip it: reply with the reasoning, then send a round so the reviewer can decide.
    - If you delegate fixing review notes to a subagent, run it on Sonnet 5.5 (`claude-sonnet-5-5`; `model: "sonnet"`), set explicitly.
 3. **Approved with no notes**: go to Merge.
-4. **Approved with minor notes**: fix the notes, push, wait for CI to go green, then Merge. Do not wait for a second approval of the fix commits.
+4. **Approved with minor notes**: fix the notes, push, wait for CI to go green, then Merge. Do not wait for a second approval of the fix commits. A change beyond what the notes ask for needs a new round ([pr-review-rounds.md](pr-review-rounds.md)).
 5. **Merge conflict or `master` moved in a way that breaks CI**: merge or rebase `origin/master` into your branch, rerun the suite, push, wait for CI, go back to watching.
 
 ## How to check approval (agents and subagents)

@@ -78,6 +78,21 @@ class Rounds(unittest.TestCase):
 
 
 class LastSubmission(unittest.TestCase):
+    def test_cache_rereads_only_when_the_pr_or_review_changes(self):
+        calls, cache = [], {}
+
+        def gh(args):
+            calls.append(args)
+            return "2026-01-02T00:00:00Z\n"
+
+        def read(updated, reviewed):
+            return q.cached_submission(gh, {"number": 5, "updatedAt": updated},
+                                       {"submitted_at": reviewed}, "bot", cache)
+
+        for updated, reviewed in [("a", "r1"), ("a", "r1"), ("b", "r1"), ("b", "r2")]:
+            self.assertEqual(read(updated, reviewed), "2026-01-02T00:00:00Z")
+        self.assertEqual(len(calls), 3)
+
     def test_newest_matching_timeline_event(self):
         calls = []
 

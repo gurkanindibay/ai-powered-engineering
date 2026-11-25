@@ -32,7 +32,7 @@ The queue also counts a `review_requested` timeline event that names the bot, so
    2. Fix the notes, push as often as needed, reply once with what changed, and wait for green CI.
    3. `gh pr ready <pr>` to send the next round.
 5. **To answer without new commits** (a disagreement or a clarification): reply in a comment, then run `gh pr ready <pr> --undo` and `gh pr ready <pr>`. A comment alone does not wake the reviewer.
-6. After **Approve**, do not send it again. Minor notes are fixed, pushed, checked by CI and merged without another round.
+6. After **Approve**, fix only what the minor notes ask for, push, wait for green CI and merge without another round. The reviewer does not see these pushes. Any other change after the approval (new behaviour or controls, a fix the review did not ask for, conflict resolution that rewrites logic) needs a new round: `gh pr ready <pr> --undo`, push, wait for CI, `gh pr ready <pr>`, and wait for a new approval before merging. When unsure whether a change is covered by a note, send a round.
 
 Send only when the round is complete, and do not send again while the reviewer has not answered. A PR that is not finished stays a draft (rule 12). If the user wants to send a round by hand, they press **Ready for review** in the PR's merge box; the agent then does not press it for them.
 

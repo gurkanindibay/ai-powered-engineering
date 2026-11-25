@@ -46,6 +46,8 @@ PENDING_STATES = {"PENDING", "EXPECTED"}
 FAILED_CONCLUSIONS = {"FAILURE", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE", "ACTION_REQUIRED", "ERROR"}
 
 Gh = Callable[[list[str]], str]
+# number -> ((PR updatedAt, last bot review time), last submission): one watcher's timeline cache.
+Submissions = dict[int, tuple[tuple[str, str], "str | None"]]
 
 
 class GhError(RuntimeError):
@@ -147,16 +149,33 @@ def last_submission(gh: Gh, number: int, bot_login: str) -> str | None:
     return max((line.strip() for line in out.splitlines() if line.strip()), default=None)
 
 
+def cached_submission(gh: Gh, pr: dict[str, Any], review: dict[str, Any], bot_login: str,
+                      cache: Submissions | None) -> str | None:
+    """`last_submission`, re-read only when the PR or the bot's last review changed.
+    A submission updates the PR's `updatedAt`; without that field nothing is cached."""
+    updated = pr.get("updatedAt")
+    if cache is None or not updated:
+        return last_submission(gh, pr["number"], bot_login)
+    key = (updated, review.get("submitted_at") or "")
+    hit = cache.get(pr["number"])
+    if hit is None or hit[0] != key:
+        hit = cache[pr["number"]] = (key, last_submission(gh, pr["number"], bot_login))
+    return hit[1]
+
+
 def build_queue(gh: Gh, bot_login: str = BOT_LOGIN, skip_authors: set[str] | None = None,
-                limit: int = 100, any_change: bool = False) -> dict[str, list[dict[str, Any]]]:
-    fields = "number,title,isDraft,headRefOid,author,statusCheckRollup"
+                limit: int = 100, any_change: bool = False,
+                submissions: Submissions | None = None) -> dict[str, list[dict[str, Any]]]:
+    fields = "number,title,isDraft,headRefOid,updatedAt,author,statusCheckRollup"
     prs = json.loads(gh(["pr", "list", "--state", "open", "--limit", str(limit), "--json", fields]) or "[]")
     queue: dict[str, list[dict[str, Any]]] = {"ready": [], "waiting_ci": [], "skipped": []}
     for pr in prs:
         # Drafts are skipped without a review lookup.
         review = None if pr.get("isDraft") else last_bot_review(gh, pr["number"], bot_login)
         # The timeline is read only when an earlier review makes the submission time matter.
-        submitted = None if review is None or any_change else last_submission(gh, pr["number"], bot_login)
+        submitted = None
+        if review is not None and not any_change:
+            submitted = cached_submission(gh, pr, review, bot_login, submissions)
         entry = classify(pr, review, skip_authors or set(), submitted, any_change)
         queue[entry.pop("bucket")].append(entry)
     return queue

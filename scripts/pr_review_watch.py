@@ -151,6 +151,7 @@ class QueueCheck:
         self._fingerprint: dict[int, tuple[str, bool, str, str | None]] | None = None
         self._feedback: dict[int, tuple[str, str, str | None, list[Entry]]] = {}
         self._ready: list[Entry] = []
+        self._submissions: queue_tool.Submissions = {}
 
     def fingerprint(self) -> dict[int, tuple[str, bool, str, str | None]]:
         fields = "number,isDraft,headRefOid,updatedAt,statusCheckRollup"
@@ -164,9 +165,11 @@ class QueueCheck:
 
     def __call__(self, force: bool = False) -> list[Entry]:
         current = self.fingerprint()
+        if force:
+            self._submissions.clear()  # the safety refresh trusts nothing cached
         if force or current != self._fingerprint:
             queue = queue_tool.build_queue(self.gh, self.bot_login, self.skip_authors, self.limit,
-                                           self.any_change)
+                                           self.any_change, self._submissions)
             ready = queue["ready"]
             feedback = {}
             # In rounds mode comments never wake the reviewer: the author submits instead.
