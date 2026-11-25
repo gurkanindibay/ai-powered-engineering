@@ -198,6 +198,7 @@ Four signals measure whether the tests are strong, not just numerous. Each has o
 - **Strict xfail** only with an open issue id in the reason. `known_issues.py` holds shared reasons. `closed_issue_warnings` fails the check when the issue closes.
 - **Flaky tests** are measured from the last 30 recorded runs plus CI JUnit. Above 2% flips, a test is quarantined to the nightly lane with an issue and an expiry date of 14 days. Expired quarantine fails the build.
 - **Reruns** are allowed once in the browser lane and are reported as FLAKY, never as PASS.
+- **Hung tests** fail alone. `e2e/pytest.ini` gives every E2E test a 300 s limit (`pytest-timeout`, `signal` method, test body only), so a stuck browser call fails one test in minutes instead of holding a job until its 90-minute limit, as the WebKit nightly did in November 2026. The slowest real test takes about 85 s; a test that needs longer opts in with `@pytest.mark.timeout(n)`.
 
 **The gate that never moves:** a skipped or deselected test is reported with its reason in every run summary, as `run_tests.py` already does for gates.
 
