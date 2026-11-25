@@ -34,6 +34,23 @@ Then act on exactly one of these cases:
 4. **Approved with minor notes**: fix the notes, push, wait for CI to go green, then Merge. Do not wait for a second approval of the fix commits.
 5. **Merge conflict or `master` moved in a way that breaks CI**: merge or rebase `origin/master` into your branch, rerun the suite, push, wait for CI, go back to watching.
 
+## How to check approval (agents and subagents)
+
+Query GitHub **at the moment you report or act on a PR's approval state**: on every wake-up, whenever the user asks about the PR or its checks, right after a re-run or pending check turns green, and before saying that a PR "still needs approval". This applies to the author, to any subagent or side session it delegates to, and to an agent reporting on another agent's PR.
+
+```bash
+gh pr view <pr> --json state,headRefOid,reviewDecision,mergeable
+gh api --paginate repos/{owner}/{repo}/pulls/<pr>/reviews --jq '.[] | [.submitted_at, .user.login, .state, .commit_id] | @tsv'
+gh api --paginate repos/{owner}/{repo}/issues/<pr>/comments --jq '.[] | select(.body | startswith("APPROVED")) | [.created_at, .user.login] | @tsv'
+gh pr checks <pr>
+```
+
+- **An empty `reviewDecision` does not mean "not approved".** GitHub can leave it empty although an `APPROVED` review exists (seen on PR 412), so always read the reviews list. The second and third commands are the evidence for the rules in [What counts as approved](#what-counts-as-approved).
+- For each reviewer, take their newest `APPROVED`, `CHANGES_REQUESTED` or `DISMISSED` review. A later `COMMENTED` review does not cancel an approval. Compare its `commit_id` with `headRefOid`.
+- **Do not infer the state from older text or other signals.** A review saying "I'll approve once CI is green" describes what the reviewer intended then; the approval may have arrived since. Green checks, an earlier report, a CI event or a subagent's summary say nothing about the current reviews.
+- A host's PR monitor (for example Auto-fix, which reports CI failures, merge conflicts and review comments) does not replace the `--author-pr` watcher in [The loop](#the-loop): do not rely on it to wake you for an approval.
+- **Delegating:** put these commands, or a link to this section, in the subagent's brief, and ask it to return the matching review line (time, reviewer, state, commit) and the current head, not just "approved" or "waiting". Re-run the queries yourself before merging.
+
 ## What counts as approved
 
 Any of these on the PR's current head, or on an earlier head when every commit after it only addresses that review's minor notes:
