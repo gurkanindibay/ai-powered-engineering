@@ -2064,9 +2064,7 @@ impl PaymentTrackingService {
             .as_deref()
             .and_then(|uid| inner.users.iter().find(|u| u.id == uid))
             .map(|user| {
-                user.created_at
-                    .with_timezone(&crate::domain::clock::DEFAULT_TIMEZONE)
-                    .date_naive()
+                crate::services::finance_common::local_date(&inner, &site_id, user.created_at)
             })
             .unwrap_or_else(|| NaiveDate::from_ymd_opt(2020, 1, 1).unwrap_or(transfer_date))
             .min(transfer_date);

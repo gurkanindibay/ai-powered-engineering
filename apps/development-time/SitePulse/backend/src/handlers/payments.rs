@@ -380,8 +380,8 @@ pub async fn get_site_payments(
     let site_name = site.as_ref().map(|s| s.name.clone()).unwrap_or_default();
     let site_timezone = site
         .as_ref()
-        .map(|s| s.timezone.as_str())
-        .unwrap_or_else(|| "Europe/Istanbul");
+        .map(|s| s.timezone.clone())
+        .unwrap_or_else(crate::models::default_site_timezone);
 
     // 2. Units in this site
     let site_units: Vec<_> = inner
@@ -544,7 +544,7 @@ pub async fn get_site_payments(
                 payments.push(serde_json::json!({
                     "match_id": format!("MATCH-HP-{}", hp.id),
                     "transaction_id": hp.id.clone(),
-                    "date": crate::domain::clock::local_date(site_timezone, hp.created_at).to_string(),
+                    "date": crate::domain::clock::local_date(&site_timezone, hp.created_at).to_string(),
                     "unit_id": Some(hp.unit_id.clone()),
                     "block": Some(hp.block_id.clone()),
                     "unit_number": Some(hp.unit_number),

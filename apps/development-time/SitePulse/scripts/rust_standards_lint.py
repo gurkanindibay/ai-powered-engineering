@@ -80,6 +80,8 @@ STRUCT_RE = re.compile(r"\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)\b[^;{]*\{")
 SERDE_FLATTEN_RE = re.compile(r"#\[serde\([^\]]*\bflatten\b")
 UTC_TODAY_RE = re.compile(r"\bUtc\s*::\s*now\s*\(\s*\)\s*\.\s*date_naive\s*\(\s*\)")
 DATE_NAIVE_RE = re.compile(r"\bdate_naive\s*\(")
+# A conversion to a zone other than UTC; `with_timezone(&Utc)` keeps the UTC date.
+SITE_ZONE_RE = re.compile(r"\bwith_timezone\s*\((?!\s*&?\s*(?:chrono\s*::\s*)?Utc\s*\))")
 POOL_BRANCH_RE = re.compile(r"if let Some\((?:ref )?pool\)|\bstate\.pool\b")
 
 HASH_ALLOWED = ("src/domain/fingerprint.rs", "src/auth.rs", "src/migrations.rs")
@@ -244,7 +246,7 @@ def lint(backend: Path, baseline_path: Path | None = None, check_fmt: bool = Tru
             for m in DATE_NAIVE_RE.finditer(code):
                 stmt_start = max(code.rfind(";", 0, m.start()), code.rfind("{", 0, m.start()), 0)
                 stmt = code[stmt_start:m.start()]
-                if "with_timezone(" in stmt:
+                if SITE_ZONE_RE.search(stmt):
                     continue
                 utc_m = re.search(r"\b(?:chrono\s*::\s*)?Utc\s*::\s*now\s*\(\s*\)", stmt)
                 offset = stmt_start + utc_m.start() if utc_m else m.start()
