@@ -32,10 +32,10 @@ class _FakeApi extends PersonDirectoryApi {
     importRuns.add(dryRun);
     return ImportReport(
       dryRun: dryRun,
-      committed: !dryRun && invalidRows == 0,
+      committed: !dryRun && invalidRows < 2,
       total: 2,
       invalid: invalidRows,
-      created: dryRun ? 0 : 2,
+      created: dryRun ? 0 : 2 - invalidRows,
       rows: [
         ImportRowResult(
           line: 2,
@@ -117,7 +117,7 @@ void main() {
     expect(commit().onPressed, isNull);
   });
 
-  testWidgets('a dry run with errors lists them and allows no import', (tester) async {
+  testWidgets('a dry run with errors lists the row and commits only valid rows', (tester) async {
     final api = _FakeApi()..invalidRows = 1;
     await tester.pumpWidget(_host(PersonImportPage(api: api)));
     await tester.enterText(find.byKey(const Key('person_import_text')), PersonImportPage.template());
@@ -127,7 +127,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1 satırda hata var'), findsOneWidget);
     expect(find.text('Malik telefonu: geçersiz'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.byKey(const Key('person_import_commit_btn'))).onPressed, isNull);
+    final commit = find.byKey(const Key('person_import_commit_btn'));
+    expect(tester.widget<FilledButton>(commit).onPressed, isNotNull);
+    await tester.tap(commit);
+    await tester.pumpAndSettle();
+    expect(api.importRuns, [true, false]);
+    expect(find.text('1 / 2 kayıt eklendi'), findsOneWidget);
+    expect(find.text('1 satır kayıt sırasında reddedildi; aşağıda nedenleri var.'), findsOneWidget);
+    expect(find.text('1 kayıt eklendi; 1 satır hatalı.'), findsOneWidget);
+    expect(tester.widget<FilledButton>(commit).onPressed, isNull);
   });
 
   test('the template has every column the server reads', () {

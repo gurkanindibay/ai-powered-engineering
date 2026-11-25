@@ -104,13 +104,12 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ------------------------------------------------------------ people data
 
-  # Pending: the Excel import GUI scenario does not yet run against the journey attempt fixture.
-  @SC-13-05-10 @J-12 @depth:1 @state:F1 @layer:gui @edge @role_manager @pending
+  @SC-13-05-10 @J-12 @depth:1 @state:F1 @layer:gui @core @role_manager @linked
   Scenario: An Excel import with one bad row imports the good rows and reports the bad one
     Given the site is in state F1
-    When the manager imports a workbook with 5 valid people and 1 row with an invalid national id
+    When the manager imports a workbook with 5 valid people and 1 row with an invalid email
     Then 5 people are created
-    And the result lists row 6 with the reason
+    And the result lists row 7 with the reason
     And no partial person exists for the bad row
 
   @SC-13-05-11 @J-12 @depth:1 @state:F5 @layer:backend @edge @role_manager @linked

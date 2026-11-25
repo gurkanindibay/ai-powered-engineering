@@ -16,8 +16,8 @@ import '../design_system/sp_tone.dart';
 import '../theme/app_theme.dart';
 
 /// Registers many owners from a CSV file (person module F8). The file is checked
-/// first (a dry run that changes nothing); the import button is enabled only once
-/// that check finds no errors, and only for the exact text that was checked.
+/// first (a dry run that changes nothing); the import button is enabled only after
+/// checking the exact text, and commits valid rows while leaving invalid rows visible.
 /// Pops with `true` when rows were registered.
 class PersonImportPage extends StatefulWidget {
   final PersonDirectoryApi api;
@@ -47,7 +47,11 @@ class _PersonImportPageState extends State<PersonImportPage> {
   }
 
   bool get _canCommit =>
-      !_busy && _report != null && _report!.dryRun && _report!.invalid == 0 && _checkedText == _text.text;
+      !_busy &&
+      _report != null &&
+      _report!.dryRun &&
+      _report!.invalid < _report!.total &&
+      _checkedText == _text.text;
 
   void _downloadTemplate() {
     final saved = downloadBytes('kisi_sablonu.csv', utf8.encode(PersonImportPage.template()), 'text/csv');
@@ -100,8 +104,10 @@ class _PersonImportPageState extends State<PersonImportPage> {
       });
       if (!dryRun && report.committed) {
         messenger.showSnackBar(spSnackBar(
-          kind: ToastKind.success,
-          content: Text('${report.created} kayıt eklendi; etkinleştirme bağlantıları gönderildi.'),
+          kind: report.invalid == 0 ? ToastKind.success : ToastKind.warning,
+          content: Text(report.invalid == 0
+              ? '${report.created} kayıt eklendi; etkinleştirme bağlantıları gönderildi.'
+              : '${report.created} kayıt eklendi; ${report.invalid} satır hatalı.'),
         ));
         if (report.invalid == 0) navigator.pop(true);
       }
@@ -130,7 +136,7 @@ class _PersonImportPageState extends State<PersonImportPage> {
             message: '1. Şablonu indirip doldurun (sütun adlarını değiştirmeyin).\n'
                 '2. Excel (.xlsx) veya CSV dosyasını seçin ya da içeriği yapıştırın.\n'
                 '3. "Kontrol et" hiçbir şeyi kaydetmez, her satırın hatasını gösterir.\n'
-                '4. Hata kalmadığında "İçe aktar" tüm satırları kaydeder ve etkinleştirme bağlantılarını gönderir.',
+                '4. "İçe aktar" geçerli satırları kaydeder; hatalı satırlar nedenleriyle görünür kalır.',
           ),
           const SizedBox(height: AppSpacing.md),
           Wrap(
@@ -189,7 +195,9 @@ class _PersonImportPageState extends State<PersonImportPage> {
                   onPressed: _canCommit ? () => _run(dryRun: false) : null,
                   child: Text(report != null && report.dryRun && report.invalid == 0
                       ? 'İçe aktar (${report.total} kayıt)'
-                      : 'İçe aktar'),
+                      : report != null && report.dryRun && report.invalid < report.total
+                          ? 'Geçerli ${report.total - report.invalid} kaydı içe aktar'
+                          : 'İçe aktar'),
                 ), label: 'İçe aktar; önce kontrol edilmeli'),
               ),
             ],

@@ -82,18 +82,31 @@ async fn a_commit_registers_the_rows_and_a_second_import_is_refused_row_by_row()
 }
 
 #[tokio::test]
-async fn one_bad_row_blocks_the_whole_commit() {
+async fn one_bad_row_does_not_block_valid_rows_from_the_commit() {
     let state = AppState::new_with_test_fixtures();
     let before = state.inner.read().await.users.len();
-    let bad = format!("{}Z Blok,903,9,,x,1,,,evet,,,\n", file());
+    let mixed = format!(
+        "{}Z Blok,903,9,Invalid Email Person,not-an-email,0532 700 10 04,12,1500,evet,,,\n",
+        file()
+    );
     let report = PersonImportService::new(state.clone())
-        .import(&manager(), SITE, &bad, false)
+        .import(&manager(), SITE, &mixed, false)
         .await
         .unwrap();
-    assert!(!report.committed);
-    assert_eq!((report.invalid, report.created), (1, 0));
+    assert!(report.committed);
+    assert_eq!((report.total, report.invalid, report.created), (3, 1, 2));
+    assert!(report.rows[0].unit_id.is_some());
+    assert!(report.rows[1].unit_id.is_some());
     assert_eq!(report.rows[2].line, 4);
-    assert_eq!(state.inner.read().await.users.len(), before);
+    assert!(report.rows[2]
+        .errors
+        .iter()
+        .any(|error| error.contains("e-posta")));
+    assert!(report.rows[2].unit_id.is_none());
+    let snapshot = state.inner.read().await;
+    let users = &snapshot.users;
+    assert!(users.len() > before);
+    assert!(!users.iter().any(|user| user.email == "not-an-email"));
 }
 
 #[tokio::test]
