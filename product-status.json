@@ -201,7 +201,7 @@
       "stories_with_scenarios": 116
     },
     {
-      "automated": 451,
+      "automated": 453,
       "date": "2026-11-25",
       "epics": 13,
       "scenarios": 471,
@@ -209,7 +209,7 @@
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "15214d71ed25a37b33a7bc5d27e6bcde653113ed",
+  "commit": "b8f78bc78fbed53b8973277fb9c5bac06b47b7db",
   "epics": [
     {
       "automated": 10,
@@ -380,32 +380,32 @@
       "title": "Unified People and Unit Directory"
     },
     {
-      "automated": 139,
+      "automated": 141,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-13",
       "no_result": 19,
-      "passing": 120,
-      "planned": 14,
+      "passing": 122,
+      "planned": 12,
       "scenarios": 153,
       "stories": 16,
-      "stories_passing": 7,
+      "stories_passing": 8,
       "stories_with_scenarios": 16,
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-25T16:52:30Z",
+  "generated_at": "2026-11-25T17:16:12Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
-    "passed": 316,
-    "seconds": 2290.6,
+    "passed": 318,
+    "seconds": 2250.7,
     "skipped": 1,
-    "tests": 317
+    "tests": 319
   },
   "recent_changes": [],
-  "run_id": "20261125T165228Z-15214d7",
+  "run_id": "20261125T171611Z-b8f78bc",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -2900,7 +2900,7 @@
     "SC-13-08-04": {
       "epic": "EPIC-13",
       "name": "An expired session cannot reveal a previous manager's data",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-13-08"
     },
     "SC-13-08-05": {
@@ -3020,7 +3020,7 @@
     "SC-13-10-08": {
       "epic": "EPIC-13",
       "name": "A late response cannot repopulate the next tenant's session",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-13-10"
     },
     "SC-13-11-01": {
@@ -3237,17 +3237,17 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 451,
+    "automated": 453,
     "epics": 13,
     "epics_failing": 0,
     "epics_verified": 1,
     "failing": 0,
     "no_result": 214,
-    "passing": 237,
-    "planned": 20,
+    "passing": 239,
+    "planned": 18,
     "scenarios": 471,
     "stories": 116,
-    "stories_passing": 40,
+    "stories_passing": 41,
     "stories_with_scenarios": 116
   }
 }
