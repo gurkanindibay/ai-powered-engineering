@@ -126,10 +126,9 @@ def page_guard(request, page):
     errors: list[str] = []
     client_errors: list[str] = []
     gate_errors: list[str] = []
-    console_errors: list[str] = []
+    page_errors: list[str] = []
     page.add_init_script(CAPTURE_SCRIPT)
-    page.on("pageerror", lambda exc: errors.append(describe_page_error(exc)))
-    page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+    page.on("pageerror", lambda exc: page_errors.append(describe_page_error(exc)))
     # A crashed renderer makes every later call hang until its timeout; say so instead.
     page.on("crash", lambda _page: errors.append("page crashed: the browser's renderer process died"))
 
@@ -148,14 +147,16 @@ def page_guard(request, page):
     yield
     request.node.user_properties.append(("client_errors", "; ".join(sorted(set(client_errors)))))
     if "allow_server_errors" in request.keywords:
-        errors = []
+        errors, page_errors = [], []
     if "allow_password_gate" not in request.keywords:
         errors += gate_errors
-    if errors:
-        details = uncaught_details(console_errors)
+    if page_errors:
+        details = uncaught_details(page)
+        errors = page_errors + errors
         if details:
             errors.append("uncaught events seen by the page:")
             errors += [f"    {line}" for line in details]
+    if errors:
         pytest.fail("page/server errors during test:\n" + "\n".join(errors), pytrace=False)
 
 

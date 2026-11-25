@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import re
+import time
 from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
@@ -30,6 +32,20 @@ def page_lines(page: Page) -> list[str]:
         }"""
     )
     return [part.strip() for line in raw for part in line.split("\n") if part.strip()]
+
+
+def page_lines_until(page: Page, pattern: re.Pattern[str], timeout_ms: int = 10_000) -> list[str]:
+    """Page lines once one of them matches `pattern`, or the last lines read when time runs out.
+
+    A screen's body (for example a list's empty state) can paint a frame or a fetch after the
+    control the test waited for; slower engines such as WebKit expose that gap.
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    while True:
+        lines = page_lines(page)
+        if any(pattern.search(line) for line in lines) or time.monotonic() >= deadline:
+            return lines
+        page.wait_for_timeout(250)
 
 
 def page_text(page: Page) -> str:
