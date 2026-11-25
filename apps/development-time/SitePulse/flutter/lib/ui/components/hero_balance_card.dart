@@ -19,6 +19,7 @@ class HeroBalanceCard extends StatelessWidget {
   final String? virtualIban;
   final List<CapitalDuesSummary> capitalDues;
   final ValueChanged<CapitalDuesSummary>? onCapitalProjectPressed;
+  final bool isLoadingCapitalProjectDetails;
 
   const HeroBalanceCard({
     super.key,
@@ -32,6 +33,7 @@ class HeroBalanceCard extends StatelessWidget {
     this.virtualIban,
     this.capitalDues = const [],
     this.onCapitalProjectPressed,
+    this.isLoadingCapitalProjectDetails = false,
   });
 
   @override
@@ -393,8 +395,16 @@ class HeroBalanceCard extends StatelessWidget {
                       const SizedBox(width: 4),
                       testId('capital_project_detail_${item.projectId}', TextButton(
                         key: Key('capital_project_detail_${item.projectId}'),
-                        onPressed: () => onCapitalProjectPressed!(item),
-                        child: const Text('Detay'),
+                        onPressed: isLoadingCapitalProjectDetails
+                            ? null
+                            : () => onCapitalProjectPressed!(item),
+                        child: isLoadingCapitalProjectDetails
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Detay'),
                       )),
                     ],
                   ],

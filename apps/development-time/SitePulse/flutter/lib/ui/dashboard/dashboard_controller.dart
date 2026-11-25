@@ -216,6 +216,7 @@ class DashboardController extends ChangeNotifier {
   late UserSession _userSession;
   UserSession get userSession => _userSession;
   UserRole get userRole => _userSession.role;
+  bool get isHomeResident => _userSession.role == UserRole.homeResident;
 
   String? _authMessage;
   String? get authMessage => _authMessage;
@@ -1326,7 +1327,7 @@ class DashboardController extends ChangeNotifier {
             .where((item) => item.outstandingBalance > Decimal.zero)
             .toList();
 
-        if (_userSession.role == UserRole.homeResident) {
+        if (isHomeResident) {
           unawaited(fetchResidentCapitalProjects(_activeUnit.siteId));
         }
 

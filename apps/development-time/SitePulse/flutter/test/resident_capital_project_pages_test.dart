@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
+import 'package:sitepulse/ui/components/hero_balance_card.dart';
 import 'package:sitepulse/ui/components/resident_capital_project_pages.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 
@@ -39,6 +40,51 @@ void main() {
     expect(find.text('Çatı Yalıtımı'), findsOneWidget);
     expect(find.text('Kat Maliki Sorumluluğunda'), findsOneWidget);
     expect(find.text(TenantCapitalProjectsGuidance.guidance), findsOneWidget);
+  });
+
+  testWidgets('project detail action is disabled while details load', (
+    tester,
+  ) async {
+    final dues = DuesLiability(
+      id: 'due-1',
+      unitId: 'unit-1',
+      period: 'Taksit 1',
+      principalAmount: Decimal.parse('21000.00'),
+      delayPenalty: Decimal.zero,
+      totalAmount: Decimal.parse('21000.00'),
+      dueDate: DateTime(2026, 11, 30),
+      status: DebtStatus.pending,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HeroBalanceCard(
+            dues: dues,
+            siteName: 'Begonya Sitesi',
+            unitName: 'A Blok D:14',
+            isOffline: false,
+            onPayPressed: () {},
+            onDetailPressed: () {},
+            capitalDues: [
+              CapitalDuesSummary(
+                projectId: 'project-1',
+                projectTitle: 'Çatı Yalıtımı',
+                outstandingBalance: Decimal.parse('21000.00'),
+              ),
+            ],
+            onCapitalProjectPressed: (_) {},
+            isLoadingCapitalProjectDetails: true,
+          ),
+        ),
+      ),
+    );
+
+    final detailButton = tester.widget<TextButton>(
+      find.byKey(const Key('capital_project_detail_project-1')),
+    );
+    expect(detailButton.onPressed, isNull);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 
   testWidgets(

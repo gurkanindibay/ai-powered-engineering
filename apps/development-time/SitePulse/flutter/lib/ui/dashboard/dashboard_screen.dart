@@ -62,6 +62,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _localTabIndex = 0;
+  bool _isLoadingCapitalProjectDetails = false;
   Object? _lastSessionShape;
 
   int get _selectedTabIndex => widget.selectedTab ?? _localTabIndex;
@@ -574,10 +575,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         virtualIban: unit.virtualIban,
         capitalDues: isOwner ? widget.controller.capitalDues : const [],
         onCapitalProjectPressed: isOwner ? _openCapitalProjectDetails : null,
+        isLoadingCapitalProjectDetails: _isLoadingCapitalProjectDetails,
         onPayPressed: () => _showPaymentDialog(dues),
         onDetailPressed: () => _showDuesDetailDialog(dues),
       ),
-      if (!isOwner) ...[
+      if (widget.controller.isHomeResident) ...[
         const SizedBox(height: 12),
         TenantCapitalProjectsGuidance(projects: widget.controller.residentCapitalProjects),
       ],
@@ -1450,19 +1452,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _openCapitalProjectDetails(CapitalDuesSummary summary) async {
-    final details = await widget.controller.fetchResidentCapitalProjectDetails(summary.projectId);
-    if (!mounted) return;
-    if (details == null) {
-      SpToast.error(context, 'Demirbaş proje detayları şu anda alınamıyor.');
-      return;
+    if (_isLoadingCapitalProjectDetails) return;
+    setState(() => _isLoadingCapitalProjectDetails = true);
+    try {
+      final details = await widget.controller.fetchResidentCapitalProjectDetails(summary.projectId);
+      if (!mounted) return;
+      if (details == null) {
+        SpToast.error(context, 'Demirbaş proje detayları şu anda alınamıyor.');
+        return;
+      }
+      await AppFullscreenPage.push<void>(
+        context: context,
+        builder: (_) => ResidentCapitalProjectDetailsPage(
+          details: details,
+          outstandingBalance: summary.outstandingBalance,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoadingCapitalProjectDetails = false);
     }
-    await AppFullscreenPage.push<void>(
-      context: context,
-      builder: (_) => ResidentCapitalProjectDetailsPage(
-        details: details,
-        outstandingBalance: summary.outstandingBalance,
-      ),
-    );
   }
 
   void _showDuesDetailDialog(DuesLiability dues) {

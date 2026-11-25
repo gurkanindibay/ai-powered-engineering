@@ -23,6 +23,11 @@ extension DashboardControllerCapital on DashboardController {
       final uri = ApiClient.uri('/api/v1/capital-projects', {'site_id': siteId});
       final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
       if (response.statusCode != 200) {
+        AppLogger.warn(
+          'Resident capital project list request failed',
+          tag: 'CapitalProjects',
+          context: {'status_code': response.statusCode},
+        );
         _residentCapitalProjects = [];
         notify();
         return _residentCapitalProjects;
@@ -32,7 +37,13 @@ extension DashboardControllerCapital on DashboardController {
           .map((item) => CapitalProjectItem.fromJson(item as Map<String, dynamic>))
           .where((project) => project.status == 'ACTIVE')
           .toList();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.warn(
+        'Resident capital project list request failed before receiving a response',
+        tag: 'CapitalProjects',
+        error: error,
+        stackTrace: stackTrace,
+      );
       _residentCapitalProjects = [];
     }
     notify();
@@ -54,7 +65,17 @@ extension DashboardControllerCapital on DashboardController {
         ApiClient.get(ApiClient.uri('/api/v1/capital-projects/$projectId')),
         ApiClient.get(ApiClient.uri('/api/v1/capital-projects/$projectId/installments')),
       ]).timeout(const Duration(seconds: 4));
-      if (responses.any((response) => response.statusCode != 200)) return null;
+      if (responses.any((response) => response.statusCode != 200)) {
+        AppLogger.warn(
+          'Resident capital project details request failed',
+          tag: 'CapitalProjects',
+          context: {
+            'project_status_code': responses[0].statusCode,
+            'installments_status_code': responses[1].statusCode,
+          },
+        );
+        return null;
+      }
       final projectJson = json.decode(utf8.decode(responses[0].bodyBytes)) as Map<String, dynamic>;
       final installmentsJson = json.decode(utf8.decode(responses[1].bodyBytes)) as List<dynamic>;
       return ResidentCapitalProjectDetails(
@@ -63,7 +84,13 @@ extension DashboardControllerCapital on DashboardController {
             .map((item) => CapitalProjectInstallmentItem.fromJson(item as Map<String, dynamic>))
             .toList(),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.warn(
+        'Resident capital project details request failed',
+        tag: 'CapitalProjects',
+        error: error,
+        stackTrace: stackTrace,
+      );
       return null;
     }
   }
