@@ -1,0 +1,155 @@
+name: Agent relaunch
+# Started from the Agent Monitor app (apps/agent-monitor) when an agent looks
+# stuck on an issue: takes the claim over (scripts/issue_claim.py --force, the
+# user pressed "Start new session") and runs a fresh agent on the issue.
+#
+# Secrets (add only the ones you use):
+#   CLAUDE_CODE_OAUTH_TOKEN  harness=claude   (`claude setup-token`)
+#   DEEPSEEK_API_KEY         harness=deepseek (Claude Code on DeepSeek's Anthropic-compatible API)
+#   OPENAI_API_KEY           harness=codex
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue number
+        required: true
+        type: string
+      harness:
+        description: Agent to start
+        required: true
+        type: choice
+        options: [claude, codex, deepseek]
+      note:
+        description: Extra instructions for the agent
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: agent-relaunch-${{ inputs.issue }}
+  cancel-in-progress: false
+
+jobs:
+  relaunch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      ISSUE: ${{ inputs.issue }}
+      HARNESS: ${{ inputs.harness }}
+      NOTE: ${{ inputs.note }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Take over the claim
+        id: claim
+        run: |
+          case "$ISSUE" in ''|*[!0-9]*) echo "issue must be a number" >&2; exit 2;; esac
+          session="gha-${GITHUB_RUN_ID}"
+          previous=$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE" --jq '[.labels[].name | select(startswith("claim:"))][0] // ""')
+          python3 scripts/issue_claim.py claim "$ISSUE" --harness "$HARNESS" --session "$session" --force
+          pr=""
+          if [ -n "$previous" ]; then
+            pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
+              --jq "[.[] | select(any(.labels[]; .name == \"$previous\"))][0].number // \"\"")
+            if [ -n "$pr" ]; then
+              python3 scripts/issue_claim.py claim "$pr" --harness "$HARNESS" --session "$session" --force
+            fi
+          fi
+          {
+            echo "session=$session"
+            echo "previous=$previous"
+            echo "pr=$pr"
+          } >> "$GITHUB_OUTPUT"
+      - name: Write the prompt
+        id: prompt
+        env:
+          PREVIOUS: ${{ steps.claim.outputs.previous }}
+          PR: ${{ steps.claim.outputs.pr }}
+          SESSION: ${{ steps.claim.outputs.session }}
+        run: |
+          file="$RUNNER_TEMP/prompt.md"
+          {
+            echo "You are taking over GitHub issue #$ISSUE in $GITHUB_REPOSITORY because the previous agent session (${PREVIOUS:-none}) stalled."
+            echo "Read AGENTS.md and follow it. Your claim label is claim:$HARNESS/$SESSION (already applied)."
+            echo "Read the issue and its comments with gh."
+            if [ -n "$PR" ]; then
+              echo "Continue the existing pull request #$PR: check out its branch, read its review comments and failing checks, fix them, run the relevant tests and push to that branch."
+            else
+              echo "Create a branch, implement the issue, run the relevant tests, push and open a pull request that closes #$ISSUE, then run: python3 scripts/issue_claim.py sync $ISSUE --pr <pr>."
+            fi
+            echo "Finish with a short comment on the issue describing what you did and what remains."
+            if [ -n "$NOTE" ]; then
+              echo ""
+              echo "Extra instructions from the user:"
+              printf '%s\n' "$NOTE"
+            fi
+          } > "$file"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          {
+            echo "text<<PROMPT_EOF_$GITHUB_RUN_ID"
+            cat "$file"
+            echo "PROMPT_EOF_$GITHUB_RUN_ID"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Claude Code
+        if: inputs.harness == 'claude'
+        uses: anthropics/claude-code-action@c148296601107048fe24605a3dfb32a317a6f4c7 # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: ${{ steps.prompt.outputs.text }}
+          claude_args: --max-turns 200 --allowedTools Bash,Edit,Write,Read,Glob,Grep
+
+      - name: Claude Code on DeepSeek
+        if: inputs.harness == 'deepseek'
+        uses: anthropics/claude-code-action@c148296601107048fe24605a3dfb32a317a6f4c7 # v1
+        env:
+          ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+          ANTHROPIC_MODEL: deepseek-chat
+          ANTHROPIC_SMALL_FAST_MODEL: deepseek-chat
+        with:
+          anthropic_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
+          github_token: ${{ github.token }}
+          prompt: ${{ steps.prompt.outputs.text }}
+          claude_args: --max-turns 200 --allowedTools Bash,Edit,Write,Read,Glob,Grep
+
+      - name: Codex
+        if: inputs.harness == 'codex'
+        uses: openai/codex-action@54e817e77767f274e7e9ceb9da755fb5c62ce25d # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ steps.prompt.outputs.file }}
+          sandbox: workspace-write
+      - name: Push Codex changes
+        # Codex edits the checkout but cannot reach GitHub from its sandbox.
+        if: inputs.harness == 'codex'
+        env:
+          PR: ${{ steps.claim.outputs.pr }}
+          SESSION: ${{ steps.claim.outputs.session }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          if [ -z "$(git status --porcelain)" ] && [ -z "$(git log --oneline "origin/$(git rev-parse --abbrev-ref HEAD)..HEAD" 2>/dev/null)" ]; then
+            gh issue comment "$ISSUE" --body "Codex relaunch run $GITHUB_RUN_ID made no changes."
+            exit 0
+          fi
+          git add -A
+          git commit -m "Continue #$ISSUE (codex relaunch $GITHUB_RUN_ID)" || true
+          if [ -n "$PR" ]; then
+            branch=$(gh pr view "$PR" --json headRefName --jq .headRefName)
+            git push origin "HEAD:$branch"
+          else
+            branch="agent/issue-$ISSUE-$GITHUB_RUN_ID"
+            git push origin "HEAD:refs/heads/$branch"
+            url=$(gh pr create --draft --head "$branch" --title "Issue #$ISSUE (codex relaunch)" \
+              --body "Closes #$ISSUE. Started from Agent Monitor, run $GITHUB_RUN_ID.")
+            python3 scripts/issue_claim.py sync "$ISSUE" --pr "${url##*/}"
+          fi

@@ -1,0 +1,59 @@
+name: Agent Monitor
+on:
+  pull_request:
+    paths:
+      - 'apps/agent-monitor/**'
+      - 'scripts/agent_usage_collector.py'
+      - 'tests/agent_usage_collector/**'
+      - '.github/workflows/agent-monitor-ci.yml'
+      - '.github/workflows/agent-relaunch.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'apps/agent-monitor/**'
+      - 'scripts/agent_usage_collector.py'
+      - 'tests/agent_usage_collector/**'
+      - '.github/workflows/agent-monitor-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collector:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Collector tests
+        run: python3 -m unittest discover -s tests/agent_usage_collector -v
+
+  app:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/agent-monitor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test
+      - name: Build APK
+        run: flutter build apk --release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: agent-monitor-apk
+          path: apps/agent-monitor/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30

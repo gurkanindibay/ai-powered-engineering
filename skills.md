@@ -402,6 +402,18 @@ echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command"
 python3 -m unittest discover -s tests/token_guard
 ```
 
+## 5c-2b. Agent Usage Collector (`agent_usage_collector.py`)
+
+- **Executable Script:** [scripts/agent_usage_collector.py](file:///scripts/agent_usage_collector.py)
+- **Purpose:** Feeds the Agent Monitor Android app (`apps/agent-monitor`). Reads Claude Code transcripts and Codex session logs (tokens per 5h/24h/7d window, Codex plan rate-limit percentages), Copilot premium requests (GitHub billing API), the DeepSeek balance and an optional Antigravity file, and publishes one JSON snapshot to a secret gist. Only project folder names leave the machine; money stays decimal text.
+
+```bash
+python3 scripts/agent_usage_collector.py --json
+python3 scripts/agent_usage_collector.py --create-gist
+python3 scripts/agent_usage_collector.py --publish-gist <id> --watch 300 --claude-5h-limit 2000000
+python3 -m unittest discover -s tests/agent_usage_collector
+```
+
 ## 5c-3. Issue Claim Labels (`issue_claim.py`)
 
 - **Executable Script:** [scripts/issue_claim.py](file:///scripts/issue_claim.py)
