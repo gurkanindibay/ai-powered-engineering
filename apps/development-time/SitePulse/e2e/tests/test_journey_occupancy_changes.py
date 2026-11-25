@@ -106,6 +106,76 @@ def test_resident_added_after_accruals_is_charged_from_start_date(journey_site):
     j.invariants("SC-13-03-04 after December")
 
 
+@pytest.mark.covers("SC-13-03-06")
+@pytest.mark.edge
+@pytest.mark.role_manager
+def test_title_transfer_keeps_the_sellers_advance(journey_site):
+    j = journey_site("F2")
+    unit = j.unit_id(4)
+    j.api.record_manual_payment(
+        j.manager, unit, D("500.00"), "Ahmet Yılmaz", payer_role="OWNER",
+        idempotency_key="sc-13-03-06-seller-advance",
+    )
+    assert j.stack.sql(
+        f"SELECT balance FROM advance_balances WHERE unit_id = {int(unit)} AND debtor_type = 'OWNER';"
+    ) == "500.00"
+    j.invariants("SC-13-03-06 before the sale")
+
+    sell_unit(j, 4, "Gül Tanrıverdi", "gul")
+    j.invariants("SC-13-03-06 after the sale")
+
+    seller = j.people["Ahmet Yılmaz"]
+    assert j.stack.sql(
+        "SELECT COALESCE((SELECT balance FROM person_advance_holds "
+        f"WHERE unit_id = {int(unit)} AND person_id = {int(seller)} AND debtor_type = 'OWNER'), 0)::text;"
+    ) == "500.00"
+    assert j.stack.sql(
+        "SELECT COALESCE((SELECT balance FROM advance_balances "
+        f"WHERE unit_id = {int(unit)} AND debtor_type = 'OWNER'), 0)::text;"
+    ) == "0.00"
+    flat = next(
+        item for item in j.api.site_overview(j.manager, j.site_id)["flats"]
+        if str(item["id"]) == str(unit)
+    )
+    assert D(flat["advance_balance"]) == D("0.00")
+    assert D(flat["amount_due"]) == D("0.00")
+
+    # The money is still the seller's: only a second manager can release it.
+    reviewer = second_manager(j)
+    created = j.api.call(
+        "POST",
+        f"/api/v1/site-admin/units/{unit}/advance-exit-settlements?site_id={j.site_id}",
+        j.manager.token,
+        body={
+            "request_key": "sc-13-03-06-seller-payout",
+            "kind": "PAYOUT",
+            "source_debtor": "OWNER",
+            "beneficiary_name": "Ahmet Yılmaz",
+            "beneficiary_person_id": str(seller),
+            "amount": "500.00",
+        },
+    )
+    assert created["status"] == "PENDING"
+    assert j.stack.sql(
+        "SELECT COALESCE((SELECT balance FROM person_advance_holds "
+        f"WHERE unit_id = {int(unit)} AND person_id = {int(seller)} AND debtor_type = 'OWNER'), 0)::text;"
+    ) == "500.00", "a pending request moves nothing"
+    j.api.call(
+        "POST",
+        f"/api/v1/site-admin/advance-exit-settlements/{created['id']}/decide",
+        reviewer.token,
+        body={"approve": True, "payment_reference": "E2E-SELLER-ADVANCE-1", "note": None},
+    )
+    assert j.stack.sql(
+        "SELECT COALESCE((SELECT balance FROM person_advance_holds "
+        f"WHERE unit_id = {int(unit)} AND person_id = {int(seller)} AND debtor_type = 'OWNER'), 0)::text;"
+    ) == "0.00"
+    assert j.stack.sql(
+        f"SELECT COUNT(*) FROM advance_exit_disbursements WHERE settlement_id = {int(created['id'])};"
+    ) == "1"
+    j.invariants("SC-13-03-06 after the payout")
+
+
 @pytest.mark.covers("SC-13-03-08")
 @pytest.mark.edge
 @pytest.mark.role_manager

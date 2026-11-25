@@ -879,6 +879,30 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
         );
     }
 
+    // Advance held for a person after a title transfer or occupancy change.
+    {
+        let rows = client
+            .query(
+                "SELECT unit_id, person_id, debtor_type, balance FROM person_advance_holds",
+                &[],
+            )
+            .await?;
+        for row in rows {
+            let unit_id: i64 = row.get(0);
+            let person_id: i64 = row.get(1);
+            let debtor_type: String = row.get(2);
+            let balance: Decimal = row.get(3);
+            if !balance.is_zero() {
+                state.hold_advance(
+                    &unit_id.to_string(),
+                    &person_id.to_string(),
+                    &debtor_type,
+                    balance,
+                );
+            }
+        }
+    }
+
     // Pending exit settlements reserve advances across backend restarts too.
     {
         let rows = client

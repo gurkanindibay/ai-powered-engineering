@@ -129,6 +129,9 @@ pub struct AppStateInner {
     pub site_bank_accounts: Vec<SiteBankAccount>,
     /// Advance (avans) balance per unit, split by debtor like `advance_balances`.
     pub advance_balances: HashMap<String, crate::models::UnitAdvance>,
+    /// Advance that outlives the role that paid it, keyed by (unit, person, debtor),
+    /// mirroring `person_advance_holds`.
+    pub person_advance_holds: HashMap<(String, String, String), Decimal>,
     /// Amounts reserved by pending exit-settlement requests, by unit and source debtor.
     pub pending_exit_advance_reservations: HashMap<(String, String), Decimal>,
     /// Idempotency keys: (site id, key) -> receipt id. Mirrors `payment_idempotency_keys`.
@@ -208,6 +211,7 @@ impl AppStateInner {
             reconciliation_queue: Vec::new(),
             site_bank_accounts: Vec::new(),
             advance_balances: HashMap::new(),
+            person_advance_holds: HashMap::new(),
             pending_exit_advance_reservations: HashMap::new(),
             payment_idempotency: HashMap::new(),
             homeowner_payments: Vec::new(),
@@ -745,6 +749,48 @@ impl AppStateInner {
         *entry.bucket_mut(debtor_type) += delta;
     }
 
+    /// Advance of a unit held for one person: money that outlived the role that
+    /// paid it and never passed to the role's next holder.
+    pub fn held_advance_of(&self, unit_id: &str, person_id: &str, debtor_type: &str) -> Decimal {
+        self.person_advance_holds
+            .get(&(
+                unit_id.to_string(),
+                person_id.to_string(),
+                debtor_type.to_string(),
+            ))
+            .copied()
+            .unwrap_or(Decimal::ZERO)
+    }
+
+    /// Advance of a unit held for any person.
+    pub fn held_advance_total(&self, unit_id: &str) -> Decimal {
+        self.person_advance_holds
+            .iter()
+            .filter(|((unit, _, _), _)| unit == unit_id)
+            .map(|(_, balance)| *balance)
+            .sum()
+    }
+
+    /// Holds `delta` (may be negative) for one person against `person_advance_holds`.
+    pub fn hold_advance(
+        &mut self,
+        unit_id: &str,
+        person_id: &str,
+        debtor_type: &str,
+        delta: Decimal,
+    ) {
+        let key = (
+            unit_id.to_string(),
+            person_id.to_string(),
+            debtor_type.to_string(),
+        );
+        let entry = self.person_advance_holds.entry(key.clone()).or_default();
+        *entry += delta;
+        if entry.is_zero() {
+            self.person_advance_holds.remove(&key);
+        }
+    }
+
     pub fn seed(&mut self) {
         self.seed_test_fixtures();
     }
@@ -762,6 +808,7 @@ impl AppStateInner {
         self.reconciliation_queue.clear();
         self.site_bank_accounts.clear();
         self.advance_balances.clear();
+        self.person_advance_holds.clear();
         self.pending_exit_advance_reservations.clear();
         self.payment_idempotency.clear();
         self.homeowner_payments.clear();
@@ -785,6 +832,7 @@ impl AppStateInner {
     pub fn reset_all_payments_and_balances(&mut self) {
         self.auto_scheduler_enabled = std::env::var("SITEPULSE_E2E").is_ok_and(|v| v == "true");
         self.advance_balances.clear();
+        self.person_advance_holds.clear();
         self.pending_exit_advance_reservations.clear();
         self.payment_idempotency.clear();
         self.homeowner_payments.clear();
@@ -1100,6 +1148,28 @@ mod fixture_detection_tests {
             "payments_phase3_tests-0123456789abcdef"
         ));
         assert!(!AppStateInner::is_fixture_test_binary(""));
+    }
+
+    #[test]
+    fn a_held_advance_belongs_to_the_person_and_leaves_the_role_bucket() {
+        let mut state = AppStateInner::blank();
+        state.adjust_advance("14", "OWNER", Decimal::new(50000, 2));
+        assert_eq!(state.advance_total("14"), Decimal::new(50000, 2));
+
+        state.adjust_advance("14", "OWNER", Decimal::new(-50000, 2));
+        state.hold_advance("14", "7", "OWNER", Decimal::new(50000, 2));
+
+        assert_eq!(state.advance_total("14"), Decimal::ZERO);
+        assert_eq!(
+            state.held_advance_of("14", "7", "OWNER"),
+            Decimal::new(50000, 2)
+        );
+        assert_eq!(state.held_advance_total("14"), Decimal::new(50000, 2));
+        assert_eq!(state.held_advance_of("14", "8", "OWNER"), Decimal::ZERO);
+
+        state.hold_advance("14", "7", "OWNER", Decimal::new(-50000, 2));
+        assert_eq!(state.held_advance_total("14"), Decimal::ZERO);
+        assert!(state.person_advance_holds.is_empty());
     }
 
     #[test]

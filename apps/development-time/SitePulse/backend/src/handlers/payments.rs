@@ -391,7 +391,10 @@ pub async fn get_site_payments(
         .collect();
     let site_unit_ids: Vec<String> = site_units.iter().map(|u| u.id.clone()).collect();
 
-    let total_advance: Decimal = site_units.iter().map(|u| inner.advance_total(&u.id)).sum();
+    let total_advance: Decimal = site_units
+        .iter()
+        .map(|u| inner.advance_total(&u.id) + inner.held_advance_total(&u.id))
+        .sum();
 
     // 3. Collect payments from reconciliation_queue and homeowner_payments for units of this site
     let mut payments = Vec::new();

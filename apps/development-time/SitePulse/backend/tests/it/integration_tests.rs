@@ -4104,6 +4104,50 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
         .any(|o| o.person_name == resp.old_owner_name && !o.is_active));
 }
 
+#[tokio::test]
+async fn when_title_transfers_the_sellers_advance_stays_with_the_seller() {
+    let state = AppState::new();
+    let service = PaymentTrackingService::new(state.clone());
+    {
+        let mut inner = state.inner.write().await;
+        inner.adjust_advance("d-14", "OWNER", Decimal::from_str_exact("500.00").unwrap());
+    }
+
+    let transfer_req = TransferOwnershipRequest {
+        new_owner: None,
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        new_owner_name: "Gül Tanrıverdi".to_string(),
+        new_owner_national_id: None,
+        new_owner_phone: None,
+        new_owner_email: Some("gul.tanriverdi@begonya.com".to_string()),
+        transfer_date: chrono::NaiveDate::from_ymd_opt(2026, 11, 5),
+        notes: None,
+        new_owner_person_id: None,
+        new_owner_moves_in: true,
+        seller_pays_override_reason: None,
+    };
+    service.transfer_ownership(transfer_req).await.unwrap();
+
+    let inner = state.inner.read().await;
+    assert_eq!(
+        inner.advance_of("d-14", "OWNER"),
+        Decimal::ZERO,
+        "the buyer starts with no advance of their own"
+    );
+    let seller_person = inner
+        .users
+        .iter()
+        .find(|user| user.id == "usr-home-owner-1")
+        .and_then(|user| user.person_id)
+        .expect("the seeded seller has a person id");
+    assert_eq!(
+        inner.held_advance_of("d-14", &seller_person.to_string(), "OWNER"),
+        Decimal::from_str_exact("500.00").unwrap(),
+        "the advance stays with the seller who paid it"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // EPIC-10: Capital Expenditure & Fixtures (Demirbaş Yönetimi) Integration Tests
 // ---------------------------------------------------------------------------

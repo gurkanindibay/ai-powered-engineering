@@ -114,30 +114,11 @@ impl AdvanceExitSettlementService {
                 exit_balance
             )));
         }
-        let available: Decimal = tx
-            .query_one(
-                "SELECT balance FROM advance_balances WHERE unit_id = $1 AND debtor_type = $2",
-                &[&unit, &source],
-            )
-            .await
-            .map_err(db_unavailable)?
-            .get(0);
-        let reserved: Decimal = tx
-            .query_one(
-                "SELECT COALESCE(SUM(amount), 0)::NUMERIC(15,2)
-                   FROM advance_exit_settlements
-                  WHERE site_id = $1 AND unit_id = $2 AND source_debtor = $3 AND status = 'PENDING'",
-                &[&site, &unit, &source],
-            )
-            .await
-            .map_err(db_unavailable)?
-            .get(0);
-        if available - reserved < amount {
+        let available = claimable_advance(&tx, unit, beneficiary_person, source, None).await?;
+        if available < amount {
             return Err(conflict(format!(
                 "Available {} advance after pending exit requests is ₺{:.2}; ₺{:.2} was requested",
-                source,
-                available - reserved,
-                amount
+                source, available, amount
             )));
         }
         let row = tx
@@ -358,7 +339,29 @@ impl AdvanceExitSettlementService {
             decided.amount,
         );
         if decided.status == APPROVED {
-            inner.adjust_advance(&decided.unit_id, &decided.source_debtor, -decided.amount);
+            let beneficiary = decided
+                .beneficiary_person_id
+                .as_deref()
+                .and_then(crate::db::parse_id_to_i64);
+            let mut remaining = decided.amount;
+            if let Some(person) = beneficiary {
+                let person_id = person.to_string();
+                let held =
+                    inner.held_advance_of(&decided.unit_id, &person_id, &decided.source_debtor);
+                let from_hold = held.min(remaining);
+                if from_hold > Decimal::ZERO {
+                    inner.hold_advance(
+                        &decided.unit_id,
+                        &person_id,
+                        &decided.source_debtor,
+                        -from_hold,
+                    );
+                    remaining -= from_hold;
+                }
+            }
+            if remaining > Decimal::ZERO {
+                inner.adjust_advance(&decided.unit_id, &decided.source_debtor, -remaining);
+            }
             if let Some(target) = decided.target_debtor.as_deref() {
                 inner.adjust_advance(&decided.unit_id, target, decided.amount);
             }
@@ -630,45 +633,65 @@ async fn apply_settlement(
     for debtor in debtors {
         lock_advance(tx, unit, debtor).await?;
     }
-    let reserved: Decimal = tx
-        .query_one(
-            "SELECT COALESCE(SUM(amount), 0)::NUMERIC(15,2)
-               FROM advance_exit_settlements
-              WHERE site_id = $1 AND unit_id = $2 AND source_debtor = $3
-                AND status = 'PENDING' AND id <> $4",
-            &[&site, &unit, &source, &settlement.id],
-        )
-        .await
-        .map_err(db_unavailable)?
-        .get(0);
-    let balance: Decimal = tx
-        .query_one(
-            "SELECT balance FROM advance_balances WHERE unit_id = $1 AND debtor_type = $2",
-            &[&unit, &source],
-        )
-        .await
-        .map_err(db_unavailable)?
-        .get(0);
-    if balance - reserved < settlement.amount {
+    let beneficiary_person = settlement
+        .beneficiary_person_id
+        .as_deref()
+        .ok_or_else(|| invalid("beneficiary_person_id is required for an exit settlement"))
+        .and_then(|id| parse_id("person", id))?;
+    let available =
+        claimable_advance(tx, unit, beneficiary_person, source, Some(settlement.id)).await?;
+    if available < settlement.amount {
         return Err(conflict(format!(
             "The {} advance has ₺{:.2} available after other pending exit requests",
-            source,
-            balance - reserved
+            source, available
         )));
     }
-    let source_updated = tx
-        .execute(
-            "UPDATE advance_balances SET balance = balance - $3
-              WHERE unit_id = $1 AND debtor_type = $2 AND balance >= $3",
-            &[&unit, &source, &settlement.amount],
+    // A departing person's own hold is spent before the role bucket, so an
+    // approved payout or transfer never reaches money that belongs to someone else.
+    let held: Decimal = tx
+        .query_opt(
+            "SELECT balance FROM person_advance_holds
+              WHERE unit_id = $1 AND person_id = $2 AND debtor_type = $3 FOR UPDATE",
+            &[&unit, &beneficiary_person, &source],
         )
         .await
-        .map_err(db_unavailable)?;
-    if source_updated != 1 {
-        return Err(conflict(format!(
-            "The {} advance no longer has ₺{:.2} available",
-            source, settlement.amount
-        )));
+        .map_err(db_unavailable)?
+        .map(|row| row.get(0))
+        .unwrap_or(Decimal::ZERO);
+    let from_hold = held.min(settlement.amount);
+    if from_hold > Decimal::ZERO {
+        let updated = tx
+            .execute(
+                "UPDATE person_advance_holds
+                    SET balance = balance - $4, updated_at = CURRENT_TIMESTAMP
+                  WHERE unit_id = $1 AND person_id = $2 AND debtor_type = $3 AND balance >= $4",
+                &[&unit, &beneficiary_person, &source, &from_hold],
+            )
+            .await
+            .map_err(db_unavailable)?;
+        if updated != 1 {
+            return Err(conflict(format!(
+                "The {} advance hold no longer has ₺{:.2} available",
+                source, from_hold
+            )));
+        }
+    }
+    let from_unit = settlement.amount - from_hold;
+    if from_unit > Decimal::ZERO {
+        let source_updated = tx
+            .execute(
+                "UPDATE advance_balances SET balance = balance - $3
+                  WHERE unit_id = $1 AND debtor_type = $2 AND balance >= $3",
+                &[&unit, &source, &from_unit],
+            )
+            .await
+            .map_err(db_unavailable)?;
+        if source_updated != 1 {
+            return Err(conflict(format!(
+                "The {} advance no longer has ₺{:.2} available",
+                source, from_unit
+            )));
+        }
     }
     let reference_id = format!("EXIT-SETTLEMENT-{}", settlement.id);
     let beneficiary_note = format!(" for {}", settlement.beneficiary_name);
@@ -680,20 +703,37 @@ async fn apply_settlement(
         )
         .await
         .map_err(db_unavailable)?;
-        insert_ledger_entry(
-            tx,
-            unit,
-            source,
-            "EXIT_TRANSFER_DEBIT",
-            settlement.amount,
-            &reference_id,
-            &format!("Approved move-out advance transfer{}", beneficiary_note),
-        )
-        .await?;
+        if from_hold > Decimal::ZERO {
+            insert_ledger_entry(
+                tx,
+                unit,
+                source,
+                Some(beneficiary_person),
+                "EXIT_TRANSFER_DEBIT",
+                from_hold,
+                &reference_id,
+                &format!("Approved move-out advance transfer{}", beneficiary_note),
+            )
+            .await?;
+        }
+        if from_unit > Decimal::ZERO {
+            insert_ledger_entry(
+                tx,
+                unit,
+                source,
+                None,
+                "EXIT_TRANSFER_DEBIT",
+                from_unit,
+                &reference_id,
+                &format!("Approved move-out advance transfer{}", beneficiary_note),
+            )
+            .await?;
+        }
         insert_ledger_entry(
             tx,
             unit,
             target,
+            None,
             "EXIT_TRANSFER_CREDIT",
             settlement.amount,
             &reference_id,
@@ -726,27 +766,48 @@ async fn apply_settlement(
         )
         .await
         .map_err(db_unavailable)?;
-        insert_ledger_entry(
-            tx,
-            unit,
-            source,
-            "EXIT_PAYOUT_DEBIT",
-            settlement.amount,
-            &reference_id,
-            &format!(
-                "Payout for {}: {}",
-                settlement.beneficiary_name, payment_reference
-            ),
-        )
-        .await?;
+        if from_hold > Decimal::ZERO {
+            insert_ledger_entry(
+                tx,
+                unit,
+                source,
+                Some(beneficiary_person),
+                "EXIT_PAYOUT_DEBIT",
+                from_hold,
+                &reference_id,
+                &format!(
+                    "Payout for {}: {}",
+                    settlement.beneficiary_name, payment_reference
+                ),
+            )
+            .await?;
+        }
+        if from_unit > Decimal::ZERO {
+            insert_ledger_entry(
+                tx,
+                unit,
+                source,
+                None,
+                "EXIT_PAYOUT_DEBIT",
+                from_unit,
+                &reference_id,
+                &format!(
+                    "Payout for {}: {}",
+                    settlement.beneficiary_name, payment_reference
+                ),
+            )
+            .await?;
+        }
     }
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn insert_ledger_entry(
     tx: &Transaction<'_>,
     unit: i64,
     debtor: &str,
+    person: Option<i64>,
     entry_type: &str,
     amount: Decimal,
     reference_id: &str,
@@ -754,11 +815,12 @@ async fn insert_ledger_entry(
 ) -> FinanceResult<()> {
     tx.execute(
         "INSERT INTO advance_ledger_entries
-            (unit_id, debtor_type, entry_type, amount, reference_id, description)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+            (unit_id, debtor_type, person_id, entry_type, amount, reference_id, description)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
         &[
             &unit,
             &debtor,
+            &person,
             &entry_type,
             &amount,
             &reference_id,
@@ -768,6 +830,100 @@ async fn insert_ledger_entry(
     .await
     .map_err(db_unavailable)?;
     Ok(())
+}
+
+/// Advance one person can still claim from a unit after other pending exit
+/// requests: their own person-scoped hold, plus the unit's role bucket while
+/// they hold that role. Pending requests are allocated hold first, then the
+/// shared role bucket, so two beneficiaries never both count the same money.
+/// A tenant's advance stays in the role bucket until it is settled, so the
+/// bucket remains claimable for a departing tenant (a payout or transfer is the
+/// only way it leaves); an owner's role bucket belongs to the current owner.
+async fn claimable_advance(
+    tx: &Transaction<'_>,
+    unit: i64,
+    person: i64,
+    debtor: &str,
+    exclude_settlement: Option<i64>,
+) -> FinanceResult<Decimal> {
+    let holds: Vec<(i64, Decimal)> = tx
+        .query(
+            "SELECT person_id, balance FROM person_advance_holds
+              WHERE unit_id = $1 AND debtor_type = $2",
+            &[&unit, &debtor],
+        )
+        .await
+        .map_err(db_unavailable)?
+        .iter()
+        .map(|row| (row.get(0), row.get(1)))
+        .collect();
+
+    let holds_role: bool = tx
+        .query_one(
+            "SELECT (EXISTS (SELECT 1 FROM units u
+                              WHERE u.id = $1
+                                AND (($3 = 'OWNER' AND u.owner_person_id = $2)
+                                  OR ($3 = 'TENANT' AND u.tenant_person_id = $2))))
+                 OR EXISTS (SELECT 1 FROM unit_ownerships o
+                             WHERE o.unit_id = $1 AND o.person_id = $2
+                               AND o.is_active AND $3 = 'OWNER')
+                 OR EXISTS (SELECT 1 FROM unit_occupancies o
+                             WHERE o.unit_id = $1 AND o.person_id = $2
+                               AND o.is_active AND o.occupancy_type = $3)",
+            &[&unit, &person, &debtor],
+        )
+        .await
+        .map_err(db_unavailable)?
+        .get(0);
+    let bucket_accessible = holds_role || !debtor.eq_ignore_ascii_case("OWNER");
+
+    let pending_rows = tx
+        .query(
+            "SELECT beneficiary_person_id, amount FROM advance_exit_settlements
+              WHERE unit_id = $1 AND source_debtor = $2 AND status = 'PENDING'
+                AND ($3::bigint IS NULL OR id <> $3)",
+            &[&unit, &debtor, &exclude_settlement],
+        )
+        .await
+        .map_err(db_unavailable)?;
+    // Allocate each pending request hold first, reducing that person's remaining
+    // hold as we go, so several requests from one holder cannot each count the
+    // whole hold against the shared bucket.
+    let mut remaining_holds: std::collections::HashMap<i64, Decimal> =
+        holds.iter().copied().collect();
+    let mut bucket_committed = Decimal::ZERO;
+    for row in pending_rows {
+        let beneficiary: Option<i64> = row.get(0);
+        let amount: Decimal = row.get(1);
+        let from_hold = beneficiary
+            .and_then(|id| remaining_holds.get_mut(&id))
+            .map(|balance| {
+                let from_hold = (*balance).min(amount);
+                *balance -= from_hold;
+                from_hold
+            })
+            .unwrap_or(Decimal::ZERO);
+        bucket_committed += amount - from_hold;
+    }
+
+    let held_available = remaining_holds
+        .get(&person)
+        .copied()
+        .unwrap_or(Decimal::ZERO)
+        .max(Decimal::ZERO);
+    if !bucket_accessible {
+        return Ok(held_available);
+    }
+    let bucket: Decimal = tx
+        .query_opt(
+            "SELECT balance FROM advance_balances WHERE unit_id = $1 AND debtor_type = $2",
+            &[&unit, &debtor],
+        )
+        .await
+        .map_err(db_unavailable)?
+        .map(|row| row.get(0))
+        .unwrap_or(Decimal::ZERO);
+    Ok(held_available + (bucket - bucket_committed).max(Decimal::ZERO))
 }
 
 fn from_row(row: &tokio_postgres::Row) -> AdvanceExitSettlement {

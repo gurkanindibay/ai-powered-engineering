@@ -2184,6 +2184,7 @@ impl SiteAdminService {
                     inner.payment_receipts.iter().any(|r| &r.unit_id == uid)
                         || inner.payment_entries.iter().any(|e| &e.unit_id == uid)
                         || inner.advance_total(uid) > rust_decimal::Decimal::ZERO
+                        || inner.held_advance_total(uid) > rust_decimal::Decimal::ZERO
                         || inner.dues.iter().any(|d| {
                             &d.unit_id == uid
                                 && (d.paid_principal + d.paid_penalty > rust_decimal::Decimal::ZERO
@@ -2252,6 +2253,9 @@ impl SiteAdminService {
             // Clean advance and mappings strictly for target units
             for u_id in &target_unit_ids {
                 inner.advance_balances.remove(u_id);
+                inner
+                    .person_advance_holds
+                    .retain(|(unit, _, _), _| unit != u_id);
                 inner.unit_members.remove(u_id);
                 inner.unit_payer_names.remove(u_id);
                 inner.unit_invite_tokens.remove(u_id);
