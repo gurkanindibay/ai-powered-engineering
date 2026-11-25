@@ -5,7 +5,7 @@
 //! response carries only their own section. Every other unit route keeps the
 //! current-relationship rule.
 
-mod support;
+use crate::support;
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};

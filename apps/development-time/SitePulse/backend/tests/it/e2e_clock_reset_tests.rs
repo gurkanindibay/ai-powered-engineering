@@ -1,4 +1,3 @@
-#![cfg(feature = "e2e")]
 //! The E2E control endpoint publishes the fixture date and can release it again.
 //!
 //! Kept in its own test binary because the published instant is process-wide.

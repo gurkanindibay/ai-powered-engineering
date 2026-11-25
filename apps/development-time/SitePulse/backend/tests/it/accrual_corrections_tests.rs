@@ -798,16 +798,8 @@ async fn approving_the_same_correction_twice_concurrently_applies_it_once() {
 #[tokio::test]
 #[ignore = "needs PostgreSQL"]
 async fn corrections_round_trip_through_postgresql() {
-    let pool = sitepulse_backend::db::create_pool()
-        .unwrap()
-        .expect("DB_PASS is set");
-    sitepulse_backend::db::init_db(&pool).await.unwrap();
-    pool.get()
-        .await
-        .unwrap()
-        .batch_execute(include_str!("../db/seed/02-test-seed.sql"))
-        .await
-        .unwrap();
+    let test_db = crate::test_db::create("accrual_corrections").await;
+    let pool = test_db.pool.clone();
     let state = AppState::with_pool(Some(pool.clone()));
     {
         let mut inner = state.inner.write().await;
@@ -1123,4 +1115,5 @@ async fn corrections_round_trip_through_postgresql() {
         .trial_balance(&site, None, None)
         .await;
     assert!(tb.balanced);
+    test_db.drop_db().await;
 }

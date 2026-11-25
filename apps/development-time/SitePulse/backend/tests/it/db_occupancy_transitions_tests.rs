@@ -6,7 +6,7 @@
 //! (created and dropped per test) and need PostgreSQL and `DB_PASS`:
 //!
 //! ```text
-//! cargo test --test db_occupancy_transitions_tests -- --ignored --test-threads=1
+//! cargo nextest run --locked --profile db --test it -E 'test(/db_occupancy_transitions_tests::/)' --run-ignored ignored-only --test-threads 4
 //! ```
 //!
 //! The verification gate `rust-db-test` runs them.
@@ -16,7 +16,7 @@ use axum::http::{Request, StatusCode};
 use axum::Router;
 use deadpool_postgres::Pool;
 use serde_json::{json, Value};
-use sitepulse_backend::{app::build_router, auth, db, state::AppState};
+use sitepulse_backend::{app::build_router, auth, state::AppState};
 use tower::ServiceExt;
 
 const MANAGER_PASSWORD: &str = "Occupancy-Manager-123";
@@ -29,20 +29,7 @@ struct TestDb {
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let admin =
-            db::create_pool_for("postgres").expect("DB_PASS is required for the PostgreSQL tests");
-        let name = format!("sp_occ_{}_{}", tag, std::process::id());
-        let client = admin.get().await.expect("admin connection");
-        for sql in [
-            format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", name),
-            format!("CREATE DATABASE {}", name),
-        ] {
-            client.batch_execute(&sql).await.expect("create database");
-        }
-        drop(client);
-        let pool = db::create_pool_for(&name).expect("pool");
-        db::init_db(&pool).await.expect("migrations");
-        db::seed_test_data(&pool).await.expect("test seed");
+        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
         let hash = auth::hash_password(MANAGER_PASSWORD).expect("hash");
         pool.get()
             .await

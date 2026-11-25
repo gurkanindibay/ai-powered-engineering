@@ -212,7 +212,17 @@ def native_totals(output: str, runner: str, payload: dict[str, object] | None = 
             totals["passed"] += int(match.group(1))
             totals["failed"] += int(match.group(2))
             totals["skipped"] += int(match.group(3))
-        return totals if found else None
+        if found:
+            return totals
+        if isinstance(payload, dict) and isinstance(payload.get("cases"), list):
+            rows = [row for row in payload["cases"] if isinstance(row, dict)]
+            return {
+                "total": len(rows),
+                "passed": sum(row.get("status") == "passed" for row in rows),
+                "failed": sum(row.get("status") in {"failed", "error"} for row in rows),
+                "skipped": sum(row.get("status") == "skipped" for row in rows),
+            }
+        return None
     if runner == "unittest":
         match = re.search(r"^Ran (\d+) tests? in ", output, re.MULTILINE)
         if not match:

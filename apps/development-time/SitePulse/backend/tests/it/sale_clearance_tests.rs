@@ -2,12 +2,11 @@
 //! seller-pays override. Scenarios: `.specify/features/EPIC-08/STORY-08-05-*.feature`.
 //!
 //! The statement and the split run in memory. The override and the accrual that follows it need
-//! PostgreSQL: `cargo test --test sale_clearance_tests -- --ignored --test-threads=1`.
+//! PostgreSQL: `cargo nextest run --locked --profile db --test it -E 'test(/sale_clearance_tests::/)' --run-ignored ignored-only --test-threads 4`.
 
 use chrono::NaiveDate;
 use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
-use sitepulse_backend::db;
 use sitepulse_backend::models::*;
 use sitepulse_backend::services::capital_project_service::CapitalProjectService;
 use sitepulse_backend::services::correction_service::CorrectionService;
@@ -368,23 +367,7 @@ impl TestDb {
     /// `tag` keeps the database name unique per test: the rust-db-test gate runs these tests on
     /// several threads of one process, so the process id alone collides.
     async fn create(tag: &str) -> Self {
-        let admin =
-            db::create_pool_for("postgres").expect("DB_PASS is required for PostgreSQL tests");
-        let name = format!("sp_sale_{}_{}", tag, std::process::id());
-        let client = admin.get().await.expect("admin connection");
-        for sql in [
-            format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
-            format!("CREATE DATABASE {name}"),
-        ] {
-            client
-                .batch_execute(&sql)
-                .await
-                .expect("create throwaway database");
-        }
-        drop(client);
-        let pool = db::create_pool_for(&name).expect("test database pool");
-        db::init_db(&pool).await.expect("apply migrations");
-        db::seed_test_data(&pool).await.expect("seed test data");
+        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
         Self { name, admin, pool }
     }
 

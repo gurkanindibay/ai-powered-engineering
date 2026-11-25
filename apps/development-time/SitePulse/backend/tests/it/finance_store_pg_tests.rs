@@ -7,7 +7,7 @@
 //!
 //! ```text
 //! DB_PASS=... DB_NAME=sitepulse_finance_test \
-//!   cargo test --test finance_store_pg_tests -- --ignored --nocapture
+//!   cargo nextest run --locked --profile db --test it -E 'test(/finance_store_pg_tests::every_spec009_record_round_trips_through_postgresql/)' --run-ignored ignored-only --test-threads 4
 //! ```
 
 use chrono::{Days, Utc};
@@ -124,16 +124,8 @@ fn assert_same(memory: &FinanceBook, db: &FinanceBook) {
 #[tokio::test]
 #[ignore = "needs PostgreSQL"]
 async fn every_spec009_record_round_trips_through_postgresql() {
-    let pool = sitepulse_backend::db::create_pool()
-        .unwrap()
-        .expect("DB_PASS is set");
-    sitepulse_backend::db::init_db(&pool).await.unwrap();
-    pool.get()
-        .await
-        .unwrap()
-        .batch_execute(include_str!("../db/seed/02-test-seed.sql"))
-        .await
-        .unwrap();
+    let test_db = crate::test_db::create("finance_store").await;
+    let pool = test_db.pool.clone();
     let state = AppState::with_pool(Some(pool.clone()));
     {
         let mut inner = state.inner.write().await;
@@ -737,4 +729,5 @@ async fn every_spec009_record_round_trips_through_postgresql() {
         .unwrap()
         .get(0);
     assert_eq!(adjusted, d("999.00"));
+    test_db.drop_db().await;
 }

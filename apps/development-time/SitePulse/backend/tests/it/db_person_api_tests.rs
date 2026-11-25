@@ -1,16 +1,15 @@
-#![allow(dead_code)]
 //! PostgreSQL-backed tests for the unified person API (task-33): scoped search,
 //! card create/edit, reference-based commands and the primary contact.
 //!
 //! ```text
-//! cargo test --test db_person_api_tests -- --ignored --test-threads=1
+//! cargo nextest run --locked --profile db --test it -E 'test(/db_person_api_tests::/)' --run-ignored ignored-only --test-threads 4
 //! ```
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
 use deadpool_postgres::Pool;
-use sitepulse_backend::{app::build_router, auth, db, state::AppState};
+use sitepulse_backend::{app::build_router, auth, state::AppState};
 use tower::ServiceExt;
 
 struct TestDb {
@@ -21,23 +20,7 @@ struct TestDb {
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let admin =
-            db::create_pool_for("postgres").expect("DB_PASS is required for the PostgreSQL tests");
-        let name = format!("sp_rust_{}_{}", tag, std::process::id());
-        let client = admin.get().await.expect("admin connection");
-        for sql in [
-            format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", name),
-            format!("CREATE DATABASE {}", name),
-        ] {
-            client
-                .batch_execute(&sql)
-                .await
-                .expect("create throwaway database");
-        }
-        drop(client);
-        let pool = db::create_pool_for(&name).expect("pool");
-        db::init_db(&pool).await.expect("migrations");
-        db::seed_test_data(&pool).await.expect("test seed");
+        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
         // One real site manager per site: tokens are session-backed, so the
         // tests log in through /api/v1/auth/login instead of minting tokens.
         let hash = auth::hash_password(MANAGER_PASSWORD).expect("hash");

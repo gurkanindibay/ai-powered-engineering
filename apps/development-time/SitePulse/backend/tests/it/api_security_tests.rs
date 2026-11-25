@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 // HTTP-level security tests: drive the real router (middleware included) and
 // assert authentication, role policy and tenant isolation.
 

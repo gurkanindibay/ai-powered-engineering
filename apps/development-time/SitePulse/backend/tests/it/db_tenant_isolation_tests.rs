@@ -6,7 +6,7 @@
 //! PostgreSQL and `DB_PASS` (plus `DB_HOST`/`DB_PORT`/`DB_USER` if not default):
 //!
 //! ```text
-//! cargo test --test db_tenant_isolation_tests -- --ignored --test-threads=1
+//! cargo nextest run --locked --profile db --test it -E 'test(/db_tenant_isolation_tests::/)' --run-ignored ignored-only --test-threads 4
 //! ```
 //!
 //! The verification gate `rust-db-test` (scripts/run_tests.py) runs them; with
@@ -29,23 +29,7 @@ struct TestDb {
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let admin =
-            db::create_pool_for("postgres").expect("DB_PASS is required for the PostgreSQL tests");
-        let name = format!("sp_rust_{}_{}", tag, std::process::id());
-        let client = admin.get().await.expect("admin connection");
-        for sql in [
-            format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", name),
-            format!("CREATE DATABASE {}", name),
-        ] {
-            client
-                .batch_execute(&sql)
-                .await
-                .expect("create throwaway database");
-        }
-        drop(client);
-        let pool = db::create_pool_for(&name).expect("pool");
-        db::init_db(&pool).await.expect("migrations");
-        db::seed_test_data(&pool).await.expect("test seed");
+        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
         // One real site manager per site: tokens are session-backed, so the
         // tests log in through /api/v1/auth/login instead of minting tokens.
         let hash = auth::hash_password(MANAGER_PASSWORD).expect("hash");

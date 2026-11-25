@@ -1,10 +1,9 @@
-#![allow(dead_code)]
 //! PostgreSQL tests that perform every unit and person action several times in a row and read
 //! the status, the occupancy history, the audit trail and the person cards back after each run
 //! (STORY-08-12 and STORY-12-10). Moving a person out also moves their dependents out.
 //!
 //! ```text
-//! cargo test --test db_unit_person_action_cycles_tests -- --ignored --test-threads=1
+//! cargo nextest run --locked --profile db --test it -E 'test(/db_unit_person_action_cycles_tests::/)' --run-ignored ignored-only --test-threads 4
 //! ```
 //!
 //! They run the real router on a throwaway database and need PostgreSQL and `DB_PASS`.
@@ -14,7 +13,7 @@ use axum::http::{Request, StatusCode};
 use axum::Router;
 use deadpool_postgres::Pool;
 use serde_json::{json, Value};
-use sitepulse_backend::{app::build_router, auth, db, state::AppState};
+use sitepulse_backend::{app::build_router, auth, state::AppState};
 use tower::ServiceExt;
 
 /// A password generated per test run, so no credential is committed.
@@ -37,20 +36,7 @@ struct TestDb {
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let admin =
-            db::create_pool_for("postgres").expect("DB_PASS is required for the PostgreSQL tests");
-        let name = format!("sp_cyc_{}_{}", tag, std::process::id());
-        let client = admin.get().await.expect("admin connection");
-        for sql in [
-            format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", name),
-            format!("CREATE DATABASE {}", name),
-        ] {
-            client.batch_execute(&sql).await.expect("create database");
-        }
-        drop(client);
-        let pool = db::create_pool_for(&name).expect("pool");
-        db::init_db(&pool).await.expect("migrations");
-        db::seed_test_data(&pool).await.expect("test seed");
+        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
         let hash = auth::hash_password(manager_password()).expect("hash");
         pool.get()
             .await

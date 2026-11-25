@@ -1,9 +1,8 @@
-#![allow(dead_code)]
 //! PostgreSQL tests for STORY-07-08: a site's accrual is one transaction, every liability is
 //! linked to its period row, and another spelling of the same month is a duplicate.
 //!
 //! ```text
-//! cargo test --test db_accrual_atomic_tests -- --ignored --test-threads=1
+//! cargo nextest run --locked --profile db --test it -E 'test(/db_accrual_atomic_tests::/)' --run-ignored ignored-only --test-threads 4
 //! ```
 //!
 //! They run the real router on a throwaway database and need PostgreSQL and `DB_PASS`.
@@ -50,20 +49,7 @@ struct Env {
 
 impl Env {
     async fn new(tag: &str) -> Self {
-        let admin =
-            db::create_pool_for("postgres").expect("DB_PASS is required for the PostgreSQL tests");
-        let name = format!("sp_acc_{}_{}", tag, std::process::id());
-        let client = admin.get().await.expect("admin connection");
-        for sql in [
-            format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", name),
-            format!("CREATE DATABASE {}", name),
-        ] {
-            client.batch_execute(&sql).await.expect("create database");
-        }
-        drop(client);
-        let pool = db::create_pool_for(&name).expect("pool");
-        db::init_db(&pool).await.expect("migrations");
-        db::seed_test_data(&pool).await.expect("test seed");
+        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
         let hash = auth::hash_password(manager_password()).expect("hash");
         pool.get()
             .await

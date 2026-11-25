@@ -161,35 +161,20 @@ GATES: Dict[str, List[CommandSpec]] = {
     "rust-build": [CommandSpec(["cargo", "build", "--all-targets", "--locked"], "backend")],
     "rust-clippy": [CommandSpec(["cargo", "clippy", "--all-targets", "--locked", "--", "-D", "warnings"], "backend")],
     "rust-fmt": [CommandSpec(["cargo", "fmt", "--check"], "backend", 120)],
-    "rust-test": [CommandSpec(["cargo", "test", "--locked"], "backend"),
-                  # The e2e clock tests compile only with the `e2e` feature; without this command no gate ran them.
-                  CommandSpec(["cargo", "test", "--locked", "--features", "e2e",
-                               "--test", "e2e_clock_tests", "--test", "e2e_clock_reset_tests"], "backend")],
-    # The PostgreSQL persistence path: RLS tenant isolation, read-only GETs,
-    # transactional advance offsets, 503 on database failure (needs DB_PASS).
-    # The unit state model (EPIC-08 §3): guarded transitions, derived status.
-    # The person API and merge, and unit and person actions repeated in cycles.
-    # Every test creates its own throwaway database (named by tag and process id), so the tests
-    # run 4 at a time: all five files in one cargo run took 74 s sequentially and 28 s this way.
-    "rust-db-test": [CommandSpec(["cargo", "test", "--locked",
-                                  "--test", "db_tenant_isolation_tests",
-                                  "--test", "db_occupancy_transitions_tests",
-                                  "--test", "db_person_api_tests",
-                                  "--test", "db_person_merge_tests",
-                                  "--test", "db_unit_person_action_cycles_tests",
-                                  "--test", "db_accrual_atomic_tests",
-                                  "--test", "db_accrual_persistence_tests",
-                                  "--test", "db_advance_exit_settlements_tests",
-                                  "--test", "sale_clearance_tests",
-                                  "--test", "accrual_corrections_tests",
-                                  "--test", "finance_store_pg_tests",
-                                  "--", "--ignored", "--test-threads=4"], "backend", 900)],
+    "rust-test": [
+        CommandSpec(["cargo", "nextest", "run", "--locked", "--profile", "ci", "--features", "e2e"], "backend"),
+        # cargo-nextest intentionally does not run documentation tests.
+        CommandSpec(["cargo", "test", "--locked", "--doc", "--features", "e2e"], "backend"),
+    ],
+    # Ignored persistence tests use one migrated template database and isolated clones.
+    "rust-db-test": [CommandSpec(["cargo", "nextest", "run", "--locked", "--profile", "db", "--test", "it",
+                                  "--run-ignored", "ignored-only", "--test-threads", "4"], "backend", 1800)],
     # Errors are fatal; warnings/infos are reported by `flutter analyze` itself.
     "flutter-analyze": [CommandSpec(["flutter", "analyze", "--no-fatal-infos", "--no-fatal-warnings"], "flutter", 600)],
     "flutter-test": [CommandSpec(["flutter", "test", "--reporter=json"], "flutter", 1200)],
     # One fixture file, run against the Rust services and the Dart use case.
     "money-fixtures": [
-        CommandSpec(["cargo", "test", "--locked", "--test", "financial_fixtures"], "backend"),
+        CommandSpec(["cargo", "nextest", "run", "--locked", "--profile", "ci", "--test", "it", "-E", "test(/financial_fixtures::/)"] , "backend"),
         CommandSpec(["flutter", "test", "--reporter=json", "test/financial_fixture_test.dart"], "flutter", 600),
     ],
     "harness-selftest": [CommandSpec(["python3", "scripts/unittest_json_runner.py", "-s", "harness/tests"], ".", 300)],
@@ -282,9 +267,17 @@ def _write_gate_artifacts_impl(name: str, specs: Sequence[CommandSpec], results:
         payload: dict[str, object] | None = None
         if cargo_argv:
             native_runner = "cargo"
-            suite = "money-fixtures" if "financial_fixtures" in cargo_argv else "rust-db-test" if "--ignored" in cargo_argv else name
+            suite = "money-fixtures" if "financial_fixtures" in cargo_argv else "rust-db-test" if "--run-ignored" in cargo_argv else name
             try:
-                cases = ci_case_results.parse_cargo(text, suite)
+                if "nextest" in cargo_argv:
+                    profile = cargo_argv[cargo_argv.index("--profile") + 1]
+                    junit_path = root / spec.cwd / "target" / "nextest" / profile / "junit.xml"
+                    cases = ci_case_results.parse_junit(junit_path, runner="cargo", suite=suite)
+                    payload = {"cases": cases}
+                    if not cases:
+                        runner_errors.append(f"Nextest JUnit report missing or empty: {junit_path}")
+                else:
+                    cases = ci_case_results.parse_cargo(text, suite)
             except Exception as exc:
                 runner_errors.append(f"Cargo adapter error: {type(exc).__name__}: {exc}")
         elif argv and argv[0] == "flutter" and "test" in argv:
@@ -369,12 +362,13 @@ def run_acceptance_tests(test_ids: Sequence[str], root: Path) -> Dict[str, GateR
             system.append(tid[len("system:"):])
 
     for target, names in rust.items():
-        argv = ["cargo", "test", "--locked"] + (["--lib"] if target == "lib" else ["--test", target])
-        argv += ["--", "--exact"] + names
+        argv = ["cargo", "test", "--locked"] + (["--lib"] if target == "lib" else ["--test", "it"])
+        exact_names = names if target == "lib" else [f"{target}::{name}" for name in names]
+        argv += ["--", "--exact"] + exact_names
         res = run_command(f"rust:{target}", CommandSpec(argv, "backend"), root)
-        output_ok = _rust_tests_reported(res.output, names)
-        for n in names:
-            ok = output_ok.get(n, False)
+        output_ok = _rust_tests_reported(res.output, exact_names)
+        for n, actual_name in zip(names, exact_names):
+            ok = output_ok.get(actual_name, False)
             results[f"rust:{target}::{n}"] = GateResult(
                 f"rust:{target}::{n}", ok, [] if ok else (res.diagnostics or [f"Test '{n}' did not run or failed"]), res.command, res.duration_s
             )

@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 // Regression test suite verifying architectural flaw resolutions (AF-01 through AF-10 and NV-01 through NV-07).
 
 use axum::body::Body;
