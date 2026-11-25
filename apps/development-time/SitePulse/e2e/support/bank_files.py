@@ -142,25 +142,20 @@ def kuveyt_xlsx(path: Path, rows: list[StatementRow], iban: str = "TR62002050000
     return path
 
 
-def statement_csv(rows: list[StatementRow], path: Path | None = None) -> str:
-    """Writes or returns a semicolon-delimited bank statement CSV compatible with BankStatementParser."""
+def statement_csv(rows: list[StatementRow]) -> str:
+    """Build a semicolon-delimited bank statement CSV compatible with BankStatementParser."""
     lines = ["Tarih;Referans;Açıklama;Tutar"]
     for r in rows:
         lines.append(f"{r.date};{r.reference};{r.description};{_plain_amount(r.amount)}")
     content = "\n".join(lines) + "\n"
-    if path is not None:
-        p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
     return content
 
 
 def statement_mt940(
     rows: list[StatementRow],
     iban: str = "TR620020500009863791600001",
-    path: Path | None = None,
 ) -> str:
-    """Writes or returns a standard SWIFT MT940 statement compatible with Mt940Engine and bank_file_parser.dart."""
+    """Build a standard SWIFT MT940 statement compatible with Mt940Engine and bank_file_parser.dart."""
     lines = [
         ":20:STARTMR",
         f":25:{iban}",
@@ -183,10 +178,6 @@ def statement_mt940(
     lines.append(f":62F:C261130TRY{closing_str}")
     lines.append("-")
     content = "\n".join(lines) + "\n"
-    if path is not None:
-        p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
     return content
 
 
