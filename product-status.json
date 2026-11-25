@@ -201,7 +201,7 @@
       "stories_with_scenarios": 116
     },
     {
-      "automated": 442,
+      "automated": 443,
       "date": "2026-11-25",
       "epics": 13,
       "scenarios": 471,
@@ -209,7 +209,7 @@
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "5ebc75916f0b11b6982d197b8a64e24ea4e77388",
+  "commit": "57dde4604736bca79b6f0fb52aef1eab715a8656",
   "epics": [
     {
       "automated": 10,
@@ -226,16 +226,16 @@
       "title": "Resident Dues Management & Financial Transparency"
     },
     {
-      "automated": 14,
+      "automated": 15,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-02",
       "no_result": 1,
-      "passing": 13,
-      "planned": 3,
+      "passing": 14,
+      "planned": 2,
       "scenarios": 17,
       "stories": 5,
-      "stories_passing": 1,
+      "stories_passing": 2,
       "stories_with_scenarios": 5,
       "title": "Site Manager Financial Oversight & Community Operations"
     },
@@ -394,18 +394,18 @@
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-25T12:07:57Z",
+  "generated_at": "2026-11-25T12:31:26Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
-    "passed": 308,
-    "seconds": 1921.3,
+    "passed": 309,
+    "seconds": 1802.5,
     "skipped": 1,
-    "tests": 309
+    "tests": 310
   },
   "recent_changes": [],
-  "run_id": "20261125T120756Z-5ebc759",
+  "run_id": "20261125T123124Z-57dde46",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -512,7 +512,7 @@
     "SC-02-02-02": {
       "epic": "EPIC-02",
       "name": "Overdue flats show the exact days overdue in a red badge",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-02-02"
     },
     "SC-02-03-01": {
@@ -3237,17 +3237,17 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 442,
+    "automated": 443,
     "epics": 13,
     "epics_failing": 0,
     "epics_verified": 1,
     "failing": 0,
     "no_result": 214,
-    "passing": 228,
-    "planned": 29,
+    "passing": 229,
+    "planned": 28,
     "scenarios": 471,
     "stories": 116,
-    "stories_passing": 34,
+    "stories_passing": 35,
     "stories_with_scenarios": 116
   }
 }
