@@ -730,7 +730,7 @@ pub async fn run_e2e_tick(
         .ok_or(crate::e2e_clock::E2eClockError::Disabled)?;
     let _tick_guard = clock.begin_tick()?;
     let now = clock.now()?;
-    let date = now.date_naive();
+    let date = crate::domain::clock::local_date(&crate::models::default_site_timezone(), now);
     let enabled = state.inner.read().await.auto_scheduler_enabled;
     let mut report = E2eTickReport {
         date,
@@ -763,4 +763,33 @@ pub async fn run_e2e_tick(
         .map_err(|error| crate::e2e_clock::E2eClockError::Scheduler(error.to_string()))?;
 
     Ok(report)
+}
+
+#[cfg(test)]
+#[cfg(feature = "e2e")]
+mod tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+
+    #[tokio::test]
+    async fn when_run_e2e_tick_at_late_evening_utc_then_report_date_is_next_day_in_istanbul() {
+        let evening = Utc
+            .with_ymd_and_hms(2026, 11, 30, 22, 30, 0)
+            .single()
+            .expect("valid instant");
+        let clock = std::sync::Arc::new(crate::e2e_clock::E2eClock::new(
+            chrono::NaiveDate::from_ymd_opt(2026, 11, 30).unwrap(),
+        ));
+        clock.set_instant(evening).expect("set instant");
+        let mut state = AppState::new();
+        state.e2e_clock = Some(clock);
+        state.inner.write().await.auto_scheduler_enabled = false;
+
+        let report = run_e2e_tick(&state).await.expect("tick succeeds");
+        assert_eq!(
+            report.date,
+            chrono::NaiveDate::from_ymd_opt(2026, 12, 1).unwrap()
+        );
+        assert_ne!(report.date, evening.date_naive());
+    }
 }

@@ -1042,7 +1042,7 @@ pub async fn fetch_site_payments_from_db(
             let s_num = parse_id_to_i64(sid).unwrap_or(0);
             client
                 .query_opt(
-                    "SELECT id, name FROM sites WHERE id = $1 AND deleted_at IS NULL",
+                    "SELECT id, name, timezone FROM sites WHERE id = $1 AND deleted_at IS NULL",
                     &[&s_num],
                 )
                 .await?
@@ -1058,7 +1058,7 @@ pub async fn fetch_site_payments_from_db(
             Some(r) => Some(r),
             None => client
                 .query_opt(
-                    "SELECT id, name FROM sites WHERE deleted_at IS NULL ORDER BY id ASC LIMIT 1",
+                    "SELECT id, name, timezone FROM sites WHERE deleted_at IS NULL ORDER BY id ASC LIMIT 1",
                     &[],
                 )
                 .await?,
@@ -1080,6 +1080,9 @@ pub async fn fetch_site_payments_from_db(
     let site_id_num: i64 = srow.get(0);
     let site_id = site_id_num.to_string();
     let site_name: String = srow.get(1);
+    let site_timezone: String = srow
+        .try_get(2)
+        .unwrap_or_else(|_| crate::models::default_site_timezone());
 
     // 2. Total units
     let units_count_row = client
@@ -1217,12 +1220,12 @@ pub async fn fetch_site_payments_from_db(
             r#"
         SELECT
             pe.id::text,
-            pe.receipt_number,
+            pr.receipt_number,
             pe.payment_date,
             pe.amount,
             pe.payer_name,
             pe.description,
-            pe.channel,
+            pe.payment_channel,
             pe.settlement_status,
             pe.unit_id::text,
             u.unit_number,
@@ -1232,6 +1235,7 @@ pub async fn fetch_site_payments_from_db(
         FROM payment_entries pe
         JOIN units u ON pe.unit_id = u.id
         JOIN blocks b ON u.block_id = b.id
+        LEFT JOIN payment_receipts pr ON pe.receipt_id = pr.id
         WHERE pe.site_id = $1 AND pe.entry_type != 'REVERSAL'
         ORDER BY pe.payment_date DESC
         "#,
@@ -1275,7 +1279,7 @@ pub async fn fetch_site_payments_from_db(
             payments.push(serde_json::json!({
                 "match_id": format!("MATCH-PE-{}", pe_id),
                 "transaction_id": pe_id.clone(),
-                "date": payment_date.date_naive().to_string(),
+                "date": crate::domain::clock::local_date(&site_timezone, payment_date).to_string(),
                 "unit_id": Some(unit_id),
                 "block": Some(block_name),
                 "unit_number": Some(unit_number),
@@ -1329,8 +1333,9 @@ pub async fn tx_load_due_principal_payments(
 ) -> DbResult<Vec<(chrono::NaiveDate, Decimal)>> {
     let rows = tx
         .query(
-            "SELECT pe.payment_date, pa.principal_amount FROM payment_allocations pa \
+            "SELECT pe.payment_date, pa.principal_amount, s.timezone FROM payment_allocations pa \
              JOIN payment_entries pe ON pe.id = pa.payment_entry_id \
+             JOIN sites s ON s.id = pe.site_id \
              WHERE pa.dues_liability_id = $1 AND pa.principal_amount > 0 \
                AND pe.entry_type = 'COLLECTION' AND pe.settlement_status <> 'REVERSED' \
              ORDER BY pe.payment_date, pe.id",
@@ -1341,7 +1346,11 @@ pub async fn tx_load_due_principal_payments(
         .iter()
         .map(|r| {
             let at: chrono::DateTime<chrono::Utc> = r.get(0);
-            (at.date_naive(), r.get::<_, Decimal>(1))
+            let principal: Decimal = r.get(1);
+            let tz: String = r
+                .try_get(2)
+                .unwrap_or_else(|_| crate::models::default_site_timezone());
+            (crate::domain::clock::local_date(&tz, at), principal)
         })
         .collect())
 }

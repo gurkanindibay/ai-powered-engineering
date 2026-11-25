@@ -288,9 +288,8 @@ pub async fn control(
             ClockResponse::Cleared
         }
         ClockRequest::Tick => {
-            let now = clock.now()?;
-            let date = now.date_naive();
             let report = crate::scheduler::run_e2e_tick(&state).await?;
+            let date = report.date;
             ClockResponse::Ticked { date, report }
         }
     };
