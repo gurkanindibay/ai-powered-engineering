@@ -79,7 +79,7 @@ class ViewParityTests(unittest.TestCase):
 
         view_sql = self.MIGRATION.read_text(encoding="utf-8")
         arm = view_sql.split("'advance_balance_vs_ledger'", 1)[1].split("UNION ALL", 1)[0]
-        quoted = re.search(r"IN \(\s*((?:'[A-Z_]+'\s*,?\s*)+)\)", arm)
+        quoted = re.search(r"IN \(([^)]*)\)", arm)
         self.assertIsNotNone(quoted, "the migration arm no longer lists credit entry types")
         credit_types = set(re.findall(r"'([A-Z_]+)'", quoted.group(1)))
         self.assertTrue(credit_types, "the migration arm no longer lists credit entry types")
@@ -221,15 +221,15 @@ class RedactionTests(unittest.TestCase):
         self.assertIn(health.REDACTED, redacted)
 
     def test_email_local_part_is_masked(self) -> None:
-        self.assertEqual(health.mask_email("gurkan@example.com"), "g***n@example.com")
-        self.assertEqual(health.mask_email("a@example.com"), "*@example.com")
+        self.assertEqual(health.redact_email("gurkan@example.com"), "g***n@example.com")
+        self.assertEqual(health.redact_email("a@example.com"), "*@example.com")
 
     def test_email_masking_is_idempotent(self) -> None:
-        once = health.mask_email("manager@example.test")
-        self.assertEqual(health.mask_email(once), once)
+        once = health.redact_email("manager@example.test")
+        self.assertEqual(health.redact_email(once), once)
 
     def test_turkish_iban_keeps_bank_code_and_last_four(self) -> None:
-        masked = health.mask_iban("TR330006100519786457841326")
+        masked = health.redact_iban("TR330006100519786457841326")
         self.assertTrue(masked.startswith("TR33 "))
         self.assertTrue(masked.endswith("13 26"))
         self.assertNotIn("000610051978645784", masked)

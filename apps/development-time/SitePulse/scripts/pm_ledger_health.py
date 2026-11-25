@@ -712,7 +712,7 @@ _BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+")
 _LONG_TOKEN_PATTERN = re.compile(r"\b[A-Fa-f0-9]{32,}\b")
 
 
-def mask_email(value: str) -> str:
+def redact_email(value: str) -> str:
     """Masks the local part as ``g***y@example.com`` (section 5, KVKK rule)."""
 
     def _mask(match: re.Match[str]) -> str:
@@ -728,7 +728,7 @@ def mask_email(value: str) -> str:
     return _EMAIL_PATTERN.sub(_mask, value)
 
 
-def mask_iban(value: str) -> str:
+def redact_iban(value: str) -> str:
     """Masks a Turkish IBAN keeping the country, bank code and last four digits."""
 
     def _mask(match: re.Match[str]) -> str:
@@ -745,8 +745,8 @@ def redact_text(value: Any) -> str:
     text = _SECRET_ASSIGNMENT_PATTERN.sub(
         lambda match: f"{match.group(1)}{match.group(2)}{REDACTED}", text
     )
-    text = mask_iban(text)
-    text = mask_email(text)
+    text = redact_iban(text)
+    text = redact_email(text)
     text = _TCKN_PATTERN.sub(REDACTED, text)
     text = _LONG_TOKEN_PATTERN.sub(REDACTED, text)
     if _SECRET_KEY_PATTERN.search(text):
