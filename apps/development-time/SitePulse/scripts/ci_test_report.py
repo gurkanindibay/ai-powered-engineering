@@ -85,6 +85,20 @@ def junit_totals(files: list[Path]) -> dict:
     return {**totals, "passed": passed, "seconds": round(seconds, 1), "files": len(files), "unparseable": broken}
 
 
+def junit_ignored_page_errors(files: list[Path]) -> int:
+    """Tests whose page guard recorded WebKit's empty page errors as diagnostics (#474)."""
+    count = 0
+    for path in files:
+        try:
+            root = ET.parse(path).getroot()
+        except (ET.ParseError, OSError):
+            continue
+        for prop in root.iter("property"):
+            if prop.get("name") == "ignored_page_errors" and (prop.get("value") or "").strip():
+                count += 1
+    return count
+
+
 def merge_executions(files: list[Path], out: Path) -> tuple[int, int]:
     count = invalid = 0
     with out.open("w", encoding="utf-8") as merged:
@@ -409,6 +423,7 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
         execution_files = sorted(shards.rglob("executions.jsonl"))
         junit_files = sorted(shards.rglob("junit.xml"))
     junit = junit_totals(junit_files)
+    ignored_page_errors = junit_ignored_page_errors(junit_files)
     merged = out / "executions.jsonl"
     count, invalid_executions = merge_executions(execution_files, merged)
     collection["invalid_execution_inputs"] = invalid_executions
@@ -455,6 +470,11 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
         f"# Test run {meta['run_id']}\n\nNo execution records were produced "
         f"({len(execution_files)} executions.jsonl file(s) found under {shards}).\n")
     (out / "test-report.md").write_text(markdown, encoding="utf-8")
+    if ignored_page_errors:
+        with (out / "test-report.md").open("a", encoding="utf-8") as handle:
+            handle.write(
+                f"\n> {ignored_page_errors} test(s) recorded WebKit's empty page errors (#474) "
+                "as diagnostics; every named page error still fails.\n")
     with (out / "test-report.md").open("a", encoding="utf-8") as handle:
         handle.write("\n" + (out / "suite-report.md").read_text(encoding="utf-8"))
 
@@ -493,6 +513,7 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
     summary = {"run_id": meta["run_id"], "actions_run_id": str(run_id or ""),
                "attempt": str(attempt or ""), "task": meta["task"], "commit": commit_override or meta["commit"],
                "shards": len(execution_files), "executions": count, "junit": clean_junit,
+               "ignored_page_errors": ignored_page_errors,
                "ci_suites": {"case_count": collection["case_count"], "unique_case_count": collection["unique_case_count"],
                              "case_totals": collection["case_totals"],
                              "incomplete_suites": incomplete_suite_count(collection["suites"])},
@@ -536,6 +557,9 @@ def step_summary(summary: dict, markdown: str, coverage_md: str = "") -> str:
             f"{j['seconds']:.0f}s | {summary['shards']} |", "",
             f"**Result:** {summary['status']} ({counts}); scenarios covered: {summary['scenarios_covered']}. "
             "Full report and HTML dashboard: artifact `e2e-test-report`.", ""]
+    if summary.get("ignored_page_errors"):
+        head.extend([f"> WebKit empty page errors recorded as diagnostics: "
+                     f"{summary['ignored_page_errors']} test(s) (#474).", ""])
     if coverage_md:
         head.extend([coverage_md.rstrip(), ""])
     head.extend(["<details><summary>Executed tests</summary>", ""])
