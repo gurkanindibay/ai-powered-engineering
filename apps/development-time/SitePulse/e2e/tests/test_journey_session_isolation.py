@@ -30,11 +30,12 @@ def _install_held_fetch(page: Page, path: str) -> None:
     script = """(() => {
           const heldPath = __HELD_PATH__;
           window.__sitePulseHeldLoads = [];
+          window.__sitePulseHoldResponse = false;
           const originalFetch = window.fetch.bind(window);
           window.fetch = (input, init) => {
             const url = typeof input === 'string' ? input : input.url;
             return originalFetch(input, init).then((response) => {
-              if (!url.includes(heldPath)) return response;
+              if (!window.__sitePulseHoldResponse || !url.includes(heldPath)) return response;
               return new Promise((resolve) => {
                 window.__sitePulseHeldLoads.push(() => resolve(response));
               });
@@ -73,7 +74,7 @@ def test_expired_manager_session_clears_previous_site_data(request, api, actors,
         Shell(page).nav("dues")
         by_id(page, "login_tab_quickAll").wait_for(timeout=20_000)
         assert by_id(page, "cockpit_remaining_debt").count() == 0
-        assert "4.567,50" not in page.locator("body").inner_text()
+        assert "4.567,50" not in page_text(page)
 
         page.go_back()
         by_id(page, "login_tab_quickAll").wait_for(timeout=10_000)
@@ -87,7 +88,7 @@ def test_expired_manager_session_clears_previous_site_data(request, api, actors,
         Shell(page).nav("home")
         ManagerCockpit(page).wait()
         assert amount_of(page, "cockpit_remaining_debt") == Decimal("8800.00")
-        assert "4.567,50" not in page.locator("body").inner_text()
+        assert "4.567,50" not in page_text(page)
     except BaseException as failure:
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
         raise
@@ -117,6 +118,14 @@ def test_late_statement_response_cannot_replace_next_resident(request, api, acto
         LoginPage(page, login_page.base_url).open().login("resident", email_a, site_a.manager_password)
         ResidentHome(page).wait()
         by_id(page, "resident_statement_entry").click()
+        receipt_a_row = by_id(page, f"statement_receipt_{receipt_a['receipt_number']}")
+        receipt_a_row.wait_for(timeout=15_000)
+        assert "510,00" in page_text(page)
+
+        page.keyboard.press("Escape")
+        by_id(page, "hero_balance_amount").wait_for(timeout=10_000)
+        page.evaluate("window.__sitePulseHoldResponse = true")
+        by_id(page, "resident_statement_entry").click()
         page.wait_for_function("window.__sitePulseHeldLoads?.length === 1", timeout=15_000)
 
         page.keyboard.press("Escape")
@@ -128,12 +137,12 @@ def test_late_statement_response_cannot_replace_next_resident(request, api, acto
         receipt_b_row = by_id(page, f"statement_receipt_{receipt_b['receipt_number']}")
         receipt_b_row.wait_for(timeout=15_000)
         assert "520,00" in page_text(page)
-        assert "510,00" not in page.locator("body").inner_text()
+        assert "510,00" not in page_text(page)
 
         page.evaluate("window.__sitePulseHeldLoads.shift()()")
         page.wait_for_load_state("networkidle")
         assert "520,00" in page_text(page)
-        assert "510,00" not in page.locator("body").inner_text()
+        assert "510,00" not in page_text(page)
         page.keyboard.press("Escape")
         by_id(page, "hero_balance_amount").wait_for(timeout=10_000)
         page.go_back()
@@ -142,14 +151,14 @@ def test_late_statement_response_cannot_replace_next_resident(request, api, acto
             "document.querySelector('[flt-semantics-identifier=\\\"login_tab_quickAll\\\"]')",
             timeout=10_000,
         )
-        assert "510,00" not in page.locator("body").inner_text()
+        assert "510,00" not in page_text(page)
         page.reload()
         page.wait_for_function(
             "document.querySelector('[flt-semantics-identifier=\\\"hero_balance_amount\\\"]') || "
             "document.querySelector('[flt-semantics-identifier=\\\"login_tab_quickAll\\\"]')",
             timeout=20_000,
         )
-        assert "510,00" not in page.locator("body").inner_text()
+        assert "510,00" not in page_text(page)
     except BaseException as failure:
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
         raise
