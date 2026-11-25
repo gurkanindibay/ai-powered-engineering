@@ -7,13 +7,15 @@ trigger: always_on
 
 Operationalizes AGENTS.md rule 15. Applies to the agent that developed a GitHub issue and opened its PR. It extends rules 11 and 12: the task is **not** finished when the PR is green. It is finished when the PR is merged and cleaned up (or closed, see Stop conditions).
 
+Reviews run in rounds: follow [pr-review-rounds.md](pr-review-rounds.md). Open the PR as a draft, send each finished round with `gh pr ready <pr>`, and convert it back with `gh pr ready <pr> --undo` before fixing notes. Pushes and comments alone do not wake the reviewer.
+
 Pair rule for reviewers: [pr-reviewer-polling.md](pr-reviewer-polling.md).
 
 ## The loop
 
 After opening and labeling the PR, watch it until it is merged or closed. Keep its claim labels in place while waiting. The harness starts the Python watcher as a background process and resumes the author on exit. GitHub I/O and idle waits happen in the process.
 
-1. **CI.** Run `gh pr checks <pr> --watch` as required by rule 12.
+1. **CI, then send.** Run `gh pr checks <pr> --watch` as required by rule 12. When every check passes on the draft, send it with `gh pr ready <pr>`.
 2. **Review activity.** Capture a baseline once, and inspect any review or comment already present in it before waiting. Keep the file outside the worktree.
 
    ```bash
@@ -28,8 +30,8 @@ After opening and labeling the PR, watch it until it is merged or closed. Keep i
 Then act on exactly one of these cases:
 
 1. **Nothing new** (no review or comment since your last push or last wake-up): do nothing and go back to watching.
-2. **Review notes to fix** (a `CHANGES_REQUESTED` review, or a comment or review body that lists problems): fix every note in your own worktree and branch, run the relevant local suite (rule 3), push, reply on the PR with what changed (one comment, citing the commit), wait for CI to go green (rule 12), then resume from the last handled baseline. The reviewer's watcher wakes it for the new head once CI finishes.
-   - If you disagree with a note, do not silently skip it: reply with the reasoning and let the reviewer decide.
+2. **Review notes to fix** (a `CHANGES_REQUESTED` review, or a comment or review body that lists problems): convert the PR to draft (`gh pr ready <pr> --undo`), fix every note in your own worktree and branch, run the relevant local suite (rule 3), push, reply on the PR with what changed (one comment, citing the commit), wait for CI to go green (rule 12), send the next round (`gh pr ready <pr>`), then resume from the last handled baseline. Your own draft changes may show up as one `draft` wake-up; advance the baseline past it.
+   - If you disagree with a note, do not silently skip it: reply with the reasoning, then send a round so the reviewer can decide.
    - If you delegate fixing review notes to a subagent, run it on Sonnet 5.5 (`claude-sonnet-5-5`; `model: "sonnet"`), set explicitly.
 3. **Approved with no notes**: go to Merge.
 4. **Approved with minor notes**: fix the notes, push, wait for CI to go green, then Merge. Do not wait for a second approval of the fix commits.

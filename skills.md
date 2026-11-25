@@ -420,19 +420,20 @@ python3 -m unittest discover -s tests/issue_claim
 ## 5c-3b. PR Review Queue (`pr_review_queue.py`)
 
 - **Executable Script:** [scripts/pr_review_queue.py](file:///scripts/pr_review_queue.py)
-- **Purpose:** Tells the reviewer agent which open PRs need a review now (AGENTS.md rule 16): not a draft, CI finished, and no final bot verdict on the current head. Reasons: `new`, `new_head` (commits after the last review), `unfinished` (last bot review is a `COMMENT`). PRs still running CI are listed as `waiting_ci`. The bot's review history is the state.
+- **Purpose:** Tells the reviewer agent which open PRs need a review now (AGENTS.md rule 16): not a draft, CI finished, and sent by the author since the bot's last review ([review rounds](file:///.agents/rules/pr-review-rounds.md)). Reasons: `new`, `new_head` (sent again with new commits), `requested` (sent again, same commit), `unfinished` (last bot review was dismissed). PRs still running CI are listed as `waiting_ci`. The bot's review history is the state.
 
 ```bash
 python3 scripts/pr_review_queue.py             # ready PRs
 python3 scripts/pr_review_queue.py --json      # ready / waiting_ci / skipped with reasons
 python3 scripts/pr_review_queue.py --all --skip-author my-login
+python3 scripts/pr_review_queue.py --any-change  # ignore review rounds: every new head
 python3 -m unittest discover -s tests/pr_review_queue
 ```
 
 ## 5c-3c. PR Review Watcher (`pr_review_watch.py`)
 
 - **Executable Script:** [scripts/pr_review_watch.py](file:///scripts/pr_review_watch.py)
-- **Purpose:** Blocks in Python until there is actionable GitHub PR activity (AGENTS.md rules 15–16). The reviewer receives ready PRs and new or edited follow-up comments on reviewed heads. The author receives new or edited reviews and comments plus changes to CI or PR state. The harness waits on the process before invoking either agent. GitHub webhook forwarding or read-only `gh` polling supplies the activity.
+- **Purpose:** Blocks in Python until there is actionable GitHub PR activity (AGENTS.md rules 15–16). The reviewer receives PRs sent for a review round (with `--any-change`, also every new head and new comment). The author receives new or edited reviews and comments plus changes to CI or PR state. The harness waits on the process before invoking either agent. GitHub webhook forwarding or read-only `gh` polling supplies the activity.
 - **State:** The reviewer keeps `--seen N@SHA[:CI]` and `--seen-activity CURSOR` arguments for handled items. The author keeps the last handled JSON snapshot and passes it to `--after`. Use `--repo owner/name` to scope either mode. Exit 0 returns a wake-up, exit 2 reports an error, and exit 3 ends a bounded wait.
 
 ```bash

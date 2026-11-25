@@ -131,6 +131,7 @@ class LoopGh:
         self.pr = {**pr(42), "state": "OPEN", "mergeable": "MERGEABLE", "reviewDecision": ""}
         self.bot_reviews = []
         self.activity_calls = []
+        self.submissions = []
         self.activity = {"reviews": [], "comments": [], "inline": []}
 
     def __call__(self, args):
@@ -141,6 +142,8 @@ class LoopGh:
         if args[:2] == ["repo", "view"]:
             return "owner/repo"
         path = args[1]
+        if path.endswith("/timeline"):
+            return "\n".join(self.submissions)
         if path.endswith("/reviews"):
             items = self.bot_reviews if "commit_id,submitted_at" in args[-1] else self.activity["reviews"]
         else:
@@ -163,7 +166,7 @@ def feedback(number, author, at, **fields):
 class DeveloperReviewerLoop(unittest.TestCase):
     def test_changes_requested_push_green_approval_and_close(self):
         gh = LoopGh()
-        check = w.QueueCheck(gh, "bot", set(), 100)
+        check = w.QueueCheck(gh, "bot", set(), 100, any_change=True)
 
         def snapshot():
             return w.activity_tool.author_snapshot(gh, "owner/repo", 42)
@@ -190,6 +193,21 @@ class DeveloperReviewerLoop(unittest.TestCase):
         gh.pr.update(state="MERGED")
         self.assertEqual(w.activity_tool.author_changes(snapshot(), change["snapshot"])["changed"], ["state"])
 
+    def test_rounds_wake_only_when_the_author_submits(self):
+        gh = LoopGh()
+        check = w.QueueCheck(gh, "bot", set(), 100)
+        self.assertEqual(check()[0]["reason"], "new")
+        gh.add_review("CHANGES_REQUESTED", "2026-11-22T10:00:00Z")
+        self.assertEqual(check(force=True), [])
+
+        gh.activity["comments"] = [feedback(7, "dev", "2026-11-22T10:01:00Z")]
+        gh.pr.update(headRefOid="bbb222ccc333ddd", updatedAt="2026-11-22T10:01:00Z")
+        self.assertEqual(check(force=True), [])
+        self.assertEqual(gh.activity_calls, [])  # comments are never read between rounds
+
+        gh.submissions = ["2026-11-22T10:05:00Z"]
+        self.assertEqual(check(force=True)[0]["reason"], "new_head")
+
     def test_same_head_feedback_is_independent_of_verdict_and_ci_suppression(self):
         gh = LoopGh()
         gh.add_review("APPROVED", "2026-11-22T10:00:00Z")
@@ -198,13 +216,13 @@ class DeveloperReviewerLoop(unittest.TestCase):
             feedback(2, "bot", "2026-11-22T10:01:00Z"),
             feedback(3, "dev", "2026-11-22T10:02:00Z"),
         ]
-        check = w.QueueCheck(gh, "bot", set(), 100)
+        check = w.QueueCheck(gh, "bot", set(), 100, any_change=True)
         found = w.watch(check, lambda _: self.fail("must wake"), w.parse_seen(["42@aaa111bbb222:passed"]),
                         900, None, ci_grace=300)
         self.assertEqual(found[0]["reason"], "feedback")
         self.assertEqual([item["id"] for item in found[0]["activity"]], [3])
         cursor = found[0]["activity"][0]["cursor"]
-        acknowledged = w.QueueCheck(gh, "bot", set(), 100, {cursor})
+        acknowledged = w.QueueCheck(gh, "bot", set(), 100, {cursor}, any_change=True)
         self.assertEqual(acknowledged(), [])
         gh.activity["comments"] = [feedback(7, "dev", "2026-11-22T10:03:00Z")]
         gh.pr["updatedAt"] = "2026-11-22T10:03:00Z"
@@ -257,7 +275,7 @@ class DeveloperReviewerLoop(unittest.TestCase):
     def test_cheap_ci_refresh_reuses_feedback_but_safety_refresh_reads_it_again(self):
         gh = LoopGh()
         gh.add_review("APPROVED", "2026-11-22T10:00:00Z")
-        check = w.QueueCheck(gh, "bot", set(), 100)
+        check = w.QueueCheck(gh, "bot", set(), 100, any_change=True)
         self.assertEqual(check(force=True), [])
         self.assertEqual(len(gh.activity_calls), 2)
         gh.pr["statusCheckRollup"] = RUNNING
