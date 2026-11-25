@@ -201,7 +201,7 @@
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "355edccefb277b5ec4abccc4aba42574f9ad51ca",
+  "commit": "f7d39605421634286867045341546963fc68e487",
   "epics": [
     {
       "automated": 10,
@@ -386,18 +386,18 @@
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-24T20:56:46Z",
+  "generated_at": "2026-11-25T00:24:37Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
     "passed": 308,
-    "seconds": 2254.6,
+    "seconds": 2095.8,
     "skipped": 1,
     "tests": 309
   },
   "recent_changes": [],
-  "run_id": "20261124T205645Z-355edcc",
+  "run_id": "20261125T002434Z-f7d3960",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
