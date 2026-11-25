@@ -201,7 +201,7 @@
       "stories_with_scenarios": 116
     },
     {
-      "automated": 453,
+      "automated": 456,
       "date": "2026-11-25",
       "epics": 13,
       "scenarios": 471,
@@ -209,7 +209,7 @@
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "c1633cb56718ed8715eddbff8cdab1bb278ec09a",
+  "commit": "c7e97ad5ccf2fda97a0329f776a7ffa03478c293",
   "epics": [
     {
       "automated": 10,
@@ -380,32 +380,32 @@
       "title": "Unified People and Unit Directory"
     },
     {
-      "automated": 141,
+      "automated": 144,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-13",
       "no_result": 19,
-      "passing": 122,
-      "planned": 12,
+      "passing": 125,
+      "planned": 9,
       "scenarios": 153,
       "stories": 16,
-      "stories_passing": 8,
+      "stories_passing": 9,
       "stories_with_scenarios": 16,
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-25T18:14:03Z",
+  "generated_at": "2026-11-25T19:15:16Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
-    "passed": 318,
-    "seconds": 1954.5,
+    "passed": 323,
+    "seconds": 2268.5,
     "skipped": 1,
-    "tests": 319
+    "tests": 324
   },
   "recent_changes": [],
-  "run_id": "20261125T181402Z-c1633cb",
+  "run_id": "20261125T191514Z-c7e97ad",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -2888,7 +2888,7 @@
     "SC-13-08-02": {
       "epic": "EPIC-13",
       "name": "SC-13-08-02",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-13-08"
     },
     "SC-13-08-03": {
@@ -2912,13 +2912,13 @@
     "SC-13-08-06": {
       "epic": "EPIC-13",
       "name": "Refreshing a payment after a lost response shows the committed result",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-13-08"
     },
     "SC-13-08-07": {
       "epic": "EPIC-13",
       "name": "A stale unit action refreshes after another manager updates occupancy",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-13-08"
     },
     "SC-13-09-01": {
@@ -3237,17 +3237,17 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 453,
+    "automated": 456,
     "epics": 13,
     "epics_failing": 0,
     "epics_verified": 1,
     "failing": 0,
     "no_result": 214,
-    "passing": 239,
-    "planned": 18,
+    "passing": 242,
+    "planned": 15,
     "scenarios": 471,
     "stories": 116,
-    "stories_passing": 41,
+    "stories_passing": 42,
     "stories_with_scenarios": 116
   }
 }
