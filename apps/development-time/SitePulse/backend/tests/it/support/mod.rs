@@ -57,3 +57,13 @@ pub async fn token(
         .expect("session stored")
         .access_token
 }
+
+/// Today in the site's time zone, the date every service works with. The runner's UTC
+/// calendar date is a day behind it between 21:00 and 24:00 UTC, so a date a test calls
+/// "today" would already be overdue and would accrue an unexpected delay penalty.
+pub fn site_today() -> chrono::NaiveDate {
+    sitepulse_backend::scheduler::site_local_date(
+        &sitepulse_backend::models::default_site_timezone(),
+        chrono::Utc::now(),
+    )
+}

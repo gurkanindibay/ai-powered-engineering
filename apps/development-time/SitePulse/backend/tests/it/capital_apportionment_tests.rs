@@ -2,7 +2,6 @@
 //! sum exactly to the budget, and the unit share summary reports exactly what
 //! accrual charges.
 
-use chrono::Utc;
 use rust_decimal::Decimal;
 use sitepulse_backend::models::*;
 use sitepulse_backend::services::CapitalProjectService;
@@ -60,7 +59,7 @@ fn project_request(
         description: None,
         total_budget: d(budget),
         allocation_basis: Some(basis),
-        target_start_date: Some(Utc::now().date_naive()),
+        target_start_date: Some(crate::support::site_today()),
         target_completion_date: None,
         contractor_name: None,
         contractor_tax_no: None,
@@ -69,7 +68,7 @@ fn project_request(
         installments: Some(vec![CreateInstallmentItem {
             installment_number: 1,
             total_installments: 1,
-            due_date: Utc::now().date_naive(),
+            due_date: crate::support::site_today(),
             installment_budget: d(budget),
             percentage: Some(d("100.00")),
         }]),

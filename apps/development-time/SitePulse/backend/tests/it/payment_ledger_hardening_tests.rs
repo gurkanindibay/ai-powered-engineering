@@ -35,10 +35,7 @@ fn d(s: &str) -> Decimal {
 
 /// Today in the site's time zone, the date every service works with.
 fn today() -> NaiveDate {
-    sitepulse_backend::scheduler::site_local_date(
-        &sitepulse_backend::models::default_site_timezone(),
-        Utc::now(),
-    )
+    crate::support::site_today()
 }
 
 fn liability(

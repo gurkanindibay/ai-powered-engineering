@@ -20,6 +20,11 @@ use sitepulse_backend::models::*;
 use sitepulse_backend::services::accounting_service::AccountingService;
 use sitepulse_backend::services::assembly_service::AssemblyService;
 use sitepulse_backend::services::autopay_service::AutopayService;
+
+/// Today in the site's time zone, the date every service works with.
+fn site_today() -> chrono::NaiveDate {
+    crate::support::site_today()
+}
 use sitepulse_backend::services::bank_matching_service::BankMatchingService;
 use sitepulse_backend::services::collections_service::CollectionsService;
 use sitepulse_backend::services::dunning_service::DunningService;
@@ -175,7 +180,7 @@ async fn every_spec009_record_round_trips_through_postgresql() {
         inner.users.push(u);
     }
     let store = FinanceStore::new(&state);
-    let today = Utc::now().date_naive();
+    let today = site_today();
     let due = store
         .insert_due(DuesLiability {
             id: String::new(),

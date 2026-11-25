@@ -5,22 +5,12 @@ use sitepulse_backend::models::*;
 use sitepulse_backend::services::*;
 use sitepulse_backend::state::AppState;
 
-/// Today in the site's time zone, the date every service works with. Using the runner's
-/// UTC calendar date instead makes due dates look one day overdue between 21:00 and
-/// 24:00 UTC, when Istanbul has already moved to the next day.
-fn site_today() -> NaiveDate {
-    sitepulse_backend::scheduler::site_local_date(
-        &sitepulse_backend::models::default_site_timezone(),
-        Utc::now(),
-    )
-}
-
 /// The seeded fixture due (`b-101`, "Eylül 2026") is dated 2026-09-15, so by the
 /// real clock it is overdue and the canonical payment path first collects its
 /// KMK 20 delay penalty (TBK 100, SPEC-005). Tests whose subject is not the
 /// penalty move the open seeded dues to a future due date to stay deterministic.
 async fn fixture_dues_not_yet_due(state: &AppState) {
-    let due = Utc::now().date_naive() + chrono::Days::new(15);
+    let due = crate::support::site_today() + chrono::Days::new(15);
     let mut inner = state.inner.write().await;
     for d in inner
         .dues
@@ -1531,7 +1521,7 @@ async fn when_querying_resident_dashboard_then_separates_capital_dues_by_project
         description: None,
         total_budget: Decimal::from_str_exact("1400.00").unwrap(),
         allocation_basis: AllocationBasis::ByLandShare,
-        target_start_date: chrono::Utc::now().date_naive(),
+        target_start_date: crate::support::site_today(),
         target_completion_date: None,
         contractor_name: None,
         contractor_tax_no: None,
@@ -1558,7 +1548,7 @@ async fn when_querying_resident_dashboard_then_separates_capital_dues_by_project
         principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
         delay_penalty: Decimal::ZERO,
         total_amount: Decimal::from_str_exact("1400.00").unwrap(),
-        due_date: chrono::Utc::now().date_naive() + chrono::Days::new(10),
+        due_date: crate::support::site_today() + chrono::Days::new(10),
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
@@ -1894,7 +1884,7 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
     );
 
     // 2. New monthly dues period arrives: "Ekim 2026" (₺1400.00)
-    let not_yet_due = Utc::now().date_naive() + chrono::Days::new(30);
+    let not_yet_due = crate::support::site_today() + chrono::Days::new(30);
     let accrued_label =
         sitepulse_backend::domain::billing_period::BillingPeriod::of_date(not_yet_due).label();
     let accrue_req = AccrueDuesPeriodRequest {
@@ -3981,7 +3971,7 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
     let service = PaymentTrackingService::new(state.clone());
     // The services decide "today" in the site's time zone; a UTC calendar date would be a
     // day behind it between 21:00 and 24:00 UTC and the due below would already be overdue.
-    let today = site_today();
+    let today = crate::support::site_today();
 
     // Setup: Unit d-14 has ₺3000 advance balance and ₺1400 unpaid capital dues
     {
@@ -4066,7 +4056,7 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
             principal_amount: Decimal::from_str_exact("2800.00").unwrap(),
             delay_penalty: Decimal::ZERO,
             total_amount: Decimal::from_str_exact("2800.00").unwrap(),
-            due_date: Utc::now().date_naive(),
+            due_date: crate::support::site_today(),
             status: DebtStatus::Pending,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
@@ -4087,7 +4077,7 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
         new_owner_national_id: Some("12345678901".to_string()),
         new_owner_phone: Some("0535 999 88 77".to_string()),
         new_owner_email: Some("mehmet.yeni@begonya.com".to_string()),
-        transfer_date: Some(Utc::now().date_naive()),
+        transfer_date: Some(crate::support::site_today()),
         notes: Some("Tapu devri noter onaylı satış belgesi".to_string()),
         new_owner_person_id: None,
         new_owner_moves_in: false,
@@ -4177,7 +4167,7 @@ async fn when_creating_capital_project_with_installments_then_calculates_plan_co
         description: Some("Dış cephe ısı yalıtımı ve çatı su izolasyonu".to_string()),
         total_budget: Decimal::from_str_exact("300000.00").unwrap(),
         allocation_basis: Some(AllocationBasis::ByLandShare),
-        target_start_date: Some(Utc::now().date_naive()),
+        target_start_date: Some(crate::support::site_today()),
         target_completion_date: None,
         contractor_name: Some("İzotürk Yapı Ltd.".to_string()),
         contractor_tax_no: Some("1234567890".to_string()),
@@ -4187,21 +4177,21 @@ async fn when_creating_capital_project_with_installments_then_calculates_plan_co
             CreateInstallmentItem {
                 installment_number: 1,
                 total_installments: 3,
-                due_date: Utc::now().date_naive(),
+                due_date: crate::support::site_today(),
                 installment_budget: Decimal::from_str_exact("100000.00").unwrap(),
                 percentage: Some(Decimal::from_str_exact("33.33").unwrap()),
             },
             CreateInstallmentItem {
                 installment_number: 2,
                 total_installments: 3,
-                due_date: Utc::now().date_naive() + chrono::Duration::days(30),
+                due_date: crate::support::site_today() + chrono::Duration::days(30),
                 installment_budget: Decimal::from_str_exact("100000.00").unwrap(),
                 percentage: Some(Decimal::from_str_exact("33.33").unwrap()),
             },
             CreateInstallmentItem {
                 installment_number: 3,
                 total_installments: 3,
-                due_date: Utc::now().date_naive() + chrono::Duration::days(60),
+                due_date: crate::support::site_today() + chrono::Duration::days(60),
                 installment_budget: Decimal::from_str_exact("100000.00").unwrap(),
                 percentage: Some(Decimal::from_str_exact("33.34").unwrap()),
             },
@@ -4237,7 +4227,7 @@ async fn when_accruing_capital_installment_then_reconciles_penny_drift_exactly()
         description: None,
         total_budget: Decimal::from_str_exact("10000.00").unwrap(),
         allocation_basis: Some(AllocationBasis::ByLandShare),
-        target_start_date: Some(Utc::now().date_naive()),
+        target_start_date: Some(crate::support::site_today()),
         target_completion_date: None,
         contractor_name: None,
         contractor_tax_no: None,
@@ -4246,7 +4236,7 @@ async fn when_accruing_capital_installment_then_reconciles_penny_drift_exactly()
         installments: Some(vec![CreateInstallmentItem {
             installment_number: 1,
             total_installments: 1,
-            due_date: Utc::now().date_naive(),
+            due_date: crate::support::site_today(),
             installment_budget: Decimal::from_str_exact("10000.00").unwrap(),
             percentage: Some(Decimal::from_str_exact("100.00").unwrap()),
         }]),
@@ -4285,7 +4275,7 @@ async fn when_milestone_disbursement_recorded_then_keeps_invoice_and_accumulates
             description: None,
             total_budget: budget,
             allocation_basis: Some(AllocationBasis::ByLandShare),
-            target_start_date: Some(Utc::now().date_naive()),
+            target_start_date: Some(crate::support::site_today()),
             target_completion_date: None,
             contractor_name: Some("Otis Asansör San. Tic.".to_string()),
             contractor_tax_no: Some("6490012345".to_string()),
@@ -4294,7 +4284,7 @@ async fn when_milestone_disbursement_recorded_then_keeps_invoice_and_accumulates
             installments: Some(vec![CreateInstallmentItem {
                 installment_number: 1,
                 total_installments: 1,
-                due_date: Utc::now().date_naive(),
+                due_date: crate::support::site_today(),
                 installment_budget: budget,
                 percentage: Some(Decimal::from_str_exact("100.00").unwrap()),
             }]),
@@ -4314,7 +4304,7 @@ async fn when_milestone_disbursement_recorded_then_keeps_invoice_and_accumulates
         milestone_name: milestone.to_string(),
         invoice_number: Some(invoice.to_string()),
         amount: Decimal::from_str_exact(amount).unwrap(),
-        disbursement_date: Some(Utc::now().date_naive()),
+        disbursement_date: Some(crate::support::site_today()),
         recipient_name: "Otis Asansör San. Tic.".to_string(),
         recipient_iban: "TR330006100519786457841326".to_string(),
         payment_reference: None,
@@ -4369,7 +4359,7 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
         description: None,
         total_budget: Decimal::from_str_exact("80000.00").unwrap(),
         allocation_basis: Some(AllocationBasis::ByLandShare),
-        target_start_date: Some(Utc::now().date_naive()),
+        target_start_date: Some(crate::support::site_today()),
         target_completion_date: None,
         contractor_name: Some("Termik Mühendislik".to_string()),
         contractor_tax_no: Some("9876543210".to_string()),
@@ -4378,7 +4368,7 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
         installments: Some(vec![CreateInstallmentItem {
             installment_number: 1,
             total_installments: 1,
-            due_date: Utc::now().date_naive(),
+            due_date: crate::support::site_today(),
             installment_budget: Decimal::from_str_exact("80000.00").unwrap(),
             percentage: Some(Decimal::from_str_exact("100.00").unwrap()),
         }]),
@@ -4390,7 +4380,7 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
         milestone_name: "Unfunded payment".to_string(),
         invoice_number: None,
         amount: Decimal::from_str_exact("120000.00").unwrap(),
-        disbursement_date: Some(Utc::now().date_naive()),
+        disbursement_date: Some(crate::support::site_today()),
         recipient_name: "Termik Mühendislik".to_string(),
         recipient_iban: "TR330006200000000098765432".to_string(),
         payment_reference: None,
@@ -4419,7 +4409,7 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
         milestone_name: "1. Hakediş: Eski Kazan Sökümü".to_string(),
         invoice_number: Some("FTR-2026-0042".to_string()),
         amount: Decimal::from_str_exact("25000.00").unwrap(),
-        disbursement_date: Some(Utc::now().date_naive()),
+        disbursement_date: Some(crate::support::site_today()),
         recipient_name: "Termik Mühendislik".to_string(),
         recipient_iban: "TR330006200000000098765432".to_string(),
         payment_reference: Some("PROJ-KAZAN-HK1".to_string()),

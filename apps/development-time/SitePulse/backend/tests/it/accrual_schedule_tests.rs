@@ -323,7 +323,7 @@ fn when_a_backdated_payment_is_inside_the_grace_period_then_the_reevaluated_fee_
 async fn when_a_backdated_payment_settles_a_charged_liability_inside_grace_then_the_fee_is_reversed(
 ) {
     let state = AppState::new();
-    let due_date = Utc::now().date_naive() - chrono::Days::new(40);
+    let due_date = crate::support::site_today() - chrono::Days::new(40);
     {
         let mut inner = state.inner.write().await;
         inner.dues.clear();

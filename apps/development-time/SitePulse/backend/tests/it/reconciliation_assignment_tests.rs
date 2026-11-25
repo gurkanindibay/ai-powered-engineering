@@ -25,7 +25,7 @@ fn due(id: &str, debtor: DebtorType, amount: &str) -> DuesLiability {
         principal_amount: d(amount),
         delay_penalty: Decimal::ZERO,
         total_amount: d(amount),
-        due_date: chrono::Utc::now().date_naive() + chrono::Days::new(15),
+        due_date: crate::support::site_today() + chrono::Days::new(15),
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,

@@ -36,7 +36,7 @@ fn d(s: &str) -> Decimal {
 
 /// Today in the site's time zone, the date every SPEC-009 service works with.
 fn today() -> NaiveDate {
-    sitepulse_backend::scheduler::site_local_date("Europe/Istanbul", Utc::now())
+    crate::support::site_today()
 }
 
 fn days_ago(n: u64) -> NaiveDate {

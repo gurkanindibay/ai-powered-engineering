@@ -17,6 +17,11 @@ use sitepulse_backend::{
     state::AppState,
 };
 
+/// Today in the site's time zone, the date every service works with.
+fn site_today() -> chrono::NaiveDate {
+    crate::support::site_today()
+}
+
 struct TestDb {
     name: String,
     admin: Pool,
@@ -284,7 +289,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
             .cloned()
             .expect("frozen liability in read model");
         sitepulse_backend::services::DuesCalculationService::new()
-            .calculate_delay_penalty(liability, chrono::Utc::now().date_naive())
+            .calculate_delay_penalty(liability, site_today())
             .total_amount
     };
     PaymentTrackingService::new(state.clone())
@@ -393,7 +398,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         &inner,
         &unit_projection,
         Some("TENANT"),
-        chrono::Utc::now().date_naive(),
+        site_today(),
     );
     assert_eq!(statement.debtors[0].advance_balance, Decimal::new(6000, 2));
     drop(inner);
