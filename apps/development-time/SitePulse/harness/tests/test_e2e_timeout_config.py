@@ -31,12 +31,10 @@ class E2ETimeoutConfigTest(unittest.TestCase):
         # The first test's setup builds and starts the whole stack, which can exceed the limit.
         self.assertEqual(self.section["timeout_func_only"].strip().lower(), "true")
 
-    def test_plugin_is_pinned_with_the_other_test_dependencies(self) -> None:
-        lines = (E2E / "requirements.txt").read_text().splitlines()
-        self.assertTrue(
-            any(line.strip().startswith("pytest-timeout==") for line in lines),
-            "pytest-timeout must be pinned in e2e/requirements.txt",
-        )
+    def test_missing_timeout_plugin_fails_at_startup(self) -> None:
+        # Without the plugin, pytest only warns about the unknown `timeout` option and runs unlimited.
+        required = self.section["required_plugins"].strip()
+        self.assertRegex(required, r"^pytest-timeout>=\d+(\.\d+)*$")
 
 
 if __name__ == "__main__":
