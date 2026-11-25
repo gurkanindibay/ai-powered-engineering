@@ -254,8 +254,9 @@ def stop_database_dependencies() -> None:
 
 def call_clock_api(
     api_url: str,
-    payload: dict[str, Any],
+    payload: dict[str, Any] | None = None,
     timeout: float = 10.0,
+    method: str | None = None,
 ) -> dict[str, Any]:
     """Invokes the backend deterministic E2E clock endpoint with automatic fallback.
 
@@ -263,15 +264,17 @@ def call_clock_api(
     """
     base = api_url.rstrip("/")
     endpoints = [f"{base}/api/e2e/clock", f"{base}/__e2e/clock"]
-    data = json.dumps(payload).encode("utf-8")
+    if method is None:
+        method = "GET" if payload is None else "POST"
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
     last_err: Exception | None = None
 
     for url in endpoints:
         req = urllib.request.Request(
             url,
             data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+            headers={"Content-Type": "application/json"} if data else {},
+            method=method,
         )
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -439,6 +442,8 @@ def run_up(
                 str(ui_port),
                 "--api-url",
                 f"http://localhost:{api_port}",
+                "--web-url",
+                f"http://localhost:{web_port}",
             ]
             if not as_json:
                 print(f"Launching Workbench UI on {ui_url} ...")
@@ -717,8 +722,10 @@ def run_clock(
         payload = {"action": "tick"}
     elif action in ("reset", "clear"):
         payload = {"action": "clear"}
+    elif action in ("get", "status"):
+        payload = {"action": "get"}
     else:
-        raise ValueError(f"Unknown clock action: {action!r}. Supported: set, advance, tick, reset, clear.")
+        raise ValueError(f"Unknown clock action: {action!r}. Supported: set, advance, tick, reset, clear, status, get.")
 
     resp = call_clock_api(api_url, payload)
 
@@ -737,6 +744,8 @@ def run_clock(
         elif resp_action == "ticked":
             report = resp.get("report", {})
             print(f"Clock ticked at {resp.get('date')}. Scheduler report: {report}")
+        elif resp_action == "current":
+            print(f"Current simulated clock: {resp.get('date')} {resp.get('time', '')} ({resp.get('timezone', 'Europe/Istanbul')}).")
         else:
             print(f"Clock action '{action}' executed successfully: {resp}")
 
@@ -860,7 +869,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser_clock = subparsers.add_parser("clock", help="Deterministic E2E clock control")
     parser_clock.add_argument(
         "action",
-        choices=["set", "advance", "tick", "reset", "clear"],
+        choices=["set", "advance", "tick", "reset", "clear", "status", "get"],
         help="Clock action to execute",
     )
     parser_clock.add_argument("value", nargs="?", default=None, help="Target date or RFC3339 timestamp")

@@ -17,6 +17,7 @@ class AppRoutes {
   const AppRoutes._();
 
   static const login = '/login';
+  static const quickLogin = '/quick-login';
 
   /// The only page open to a user who must change a temporary password (STORY-06-06).
   static const changePassword = '/change-password';

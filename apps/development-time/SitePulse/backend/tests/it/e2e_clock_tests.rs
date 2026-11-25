@@ -110,3 +110,55 @@ async fn e2e_scheduler_tick_fails_when_the_clock_is_disabled() {
         Some(sitepulse_backend::e2e_clock::E2eClockError::Disabled)
     );
 }
+
+#[test]
+fn the_clock_endpoint_is_readable_and_the_reload_endpoint_is_not() {
+    use sitepulse_backend::app::e2e_route_policy;
+
+    for path in ["/__e2e/clock", "/api/e2e/clock"] {
+        assert!(
+            e2e_route_policy("GET", path).is_some(),
+            "{path} must allow GET"
+        );
+        assert!(
+            e2e_route_policy("POST", path).is_some(),
+            "{path} must allow POST"
+        );
+        assert!(
+            e2e_route_policy("DELETE", path).is_none(),
+            "{path} must reject DELETE"
+        );
+    }
+    for path in ["/__e2e/reload-state", "/api/e2e/reload-state"] {
+        assert!(
+            e2e_route_policy("POST", path).is_some(),
+            "{path} must allow POST"
+        );
+        assert!(
+            e2e_route_policy("GET", path).is_none(),
+            "{path} must reject GET"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_clock_handler_reports_the_simulated_date() {
+    use axum::{extract::State, response::IntoResponse};
+    use sitepulse_backend::e2e_clock::get_clock;
+
+    let state = AppState::with_e2e_test_clock(date(11, 19));
+    let response = get_clock(State(state)).await.into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+    let bytes = match axum::body::to_bytes(response.into_body(), 64 * 1024).await {
+        Ok(bytes) => bytes,
+        Err(error) => panic!("clock response body could not be read: {error}"),
+    };
+    let payload: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(payload) => payload,
+        Err(error) => panic!("clock response was not JSON: {error}"),
+    };
+    assert_eq!(payload["action"], "current");
+    assert_eq!(payload["date"], "2026-11-19");
+    assert_eq!(payload["timezone"], "Europe/Istanbul");
+}

@@ -509,7 +509,7 @@ extension DashboardControllerAuth on DashboardController {
 
     final role = targetRole ?? (trimmedEmail.contains('admin')
         ? UserRole.saasAdmin
-        : (trimmedEmail.contains('yonetim') || trimmedEmail.contains('manager') || trimmedEmail.contains('mehmet'))
+        : (trimmedEmail.contains('yonetim') || trimmedEmail.contains('yonetici') || trimmedEmail.contains('manager') || trimmedEmail.contains('mehmet'))
             ? UserRole.siteManager
             : (trimmedEmail.contains('sakin') || trimmedEmail.contains('zeynep'))
                 ? UserRole.homeResident
