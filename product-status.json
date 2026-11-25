@@ -201,7 +201,7 @@
       "stories_with_scenarios": 116
     },
     {
-      "automated": 447,
+      "automated": 448,
       "date": "2026-11-25",
       "epics": 13,
       "scenarios": 471,
@@ -209,7 +209,7 @@
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "40b99ee8f6d211bd4947c2131d73b644fdd4b3ae",
+  "commit": "cf46fcb415567118ddfc2c9612aeef80c4527a83",
   "epics": [
     {
       "automated": 10,
@@ -380,32 +380,32 @@
       "title": "Unified People and Unit Directory"
     },
     {
-      "automated": 135,
+      "automated": 136,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-13",
       "no_result": 19,
-      "passing": 116,
-      "planned": 18,
+      "passing": 117,
+      "planned": 17,
       "scenarios": 153,
       "stories": 16,
-      "stories_passing": 5,
+      "stories_passing": 6,
       "stories_with_scenarios": 16,
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-25T14:05:12Z",
+  "generated_at": "2026-11-25T14:51:01Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
-    "passed": 313,
-    "seconds": 1993.4,
+    "passed": 314,
+    "seconds": 1988.0,
     "skipped": 1,
-    "tests": 314
+    "tests": 315
   },
   "recent_changes": [],
-  "run_id": "20261125T140510Z-40b99ee",
+  "run_id": "20261125T145059Z-cf46fcb",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -3050,7 +3050,7 @@
     "SC-13-11-05": {
       "epic": "EPIC-13",
       "name": "The periods screen shows each status with only its allowed actions",
-      "state": "planned",
+      "state": "passing",
       "story": "STORY-13-11"
     },
     "SC-13-11-06": {
@@ -3237,17 +3237,17 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 447,
+    "automated": 448,
     "epics": 13,
     "epics_failing": 0,
     "epics_verified": 1,
     "failing": 0,
     "no_result": 214,
-    "passing": 233,
-    "planned": 24,
+    "passing": 234,
+    "planned": 23,
     "scenarios": 471,
     "stories": 116,
-    "stories_passing": 38,
+    "stories_passing": 39,
     "stories_with_scenarios": 116
   }
 }
