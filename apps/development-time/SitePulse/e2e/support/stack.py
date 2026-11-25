@@ -3,7 +3,11 @@
 Never touches the developer stack (backend :8080, database `sitepulse`):
 - the database is `sitepulse_e2e_<pid>`, created and dropped here;
 - the backend listens on E2E_API_PORT (8180) and gets test-only secrets;
-- the web bundle is served on E2E_WEB_PORT (9190).
+- the web bundle is served on E2E_WEB_PORT (9190);
+- an in-process fake SMS gateway listens on E2E_SMS_PORT (9191). Every test runs
+  with `SITEPULSE_NOTIFICATION_SENDER=WEBHOOK` and a test-only bearer token, so
+  the backend's notifications are captured here instead of reaching a provider;
+  `stack.sms.received()` returns the payloads.
 
 CI provides both the backend and the web bundle in SITEPULSE_E2E_PREBUILT_DIR.
 Local runs build the backend with Cargo and the web bundle in flutter/build/web-e2e.

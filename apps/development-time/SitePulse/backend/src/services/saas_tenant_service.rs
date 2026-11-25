@@ -187,7 +187,7 @@ impl SaasTenantService {
             &admin_user.full_name,
             &admin_user.email,
             &temp_pass,
-            &public_app_url(),
+            &self.state.settings.app_link("login"),
         );
         if let Err(error) = crate::services::notification_service::send_credential_sms(
             &self.state.settings,
@@ -829,23 +829,15 @@ fn credential_alert_body(
     full_name: &str,
     email: &str,
     temporary_password: &str,
-    app_url: &str,
+    login_link: &str,
 ) -> String {
     format!(
         "Sayın {full_name}, SitePulse site yönetici hesabınız hazır.\n\
-         Giriş: {app_url}/#/login\n\
+         Giriş: {login_link}\n\
          E-posta: {email}\n\
          Geçici şifre: {temporary_password}\n\
          İlk girişte şifrenizi değiştirmeniz istenecek."
     )
-}
-
-fn public_app_url() -> String {
-    std::env::var("SITEPULSE_PUBLIC_APP_URL")
-        .ok()
-        .map(|url| url.trim().trim_end_matches('/').to_string())
-        .filter(|url| !url.is_empty())
-        .unwrap_or_else(|| "http://localhost:8080".to_string())
 }
 
 #[cfg(test)]
@@ -858,7 +850,7 @@ mod tests {
             "Murat Yıldırım",
             "murat@e2e.test",
             "SP-TEMP-1234",
-            "https://sitepulse.test",
+            "https://sitepulse.test/#/login",
         );
         assert!(body.contains("Murat Yıldırım"));
         assert!(body.contains("https://sitepulse.test/#/login"));

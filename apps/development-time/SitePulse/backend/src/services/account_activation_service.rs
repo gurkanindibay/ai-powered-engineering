@@ -190,12 +190,6 @@ pub fn issue_in_memory(
     IssuedToken { token, expires_at }
 }
 
-fn public_link(path: &str, token: &str) -> String {
-    let base = std::env::var("SITEPULSE_PUBLIC_APP_URL")
-        .unwrap_or_else(|_| "http://localhost:8080".to_string());
-    format!("{}/#/{}?token={}", base.trim_end_matches('/'), path, token)
-}
-
 /// A login account a token is issued for.
 struct ActivationTarget {
     user_id: String,
@@ -243,7 +237,7 @@ impl AccountActivationService {
         let body = format!(
             "{}\n{}\n\nBağlantı {} tarihine kadar geçerlidir ve bir kez kullanılabilir.",
             intro,
-            public_link(path, &issued.token),
+            self.state.settings.app_link_with_token(path, &issued.token),
             issued.expires_at.format("%d.%m.%Y %H:%M UTC")
         );
         let recipient = Recipient {
@@ -603,7 +597,8 @@ mod tests {
 
     #[test]
     fn link_carries_the_token_under_the_public_url() {
-        let link = public_link("activate", "abc");
+        let settings = crate::state::AppSettings::from_env();
+        let link = settings.app_link_with_token("activate", "abc");
         assert!(link.ends_with("/#/activate?token=abc"));
     }
 
