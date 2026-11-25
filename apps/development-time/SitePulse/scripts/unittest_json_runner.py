@@ -90,7 +90,9 @@ def main(argv: list[str] | None = None) -> int:
 
     start = Path(args.start_directory).resolve()
     top = Path(args.top_level_directory).resolve() if args.top_level_directory else None
-    suite = unittest.defaultTestLoader.discover(str(start), pattern=args.pattern, top_level_dir=str(top) if top else None)
+    # A fresh loader: before Python 3.12.4 a reused one keeps the first run's top-level
+    # directory, so discovery elsewhere in the same process fails.
+    suite = unittest.TestLoader().discover(str(start), pattern=args.pattern, top_level_dir=str(top) if top else None)
     result = JsonRunner(verbosity=2).run(suite)
     output = args.json_output
     artifact_dir = os.environ.get("SITEPULSE_GATE_ARTIFACT_DIR")
