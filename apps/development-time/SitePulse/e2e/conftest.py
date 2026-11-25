@@ -127,7 +127,6 @@ def page_guard(request, page):
     client_errors: list[str] = []
     gate_errors: list[str] = []
     page_errors: list[str] = []
-    page.add_init_script(CAPTURE_SCRIPT)
     page.on("pageerror", lambda exc: page_errors.append(describe_page_error(exc)))
     # A crashed renderer makes every later call hang until its timeout; say so instead.
     page.on("crash", lambda _page: errors.append("page crashed: the browser's renderer process died"))
