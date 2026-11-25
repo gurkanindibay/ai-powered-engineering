@@ -97,7 +97,7 @@ pub struct ImportRow {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ImportReport {
     pub dry_run: bool,
-    /// At least one valid row was registered by this request.
+    /// At least one row was successfully registered by this request.
     pub committed: bool,
     pub total: usize,
     pub invalid: usize,
@@ -549,7 +549,7 @@ impl PersonImportService {
         let invalid = rows.iter().filter(|r| !r.errors.is_empty()).count();
         Ok(ImportReport {
             dry_run,
-            committed: commit,
+            committed: created > 0,
             total: rows.len(),
             invalid,
             created,

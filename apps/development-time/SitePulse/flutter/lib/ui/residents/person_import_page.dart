@@ -102,14 +102,15 @@ class _PersonImportPageState extends State<PersonImportPage> {
         _report = report;
         _checkedText = text;
       });
-      if (!dryRun && report.committed) {
+      if (!dryRun) {
+        final complete = report.invalid == 0;
         messenger.showSnackBar(spSnackBar(
-          kind: report.invalid == 0 ? ToastKind.success : ToastKind.warning,
-          content: Text(report.invalid == 0
+          kind: complete ? ToastKind.success : ToastKind.warning,
+          content: Text(complete
               ? '${report.created} kayıt eklendi; etkinleştirme bağlantıları gönderildi.'
               : '${report.created} kayıt eklendi; ${report.invalid} satır hatalı.'),
         ));
-        if (report.invalid == 0) navigator.pop(true);
+        if (report.committed && complete) navigator.pop(true);
       }
     } on ApiException catch (e) {
       messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: Text(e.message)));
