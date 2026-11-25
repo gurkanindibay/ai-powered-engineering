@@ -920,7 +920,7 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     assert_write_is_site_scoped(
         api, "/api/v1/assembly/agenda-items/" + agenda_item_id + "/votes",
         second, first,
-        {"votes": [{"unit_id": str(ids["unit"]), "vote": "FOR"}]}, success={200},
+        {"votes": [{"unit_id": str(ids["unit"]), "vote": "YES"}]}, success={200},
     )
     assert_write_is_site_scoped(
         api, "/api/v1/assembly/agenda-items/" + agenda_item_id + "/close",
