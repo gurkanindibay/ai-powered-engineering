@@ -148,7 +148,9 @@ Every test starts from a named, versioned state, not from data it invents. The j
 
 ## Execution lanes and CI
 
-CI already went from about 27 minutes in one sequential job to 11.5 minutes (run 129). That came from parallel gate groups, cache-on-failure, lints first, 8 duration-balanced E2E shards and dropping the duplicate wrapper suites (time analysis steps A–E). Every PR still runs the full browser suite, and every test still signs in through the UI. The lanes below decide what runs when. The table after them tracks the speed-ups, with time-analysis step letters where one exists.
+CI already went from about 27 minutes in one sequential job to 11.5 minutes (run 129). That came from parallel gate groups, cache-on-failure, lints first, 8 duration-balanced E2E shards and dropping the duplicate wrapper suites (time analysis steps A–E). PRs now run `smoke` and `core` plus any epic selected by `impact-map.json`; shared-code changes still run the full browser suite. Docs-only PRs skip the browser build and shards. Master runs the full suite, and nightly runs `edge`. The lanes below decide what runs when. The table after them tracks the speed-ups, with time-analysis step letters where one exists.
+
+Targeted PR lanes trade early cross-epic coverage for speed: a regression outside the selected epic tests may only be caught by the full E2E suite on master. When a master E2E run fails, the author of the merged change owns triage and a fix or revert; maintainers coordinate when several changes may be involved.
 
 ### Lanes: what runs when
 
@@ -157,7 +159,7 @@ CI already went from about 27 minutes in one sequential job to 11.5 minutes (run
 | Local pre-push | Developer | `run_tests.py --changed --skip-gui`: lints, affected Rust, Flutter by tag | No | Under 3 min |
 | PR | Every push to a PR | All lints; Rust unit, integration and DB; Flutter; money fixtures; E2E `smoke or core` plus impact-map picks; changed-lines coverage; mutation in-diff (report-only first) | Yes, except mutation | Critical path 30% below today's measured baseline |
 | Merge to master | Push to master | Everything in PR plus the full E2E suite; records evidence and updates traceability | Reverts on red | As today |
-| Nightly | 02:00 UTC | Full mutation catalogue; E2E `edge`; mobile viewport; calendar matrix; volume and tenancy fuzz; flake report | Opens issues | Under 45 min |
+| Nightly | 03:30 UTC | Full mutation catalogue; E2E `edge`; mobile viewport; calendar matrix; volume and tenancy fuzz; flake report | Opens issues | Under 45 min |
 | Release candidate | Tag | Full suite on a clean environment, cross-browser smoke, accessibility smoke | Yes | n/a |
 
 | # | Area | Today | Change | Expected effect |
@@ -165,9 +167,9 @@ CI already went from about 27 minutes in one sequential job to 11.5 minutes (run
 | 1 | E2E setup | Each of the 8 shards installed Rust and Flutter, compiled the backend with `--features e2e`, and restored or built the web bundle | Implemented in #375. One `build-e2e` job builds the backend binary and `flutter/build/web-e2e` once and uploads them. Shards download and run both artifacts. | Removes 7 redundant compiles per PR |
 | 2 | E2E per-test cost | Median 6.9 s per test, 20–30 s per journey; every test signs in through the UI | Playwright `storage_state` per role, created once per worker. Seed data through the API or SQL fixtures (F0–F6), not through screens. Keep one UI sign-in test per role | Typically 30–50% off GUI test time |
 | 3 | Fixed waits | 41 `wait_for_timeout` calls, about 48 s per full pass | State-based waits (`expect`, `wait_for_response`) | Saves about 48 s per pass and removes timing flakes |
-| 4 | Shard balance | 1 min 52 s spread between shards. Balancing uses local recorded runs, which hold only 115 of 250 E2E tests | Feed CI JUnit durations from every shard into the `e2e_shard.py` duration store | Shards converge on the mean, about 1 min off the critical path |
-| 5 | Risk-based lanes | `smoke`/`core`/`edge` markers are declared as P0/P1/P2 but CI runs everything on every PR | **PR**: lint, unit, integration, DB, Flutter, E2E `smoke or core` plus tests the impact map selects. **Merge to master**: the full suite. **Nightly**: `edge`, the full mutation catalogue, mobile viewport, flake report | PR E2E shrinks to 72% of tests (164 of 229 are smoke or core; 14 carry no priority marker yet) without losing merge-time coverage |
-| 6 | Change-based selection | `run_tests.py --changed` and `.specify/features/impact-map.json` exist but CI doesn't use them | Use `feature_traceability.py affected` to add epic-scoped E2E tests on PRs; `paths-filter` skips E2E for docs-only changes | Docs and harness-only PRs finish in lint time |
+| 4 | Shard balance | 1 min 52 s spread between shards. Balancing used local recorded runs, which hold only 115 of 250 E2E tests | Master CI ingests JUnit durations from every shard into a cache-backed `e2e_shard.py` store; PR shards restore the latest master store | Shard assignments use recent CI timings and converge as runs accumulate |
+| 5 | Risk-based lanes | `smoke`/`core`/`edge` markers are declared as P0/P1/P2 but CI ran everything on every PR | **PR**: lint, unit, integration, DB, Flutter, E2E `smoke or core` plus tests from affected epics. **Merge to master**: the full suite. **Nightly**: `edge`, the full mutation catalogue, mobile viewport, flake report | Typical PR E2E starts from 164 of 229 smoke/core tests; impacted epics add any required tests |
+| 6 | Change-based selection | `run_tests.py --changed` and `.specify/features/impact-map.json` existed but CI did not use them | `ci_e2e_plan.py` runs `feature_traceability.py affected` and skips E2E for PRs with no behaviour paths; shared code changes retain the full suite | Docs-only PRs skip E2E build and shards |
 | 7 | Rust test runner | `cargo test` over 41 separate integration-test binaries | `cargo nextest` (parallel per test, JUnit, retries reported as flaky) and merge `tests/*.rs` into one `tests/it/` crate with modules | Fewer link steps; nextest is commonly 2–3× faster on many-binary suites |
 | 8 | PostgreSQL tests | Each test creates a throwaway database and migrates it; 4 threads | Migrate once into a template, then `CREATE DATABASE … TEMPLATE sitepulse_tpl` per test; raise threads to the runner's cores | Per-test setup goes from a full migration run to a file copy |
 | 9 | Mutation on PRs | Nightly only, about 24 min; a survivor stops the aggregator before it publishes | PR job: `cargo-mutants --in-diff` on changed `domain/` and `services/` files, 10-minute cap, non-blocking at first. Fix the aggregator to publish before failing | Mutation signal while the author is still on the change |
@@ -273,7 +275,7 @@ There are no active xfail markers. `e2e/pytest.ini` keeps `xfail_strict = true` 
 | Gherkin `@pending` | `.specify/features` | 30 scenarios | Deselected | See mis-coverage |
 | Gherkin `@linked` | `.specify/features` | 425 scenarios | Deselected, verified through `covers` | Check what the link points at |
 | Gherkin `@smoke` / `@core` / `@edge` | features | 38 / 266 / 101 tag uses | Priority only; no CI lane selects on them | Use them for PR vs nightly lanes |
-| pytest `smoke` / `core` / `edge` | e2e | 31 / 141 / 51 | Declared "P0 every change, P1 each merge, P2 nightly", but CI runs all of them on every PR | Lanes not implemented |
+| pytest `smoke` / `core` / `edge` | e2e | 31 / 141 / 51 | Declared "P0 every change, P1 each merge, P2 nightly" | Implemented in #377: PR selects smoke/core plus impacted epics, master runs all, nightly selects edge |
 | Flutter `@Tags([...])` | `flutter/test` | 40 of 53 files | `--area` runs select by tag | 13 files untagged, so `--area` skips them |
 
 The untagged Flutter files are `money_format`, `dues_models_penalty_row`, `sale_clearance`, `unit_state`, `unit_registration_person_refs`, `unit_directory_row`, `unit_directory_benchmark`, `resident_directory`, `person_components`, `person_directory_repository`, `responsible_contact_selection`, `sp_directory_scaffold` and `standardized_logging`. `money_format` and `sale_clearance` are finance tests, so a `--area finance` run misses them. Smaller issue: `pytest.ini` declares `depth`, `state` and `layer` twice.

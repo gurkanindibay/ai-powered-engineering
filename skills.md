@@ -216,12 +216,18 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ### 5b-2a. E2E Shard Planner (`e2e_shard.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/e2e_shard.py](file:///apps/development-time/SitePulse/scripts/e2e_shard.py)
-- **Purpose:** Splits the GUI suite into N shards of similar run time, using the latest `duration_s` per test from `.specify/executions/runs` (a test with no recorded duration counts as the median). `gui_e2e.py run --shard I/N` (or `$SITEPULSE_E2E_SHARD`) loads it as a pytest plugin that deselects other shards' tests after marker and `-k` filtering. The partition is deterministic, so each test runs in exactly one shard. `sitepulse-ci.yml` runs the `e2e` job as an 8-shard matrix and ignores `e2e/tests/test_linked_backend_suites.py` there, because other CI gates already run the suites it wraps (`harness/tests/test_ci_linked_suites.py` enforces this). Self-tests: `harness/tests/test_e2e_shard.py`.
+- **Purpose:** Splits the GUI suite into N shards of similar run time, using the latest `duration_s` per test from `.specify/executions/runs` plus cache-fed CI JUnit durations (a test with no recorded duration counts as the median). `gui_e2e.py run --shard I/N` (or `$SITEPULSE_E2E_SHARD`) loads it as a pytest plugin that deselects other shards' tests after marker and `-k` filtering. `ingest-junit` merges master shard timings into the compact duration store for following runs. The partition is deterministic, so each test runs in exactly one shard. `sitepulse-ci.yml` runs the `e2e` job as an 8-shard matrix and ignores `e2e/tests/test_linked_backend_suites.py` there, because other CI gates already run the suites it wraps (`harness/tests/test_ci_linked_suites.py` enforces this). Self-tests: `harness/tests/test_e2e_shard.py`.
 
 ```bash
 python3 apps/development-time/SitePulse/scripts/e2e_shard.py plan --shards 4          # expected seconds per shard
 python3 apps/development-time/SitePulse/scripts/e2e_shard.py --json plan --shards 3
+python3 apps/development-time/SitePulse/scripts/e2e_shard.py ingest-junit --junit-dir e2e/.artifacts --store /tmp/durations/ci-cache/durations.jsonl
 ```
+
+### 5b-2b. CI E2E Lane Planner (`ci_e2e_plan.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/ci_e2e_plan.py](file:///apps/development-time/SitePulse/scripts/ci_e2e_plan.py)
+- **Purpose:** Uses `feature_traceability.py affected` to run smoke/core plus impact-selected epics on PRs, keep full coverage for shared code and master, and skip browser setup for docs-only PRs. Supports `--help`, `--json`, and GitHub Actions output through `--github-output` or `GITHUB_OUTPUT`. Self-tests: `harness/tests/test_ci_e2e_plan.py`.
 
 ## 5b-3. testId Lint (`testid_lint.py`)
 

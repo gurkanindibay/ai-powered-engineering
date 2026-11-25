@@ -27,6 +27,12 @@ class CaseAdapterTests(unittest.TestCase):
         db = next(row for row in manifest if row["suite"] == "rust-db-test")
         self.assertEqual(db["shards"], ["rust-db-test"])
 
+    def test_intentionally_skipped_browser_lane_is_not_expected_in_manifests(self):
+        suites = cases.expected_suites(e2e_enabled=False)
+        gates_manifest = cases.expected_gates(e2e_enabled=False)
+        self.assertNotIn("e2e", {row["suite"] for row in suites})
+        self.assertNotIn("e2e", gates_manifest)
+
     def test_cargo_parser_keeps_doctest_names_and_ignored_status(self):
         output = """Running unittests src/lib.rs (target/debug/deps/sitepulse)
 running 2 tests
