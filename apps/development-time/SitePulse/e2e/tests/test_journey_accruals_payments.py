@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from support.api import ApiError
-from support.flutter import by_id
+from support.flutter import ID_ATTR, by_id, text_of
 from support.journey_attempts import (
     JourneyManifest,
     ledger_invariants,
@@ -29,8 +29,16 @@ from support.journey_attempts import (
     teardown_sites,
     teardown_with_evidence,
 )
-from support.journey_live_reconciliation import assert_cash_matches_model, assert_statements_match_model, posted_cash
+from support.journey_gui import amount_of
+from support.journey_live_reconciliation import (
+    PERIOD_LABELS,
+    assert_cash_matches_model,
+    assert_statements_match_model,
+    posted_cash,
+)
 from support.journey_multi_site import build_multi_site_journey
+from support.journey_reconciliation import CHECKPOINTS, reconcile
+from support.money import format_try
 from support.journey_reconciliation import CHECKPOINTS
 from support.journey_snapshots import current_section
 from pages.login import LoginPage
@@ -38,6 +46,25 @@ from pages.manager import PaymentStream, ResidentsTab
 from pages.person import UnitWorkspace
 
 E2E = Path(__file__).resolve().parents[1]
+
+
+def _wait_for_semantics_text(page, test_id: str, expected: str, timeout_ms: int = 15_000) -> None:
+    """Wait until the widget tagged `test_id` exposes `expected`.
+
+    A tagged widget can be attached before its child text paints, especially on slow engines;
+    waiting on the expected value avoids reading the semantics tree one frame too early.
+    """
+    page.wait_for_function(
+        """([attribute, id, text]) => {
+            const element = document.querySelector(`[${attribute}="${id}"]`);
+            const content = element
+                ? (element.getAttribute('aria-label') || element.textContent || '')
+                : '';
+            return content.includes(text);
+        }""",
+        arg=[ID_ATTR, test_id, expected],
+        timeout=timeout_ms,
+    )
 
 
 @pytest.mark.covers("SC-13-02-03")
@@ -1038,6 +1065,7 @@ def test_multi_site_journey_accruals_through_march_first(request, api, actors, s
 
 
 @pytest.mark.covers("SC-13-13-02")
+@pytest.mark.covers("SC-13-13-05")
 @pytest.mark.covers("SC-13-26-02")
 @pytest.mark.covers("SC-13-25-02")
 @pytest.mark.covers("SC-13-25-03")
@@ -1526,33 +1554,73 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         j.invariants_a("April final")
         j.invariants_b("April final")
 
-        # Manager browser evidence: a unit statement shows the debtor's receipts and the
-        # site cash view shows the posted gross receipt total for the same manager scope.
+        # Manager browser evidence (SC-13-13-05): each manager sees only their own site, the
+        # four-period journey's unit statement renders the ledger's payer identity, open period
+        # history and exact totals, and the cash view lists posted receipts whose stream total
+        # reconciles to the ledger's posted site cash.
         login_page.login("manager", j.manager_a.user["email"], j.manager_a_password)
         ResidentsTab(page).open()
-        assert set(ResidentsTab(page).unit_card_ids()) == set(j.units_a.values())
+        units_a = set(ResidentsTab(page).unit_card_ids())
+        assert units_a == set(j.units_a.values())
         unit_id_a = j.unit_a("A-03")
+        unit_id_b = j.unit_b("B2-01")
+        assert unit_id_b not in units_a, "Site A's manager must not see Site B's units"
+
         UnitWorkspace(page).open(unit_id_a).action(unit_id_a, "statement")
         by_id(page, "statement_debtor_owner").wait_for(timeout=15_000)
         statement_a = api.resident_statement(j.manager_a, unit_id_a)
-        expected_receipt_a = Decimal("1000.00")
-        receipt_a = next(
-            (r for r in statement_a["receipts"] if Decimal(str(r["total_amount"])) == expected_receipt_a),
-            None,
+        owner_a = next(d for d in statement_a["debtors"] if d["debtor_type"] == "OWNER")
+        # A-03 is paid in January and April, so February and March stay open. The independent
+        # journey model pins the periods and their exact principal-plus-fee totals; the API
+        # statement is reconciled to the same model just above.
+        ledger = reconcile()
+        expected_a = {
+            PERIOD_LABELS[row.period]: row.total
+            for row in ledger.open_rows()
+            if (row.site, row.unit) == ("A", "A-03")
+        }
+        assert expected_a == {
+            "Şubat 2027": Decimal("1098.33"),
+            "Mart 2027": Decimal("1051.67"),
+        }, f"the journey model pins A-03's two unpaid periods and totals, got {expected_a}"
+        for period, total in expected_a.items():
+            _wait_for_semantics_text(page, "statement_debtor_owner", period)
+            _wait_for_semantics_text(page, "statement_debtor_owner", format_try(total))
+        owner_section_a = text_of(by_id(page, "statement_debtor_owner"))
+        assert f"{owner_a['name']} · Kat maliki" in owner_section_a, (
+            f"Site A, April 2027, unit A-03 ({unit_id_a}): the statement should name the "
+            f"owner payer {owner_a['name']!r}; it showed {owner_section_a!r}"
         )
-        assert receipt_a is not None, (
-            f"Site A, April 2027, unit A-03 ({unit_id_a}), debtor Fay Çelik: "
-            f"expected receipt TRY {expected_receipt_a} in the unit statement"
+        assert by_id(page, "statement_debtor_tenant").count() == 0, (
+            f"Site A, April 2027, unit A-03 ({unit_id_a}): the owner-paid unit has no tenant "
+            "debtor, so the statement must not render a tenant section"
         )
-        by_id(page, f"statement_receipt_{receipt_a['receipt_number']}").wait_for(timeout=15_000)
+        for period, total in expected_a.items():
+            assert period in owner_section_a, (
+                f"Site A, unit A-03: period {period!r} missing from the owner section"
+            )
+            assert format_try(total) in owner_section_a, (
+                f"Site A, unit A-03, {period}: open amount {format_try(total)} missing from "
+                "the owner section"
+            )
+        expected_total_a = sum(expected_a.values(), Decimal("0.00"))
+        _wait_for_semantics_text(page, "statement_total_owner", format_try(expected_total_a))
+        assert amount_of(page, "statement_total_owner") == expected_total_a, (
+            f"Site A, April 2027, unit A-03 ({unit_id_a}): statement total does not match "
+            f"the ledger total {format_try(expected_total_a)}"
+        )
+        assert statement_a["receipts"], f"Site A, unit A-03 ({unit_id_a}) should list its paid periods"
+        for receipt in statement_a["receipts"]:
+            by_id(page, f"statement_receipt_{receipt['receipt_number']}").wait_for(timeout=15_000)
         page.keyboard.press("Escape")
         UnitWorkspace(page).close()
         PaymentStream(page).open()
         # The Canlı Kasa segment lists receipts but renders no site total; the posted cash total is
         # reconciliation evidence from the API (plan figure from the #246 contract, April 10).
         stream_a = api.payment_stream(j.manager_a)
-        assert Decimal(str(stream_a["total_volume"])) == j.expected_posted_cash_a, (
-            f"Site A, April 2027: posted cash TRY {stream_a['total_volume']}, "
+        cash_a = posted_cash(stack, j.site_a_id)
+        assert Decimal(str(stream_a["total_volume"])) == cash_a == j.expected_posted_cash_a, (
+            f"Site A, April 2027: cash view TRY {stream_a['total_volume']}, ledger TRY {cash_a}, "
             f"expected {j.expected_posted_cash_a}"
         )
         PaymentStream(page).wait_for_entries("return ids.length > 0")
@@ -1564,27 +1632,56 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
                 "manager", j.manager_b.user["email"], j.manager_b_password,
             )
             ResidentsTab(manager_b_page).open()
-            assert set(ResidentsTab(manager_b_page).unit_card_ids()) == set(j.units_b.values())
-            unit_id_b = j.unit_b("B2-01")
+            units_b = set(ResidentsTab(manager_b_page).unit_card_ids())
+            assert units_b == set(j.units_b.values())
+            assert unit_id_a not in units_b, "Site B's manager must not see Site A's units"
             UnitWorkspace(manager_b_page).open(unit_id_b).action(unit_id_b, "statement")
             by_id(manager_b_page, "statement_debtor_tenant").wait_for(timeout=15_000)
             statement_b = api.resident_statement(j.manager_b, unit_id_b)
-            expected_receipt_b = Decimal("750.00")
-            receipt_b = next(
-                (r for r in statement_b["receipts"] if Decimal(str(r["total_amount"])) == expected_receipt_b),
-                None,
+            tenant_b = next(d for d in statement_b["debtors"] if d["debtor_type"] == "TENANT")
+            # B2-01 is paid in January and April, so February and March stay open. The model
+            # pins Juno's two unpaid periods and their principal-plus-fee totals.
+            expected_b = {
+                PERIOD_LABELS[row.period]: row.total
+                for row in ledger.open_rows()
+                if (row.site, row.unit) == ("B", "B2-01")
+            }
+            assert expected_b == {
+                "Şubat 2027": Decimal("823.75"),
+                "Mart 2027": Decimal("788.75"),
+            }, f"the journey model pins B2-01's two unpaid periods and totals, got {expected_b}"
+            for period, total in expected_b.items():
+                _wait_for_semantics_text(manager_b_page, "statement_debtor_tenant", period)
+                _wait_for_semantics_text(manager_b_page, "statement_debtor_tenant", format_try(total))
+            tenant_section_b = text_of(by_id(manager_b_page, "statement_debtor_tenant"))
+            assert f"{tenant_b['name']} · Kiracı" in tenant_section_b, (
+                f"Site B, April 2027, unit B2-01 ({unit_id_b}): the statement should name the "
+                f"tenant payer {tenant_b['name']!r}; it showed {tenant_section_b!r}"
             )
-            assert receipt_b is not None, (
-                f"Site B, April 2027, unit B2-01 ({unit_id_b}), debtor Juno Yıldız: "
-                f"expected receipt TRY {expected_receipt_b} in the unit statement"
+            for period, total in expected_b.items():
+                assert period in tenant_section_b, (
+                    f"Site B, unit B2-01: period {period!r} missing from the tenant section"
+                )
+                assert format_try(total) in tenant_section_b, (
+                    f"Site B, unit B2-01, {period}: open amount {format_try(total)} missing from "
+                    "the tenant section"
+                )
+            expected_total_b = sum(expected_b.values(), Decimal("0.00"))
+            _wait_for_semantics_text(manager_b_page, "statement_total_tenant", format_try(expected_total_b))
+            assert amount_of(manager_b_page, "statement_total_tenant") == expected_total_b, (
+                f"Site B, April 2027, unit B2-01 ({unit_id_b}): statement total does not match "
+                f"the ledger total {format_try(expected_total_b)}"
             )
-            by_id(manager_b_page, f"statement_receipt_{receipt_b['receipt_number']}").wait_for(timeout=15_000)
+            assert statement_b["receipts"], f"Site B, unit B2-01 ({unit_id_b}) should list its paid periods"
+            for receipt in statement_b["receipts"]:
+                by_id(manager_b_page, f"statement_receipt_{receipt['receipt_number']}").wait_for(timeout=15_000)
             manager_b_page.keyboard.press("Escape")
             UnitWorkspace(manager_b_page).close()
             PaymentStream(manager_b_page).open()
             stream_b = api.payment_stream(j.manager_b)
-            assert Decimal(str(stream_b["total_volume"])) == j.expected_posted_cash_b, (
-                f"Site B, April 2027: posted cash TRY {stream_b['total_volume']}, "
+            cash_b = posted_cash(stack, j.site_b_id)
+            assert Decimal(str(stream_b["total_volume"])) == cash_b == j.expected_posted_cash_b, (
+                f"Site B, April 2027: cash view TRY {stream_b['total_volume']}, ledger TRY {cash_b}, "
                 f"expected {j.expected_posted_cash_b}"
             )
             PaymentStream(manager_b_page).wait_for_entries("return ids.length > 0")
