@@ -37,6 +37,9 @@ mod db_accrual_persistence_tests;
 #[path = "it/db_advance_exit_settlements_tests.rs"]
 mod db_advance_exit_settlements_tests;
 
+#[path = "it/db_capital_accrual_archived_units_tests.rs"]
+mod db_capital_accrual_archived_units_tests;
+
 #[path = "it/db_occupancy_transitions_tests.rs"]
 mod db_occupancy_transitions_tests;
 

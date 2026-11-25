@@ -315,10 +315,34 @@ pub async fn accrue_monthly_dues(
                     crate::error::sanitized("Database unavailable", &e),
                 )
             })?;
-    let planned: Vec<_> = planned
-        .into_iter()
-        .filter(|(unit, ..)| canonical.as_ref().is_none_or(|ids| ids.contains(&unit.id)))
-        .collect();
+    // A unit outside the canonical inventory is never billed, but it must not vanish
+    // silently: log it and report it in the run's skipped units.
+    let mut skipped = skipped;
+    let mut kept = Vec::with_capacity(planned.len());
+    for entry in planned {
+        if canonical
+            .as_ref()
+            .is_none_or(|ids| ids.contains(&entry.0.id))
+        {
+            kept.push(entry);
+            continue;
+        }
+        let unit = &entry.0;
+        tracing::warn!(
+            site_id = %payload.site_id,
+            unit_id = %unit.id,
+            "unit is not in the site's database inventory; excluded from dues accrual"
+        );
+        let label = state
+            .inner
+            .read()
+            .await
+            .unit_label(&unit.block_id, unit.unit_number);
+        skipped.push(format!(
+            "{label}: not in the site's database unit inventory"
+        ));
+    }
+    let planned = kept;
 
     let period_already_exists = {
         let inner = state.inner.read().await;

@@ -492,7 +492,7 @@ impl CapitalProjectService {
             // leave synthetic unit IDs in the in-memory store.
             let db_units = tx
                 .query(
-                    "SELECT id, land_share FROM units WHERE site_id = $1 ORDER BY id",
+                    "SELECT id, land_share FROM units WHERE site_id = $1 AND deleted_at IS NULL ORDER BY id",
                     &[&site_num],
                 )
                 .await
@@ -639,7 +639,7 @@ impl CapitalProjectService {
             installment.total_installments,
             project.title,
             installment_budget,
-            unit_shares.len()
+            charged_units_count
         );
         // Owners' advances settle the new installment dues of this site only.
         if let Err(e) = crate::services::advance_offset_service::settle_advances(
