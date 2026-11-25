@@ -12,6 +12,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("ci_test_report", ROOT / "scripts" / "ci_test_report.py")
 ctr = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ctr)
+evidence_spec = importlib.util.spec_from_file_location("ci_scenario_evidence", ROOT / "scripts" / "ci_scenario_evidence.py")
+cse = importlib.util.module_from_spec(evidence_spec)
+evidence_spec.loader.exec_module(cse)
 
 
 def _record(scenario: str, status: str) -> dict:
@@ -21,6 +24,43 @@ def _record(scenario: str, status: str) -> dict:
 
 
 class CiTestReportTest(unittest.TestCase):
+    def test_scenario_evidence_distinguishes_ci_outcomes_scheduled_and_unresolved(self):
+        scenarios = {sid: {"state": "no_result"} for sid in
+                     ("SC-01-01-01", "SC-01-01-02", "SC-01-01-03", "SC-01-01-04",
+                      "SC-01-01-06", "SC-01-01-07")}
+        scenarios["SC-01-01-05"] = {"state": "planned"}
+        links = {
+            "SC-01-01-01": [{"file": "backend/tests/example.rs", "line": 1, "test": "works"}],
+            "SC-01-01-02": [{"file": "backend/tests/example.rs", "line": 2, "test": "fails"}],
+            "SC-01-01-03": [{"file": "e2e/nightly/test_later.py", "line": 3, "test": "test_later"}],
+            "SC-01-01-04": [{"file": "harness/tests/test_missing.py", "line": 4,
+                             "test": "missing | `case`"}],
+            "SC-01-01-06": [{"file": "flutter/test/people_widget_test.dart", "line": 6,
+                             "test": "Resident detail"}],
+            "SC-01-01-07": [{"file": "harness/tests/test_people.py", "line": 7,
+                             "test": "test_disable"}],
+        }
+        cases = [
+            {"producer": "rust", "suite": "rust-test", "native_id": "example::works", "status": "passed"},
+            {"producer": "rust", "suite": "rust-test", "native_id": "example::fails", "status": "failed"},
+            {"producer": "flutter", "suite": "flutter-test",
+             "native_id": "flutter/test/people_widget_test.dart::Resident details show occupancy", "status": "passed"},
+            {"producer": "lint", "suite": "harness-selftest",
+             "native_id": "test_people.PersonTests.test_disable", "status": "passed"},
+        ]
+
+        report = cse.build_evidence(scenarios, cases, links, "run-1", "commit-1")
+
+        self.assertEqual(report["evidence_counts"],
+                         {"failing": 1, "passing": 2, "planned": 1, "scheduled": 1, "unresolved": 2})
+        self.assertEqual(report["scenarios"]["SC-01-01-03"]["evidence"], "scheduled")
+        self.assertEqual(report["scenarios"]["SC-01-01-04"]["evidence"], "unresolved")
+        self.assertEqual(report["scenarios"]["SC-01-01-06"]["evidence"], "unresolved")
+        self.assertEqual(report["scenarios"]["SC-01-01-07"]["evidence"], "passing")
+        self.assertIn(r"missing \| \`case\`", cse.render_markdown(report))
+        self.assertEqual({item["scenario_id"] for item in report["unresolved_links"]},
+                         {"SC-01-01-04", "SC-01-01-06"})
+
     def test_incomplete_suite_count_includes_mixed_and_reused_evidence(self):
         suites = [
             {"status": "collected"},
@@ -172,14 +212,17 @@ class CiTestReportTest(unittest.TestCase):
                              (2, 1, 1))
             self.assertEqual(sorted(p.name for p in out.iterdir()),
                              ["case-results.jsonl", "executions.jsonl", "feature-report.html", "product-status.html",
-                              "product-status.json", "public-report.json", "suite-collection.json", "suite-report.md",
-                              "summary.json", "test-report.md"])
+                              "product-status.json", "public-report.json", "scenario-evidence.json", "scenario-evidence.md",
+                              "suite-collection.json", "suite-report.md", "summary.json", "test-report.md"])
             status = json.loads((out / "product-status.json").read_text(encoding="utf-8"))
             self.assertEqual((status["status"], status["scenarios"]["SC-06-06-01"]["state"],
                               status["scenarios"]["SC-06-06-02"]["state"]), ("FAIL", "passing", "failing"))
             report = (out / "test-report.md").read_text(encoding="utf-8")
             self.assertIn("**Task:** demo task", report)
             self.assertIn("SC-06-06-02", report)
+            self.assertIn("Scenario evidence across CI lanes", report)
+            self.assertIn("unresolved", json.loads((out / "scenario-evidence.json").read_text())["evidence_counts"])
+            self.assertIn("CI scenario evidence", (out / "feature-report.html").read_text(encoding="utf-8"))
             self.assertEqual(list((history / "runs").iterdir()), [])
             # The Actions consumer downloads this separate artifact and resolves the same
             # run/attempt path. Evidence stays out of the report directory uploaded to Pages.

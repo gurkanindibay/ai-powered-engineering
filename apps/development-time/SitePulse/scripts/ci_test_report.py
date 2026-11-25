@@ -9,6 +9,7 @@ into one directory and runs this tool, which
 * writes <out>/test-report.md (the run: totals, regressions/fixes, every executed test),
   <out>/feature-report.html (the dashboard: committed history plus this run),
   <out>/executions.jsonl (the merged records) and <out>/summary.json (the stats),
+  <out>/scenario-evidence.json and .md (named case outcomes linked to scenario IDs),
   <out>/product-status.json and <out>/product-status.html (scripts/product_status.py: coverage
   per epic and trends; the published site keeps one snapshot per run to draw them),
 * appends the stats and the report to $GITHUB_STEP_SUMMARY, so they show on the run page.
@@ -47,6 +48,7 @@ import feature_traceability as ft  # noqa: E402
 import product_status as ps  # noqa: E402
 import ci_suite_collection as sc  # noqa: E402
 import ci_coverage_report as cov  # noqa: E402
+import ci_scenario_evidence as scenario_evidence  # noqa: E402
 
 
 def junit_totals(files: list[Path]) -> dict:
@@ -501,12 +503,23 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
                              "unmapped_cases": len(inventory.get("unmapped_cases", []))}}
     if coverage is not None:
         summary["coverage"] = coverage
+    snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history(), inventory=inventory)
+    evidence = scenario_evidence.build_evidence(snapshot["scenarios"], inventory.get("cases", []),
+                                                catalogue.links, meta["run_id"], commit_override or meta["commit"])
+    feature_page = (out / "feature-report.html").read_text(encoding="utf-8")
+    (out / "feature-report.html").write_text(scenario_evidence.add_html_section(feature_page, evidence),
+                                             encoding="utf-8")
+    (out / "scenario-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+    evidence_markdown = scenario_evidence.render_markdown(evidence)
+    (out / "scenario-evidence.md").write_text(evidence_markdown, encoding="utf-8")
+    with (out / "test-report.md").open("a", encoding="utf-8") as handle:
+        handle.write("\n" + evidence_markdown)
+    summary["scenario_evidence"] = evidence["evidence_counts"]
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     (out / "public-report.json").write_text(
         json.dumps(public_report_from_inventory(inventory, coverage=coverage), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history(), inventory=inventory)
     (out / "product-status.json").write_text(json.dumps(snapshot, indent=1) + "\n", encoding="utf-8")
     (out / "product-status.html").write_text(
         ps.render_html([snapshot], {"detail": "feature-report.html", "history": "feature-report.html"}),
