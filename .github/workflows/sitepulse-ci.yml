@@ -392,25 +392,15 @@ jobs:
   # HTML dashboard and product status snapshot as artifact `e2e-test-report`; the execution
   # history needed by record-evidence is uploaded separately as `sitepulse-actions-evidence`.
   # This replaces committing a recorded run with every task (gate test-run-recorded is off).
-  # Generates the Serenity BDD living-documentation site from the Cucumber pilot on master pushes and
-  # hands a sanitized copy (static assets only, secrets redacted) to build-pages. It never gates the
-  # workflow: a failing pilot only means no Serenity report is added to that run's Pages archive.
+  # Renders the Serenity BDD site from this run's own results (scripts/serenity_report.py): one entry
+  # per scenario of the catalogue; no test runs again. build-pages publishes a sanitized copy on
+  # master pushes. It never gates the workflow: a failure only leaves the run without a Serenity report.
   serenity-report:
-    name: serenity (Cucumber pilot site)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.SITEPULSE_PAGES_ACTIONS_ENABLED == 'true'
+    name: serenity (report from CI results)
+    if: ${{ !cancelled() }}
+    needs: [test-report]
     runs-on: ubuntu-24.04
     continue-on-error: true
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: sitepulse_user
-          POSTGRES_PASSWORD: ci-only-password
-          POSTGRES_DB: sitepulse
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U sitepulse_user -d sitepulse"
-          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -425,32 +415,27 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          flutter-version: "3.47.5"
-          channel: stable
-          cache: true
-      - name: Configure isolated stack dependencies
-        run: |
-          echo "FLUTTER_ROOT=$(dirname "$(dirname "$(command -v flutter)")")" >> "$GITHUB_ENV"
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-      - name: Install Cucumber and browser dependencies
+          name: e2e-test-report
+          path: ${{ runner.temp }}/e2e-test-report
+      # The lock file pins the Serenity BDD command line tool, bundled in @serenity-js/serenity-bdd.
+      - name: Install the locked Serenity BDD tool
         working-directory: apps/development-time/SitePulse/e2e-cucumber
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-          npm run lint:money
-      - name: Run isolated Cucumber and Serenity pilot
-        run: |
-          rm -rf e2e-cucumber/target
-          python3 e2e-cucumber/scripts/run_pilot.py > "$RUNNER_TEMP/cucumber-pilot-private.log" 2>&1 || {
-            tail -40 "$RUNNER_TEMP/cucumber-pilot-private.log"; exit 1; }
+        run: npm ci --ignore-scripts
+      - name: Convert CI results to Serenity outcomes
+        run: >-
+          python3 scripts/serenity_report.py
+          --artifact-dir "$RUNNER_TEMP/e2e-test-report" --out "$RUNNER_TEMP/serenity-json"
+      - name: Render Serenity site
+        run: >-
+          java -jar e2e-cucumber/node_modules/@serenity-js/serenity-bdd/cache/serenity-cli-*.jar
+          --source "$RUNNER_TEMP/serenity-json" --destination "$RUNNER_TEMP/serenity-raw"
+          --project SitePulse > "$RUNNER_TEMP/serenity.log" 2>&1 || { tail -40 "$RUNNER_TEMP/serenity.log"; exit 1; }
       - name: Sanitize Serenity site
         run: >-
           python3 scripts/pages_site.py sanitize-serenity
-          --source e2e-cucumber/target/site/serenity --out "$RUNNER_TEMP/serenity-site"
+          --source "$RUNNER_TEMP/serenity-raw" --out "$RUNNER_TEMP/serenity-site"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: serenity-site
