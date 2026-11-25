@@ -213,9 +213,10 @@ class TestRtmValidator(unittest.TestCase):
             (spec / "evidence" / "task-01.json").write_text(json.dumps(evidence))
         return root
 
-    def validator(self, root, stale=False):
+    def validator(self, root, stale=False, recording=False):
         from harness.rtm_validator import RtmValidator
-        return RtmValidator(workspace_root=root, allow_stale_evidence=stale)
+        # Explicit: the harness-selftest gate also runs inside `verify --record`, which exports the flag.
+        return RtmValidator(workspace_root=root, allow_stale_evidence=stale, recording=recording)
 
     def test_unverified_requirements_need_no_evidence(self):
         self.assertTrue(self.validator(self.make_workspace("UNVERIFIED")).validate()["passed"])
@@ -225,8 +226,10 @@ class TestRtmValidator(unittest.TestCase):
         dag = root / "apps" / "development-time" / "SitePulse" / ".specify" / "tasks" / "task-dag.json"
         dag.write_text(json.dumps({"tasks": [task("task-01", gates=[], acceptance_tests=[], status="COMPLETED")]}))
         self.assertFalse(self.validator(root).validate()["passed"])
+        self.assertTrue(self.validator(root, recording=True).validate()["passed"])
         with mock.patch.dict(os.environ, {"SITEPULSE_RECORDING": "1"}):
-            self.assertTrue(self.validator(root).validate()["passed"])
+            from harness.rtm_validator import RtmValidator
+            self.assertTrue(RtmValidator(workspace_root=root).validate()["passed"])
 
     def test_verified_without_evidence_fails(self):
         report = self.validator(self.make_workspace("VERIFIED")).validate()
