@@ -46,6 +46,8 @@ run from `e2e/`:
 ```sh
 python -m pytest tests/ --ignore=tests/test_linked_backend_suites.py -m smoke --browser firefox
 python -m pytest tests/ --ignore=tests/test_linked_backend_suites.py -m smoke --browser webkit
+# One of the three nightly WebKit shards (the nightly runs shards 1/3, 2/3 and 3/3 on separate runners):
+SITEPULSE_E2E_SHARD=1/3 PYTHONPATH=../scripts python -m pytest tests/ --ignore=tests/test_linked_backend_suites.py -m smoke --browser webkit -p e2e_shard
 SITEPULSE_E2E_VIEWPORT_WIDTH=375 python -m pytest tests/ --ignore=tests/test_linked_backend_suites.py -m smoke
 python -m pytest nightly/test_performance.py -o junit_family=xunit1 --junitxml=.artifacts/junit.xml
 python -m pytest nightly/test_tenant_contract.py
