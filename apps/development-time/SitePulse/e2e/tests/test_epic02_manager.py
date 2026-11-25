@@ -2,7 +2,8 @@
 import pytest
 from playwright.sync_api import expect
 
-from pages import DuesManagement, ManagerCockpit, ResidentsTab, UnitWorkspace
+from pages import DuesManagement, ManagerCockpit, ResidentHome, ResidentsTab, UnitWorkspace
+from pages.login import LoginPage
 from support.flutter import by_id
 from support.money import last_amount
 
@@ -207,6 +208,46 @@ def test_manager_can_create_an_announcement(login_as, page, stack):
     by_id(page, "btn_create_announcement").wait_for(timeout=10_000)
     assert stack.sql("SELECT count(*) FROM notifications WHERE category = 'ANNOUNCEMENT' "
                      "AND subject = 'Planlı Su Kesintisi';") == "1"
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-02-07")
+@pytest.mark.covers("SC-02-05-02")
+def test_published_announcement_appears_on_the_resident_feed(login_as, page, actors, login_page, stack):
+    """SC-02-05-02: a manager's site announcement is on the intended resident's feed."""
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    by_id(page, "btn_create_announcement").click()
+    by_id(page, "announcement_title_field").wait_for(timeout=10_000)
+    fill(page, "announcement_title_field", "Planlı Su Kesintisi")
+    fill(page, "announcement_body_field", "Salı 10:00-14:00 arası su kesilecektir.")
+    by_id(page, "btn_save_announcement").click()
+    # The composer closes only after the POST succeeds.
+    by_id(page, "announcement_title_field").wait_for(state="detached", timeout=15_000)
+    # The broadcast is scoped to this site's residents, not every tenant.
+    assert stack.sql(
+        "SELECT count(*) FROM notifications WHERE category = 'ANNOUNCEMENT' "
+        "AND subject = 'Planlı Su Kesintisi' AND recipient_ref = 'site:1:all';"
+    ) == "1"
+
+    resident = page.context.new_page()
+    try:
+        LoginPage(resident, login_page.base_url).open().login(
+            "homeowner", actors["homeowner"]["email"], actors["homeowner"]["password"]
+        )
+        ResidentHome(resident).wait()
+        by_id(resident, "resident_action_announcements").click()
+        by_id(resident, "site_announcement_title").wait_for(timeout=15_000)
+        # The feed target is not per-item, so match any rendered title rather than the first.
+        titles = [text.strip() for text in by_id(resident, "site_announcement_title").all_text_contents()]
+        assert "Planlı Su Kesintisi" in titles, f"announcement title not on the feed: {titles}"
+        bodies = by_id(resident, "site_announcement_body").all_text_contents()
+        assert any("Salı 10:00-14:00" in body for body in bodies), (
+            f"announcement details not on the feed: {bodies}"
+        )
+    finally:
+        resident.close()
 
 
 def _open_house_types(page):
