@@ -194,7 +194,7 @@ def two_sites(api, actors):
     unit = created["id"]
     assert created["virtual_iban"], "The virtual IBAN read requires an already allocated value"
     receipt = api.record_manual_payment(second, unit, Decimal("25.00"), "Nightly Owner")
-    period = api.create_period(second, "Ekim 2026", "2026-10-15")
+    period = api.create_period(second, "Ekim 2025", "2025-10-15")
     budget = api.call(
         "POST", "/api/v1/operating-budgets", second.token,
         body={"fiscal_year": 2026, "lines": [
