@@ -857,11 +857,6 @@ async fn claimable_advance(
         .iter()
         .map(|row| (row.get(0), row.get(1)))
         .collect();
-    let held = holds
-        .iter()
-        .find(|(holder, _)| *holder == person)
-        .map(|(_, balance)| *balance)
-        .unwrap_or(Decimal::ZERO);
 
     let holds_role: bool = tx
         .query_one(
@@ -891,25 +886,31 @@ async fn claimable_advance(
         )
         .await
         .map_err(db_unavailable)?;
+    // Allocate each pending request hold first, reducing that person's remaining
+    // hold as we go, so several requests from one holder cannot each count the
+    // whole hold against the shared bucket.
+    let mut remaining_holds: std::collections::HashMap<i64, Decimal> =
+        holds.iter().copied().collect();
     let mut bucket_committed = Decimal::ZERO;
-    let mut held_committed: std::collections::HashMap<i64, Decimal> =
-        std::collections::HashMap::new();
     for row in pending_rows {
         let beneficiary: Option<i64> = row.get(0);
         let amount: Decimal = row.get(1);
-        let beneficiary_hold = beneficiary
-            .and_then(|id| holds.iter().find(|(holder, _)| *holder == id))
-            .map(|(_, balance)| *balance)
+        let from_hold = beneficiary
+            .and_then(|id| remaining_holds.get_mut(&id))
+            .map(|balance| {
+                let from_hold = (*balance).min(amount);
+                *balance -= from_hold;
+                from_hold
+            })
             .unwrap_or(Decimal::ZERO);
-        let from_hold = beneficiary_hold.min(amount);
-        if let Some(beneficiary) = beneficiary {
-            *held_committed.entry(beneficiary).or_default() += from_hold;
-        }
         bucket_committed += amount - from_hold;
     }
 
-    let held_available =
-        (held - held_committed.get(&person).copied().unwrap_or_default()).max(Decimal::ZERO);
+    let held_available = remaining_holds
+        .get(&person)
+        .copied()
+        .unwrap_or(Decimal::ZERO)
+        .max(Decimal::ZERO);
     if !bucket_accessible {
         return Ok(held_available);
     }

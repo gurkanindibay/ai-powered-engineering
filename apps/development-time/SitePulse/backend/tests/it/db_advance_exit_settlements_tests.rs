@@ -708,3 +708,92 @@ async fn seller_advance_held_after_a_title_transfer_is_paid_only_to_the_seller()
 
     db.drop_db().await;
 }
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+// covers: SC-13-03-06
+async fn pending_requests_of_one_holder_cannot_count_the_same_hold_twice() {
+    let db = TestDb::create().await;
+    let (unit, site_id) = db.unit().await;
+    let owner: i64 = db
+        .pool
+        .get()
+        .await
+        .expect("test connection")
+        .query_one("SELECT owner_person_id FROM units WHERE id = $1", &[&unit])
+        .await
+        .expect("seeded owner")
+        .get(0);
+    db.seed_hold(unit, owner, "OWNER", Decimal::new(20000, 2))
+        .await;
+    let state = AppState::with_pool(Some(db.pool.clone()));
+    state.reload_from_db().await.expect("load the hold");
+    let service = AdvanceExitSettlementService::new(&state);
+    let requester = caller(&site_id, "requester");
+
+    for key in ["held-request-1", "held-request-2"] {
+        let mut pending = request("PAYOUT", "OWNER", None, Decimal::new(10000, 2));
+        pending.request_key = key.to_string();
+        pending.beneficiary_person_id = Some(owner.to_string());
+        service
+            .create(&requester, &unit.to_string(), pending)
+            .await
+            .expect("each request fits the hold at the time it is made");
+    }
+
+    // The hold shrinks outside this service and the buyer's own advance arrives:
+    // 100.00 of the 200.00 is gone, and 100.00 sits in the unit's owner bucket.
+    let client = db.pool.get().await.expect("test connection");
+    client
+        .batch_execute("SET sitepulse.allow_ledger_purge = 'on'")
+        .await
+        .expect("enable test ledger writes");
+    client
+        .execute(
+            "UPDATE person_advance_holds SET balance = $3
+              WHERE unit_id = $1 AND person_id = $2 AND debtor_type = 'OWNER'",
+            &[&unit, &owner, &Decimal::new(10000, 2)],
+        )
+        .await
+        .expect("shrink the hold");
+    client
+        .execute(
+            "INSERT INTO advance_ledger_entries
+                (unit_id, debtor_type, person_id, entry_type, amount, description)
+             VALUES ($1, 'OWNER', $2, 'EXIT_PAYOUT_DEBIT', $3, 'Test: hold spent elsewhere')",
+            &[&unit, &owner, &Decimal::new(10000, 2)],
+        )
+        .await
+        .expect("record the external hold spend");
+    client
+        .execute(
+            "INSERT INTO advance_balances (unit_id, debtor_type, balance)
+             VALUES ($1, 'OWNER', $2)
+             ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance",
+            &[&unit, &Decimal::new(10000, 2)],
+        )
+        .await
+        .expect("seed the buyer bucket");
+    client
+        .execute(
+            "INSERT INTO advance_ledger_entries
+                (unit_id, debtor_type, entry_type, amount, description)
+             VALUES ($1, 'OWNER', 'PAYMENT_SURPLUS', $2, 'Test: buyer advance')",
+            &[&unit, &Decimal::new(10000, 2)],
+        )
+        .await
+        .expect("record the buyer advance");
+    drop(client);
+
+    // The two pending payouts already claim 100.00 of the hold and 100.00 of the
+    // bucket, so nothing is left for a third request from the same person.
+    let mut third = request("PAYOUT", "OWNER", None, Decimal::new(10000, 2));
+    third.request_key = "held-request-3".to_string();
+    third.beneficiary_person_id = Some(owner.to_string());
+    assert!(matches!(
+        service.create(&requester, &unit.to_string(), third).await,
+        Err(FinanceError::Conflict(_))
+    ));
+
+    db.drop_db().await;
+}
