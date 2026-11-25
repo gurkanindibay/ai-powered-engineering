@@ -230,6 +230,36 @@
     align-items: center;
     justify-content: space-between;
     gap: 6px;
+  /* Ledger health and bug bundle (issue #419). */
+  .health-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 0; }
+  .verdict {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); font-size: 13px;
+  }
+  .verdict strong { font-family: var(--mono); font-size: 14px; }
+  .verdict.green strong { color: var(--ok); }
+  .verdict.red strong { color: var(--bad); }
+  .scorecard { margin: 10px 0 0; display: grid; gap: 6px; }
+  .score {
+    display: grid; grid-template-columns: 46px 96px 1fr; gap: 10px;
+    padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-2); font-size: 12.5px; align-items: start;
+  }
+  .score .id { font-family: var(--mono); color: var(--muted); }
+  .score .status { font-family: var(--mono); font-size: 11.5px; }
+  .score.pass .status { color: var(--ok); }
+  .score.fail .status, .score.error .status { color: var(--bad); }
+  .score.manual .status { color: var(--warn); }
+  .score .detail { color: var(--muted); }
+  .score .detail strong { color: var(--text); font-weight: 600; }
+  .score ul { margin: 6px 0 0; padding-left: 18px; }
+  .bundle-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  textarea { width: 100%; min-height: 68px; font: inherit; font-size: 12.5px; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); resize: vertical; }
+  pre.bundle {
+    max-height: 320px; overflow: auto; margin: 0; padding: 12px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2);
+    font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word;
   }
 </style>
 </head>
@@ -315,7 +345,15 @@
 <script>
 "use strict";
 
-const state = { presets: null, active: null, clock: null, busy: false };
+const state = {
+  presets: null,
+  active: null,
+  clock: null,
+  busy: false,
+  health: null,
+  bundle: null,
+  notes: "",
+};
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -532,6 +570,9 @@ async function prepare(preset) {
       body: JSON.stringify({ preset: preset })
     });
     state.active = manifest;
+    state.health = null;
+    state.bundle = null;
+    state.notes = "";
     renderActive();
     await loadClock();
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
@@ -551,6 +592,9 @@ async function resetActive() {
   showBanner("");
   try {
     state.active = await api("/api/reset", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: "{}" });
+    state.health = null;
+    state.bundle = null;
+    state.notes = "";
     renderActive();
     await loadClock();
   } catch (err) {
@@ -746,6 +790,175 @@ function renderCompanionSection(active) {
   return wrap;
 }
 
+function renderHealth(active) {
+  const wrap = el("div");
+  wrap.appendChild(el("h4", null, "Ledger health"));
+  const actions = el("div", "health-actions");
+  const verifyButton = el("button", "primary", "Verify Ledger Health");
+  verifyButton.dataset.action = "health";
+  verifyButton.addEventListener("click", verifyHealth);
+  actions.appendChild(verifyButton);
+  const bundleButton = el("button", null, "Export Bug Bundle");
+  bundleButton.dataset.action = "bundle";
+  bundleButton.addEventListener("click", exportBundle);
+  actions.appendChild(bundleButton);
+  wrap.appendChild(actions);
+
+  // The notes box is always available so a report can be described before exporting.
+  const area = el("textarea");
+  area.placeholder = "What did you expect, and what did you see?";
+  area.value = state.notes;
+  area.addEventListener("input", function () { state.notes = area.value; });
+  wrap.appendChild(area);
+
+  const health = state.health;
+  if (!health) {
+    wrap.appendChild(el("div", "empty", "Run the checks after your manual testing to confirm the ledger still obeys the journey invariants I1–I12."));
+  } else {
+    const score = health.health || {};
+    const verdict = el("div", "verdict " + (score.status === "GREEN" ? "green" : "red"));
+    verdict.appendChild(el("strong", null, score.status === "GREEN" ? "GREEN" : "RED"));
+    verdict.appendChild(el("span", null,
+      score.passed_count + " passed · " + score.failed_count + " failed · " +
+      score.error_count + " could not run · " + score.manual_count + " need a GUI journey"));
+    wrap.appendChild(verdict);
+
+    const list = el("div", "scorecard");
+    (score.invariants || []).forEach(function (item) {
+      const row = el("div", "score " + String(item.status || "").toLowerCase());
+      row.appendChild(el("div", "id", item.invariant_id));
+      row.appendChild(el("div", "status", item.status));
+      const detail = el("div", "detail");
+      detail.appendChild(el("strong", null, item.title));
+      if (item.status === "MANUAL") {
+        detail.appendChild(el("div", null, item.manual_reason + " Covered by " + item.manual_suite + "."));
+      } else if (item.error) {
+        detail.appendChild(el("div", null, "Could not run: " + item.error));
+      } else if (item.violations && item.violations.length) {
+        const rows = el("ul");
+        item.violations.forEach(function (violation) {
+          rows.appendChild(el("li", null, violation.check_name + " · " + violation.subject + " · " + violation.detail));
+        });
+        detail.appendChild(rows);
+        if (item.remediation) detail.appendChild(el("div", null, "Try first: " + item.remediation));
+      } else {
+        detail.appendChild(el("div", null, (item.check_titles || []).join("; ") || "No automated check."));
+      }
+      row.appendChild(detail);
+      list.appendChild(row);
+    });
+    wrap.appendChild(list);
+
+    const view = score.integrity_view || { violations: [] };
+    wrap.appendChild(el("h4", null, "Integrity view (v_integrity_violations), site-scoped"));
+    if (score.view_error) {
+      wrap.appendChild(el("div", "empty", "The view could not be read: " + score.view_error));
+    } else if (!view.violations || !view.violations.length) {
+      wrap.appendChild(el("div", "empty", "No row in the integrity view belongs to this site."));
+    } else {
+      const table = el("table");
+      const head = el("tr");
+      ["Check", "Subject", "Difference"].forEach(function (title) { head.appendChild(el("th", null, title)); });
+      table.appendChild(head);
+      view.violations.forEach(function (violation) {
+        const row = el("tr");
+        row.appendChild(el("td", null, violation.check_name));
+        row.appendChild(el("td", null, violation.subject));
+        row.appendChild(el("td", null, violation.detail));
+        table.appendChild(row);
+      });
+      wrap.appendChild(table);
+    }
+  }
+
+  if (state.bundle) {
+    wrap.appendChild(el("h4", null, "Bug bundle (redacted Markdown)"));
+    const bundleActions = el("div", "bundle-actions");
+    const copyButton = el("button", null, "Copy to clipboard");
+    copyButton.dataset.action = "copy";
+    copyButton.addEventListener("click", copyBundle);
+    bundleActions.appendChild(copyButton);
+    const downloadButton = el("button", null, "Download .md");
+    downloadButton.dataset.action = "download";
+    downloadButton.addEventListener("click", downloadBundle);
+    bundleActions.appendChild(downloadButton);
+    wrap.appendChild(bundleActions);
+    const pre = el("pre", "bundle", state.bundle.markdown || "");
+    wrap.appendChild(pre);
+  }
+  return wrap;
+}
+
+async function verifyHealth() {
+  if (state.busy) return;
+  setBusy(true);
+  showBanner("");
+  try {
+    state.health = await api("/api/ledger-health", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: "{}"
+    });
+    if (state.health.health && state.health.health.status !== "GREEN") {
+      showBanner("The ledger check found problems. Export the bug bundle to report them.", "warn");
+    }
+  } catch (err) {
+    showBanner("Ledger verification failed: " + err.message);
+  } finally {
+    setBusy(false);
+    renderActive();
+  }
+}
+
+async function exportBundle() {
+  if (state.busy) return;
+  setBusy(true);
+  showBanner("");
+  try {
+    state.bundle = await api("/api/bug-bundle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ notes: state.notes || "" })
+    });
+    if (!state.health) {
+      // The bundle embeds the scorecard; refresh it so both stay consistent.
+      state.health = await api("/api/ledger-health", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: "{}"
+      });
+    }
+  } catch (err) {
+    showBanner("Bug bundle export failed: " + err.message);
+  } finally {
+    setBusy(false);
+    renderActive();
+  }
+}
+
+async function copyBundle() {
+  if (!state.bundle) return;
+  try {
+    await navigator.clipboard.writeText(state.bundle.markdown || "");
+    showBanner("Bug bundle copied to the clipboard.");
+  } catch (_err) {
+    showBanner("The clipboard is unavailable; select the Markdown below and copy it manually.", "warn");
+  }
+}
+
+function downloadBundle() {
+  if (!state.bundle) return;
+  const blob = new Blob([state.bundle.markdown || ""], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "sitepulse-bug-" + (state.bundle.preset || "preset") + "-site-" + (state.bundle.site_id || "unknown") + ".md";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function renderActive() {
   const host = document.getElementById("active");
   host.replaceChildren();
@@ -779,6 +992,7 @@ function renderActive() {
   body.appendChild(renderPersonas(active.personas));
   body.appendChild(el("h4", null, "PM test checklist"));
   body.appendChild(renderChecklist(active.pm_checklist));
+  body.appendChild(renderHealth(active));
   host.appendChild(body);
   setBusy(state.busy);
 }

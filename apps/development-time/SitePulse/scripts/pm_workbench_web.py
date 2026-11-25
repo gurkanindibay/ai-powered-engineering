@@ -79,6 +79,7 @@ from pm_scenarios import (  # noqa: E402  (sys.path is set up above)
     PM_CHECKLISTS,
     REFERENCE_CLOCKS,
 )
+import pm_ledger_health  # noqa: E402  (sys.path is set up above)
 
 LOGGER = logging.getLogger("pm_workbench_web")
 
@@ -189,6 +190,12 @@ class CompanionFilesUnavailableError(WorkbenchWebError):
     status = 503
 
 
+class LedgerHealthFailedError(WorkbenchWebError):
+    """The ledger check or the bundle export could not run against the database."""
+
+    status = 502
+
+
 def normalize_preset(value: Any) -> str:
     """Returns the canonical preset key for a user-supplied value."""
     if not isinstance(value, str) or not value.strip():
@@ -278,23 +285,29 @@ class WorkbenchService:
         seed_fn: Callable[[str], Any] | None = None,
         clock_fn: Callable[[str], Any] | None = None,
         clock_action_fn: Callable[[dict[str, Any]], Any] | None = None,
+        health_fn: Callable[[str], Any] | None = None,
+        bundle_fn: Callable[..., str] | None = None,
         state_path: Path | str | None = None,
         api_url: str = DEFAULT_API_URL,
         web_url: str = DEFAULT_WEB_URL,
         db_name: str = "sitepulse",
         saas_email: str = "admin@sitepulse.io",
         saas_password: str = "E2E-Bootstrap-Admin-1",
+        backend_log_path: Path | str = pm_ledger_health.DEFAULT_BACKEND_LOG_PATH,
         skip_reload: bool = False,
     ) -> None:
         self._seed_fn = seed_fn
         self._clock_fn = clock_fn
         self._clock_action_fn = clock_action_fn
+        self._health_fn = health_fn
+        self._bundle_fn = bundle_fn
         self._state_path = Path(state_path) if state_path else DEFAULT_STATE_PATH
         self._api_url = api_url
         self._web_url = web_url
         self._db_name = db_name
         self._saas_email = saas_email
         self._saas_password = saas_password
+        self._backend_log_path = Path(backend_log_path)
         self._skip_reload = skip_reload
         self._lock = threading.RLock()
         self._active: ActiveScenario | None = None
@@ -559,6 +572,109 @@ class WorkbenchService:
                     self._write_state(self._active)
 
             return json_safe(resp if isinstance(resp, dict) else {"status": "OK"})
+    # -- ledger health and bug bundle -------------------------------------
+
+    def _require_active(self) -> ActiveScenario:
+        active = self.active()
+        if active is None:
+            raise NoActiveScenarioError(
+                "No scenario is active; prepare a preset before verifying the ledger."
+            )
+        return active
+
+    def _site_id(self, active: ActiveScenario) -> str:
+        site_id = active.manifest.get("site_id")
+        if site_id in (None, ""):
+            raise NoActiveScenarioError(
+                "The active scenario records no site id, so its ledger cannot be verified."
+            )
+        return str(site_id)
+
+    def ledger_health(self) -> dict[str, Any]:
+        """Runs the site-scoped ledger checks for the active scenario."""
+        with self._lock:
+            active = self._require_active()
+            site_id = self._site_id(active)
+            try:
+                if self._health_fn is not None:
+                    report = self._health_fn(site_id)
+                else:
+                    report = self._checker().check(site_id)
+            except pm_ledger_health.LedgerHealthError as err:
+                raise InvalidRequestError(str(err)) from err
+            except Exception as err:  # noqa: BLE001 - surfaced as a 502 with the reason
+                raise LedgerHealthFailedError(
+                    f"The ledger check could not run: {err}"
+                ) from err
+            payload = report.to_dict() if hasattr(report, "to_dict") else dict(report)
+            return json_safe(
+                {
+                    "preset": active.preset,
+                    "site_id": site_id,
+                    "site_name": active.manifest.get("site_name"),
+                    "reference_clock": active.manifest.get("reference_clock"),
+                    "health": payload,
+                }
+            )
+
+    def bug_bundle(self, notes: Any = "") -> dict[str, Any]:
+        """Renders a redacted Markdown bug bundle for the active scenario."""
+        with self._lock:
+            active = self._require_active()
+            site_id = self._site_id(active)
+            manifest = active.manifest
+            try:
+                if self._bundle_fn is not None:
+                    markdown = self._bundle_fn(
+                        site_id,
+                        preset=active.preset,
+                        preset_label=PRESET_LABELS.get(active.preset, active.preset),
+                        site_name=str(manifest.get("site_name") or ""),
+                        reference_clock=str(
+                            manifest.get("reference_clock")
+                            or (active.clock or {}).get("reference_date")
+                            or ""
+                        ),
+                        personas=manifest.get("personas") or manifest.get("persona_accounts") or [],
+                        backend_log_path=self._backend_log_path,
+                        db_name=self._db_name,
+                        notes=str(notes or ""),
+                    )
+                else:
+                    markdown = self._render_bundle(active, site_id=site_id, notes=str(notes or ""))
+            except pm_ledger_health.LedgerHealthError as err:
+                raise InvalidRequestError(str(err)) from err
+            except Exception as err:  # noqa: BLE001 - surfaced as a 502 with the reason
+                raise LedgerHealthFailedError(
+                    f"The bug bundle could not be generated: {err}"
+                ) from err
+            return {
+                "preset": active.preset,
+                "site_id": site_id,
+                "markdown": markdown,
+            }
+
+    def _checker(self) -> pm_ledger_health.LedgerHealthChecker:
+        return pm_ledger_health.LedgerHealthChecker(db_name=self._db_name)
+
+    def _render_bundle(self, active: ActiveScenario, *, site_id: str, notes: str) -> str:
+        manifest = active.manifest
+        report = self._checker().check(site_id)
+        return pm_ledger_health.render_bug_bundle(
+            report,
+            preset=active.preset,
+            preset_label=PRESET_LABELS.get(active.preset, active.preset),
+            site_name=str(manifest.get("site_name") or ""),
+            reference_clock=str(
+                manifest.get("reference_clock")
+                or (active.clock or {}).get("reference_date")
+                or ""
+            ),
+            personas=manifest.get("personas") or manifest.get("persona_accounts") or [],
+            backend_log_path=self._backend_log_path,
+            db_name=self._db_name,
+            notes=notes,
+        )
 
     def payload(self, active: ActiveScenario) -> dict[str, Any]:
         """Flattens the active scenario into the cheat-sheet shape the UI renders."""
@@ -628,7 +744,13 @@ GET_ROUTES = (
     "/api/companion/bank-statement",
     "/api/companion/resident-import.xlsx",
 )
-POST_ROUTES = ("/api/seed", "/api/reset", "/api/clock")
+POST_ROUTES = (
+    "/api/seed",
+    "/api/reset",
+    "/api/clock",
+    "/api/ledger-health",
+    "/api/bug-bundle",
+)
 
 
 def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
@@ -854,6 +976,12 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
                 payload = self._read_json_body()
                 resp = service.control_clock(payload)
                 self._send_json(200, resp)
+            elif path == "/api/ledger-health":
+                self._read_json_body()  # body optional; the active scenario decides the scope
+                self._send_json(200, service.ledger_health())
+            elif path == "/api/bug-bundle":
+                payload = self._read_json_body()
+                self._send_json(200, service.bug_bundle(payload.get("notes", "")))
             elif path in GET_ROUTES:
                 self._method_not_allowed("GET")
             else:

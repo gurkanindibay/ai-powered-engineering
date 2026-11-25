@@ -32,6 +32,7 @@ SCRIPTS_DIR = BASE_DIR / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
+import pm_ledger_health as health
 import pm_workbench as wb
 import pm_workbench_web as web
 from pm_scenarios import EXPECTED_UNIT_BALANCES, REFERENCE_CLOCKS
@@ -96,12 +97,19 @@ class Harness:
         seed_error: Exception | None = None,
         clock_error: Exception | None = None,
         clock_action_fn: Callable[[dict[str, Any]], Any] | None = None,
+        health_error: Exception | None = None,
+        health_report: Any = None,
         state_path: Path | None = None,
         web_url: str = web.DEFAULT_WEB_URL,
+        backend_log_path: Path | None = None,
     ) -> None:
         self.seed_calls: list[str] = []
         self.clock_calls: list[str] = []
         self.clock_action_calls: list[dict[str, Any]] = []
+        self.health_calls: list[str] = []
+        self.bundle_calls: list[dict[str, Any]] = []
+        self._health_error = health_error
+        self._health_report = health_report
         self._seed_error = seed_error
         self._clock_error = clock_error
         self._manifests = seed_manifests or {}
@@ -151,13 +159,32 @@ class Harness:
                 return {"action": "advanced", "date": payload["date"]}
             return {"action": action, "status": "ok"}
 
+        def health_fn(site_id: str) -> Any:
+            self.health_calls.append(site_id)
+            if self._health_error is not None:
+                raise self._health_error
+            if self._health_report is not None:
+                return self._health_report
+            return health.LedgerHealthChecker(sql_fn=lambda _sql: "").check(site_id)
+
+        def bundle_fn(site_id: str, **kwargs: Any) -> str:
+            self.bundle_calls.append({"site_id": site_id, **kwargs})
+            if self._health_error is not None:
+                raise self._health_error
+            report = health.LedgerHealthChecker(sql_fn=lambda _sql: "").check(site_id)
+            return health.render_bug_bundle(report, **kwargs)
+
         self._tmpdir = tempfile.TemporaryDirectory()
+        self.backend_log_path = backend_log_path or Path(self._tmpdir.name) / "backend.log"
         self.service = web.WorkbenchService(
             seed_fn=seed_fn,
             clock_fn=clock_fn,
             clock_action_fn=clock_action_fn or default_clock_action_fn,
+            health_fn=health_fn,
+            bundle_fn=bundle_fn,
             state_path=state_path or Path(self._tmpdir.name) / "active.json",
             web_url=web_url,
+            backend_log_path=self.backend_log_path,
         )
         self.server = web.create_server(self.service, host="127.0.0.1", port=0)
         self.port = self.server.server_address[1]
@@ -490,6 +517,10 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("/api/reset", body)
         self.assertIn("Reset Current Scenario", body)
         self.assertIn("Scenario gallery", body)
+        self.assertIn("/api/ledger-health", body)
+        self.assertIn("/api/bug-bundle", body)
+        self.assertIn("Verify Ledger Health", body)
+        self.assertIn("Export Bug Bundle", body)
 
     def test_healthz_reports_ok(self) -> None:
         with Harness() as harness:
@@ -870,6 +901,124 @@ class PersonaQuickLaunchTests(unittest.TestCase):
         self.assertNotIn("/?quick_login=", markup)
         # Cross-window handles must not leak the app window either.
         self.assertIn('"noopener,noreferrer"', markup)
+
+class LedgerHealthEndpointTests(unittest.TestCase):
+    """POST /api/ledger-health scores the active scenario's ledger."""
+
+    def _prepare(self, harness: Harness) -> None:
+        status, payload = harness.json("/api/seed", method="POST", body={"preset": "F5"})
+        self.assertEqual(status, 200, payload)
+
+    def test_requires_an_active_scenario(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json("/api/ledger-health", method="POST", body={})
+        self.assertEqual(status, 409)
+        self.assertIn("No scenario is active", payload["error"])
+
+    def test_clean_preset_reports_green_with_manual_journeys_named(self) -> None:
+        with Harness() as harness:
+            self._prepare(harness)
+            status, payload = harness.json("/api/ledger-health", method="POST", body={})
+        self.assertEqual(status, 200, payload)
+        score = payload["health"]
+        self.assertEqual(score["status"], "GREEN")
+        self.assertEqual(score["site_id"], "4242")
+        self.assertEqual(score["passed_count"] + score["manual_count"], len(score["invariants"]))
+        manual = [item for item in score["invariants"] if item["status"] == "MANUAL"]
+        self.assertTrue(manual, "journey-only invariants must be reported, never silently passed")
+        for item in manual:
+            self.assertTrue(item["manual_suite"], item["invariant_id"])
+            self.assertFalse(item["automated"])
+
+    def test_injected_discrepancy_turns_the_scorecard_red(self) -> None:
+        report = health.LedgerHealthChecker(
+            sql_fn=lambda sql: (
+                "allocations_vs_dues_paid|77|recorded=1500.00, allocated=1400.00"
+                if "allocations_vs_dues_paid" in sql and "HAVING" in sql
+                else ""
+            )
+        ).check("4242")
+        with Harness(health_report=report) as harness:
+            self._prepare(harness)
+            status, payload = harness.json("/api/ledger-health", method="POST", body={})
+        self.assertEqual(status, 200, payload)
+        score = payload["health"]
+        self.assertEqual(score["status"], "RED")
+        self.assertEqual(score["failed_count"], 1)
+        failing = [item for item in score["invariants"] if item["status"] == "FAIL"]
+        self.assertEqual(failing[0]["invariant_id"], "I1")
+        self.assertEqual(failing[0]["violations"][0]["subject"], "77")
+
+    def test_unreachable_database_is_reported_as_a_502(self) -> None:
+        with Harness(health_error=RuntimeError("connection refused")) as harness:
+            self._prepare(harness)
+            status, payload = harness.json("/api/ledger-health", method="POST", body={})
+        self.assertEqual(status, 502)
+        self.assertIn("could not run", payload["error"])
+
+    def test_invalid_site_id_is_a_400(self) -> None:
+        with Harness(
+            health_error=health.LedgerHealthError("Site id is not a positive integer id")
+        ) as harness:
+            status, _payload = harness.json("/api/seed", method="POST", body={"preset": "F5"})
+            self.assertEqual(status, 200)
+            status, payload = harness.json("/api/ledger-health", method="POST", body={})
+        self.assertEqual(status, 400)
+        self.assertIn("not a positive integer", payload["error"])
+
+
+class BugBundleEndpointTests(unittest.TestCase):
+    """POST /api/bug-bundle renders a redacted Markdown bundle."""
+
+    def _prepare(self, harness: Harness) -> None:
+        status, payload = harness.json("/api/seed", method="POST", body={"preset": "F5"})
+        self.assertEqual(status, 200, payload)
+
+    def test_requires_an_active_scenario(self) -> None:
+        with Harness() as harness:
+            status, payload = harness.json("/api/bug-bundle", method="POST", body={})
+        self.assertEqual(status, 409)
+
+    def test_bundle_names_the_preset_clock_and_site(self) -> None:
+        with Harness() as harness:
+            self._prepare(harness)
+            status, payload = harness.json("/api/bug-bundle", method="POST", body={"notes": "A-2 shows the wrong fee"})
+        self.assertEqual(status, 200, payload)
+        markdown = payload["markdown"]
+        self.assertEqual(payload["preset"], "F5")
+        self.assertIn("`F5`", markdown)
+        self.assertIn("2026-11-19", markdown)
+        self.assertIn("4242", markdown)
+        self.assertIn("A-2 shows the wrong fee", markdown)
+        self.assertIn("Ledger health scorecard", markdown)
+        self.assertIn("Backend error responses", markdown)
+
+    def test_bundle_never_exports_persona_passwords(self) -> None:
+        with Harness() as harness:
+            self._prepare(harness)
+            status, payload = harness.json("/api/bug-bundle", method="POST", body={})
+        self.assertEqual(status, 200, payload)
+        self.assertNotIn("E2E-Manager-1", payload["markdown"])
+        self.assertNotIn("manager@example.test", payload["markdown"])
+        self.assertIn("m***r@example.test", payload["markdown"])
+
+    def test_bundle_carries_correlated_backend_errors_without_free_text(self) -> None:
+        log = (
+            '2026-11-25T10:00:00Z WARN request: request_id=req-9 method=GET '
+            'path=/api/units status=500 latency_ms=42 payer=Mehmet Yilmaz '
+            '"<-- HTTP request completed with server error"\n'
+        )
+        with Harness() as harness:
+            harness.backend_log_path.write_text(log, encoding="utf-8")
+            self._prepare(harness)
+            status, payload = harness.json("/api/bug-bundle", method="POST", body={})
+        self.assertEqual(status, 200, payload)
+        markdown = payload["markdown"]
+        self.assertIn("req-9", markdown)
+        self.assertIn("/api/units", markdown)
+        self.assertIn("500", markdown)
+        self.assertNotIn("Mehmet", markdown)
+
 
 
 if __name__ == "__main__":
