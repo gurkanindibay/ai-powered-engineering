@@ -428,10 +428,14 @@ jobs:
           python3 scripts/serenity_report.py
           --artifact-dir "$RUNNER_TEMP/e2e-test-report" --out "$RUNNER_TEMP/serenity-json"
       - name: Render Serenity site
-        run: >-
-          java -jar e2e-cucumber/node_modules/@serenity-js/serenity-bdd/cache/serenity-cli-*.jar
-          --source "$RUNNER_TEMP/serenity-json" --destination "$RUNNER_TEMP/serenity-raw"
-          --project SitePulse > "$RUNNER_TEMP/serenity.log" 2>&1 || { tail -40 "$RUNNER_TEMP/serenity.log"; exit 1; }
+        run: |
+          shopt -s nullglob
+          jars=(e2e-cucumber/node_modules/@serenity-js/serenity-bdd/cache/serenity-cli-*.jar)
+          if [ "${#jars[@]}" -ne 1 ]; then
+            echo "::error::expected one Serenity command line jar, found ${#jars[@]}: ${jars[*]}"; exit 1
+          fi
+          java -jar "${jars[0]}" --source "$RUNNER_TEMP/serenity-json" --destination "$RUNNER_TEMP/serenity-raw" \
+            --project SitePulse > "$RUNNER_TEMP/serenity.log" 2>&1 || { tail -40 "$RUNNER_TEMP/serenity.log"; exit 1; }
       - name: Sanitize Serenity site
         run: >-
           python3 scripts/pages_site.py sanitize-serenity
