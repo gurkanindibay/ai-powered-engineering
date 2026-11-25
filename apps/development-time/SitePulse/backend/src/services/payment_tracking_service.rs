@@ -171,6 +171,7 @@ impl PaymentTrackingService {
         };
 
         // Apply filters
+        let inner = self.state.inner.read().await;
         let search_term = filter.search.as_ref().map(|s| s.to_lowercase());
         let filtered: Vec<PaymentEntry> = all_entries
             .into_iter()
@@ -198,13 +199,15 @@ impl PaymentTrackingService {
                         return false;
                     }
                 }
+                let entry_date =
+                    crate::services::finance_common::local_date(&inner, &e.site_id, e.payment_date);
                 if let Some(start) = filter.start_date {
-                    if e.payment_date.date_naive() < start {
+                    if entry_date < start {
                         return false;
                     }
                 }
                 if let Some(end) = filter.end_date {
-                    if e.payment_date.date_naive() > end {
+                    if entry_date > end {
                         return false;
                     }
                 }
@@ -743,7 +746,10 @@ impl PaymentTrackingService {
         };
 
         let calc = crate::services::DuesCalculationService::new();
-        let today = issued_at.date_naive();
+        let today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::local_date(&inner, &site_id, issued_at)
+        };
         let booked_on = {
             let inner = self.state.inner.read().await;
             let operating_date = crate::services::finance_common::site_today(&inner, &site_id);
@@ -1318,6 +1324,10 @@ impl PaymentTrackingService {
             tenant_name.clone().unwrap_or_else(|| "Kiracı".to_string())
         };
         let now = crate::e2e_clock::now_utc();
+        let today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::local_date(&inner, &site_id, now)
+        };
         let calc = crate::services::DuesCalculationService::new();
         let ctx = ReceiptContext {
             site_id: site_id.clone(),
@@ -1432,7 +1442,7 @@ impl PaymentTrackingService {
                 .await
                 .map_err(db_err)?
                 .into_iter()
-                .map(|d| calc.calculate_delay_penalty(d, now.date_naive()))
+                .map(|d| calc.calculate_delay_penalty(d, today))
                 .collect();
             let (lines, unused) = allocate(&mut dues);
             let cleared = transfer_amount - unused;
@@ -1495,7 +1505,7 @@ impl PaymentTrackingService {
                 .iter()
                 .filter(|d| d.status.is_collectable() && crate::auth::same_id(&d.unit_id, &unit.id))
                 .cloned()
-                .map(|d| calc.calculate_delay_penalty(d, now.date_naive()))
+                .map(|d| calc.calculate_delay_penalty(d, today))
                 .collect();
             let seq = next_memory_sequence(&inner, &site_id, LEDGER_KIND_COLLECTION);
             let rid = inner
@@ -2053,7 +2063,11 @@ impl PaymentTrackingService {
         let old_owner_start_date = old_owner_user_id
             .as_deref()
             .and_then(|uid| inner.users.iter().find(|u| u.id == uid))
-            .map(|user| user.created_at.date_naive())
+            .map(|user| {
+                user.created_at
+                    .with_timezone(&crate::domain::clock::DEFAULT_TIMEZONE)
+                    .date_naive()
+            })
             .unwrap_or_else(|| NaiveDate::from_ymd_opt(2020, 1, 1).unwrap_or(transfer_date))
             .min(transfer_date);
 
@@ -2370,7 +2384,10 @@ fn memory_principal_histories(
         for item in &r.allocation_breakdown {
             if let Some(history) = item.due_id.as_ref().and_then(|id| out.get_mut(id)) {
                 if item.principal_paid > Decimal::ZERO {
-                    history.push((r.issued_at.date_naive(), item.principal_paid));
+                    history.push((
+                        crate::services::finance_common::local_date(inner, &r.site_id, r.issued_at),
+                        item.principal_paid,
+                    ));
                 }
             }
         }

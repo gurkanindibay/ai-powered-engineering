@@ -239,10 +239,12 @@ impl AssemblyService {
             "NO_QUORUM"
         }
         .to_string();
-        meeting.held_on = Some(
-            req.held_on
-                .unwrap_or_else(|| meeting.scheduled_at.date_naive()),
-        );
+        meeting.held_on = Some(req.held_on.unwrap_or_else(|| {
+            crate::domain::clock::local_date(
+                &crate::models::default_site_timezone(),
+                meeting.scheduled_at,
+            )
+        }));
         let meeting = self.store.update(meeting, col::meetings).await?;
         Ok(self.store.read(|inner| meeting_view(inner, &meeting)).await)
     }
@@ -378,9 +380,12 @@ impl AssemblyService {
             site_id: caller.site_id.clone(),
             meeting_id: Some(meeting.id),
             decision_number: number,
-            decided_on: meeting
-                .held_on
-                .unwrap_or_else(|| meeting.scheduled_at.date_naive()),
+            decided_on: meeting.held_on.unwrap_or_else(|| {
+                crate::domain::clock::local_date(
+                    &crate::models::default_site_timezone(),
+                    meeting.scheduled_at,
+                )
+            }),
             title: item.title.clone(),
             text,
             outcome: if accepted { "ACCEPTED" } else { "REJECTED" }.to_string(),

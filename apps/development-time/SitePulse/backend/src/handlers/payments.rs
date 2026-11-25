@@ -378,6 +378,10 @@ pub async fn get_site_payments(
         .map(|s| s.id.clone())
         .unwrap_or_else(|| query.site_id.clone().unwrap_or_default());
     let site_name = site.as_ref().map(|s| s.name.clone()).unwrap_or_default();
+    let site_timezone = site
+        .as_ref()
+        .map(|s| s.timezone.as_str())
+        .unwrap_or_else(|| "Europe/Istanbul");
 
     // 2. Units in this site
     let site_units: Vec<_> = inner
@@ -540,7 +544,7 @@ pub async fn get_site_payments(
                 payments.push(serde_json::json!({
                     "match_id": format!("MATCH-HP-{}", hp.id),
                     "transaction_id": hp.id.clone(),
-                    "date": hp.created_at.date_naive().to_string(),
+                    "date": crate::domain::clock::local_date(site_timezone, hp.created_at).to_string(),
                     "unit_id": Some(hp.unit_id.clone()),
                     "block": Some(hp.block_id.clone()),
                     "unit_number": Some(hp.unit_number),
@@ -890,5 +894,66 @@ mod tests {
         assert_eq!(debt_aging_as_of(&inner, Some("7"), now), next_day);
         assert_eq!(debt_aging_as_of(&inner, None, now), next_day);
         assert_ne!(debt_aging_as_of(&inner, Some("7"), now), now.date_naive());
+    }
+
+    #[tokio::test]
+    async fn reconciliation_payments_date_is_the_site_local_date_after_21_utc() {
+        let now = Utc
+            .with_ymd_and_hms(2026, 11, 30, 22, 30, 0)
+            .single()
+            .unwrap_or_default();
+        let state = crate::state::AppState::new();
+        {
+            let mut inner = state.inner.write().await;
+            inner.sites.push(istanbul_site("7"));
+            inner.units.push(crate::models::IndependentUnit {
+                id: "u-1".to_string(),
+                site_id: "7".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 1,
+                floor: 1,
+                land_share: 100,
+                owner_user_id: None,
+                tenant_user_id: None,
+                virtual_iban: None,
+                house_type: None,
+                monthly_tariff_override: None,
+                created_on: None,
+            });
+            inner
+                .homeowner_payments
+                .push(crate::models::HomeownerPaymentRecord {
+                    id: "hp-1".to_string(),
+                    unit_id: "u-1".to_string(),
+                    block_id: "A".to_string(),
+                    unit_number: 1,
+                    homeowner_name: Some("Test".to_string()),
+                    amount: Decimal::from(100),
+                    payment_method: PaymentChannel::CreditCard,
+                    reference_code: None,
+                    note: None,
+                    status: crate::models::PaymentMatchStatus::MatchedDebt,
+                    cleared_debt_amount: Decimal::from(100),
+                    advance_credit_amount: Decimal::ZERO,
+                    created_at: now,
+                });
+        }
+        let response = get_site_payments(
+            State(state),
+            crate::tenancy::TenantScope::site("7"),
+            Query(SitePaymentsQuery {
+                site_id: Some("7".to_string()),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("bytes");
+        let body: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        let payment = &body["payments"][0];
+        assert_eq!(payment["date"], "2026-12-01");
+        assert_ne!(payment["date"], now.date_naive().to_string());
     }
 }

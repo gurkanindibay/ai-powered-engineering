@@ -187,3 +187,109 @@ async fn when_a_unit_is_archived_late_in_the_istanbul_evening_then_end_dates_use
     drop(client);
     drop_db(database).await;
 }
+
+// covers: SC-13-05-19
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn when_payment_recorded_late_in_istanbul_evening_then_payment_history_principal_date_uses_istanbul_date(
+) {
+    let clock = late_istanbul_evening();
+    let database = crate::test_db::create("site_local_payment_history").await;
+    let mut client = database.pool.get().await.expect("connection");
+    let tx = client.transaction().await.expect("transaction");
+    let row = tx
+        .query_one(
+            "SELECT id, site_id FROM units WHERE deleted_at IS NULL ORDER BY id LIMIT 1",
+            &[],
+        )
+        .await
+        .expect("a seeded unit");
+    let (unit_id, site_id): (i64, i64) = (row.get(0), row.get(1));
+    db::tx_bind_tenant(&tx, site_id).await.expect("bind tenant");
+    let due_id: i64 = tx
+        .query_one(
+            "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type)
+             VALUES ($1, 'SITE-LOCAL-PAYMENT', 100.00, $2, 'PENDING', 'OWNER') RETURNING id",
+            &[&unit_id, &date(11, 30)],
+        )
+        .await
+        .expect("insert due")
+        .get(0);
+
+    let late = clock.now();
+    let pe_id: i64 = tx
+        .query_one(
+            "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel, settlement_status, payment_date, entry_type)
+             VALUES ($1, $2, 'Test Resident', 100.00, 'BANK_TRANSFER', 'SETTLED', $3, 'COLLECTION')
+             RETURNING id",
+            &[&site_id, &unit_id, &late],
+        )
+        .await
+        .expect("insert payment entry")
+        .get(0);
+
+    tx.execute(
+        "INSERT INTO payment_allocations (payment_entry_id, dues_liability_id, principal_amount, penalty_amount)
+         VALUES ($1, $2, 100.00, 0.00)",
+        &[&pe_id, &due_id],
+    )
+    .await
+    .expect("insert allocation");
+
+    let history = db::tx_load_due_principal_payments(&tx, due_id)
+        .await
+        .expect("load principal payments");
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].0, date(12, 1));
+    assert_ne!(history[0].0, late.date_naive());
+
+    tx.rollback().await.expect("rollback");
+    drop(client);
+    drop_db(database).await;
+}
+
+// covers: SC-13-05-19
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn when_payment_recorded_late_in_istanbul_evening_then_tx_load_payments_for_site_uses_istanbul_date(
+) {
+    let clock = late_istanbul_evening();
+    let database = crate::test_db::create("site_local_load_payments").await;
+    let client = database.pool.get().await.expect("connection");
+    let row = client
+        .query_one(
+            "SELECT id, site_id FROM units WHERE deleted_at IS NULL ORDER BY id LIMIT 1",
+            &[],
+        )
+        .await
+        .expect("a seeded unit");
+    let (unit_id, site_id): (i64, i64) = (row.get(0), row.get(1));
+
+    let late = clock.now();
+    let pe_id: i64 = client
+        .query_one(
+            "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel, settlement_status, payment_date, entry_type)
+             VALUES ($1, $2, 'Test Resident', 100.00, 'BANK_TRANSFER', 'SETTLED', $3, 'COLLECTION')
+             RETURNING id",
+            &[&site_id, &unit_id, &late],
+        )
+        .await
+        .expect("insert payment entry")
+        .get(0);
+
+    let payments_json = db::fetch_site_payments_from_db(&database.pool, Some(&site_id.to_string()))
+        .await
+        .expect("load payments");
+    let payments = payments_json["payments"]
+        .as_array()
+        .expect("payments array");
+    let pe = payments
+        .iter()
+        .find(|p| p["transaction_id"].as_str() == Some(&pe_id.to_string()))
+        .expect("found payment");
+    assert_eq!(pe["date"].as_str(), Some("2026-12-01"));
+    assert_ne!(pe["date"].as_str(), Some("2026-11-30"));
+
+    drop(client);
+    drop_db(database).await;
+}
