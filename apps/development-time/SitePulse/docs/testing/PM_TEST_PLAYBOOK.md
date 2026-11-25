@@ -487,8 +487,9 @@ Regeneration procedure:
 
 1. Start a stack and prepare each preset, or read the values straight from the modules above with `python3 -c` (no stack needed for the catalogue).
 2. Diff every table in §5, §7 and §10 against the source. A changed number in the source and not in this page is a documentation defect.
-3. Run the local gates before you push: `python3 -m unittest discover -s harness/tests` and `python3 scripts/run_tests.py --group lint --summary` (the same Python gate group CI runs; see [TEST_STRATEGY.md](TEST_STRATEGY.md) "Quality signals and gates").
-4. Change this page in the same pull request as the catalogue change. A playbook that lags a preset by one PR is worse than no playbook, because a PM will assert the old total and file a false bug.
+3. **The copies are checked.** `harness/tests/test_pm_playbook.py` parses the pack sections and their preset, unit-balance and metric tables, and fails when a pack, label, clock, total, unit balance or capital figure disagrees with `PACKS`, `PRESET_LABELS`, `REFERENCE_CLOCKS`, `EXPECTED_TOTALS` or `EXPECTED_UNIT_BALANCES`. A stale copy therefore fails the harness suite; fix the page, not the test.
+4. Run the local gates before you push: `python3 -m unittest discover -s harness/tests` and `python3 scripts/run_tests.py --group lint --summary` (the same Python gate group CI runs; see [TEST_STRATEGY.md](TEST_STRATEGY.md) "Quality signals and gates").
+5. Change this page in the same pull request as the catalogue change. A playbook that lags a preset by one PR is worse than no playbook, because a PM will assert the old total and file a false bug.
 
 ## 14. Where the manual lane stops
 

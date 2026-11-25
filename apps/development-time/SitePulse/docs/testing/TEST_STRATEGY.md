@@ -188,7 +188,7 @@ The manual lane answers a question no automated lane answers: **can a person do 
 | Concern | Rule |
 | --- | --- |
 | Tooling | [`scripts/pm_workbench.py`](../../scripts/pm_workbench.py) starts the local stack and seeds a preset; [`scripts/pm_workbench_web.py`](../../scripts/pm_workbench_web.py) serves the Workbench Web UI (`:9095`) with the scenario gallery, cheat sheet, Time Machine, companion files and bug-bundle export; [`scripts/pm_ledger_health.py`](../../scripts/pm_ledger_health.py) scores a seeded site against the twelve ledger invariants |
-| Starting state | Always a named preset from `scripts/pm_scenarios` (`F0`–`F10_GOVERNANCE`), the same catalogue the E2E seeder uses, so a cheat sheet cannot drift from the suite |
+| Starting state | Always a named preset from `scripts/pm_scenarios` (`F0`–`F10_GOVERNANCE`), the same catalogue the E2E seeder uses, so a cheat sheet cannot drift from the suite. The playbook's copies of those numbers are themselves checked by `harness/tests/test_pm_playbook.py` |
 | What it can prove | That the build is usable, that the documented numbers appear on screen, and that a defect reproduces on a known state |
 | What it cannot prove | That a rule holds. A manual pass is one observation on one site; the evidence of record stays the scenario and its named CI test (principle 1) |
 | Output of a failed session | A bug bundle (preset, clock, site, redacted roster, ledger-health scorecard, correlated `request_id`/`trace_id` fields) attached to an issue, plus the checklist line that failed |
