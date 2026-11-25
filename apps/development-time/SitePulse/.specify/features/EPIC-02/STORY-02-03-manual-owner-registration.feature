@@ -27,10 +27,12 @@ Feature: Manual unit and home owner registration
     When the manager deletes the resident and confirms
     Then the delete is refused and the resident card stays
 
-  # Pending: scenario is outdated: owner registration now sends an activation link (activation status SENT in the register response) instead of showing a generated temporary password; rewrite it against the activation flow, then automate it.
-  @SC-02-03-05 @pending @core @role_manager
-  Scenario: Registration shows generated temporary credentials
+  # Verified in the browser by test_manual_owner_registration_hands_off_an_activation_link.
+  @SC-02-03-05 @GUI-02-03 @layer:gui @linked @core @role_manager
+  Scenario: Registration hands off a one-time activation link
     Given the Site Manager opens the add owner modal
-    When saving a new owner with block "B", flat "25", resident "Fatma Şahin" and an email
+    When saving a new owner with flat "25", resident "Fatma Şahin" and an email
     Then the unit count increments by one
-    And a credentials dialog displays a generated temporary password
+    And the dialog confirms the activation link was sent
+    And one unused activation token exists for the new account
+    And no temporary password is shown
