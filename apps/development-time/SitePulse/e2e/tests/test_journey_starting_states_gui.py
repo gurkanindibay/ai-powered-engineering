@@ -561,3 +561,109 @@ def test_f2_cancelling_accrual_confirmation_makes_no_financial_change(request, a
         period, text = dues.accrue_selected_period()
         assert len(period) > 0
         assert stack.sql(f"SELECT COUNT(*) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id = {site};") != "0"
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.covers("SC-13-05-17")
+@pytest.mark.gui_id("GUI-13-16")
+def test_f5_checkout_shows_tenant_debt_and_owner_remains_collectible(
+        request, api, actors, stack, page, login_page):
+    with journey_site(request, api, actors, stack, "F5") as fixture:
+        unit = fixture.unit_ids[4]  # A-5: tenant Deniz Arslan, owner Can Öztürk
+        sign_in_manager(page, login_page, fixture)
+        ResidentsTab(page).open()
+        UnitWorkspace(page).open(unit).action(unit, "move_out")
+
+        assert amount_of(page, "checkout_debt_principal") == Decimal("4500.00")
+        assert amount_of(page, "checkout_debt_late_fee") == Decimal("297.50")
+        assert amount_of(page, "checkout_debt_total") == Decimal("4797.50")
+        assert "Deniz Arslan" in page_text(page)
+        by_id(page, "module_move_out_effective_date").click()
+        page.get_by_role(
+            "button",
+            name=re.compile(r"(?:November 19, 2026|19 Kasım 2026)", re.IGNORECASE),
+        ).click()
+        page.get_by_role("button", name="Tamam", exact=True).click()
+        by_id(page, "module_confirm_move_out_btn").click()
+        by_id(page, "module_confirm_move_out_btn").wait_for(state="detached", timeout=15_000)
+
+        before = api.resident_statement(fixture.manager, unit)
+        tenant_receipt_numbers = [
+            item["receipt_number"]
+            for item in before["receipts"]
+            if item["payer_role"] == "TENANT"
+        ]
+        tenant = next(d for d in before["debtors"] if d["debtor_type"] == "TENANT")
+        september = next(i for i in tenant["open_items"] if i["period"] == "Eylül 2026")
+        payment = api.call(
+            "POST",
+            "/api/v1/payments/record-manual",
+            fixture.manager.token,
+            body={
+                "site_id": fixture.site_id,
+                "unit_id": unit,
+                "amount": "1675.00",
+                "payer_name": "Can Öztürk",
+                "payer_role": "OWNER",
+                "payment_channel": "MANUAL_CASH",
+                "designation": {"due_ids": [september["due_id"]]},
+                "settles_tenant_joint_liability": True,
+                "idempotency_key": f"sc-13-05-17-{fixture.site_id}",
+            },
+        )
+        receipt = payment.get("receipt", payment)
+        assert receipt["payer_name"] == "Can Öztürk"
+        assert receipt["on_behalf_of_name"] == "Deniz Arslan"
+
+        owner_page = page.context.new_page()
+        owner_email = resident_email(stack, fixture, "Can Öztürk")
+        LoginPage(owner_page, login_page.base_url).open().login(
+            "homeowner", owner_email, fixture.manager_password)
+        ResidentHome(owner_page).wait()
+        by_id(owner_page, "resident_statement_entry").click()
+        by_id(owner_page, "statement_joint_liability_total").wait_for(timeout=15_000)
+        assert amount_of(owner_page, "statement_joint_liability_total") == Decimal("3122.50")
+        assert by_id(owner_page, f"statement_receipt_{receipt['receipt_number']}").count() == 1
+        owner_text = page_text(owner_page)
+        tenant_phone = stack.sql(
+            "SELECT COALESCE(phone, '') FROM persons "
+            f"WHERE site_id = {int(fixture.site_id)} AND full_name = 'Deniz Arslan';"
+        )
+        assert "Deniz Arslan" not in owner_text
+        assert resident_email(stack, fixture, "Deniz Arslan") not in owner_text
+        assert not tenant_phone or tenant_phone not in owner_text
+
+        # Add a tenant-origin receipt after proving the owner's exact remaining balance.
+        # The owner statement must keep showing the owner's own receipt only.
+        tenant_payment = api.call(
+            "POST",
+            "/api/v1/payments/record-manual",
+            fixture.manager.token,
+            body={
+                "site_id": fixture.site_id,
+                "unit_id": unit,
+                "amount": "100.00",
+                "payer_name": "Deniz Arslan",
+                "payer_role": "TENANT",
+                "payment_channel": "MANUAL_CASH",
+                "designation": {"due_ids": [next(
+                    item["due_id"] for item in tenant["open_items"]
+                    if item["period"] == "Ekim 2026"
+                )]},
+                "idempotency_key": f"sc-13-05-17-tenant-{fixture.site_id}",
+            },
+        )
+        tenant_receipt = tenant_payment.get("receipt", tenant_payment)
+        assert tenant_receipt["payer_name"] == "Deniz Arslan"
+        assert tenant_receipt["payer_role"] == "TENANT"
+        owner_page.close()
+        owner_page = page.context.new_page()
+        LoginPage(owner_page, login_page.base_url).open().login(
+            "homeowner", owner_email, fixture.manager_password)
+        ResidentHome(owner_page).wait()
+        by_id(owner_page, "resident_statement_entry").click()
+        by_id(owner_page, "statement_joint_liability_total").wait_for(timeout=15_000)
+        assert by_id(owner_page, f"statement_receipt_{tenant_receipt['receipt_number']}").count() == 0
+        for receipt_number in tenant_receipt_numbers:
+            assert by_id(owner_page, f"statement_receipt_{receipt_number}").count() == 0

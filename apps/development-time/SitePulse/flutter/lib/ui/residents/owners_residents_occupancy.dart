@@ -5,6 +5,9 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
   void _openMoveOut(HomeOwnerItem ho) {
     final notesCtrl = TextEditingController();
     final advanceAmountCtrl = TextEditingController();
+    final statementFuture = ho.isTenantOccupied
+        ? PaymentsPhase2Api.statement(ho.unitId)
+        : null;
     var effectiveDate = DateTime.now();
     var settlementChoice = AdvanceExitSettlementChoice.keep;
     const sourceDebtor = 'TENANT';
@@ -91,6 +94,57 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Ayrılan Sakin: ${ho.activeResponsibleResidentName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 12),
+            if (ho.isTenantOccupied)
+              FutureBuilder<ResidentStatement>(
+                future: statementFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: LinearProgressIndicator(),
+                    );
+                  }
+                  if (snapshot.hasError || snapshot.data == null) {
+                    AppLogger.warn(
+                      'Unable to load tenant debt for move-out',
+                      tag: 'Residents',
+                      error: snapshot.error,
+                      context: {'unit_id': ho.unitId},
+                    );
+                    return testId('checkout_debt_error', const Text('Kiracı borç özeti yüklenemedi.'));
+                  }
+                  StatementDebtor? tenant;
+                  for (final debtor in snapshot.data!.debtors) {
+                    if (debtor.debtorType == 'TENANT' && !debtor.isFormer) {
+                      tenant = debtor;
+                      break;
+                    }
+                  }
+                  if (tenant == null) {
+                    return testId('checkout_debt_error', const Text('Aktif kiracının borç özeti bulunamadı.'));
+                  }
+                  return testId(
+                    'checkout_open_debt',
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Açık kiracı borcu · ${tenant.name}'),
+                            const SizedBox(height: 8),
+                            testId('checkout_debt_principal', Text('Anapara: ${formatTry(tenant.principalOutstanding)}')),
+                            testId('checkout_debt_late_fee', Text('Gecikme tazminatı: ${formatTry(tenant.penaltyOutstanding)}')),
+                            const Divider(),
+                            testId('checkout_debt_total', Text('Toplam açık borç: ${formatTry(tenant.totalOutstanding)}')),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             const SizedBox(height: 12),
             testId('module_move_out_effective_date', SpEffectiveDateField(
               key: const Key('module_move_out_effective_date'),

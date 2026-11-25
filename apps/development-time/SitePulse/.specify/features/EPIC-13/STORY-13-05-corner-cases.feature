@@ -183,8 +183,7 @@ Feature: Corner cases around accrual, occupancy, access and time
 
   # ------------------------------------------------- tenant departure (Q9)
 
-  # Pending: GUI check-out screen is not automated; tracked by #273 (automate the @pending GUI journey scenarios). The backend side of the same flow is covered by SC-13-05-06.
-  @SC-13-05-17 @J-12 @depth:2 @state:F5 @layer:gui @core @role_manager @pending
+  @SC-13-05-17 @J-12 @depth:2 @state:F5 @layer:gui @core @role_manager @linked
   Scenario: Check-out shows the tenant's debt and the owner can still be collected from
     Given the site is in state F5
     When the manager starts the check-out of tenant "Deniz Arslan" from "A-5" effective "2026-11-19"
