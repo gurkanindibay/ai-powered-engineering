@@ -133,3 +133,6 @@ mod test_db;
 
 #[path = "it/support/mod.rs"]
 mod support;
+
+#[path = "it/money_rules_proptest.rs"]
+mod money_rules_proptest;
