@@ -10,6 +10,8 @@ E2E = Path(__file__).resolve().parents[2] / "e2e"
 sys.path.insert(0, str(E2E))
 
 from support.page_errors import (  # noqa: E402
+    BUFFER,
+    BUFFER_LIMIT,
     CAPTURE_PREFIX,
     CAPTURE_SCRIPT,
     describe_page_error,
@@ -48,16 +50,39 @@ class DescribePageErrorTests(unittest.TestCase):
         self.assertEqual(len(lines), 7)
 
 
-class UncaughtDetailsTests(unittest.TestCase):
-    def test_only_capture_lines_are_returned(self) -> None:
-        lines = [
-            "Failed to load resource: 401",
-            f"{CAPTURE_PREFIX} unhandledrejection value=undefined",
-        ]
-        self.assertEqual(uncaught_details(lines), ["unhandledrejection value=undefined"])
+class FakePage:
+    def __init__(self, entries=None, closed: bool = False, fails: bool = False) -> None:
+        self.entries, self.closed, self.fails = entries, closed, fails
+        self.expressions: list[str] = []
 
-    def test_script_embeds_the_prefix(self) -> None:
+    def is_closed(self) -> bool:
+        return self.closed
+
+    def evaluate(self, expression: str):
+        self.expressions.append(expression)
+        if self.fails:
+            raise RuntimeError("Execution context was destroyed")
+        return self.entries
+
+
+class UncaughtDetailsTests(unittest.TestCase):
+    def test_reads_the_page_buffer(self) -> None:
+        page = FakePage(["unhandledrejection value=undefined"])
+        self.assertEqual(uncaught_details(page), ["unhandledrejection value=undefined"])
+        self.assertIn(BUFFER, page.expressions[0])
+
+    def test_closed_or_broken_page_gives_nothing(self) -> None:
+        self.assertEqual(uncaught_details(FakePage(closed=True)), [])
+        self.assertEqual(uncaught_details(FakePage(fails=True)), [])
+        self.assertEqual(uncaught_details(FakePage(None)), [])
+
+    def test_buffer_is_capped(self) -> None:
+        self.assertEqual(len(uncaught_details(FakePage([str(i) for i in range(99)]))), BUFFER_LIMIT)
+
+    def test_script_embeds_prefix_buffer_and_limit(self) -> None:
         self.assertIn(repr(CAPTURE_PREFIX), CAPTURE_SCRIPT)
+        self.assertIn(repr(BUFFER), CAPTURE_SCRIPT)
+        self.assertIn(f"buffer.length < {BUFFER_LIMIT}", CAPTURE_SCRIPT)
         self.assertIn("unhandledrejection", CAPTURE_SCRIPT)
 
 
