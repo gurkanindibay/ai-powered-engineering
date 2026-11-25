@@ -12,6 +12,8 @@ on:
       - 'scripts/team_orchestrator.py'
       - 'scripts/issue_claim.py'
       - 'tests/issue_claim/**'
+      - 'scripts/cleanup_unused_worktrees.py'
+      - 'tests/cleanup_unused_worktrees/**'
       - 'scripts/cargo_target_pool.py'
       - 'tests/cargo_target_pool/**'
       - 'scripts/review_bot.py'
@@ -30,6 +32,8 @@ on:
       - 'scripts/engineering_harness/**'
       - 'scripts/development_harness.py'
       - 'scripts/team_orchestrator.py'
+      - 'scripts/cleanup_unused_worktrees.py'
+      - 'tests/cleanup_unused_worktrees/**'
       - 'scripts/cargo_target_pool.py'
       - 'tests/cargo_target_pool/**'
       - 'scripts/review_bot.py'
@@ -60,6 +64,8 @@ jobs:
         run: python3 -m unittest discover -s tests/issue_claim -v
       - name: Cargo target pool tests
         run: python3 -m unittest discover -s tests/cargo_target_pool -v
+      - name: Unused worktree cleanup tests
+        run: python3 -m unittest discover -s tests/cleanup_unused_worktrees -v
       - name: Review bot tests
         run: python3 -m unittest discover -s tests/review_bot -v
       - name: Review queue and watcher tests

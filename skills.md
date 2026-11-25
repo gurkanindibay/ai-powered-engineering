@@ -466,6 +466,18 @@ and measures a warm target slot handoff across source trees. See the
 [Cargo target benchmark](apps/development-time/SitePulse/docs/engineering-process/cargo-target-benchmark.md)
 for results and prerequisites.
 
+## 5c-3e. Unused Worktree Cleanup (`cleanup_unused_worktrees.py`)
+
+- **Executable Script:** [scripts/cleanup_unused_worktrees.py](scripts/cleanup_unused_worktrees.py)
+- **Purpose:** Removes linked worktrees that are no longer needed, without losing work. A worktree is removed only if it is not locked, was not touched within `--grace-minutes` (default 60), has no running process inside it (Linux `/proc`), is clean (no modified or untracked files), and is on a branch with a MERGED or CLOSED PR, no open PR and no unpushed commits. Being contained in `origin/master` is not enough (a just-created task worktree is), so detached worktrees are always kept. `--grace-minutes` must be at least 5. Branches are kept; git-ignored files go with the directory. It never uses `--force`. Dry run by default (no prune, no index writes); `--apply` removes and prunes. The in-use check cannot see a session that keeps no process inside its worktree, so the grace period is its only protection.
+- **Tests:** `python3 -m unittest discover -s tests/cleanup_unused_worktrees`
+
+```bash
+python3 scripts/cleanup_unused_worktrees.py            # dry run
+python3 scripts/cleanup_unused_worktrees.py --json     # dry run, JSON
+python3 scripts/cleanup_unused_worktrees.py --apply    # remove eligible worktrees
+```
+
 ## 5c-4. PR Review Bot (`review_bot.py`)
 
 - **Executable Script:** [scripts/review_bot.py](file:///scripts/review_bot.py)
