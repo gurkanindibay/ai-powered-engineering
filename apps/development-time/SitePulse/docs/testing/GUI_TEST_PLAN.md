@@ -82,7 +82,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-02-04 | 02-03 | Manager | P2 | seed | Add a resident to an already occupied unit → duplicate warning ("halihazırda kayıtlı sakin") and the unit is unchanged (the person card chosen in the picker stays without a role) | as above, `sp_person_create`, `person_form_*` | ✅ |
 | GUI-02-05 | 02-03 | Manager | P1 | ui:GUI-02-03 | Delete that resident → confirm dialog → removed. DB check: soft-delete/archive follows the zero-data-loss rule | `btn_delete_resident_*`, `btn_confirm_delete_resident` | ✅ |
 | GUI-02-06 | 02-04 | Manager | P1 | api:`overdue_dues(A14)` | Payment tracking → "Hatırlat" on A Blok D:14 → confirmation toast | NEW:`btn_remind_*` | ❌ **confirmed gap**: "Hatırlatma SMS" is only a caption on the aging tile; no reminder or message action exists |
-| GUI-02-07 | 02-05 | Manager → Homeowner | P1 | seed | Manager creates announcement "Planlı Su Kesintisi" → visible in the manager feed → log in as homeowner → visible there | NEW:`btn_create_announcement` | ❌ **confirmed gap**: announcements are display-only; no create UI and no backend route |
+| GUI-02-07 | 02-05 | Manager → Homeowner | P1 | seed | Manager creates announcement "Planlı Su Kesintisi" → the resident feed lists it with its title and details (`SC-02-05-01`, `SC-02-05-02`) | `btn_create_announcement`, `announcement_title_field`, `resident_action_announcements`, `site_announcement_title` | ✅ |
 | GUI-02-08 | 02-01 | Manager | P1 | seed | House types modal: edit the 2+1 tariff → saved; invalid amount (negative, or more than 2 decimals) → validation error | NEW:`house_type_*` | ✅ |
 
 ### EPIC-03 SaaS Multi-Tenancy & Onboarding
