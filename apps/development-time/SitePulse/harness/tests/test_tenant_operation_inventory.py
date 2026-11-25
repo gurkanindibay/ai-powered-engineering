@@ -2,6 +2,7 @@
 from collections import Counter
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 
 SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
@@ -103,6 +104,46 @@ class TenantOperationInventoryTests(unittest.TestCase):
                 self.assertFalse(result["ok"])
                 self.assertIn(message, result["invalid"][0])
                 self.assertEqual(result["runtime_coverage"]["tenant_reference"]["tested"], 0)
+
+    def test_runtime_references_must_resolve_to_a_test_function(self):
+        operations = {("GET", "/known")}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "e2e").mkdir()
+            (root / "e2e" / "test_example.py").write_text(
+                "def test_known():\n    pass\n\n\ndef helper():\n    pass\n", encoding="utf-8")
+            (root / "outside.py").write_text("def test_known():\n    pass\n", encoding="utf-8")
+            valid = "e2e/test_example.py::test_known"
+            for reference in (
+                "e2e/test_example",
+                "e2e/test_known",
+                "e2e/test_absent.py::test_known",
+                "e2e/test_example.py::test_renamed",
+                "e2e/test_example.py::helper",
+                "test_example.py::test_known",
+                "e2e/../outside.py::test_known",
+            ):
+                with self.subTest(reference=reference):
+                    # One good reference must not hide a broken one.
+                    rows = [entry("GET", "/known", runtime_tests=[valid, reference])]
+                    result = inventory.validate(
+                        {"version": 1, "operations": rows}, operations, Counter(operations),
+                        test_root=root)
+                    self.assertFalse(result["ok"])
+                    self.assertEqual(result["unresolved_runtime_tests"], [f"GET /known: {reference}"])
+                    self.assertEqual(result["runtime_coverage"]["tenant_reference"]["tested"], 0)
+            rows = [entry("GET", "/known", runtime_tests=[valid])]
+            result = inventory.validate(
+                {"version": 1, "operations": rows}, operations, Counter(operations), test_root=root)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["unresolved_runtime_tests"], [])
+
+    def test_checked_in_inventory_references_resolve(self):
+        root = SCRIPTS.parent
+        document = inventory._load_json(root / "e2e/nightly/tenant_operation_inventory.json")
+        spec_operations = inventory.openapi_operations(inventory._load_json(root / "docs/api/openapi.json"))
+        result = inventory.validate(document, spec_operations, Counter(spec_operations), test_root=root)
+        self.assertEqual(result["unresolved_runtime_tests"], [])
 
     def test_drifts_reported_separately_from_inventory_findings(self):
         source = """

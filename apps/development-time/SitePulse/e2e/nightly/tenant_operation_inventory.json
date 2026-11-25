@@ -16,7 +16,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::account_report (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -26,7 +26,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::get_approval_policy (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -36,7 +36,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::set_approval_policy (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -46,7 +46,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::budget_vs_actual (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -64,7 +64,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_expenses (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -74,7 +74,7 @@
       "reason": "CreateExpenseRequest can supply a vendor ID.",
       "evidence": "backend/src/app.rs: handlers::create_expense (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -84,7 +84,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::approve_expense (Require(ExpenseApprove))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -94,7 +94,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::pay_expense (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -104,7 +104,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::reject_expense (Require(ExpenseApprove))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -114,7 +114,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::journal (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -124,7 +124,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_journal_entry (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -134,7 +134,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::reserve_fund (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -144,7 +144,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::trial_balance (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -154,7 +154,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_vendors (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -164,7 +164,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_vendor (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -174,7 +174,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_corrections (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -184,7 +184,7 @@
       "reason": "RequestCorrectionRequest supplies a liability ID.",
       "evidence": "backend/src/app.rs: handlers::request_correction (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -194,7 +194,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::decide_correction (Require(AdjustmentApprove))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -204,7 +204,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::get_accrual_schedule (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -214,7 +214,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::update_accrual_schedule (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -224,7 +224,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_adjustments (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -234,7 +234,7 @@
       "reason": "RequestAdjustmentRequest supplies a liability ID.",
       "evidence": "backend/src/app.rs: handlers::request_adjustment (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -244,7 +244,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::decide_adjustment (Require(AdjustmentApprove))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -254,7 +254,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::collection_analytics (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -264,7 +264,7 @@
       "reason": "CreateAnnouncementRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::create_announcement (Require(AnnouncementBroadcast))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -274,7 +274,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::close_agenda_item (Require(GovernanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -284,7 +284,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::cast_votes (Require(GovernanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -294,7 +294,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_decisions (RequireAny(&[GovernanceManage, FinanceRead, UnitRead]))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -304,7 +304,7 @@
       "reason": "RecordDecisionRequest can link a site budget by ID.",
       "evidence": "backend/src/app.rs: handlers::record_decision (Require(GovernanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -314,7 +314,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_meetings (Require(GovernanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -324,7 +324,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_meeting (Require(GovernanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -334,7 +334,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::get_meeting (Require(GovernanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -344,7 +344,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::record_attendance (Require(GovernanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -354,7 +354,7 @@
       "reason": "Reads audit entries in the authenticated caller's site or platform scope.",
       "evidence": "backend/src/app.rs: authorization::audit_events (Require(AuditLogRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -364,7 +364,7 @@
       "reason": "Reads audit entries in the authenticated caller's site or platform scope.",
       "evidence": "backend/src/app.rs: authorization::audit_events (Require(AuditLogExport))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -470,7 +470,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::run_autopay (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_writes_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_writes_follow_manager_site"
       ]
     },
     {
@@ -480,7 +480,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::reconciliation_runs (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -490,7 +490,7 @@
       "reason": "Derives the ledger site from the caller for the supplied statement lines.",
       "evidence": "backend/src/app.rs: handlers::daily_reconciliation (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -500,7 +500,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_bank_feeds (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -510,7 +510,7 @@
       "reason": "Creates the feed in the caller's site using a bank account number, without selecting a SitePulse site or existing resource.",
       "evidence": "backend/src/app.rs: handlers::create_bank_feed (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -520,7 +520,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::sync_bank_feed (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -530,7 +530,7 @@
       "reason": "Bank transfer inputs are matched against candidates in the caller's site.",
       "evidence": "backend/src/app.rs: handlers::suggest_matches (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_bank_matching_suggestions_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_bank_matching_suggestions_follow_manager_site"
       ]
     },
     {
@@ -564,7 +564,7 @@
       "reason": "RememberSenderIbanRequest supplies a site and unit.",
       "evidence": "backend/src/app.rs: handlers::remember_sender_iban (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -574,7 +574,7 @@
       "reason": "ConfirmReconciliationRequest supplies a site and match IDs.",
       "evidence": "backend/src/app.rs: handlers::confirm_reconciliation (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -584,7 +584,7 @@
       "reason": "ParseBankStatementRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::parse_bank_statement (Require(ReconciliationConfirm))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -642,7 +642,7 @@
       "reason": "CreateCapitalProjectRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::create_capital_project (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -662,7 +662,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::accrue_capital_installment (Require(LedgerManageAll))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -672,7 +672,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::list_capital_disbursements (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -682,7 +682,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::record_capital_disbursement (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -712,7 +712,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_cases (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -722,7 +722,7 @@
       "reason": "OpenCaseRequest supplies a unit and liability IDs.",
       "evidence": "backend/src/app.rs: handlers::open_case (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -732,7 +732,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::get_case (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -742,7 +742,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::advance_case (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -752,7 +752,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::evidence_pack (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -762,7 +762,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::grant_lawyer_access (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -782,7 +782,7 @@
       "reason": "AccrueDuesPeriodRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::accrue_monthly_dues (Require(LedgerManageAll))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -792,7 +792,7 @@
       "reason": "Route accepts tenant resource path parameter request_id.",
       "evidence": "backend/src/app.rs: handlers::decide_billing_period_reopen (Require(LedgerManageAll))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -812,7 +812,7 @@
       "reason": "CreateDuesPeriodRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::create_dues_period (Require(LedgerManageAll))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -832,7 +832,7 @@
       "reason": "Route accepts tenant resource path parameter period_id.",
       "evidence": "backend/src/app.rs: handlers::request_billing_period_reopen (Require(LedgerManageAll))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -853,7 +853,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::dunning_actions (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -863,7 +863,7 @@
       "reason": "Route accepts tenant resource path parameter due_id.",
       "evidence": "backend/src/app.rs: handlers::dunning_notice_letter (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -873,7 +873,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::get_dunning_policy (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -883,7 +883,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::set_dunning_policy (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -893,7 +893,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::run_dunning (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -911,7 +911,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_heat_periods (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -921,7 +921,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_heat_period (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -931,7 +931,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::get_heat_period (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -941,7 +941,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::approve_heat_period (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -951,7 +951,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::record_heat_readings (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -982,7 +982,7 @@
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::add_unit_member (RequireAny(&[UnitManageHousehold, PersonManage]))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -992,7 +992,7 @@
       "reason": "Route accepts tenant resource path parameters unit_id, resident_id.",
       "evidence": "backend/src/app.rs: handlers::delete_unit_member (RequireAny(&[UnitManageHousehold, PersonManage]))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1002,7 +1002,7 @@
       "reason": "Route accepts tenant resource path parameters unit_id, resident_id.",
       "evidence": "backend/src/app.rs: handlers::update_unit_member (RequireAny(&[UnitManageHousehold, PersonManage]))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1020,7 +1020,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::financial_access_log (Require(AuditLogRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1030,7 +1030,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::debtor_export (RequireAny(&[FinanceManage, FinanceRead, UnitRead]))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1040,7 +1040,7 @@
       "reason": "Derives debtor identity from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::kvkk_status (SelfOnly)",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1050,7 +1050,7 @@
       "reason": "Binds the privacy notice acknowledgement to the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::kvkk_acknowledge (SelfOnly)",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1060,7 +1060,7 @@
       "reason": "Binds consent changes to the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::kvkk_update_consents (SelfOnly)",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1070,7 +1070,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::publish_privacy_notice (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1080,7 +1080,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::retention_review (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1090,7 +1090,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::set_retention_policy (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1100,7 +1100,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::retention_purge (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_writes_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_writes_follow_manager_site"
       ]
     },
     {
@@ -1110,7 +1110,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::late_fee_reconciliation (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1120,7 +1120,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_leases (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1130,7 +1130,7 @@
       "reason": "UpsertLeaseRequest supplies a unit ID.",
       "evidence": "backend/src/app.rs: handlers::upsert_lease (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1140,7 +1140,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::joint_exposure (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1150,7 +1150,7 @@
       "reason": "Derives the notification scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_notifications (RequireAny(&[FinanceManage, FinanceRead, UnitRead]))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1160,7 +1160,7 @@
       "reason": "Derives the broadcast site from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::broadcast_notification (Require(AnnouncementBroadcast))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1188,7 +1188,7 @@
       "reason": "SiteQuery accepts a site selector.",
       "evidence": "backend/src/app.rs: handlers::create_operating_budget (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1208,7 +1208,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::budget_legal_basis (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1218,7 +1218,7 @@
       "reason": "SiteQuery accepts a site selector.",
       "evidence": "backend/src/app.rs: handlers::set_budget_policy (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1228,7 +1228,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::set_budget_transition (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_writes_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_writes_follow_manager_site"
       ]
     },
     {
@@ -1238,7 +1238,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::delete_operating_budget (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1259,7 +1259,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::approve_operating_budget (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1269,7 +1269,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::finalize_operating_budget (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1279,7 +1279,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::issue_interim_budget (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1289,7 +1289,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::file_budget_objection (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1299,7 +1299,7 @@
       "reason": "Route accepts tenant resource path parameters id, objection_id.",
       "evidence": "backend/src/app.rs: handlers::resolve_budget_objection (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1309,7 +1309,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::reject_operating_budget (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1319,7 +1319,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::record_budget_service (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1329,7 +1329,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_plans (Require(FinanceRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1339,7 +1339,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::create_plan (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1349,7 +1349,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::run_plans (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1359,7 +1359,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::cancel_plan (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1396,7 +1396,7 @@
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::snapshot_debt_aging (Require(LedgerManageAll))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1426,7 +1426,7 @@
       "reason": "MatchAllPaymentsRequest supplies a site ID.",
       "evidence": "backend/src/app.rs: handlers::match_all_homeowner_payments (Require(PaymentRecordManual))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1470,7 +1470,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::rent_deduction_certificate (Require(UnitRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1480,7 +1480,7 @@
       "reason": "RecordHomeownerPaymentRequest supplies a unit ID.",
       "evidence": "backend/src/app.rs: handlers::record_homeowner_payment (Require(PaymentRecordManual))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1500,7 +1500,7 @@
       "reason": "ReversePaymentRequest supplies a receipt and can supply a site ID.",
       "evidence": "backend/src/app.rs: handlers::reverse_payment (Require(PaymentReverse))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1522,7 +1522,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::portfolio_summary (Require(PortfolioRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1596,7 +1596,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::site_disputes (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1606,7 +1606,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::resolve_dispute (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1616,7 +1616,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::site_virman_requests (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1626,7 +1626,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::decide_virman_request (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1686,7 +1686,7 @@
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::create_dispute (Require(UnitRead))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1706,7 +1706,7 @@
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::add_unit_sender_iban (Require(UnitPaymentProfileManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1716,7 +1716,7 @@
       "reason": "Route accepts tenant resource path parameters unit_id, sender_iban.",
       "evidence": "backend/src/app.rs: handlers::delete_unit_sender_iban (Require(UnitPaymentProfileManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1726,7 +1726,7 @@
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::update_unit_payer_names (Require(UnitPaymentProfileManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1746,7 +1746,7 @@
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::create_payment_intent_v2 (Require(UnitPay))",
       "runtime_tests": [
-        "nightly/test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1756,7 +1756,7 @@
       "reason": "Route accepts tenant resource path parameters unit_id, intent_id.",
       "evidence": "backend/src/app.rs: handlers::get_payment_intent (Require(UnitPay))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_additional_tenant_resource_reads_require_membership"
       ]
     },
     {
@@ -1799,7 +1799,7 @@
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::create_virman_request (Require(UnitRead))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1937,7 +1937,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_advance_exit_settlements (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -1947,7 +1947,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::decide_advance_exit_settlement (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1967,7 +1967,7 @@
       "reason": "Route accepts tenant resource path parameter site_id.",
       "evidence": "backend/src/app.rs: handlers::configure_site_bank_account (Require(BankAccountManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -1995,7 +1995,7 @@
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::create_block (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2015,7 +2015,7 @@
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::register_home_owner (Require(PersonManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2025,7 +2025,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::delete_home_owner (Require(PersonManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2035,7 +2035,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::update_home_owner (Require(PersonManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2045,7 +2045,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::resend_activation (Require(PersonManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2065,7 +2065,7 @@
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::create_house_type (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2075,7 +2075,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::delete_house_type (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2107,7 +2107,7 @@
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::create_person (Require(PersonManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2117,7 +2117,7 @@
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::check_person_duplicates (Require(PersonRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2137,7 +2137,7 @@
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::import_persons (Require(PersonManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2168,7 +2168,7 @@
       "reason": "Route accepts tenant resource path parameter person_id.",
       "evidence": "backend/src/app.rs: handlers::update_person (Require(PersonManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2219,7 +2219,7 @@
       "reason": "Route accepts tenant resource path parameter person_id.",
       "evidence": "backend/src/app.rs: handlers::set_person_national_id (Require(PersonIdentityManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2229,7 +2229,7 @@
       "reason": "Route accepts tenant resource path parameter person_id.",
       "evidence": "backend/src/app.rs: handlers::update_person_preferences (Require(PersonManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2249,7 +2249,7 @@
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::set_proration_policy (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2259,7 +2259,7 @@
       "reason": "RoleAssignment supplies a user ID scoped to the caller's site.",
       "evidence": "backend/src/app.rs: authorization::assign_role (Require(RoleGrant))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2269,7 +2269,7 @@
       "reason": "The operation derives its site or account scope from the authenticated caller.",
       "evidence": "backend/src/app.rs: handlers::list_seller_pays_overrides (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -2279,7 +2279,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::decide_seller_pays_override (Require(FinanceManage))",
       "runtime_tests": [
-        "nightly/test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -2299,7 +2299,7 @@
       "reason": "Selects a site in SiteIdParam.",
       "evidence": "backend/src/app.rs: handlers::create_units (Require(SiteManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2309,7 +2309,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::move_in_resident (Require(OccupancyManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2359,7 +2359,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::select_responsible_contact (Require(PersonManage))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2369,7 +2369,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::transfer_unit_ownership (Require(OccupancyManage))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2379,7 +2379,7 @@
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::create_advance_exit_settlement (RequireAny(&[OccupancyManage, FinanceManage]))",
       "runtime_tests": [
-        "nightly/test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
@@ -2399,7 +2399,7 @@
       "reason": "Route accepts tenant resource path parameter unit_id.",
       "evidence": "backend/src/app.rs: handlers::create_seller_pays_override (RequireAny(&[OccupancyManage, FinanceManage]))",
       "runtime_tests": [
-        "nightly/test_implicit_reads_follow_manager_site"
+        "e2e/nightly/test_tenant_contract.py::test_implicit_reads_follow_manager_site"
       ]
     },
     {
@@ -2577,7 +2577,7 @@
       "reason": "Route accepts tenant resource path parameter id.",
       "evidence": "backend/src/app.rs: handlers::get_or_allocate_virtual_iban (Require(UnitRead))",
       "runtime_tests": [
-        "nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
+        "e2e/nightly/test_tenant_contract.py::test_tenant_resources_require_membership"
       ]
     },
     {
