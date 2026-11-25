@@ -508,7 +508,7 @@ async fn approve_occupancy(
             .map_err(refuse)?;
         return Ok(());
     }
-    let snapshot = repo::lock_unit_snapshot(tx, site, unit)
+    let snapshot = repo::lock_unit_snapshot(tx, site, unit, today)
         .await
         .map_err(refuse)?;
     let plan = unit_state::plan(snapshot.state, Command::RegisterOwner { resides: true })

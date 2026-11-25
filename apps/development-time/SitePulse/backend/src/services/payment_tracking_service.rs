@@ -1600,7 +1600,10 @@ impl PaymentTrackingService {
         }
         let identifier = req.receipt.trim().to_string();
         let now = crate::e2e_clock::now_utc();
-        let today = now.date_naive();
+        let today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::site_today_at(&inner, &site_id, now)
+        };
 
         let existing_reversal = |inner: &crate::state::AppStateInner, original: &PaymentReceipt| {
             inner
@@ -1671,7 +1674,7 @@ impl PaymentTrackingService {
                 .collect();
             for (due_id, principal, penalty) in &lines {
                 let due_num = crate::db::require_id("dues liability", due_id)?;
-                crate::db::tx_unsettle_due(&tx, due_num, *principal, *penalty)
+                crate::db::tx_unsettle_due(&tx, due_num, *principal, *penalty, today)
                     .await
                     .map_err(db_err)?;
             }
