@@ -175,20 +175,9 @@ jobs:
             -c "DROP DATABASE IF EXISTS sitepulse_cov;" -c "CREATE DATABASE sitepulse_cov;"
           cargo llvm-cov clean --workspace
           cargo llvm-cov --no-report --locked
-          cargo llvm-cov --no-report --locked --features e2e --test e2e_clock_tests --test e2e_clock_reset_tests
-          DB_NAME=sitepulse_cov cargo llvm-cov --no-report --locked \
-            --test db_tenant_isolation_tests \
-            --test db_occupancy_transitions_tests \
-            --test db_person_api_tests \
-            --test db_person_merge_tests \
-            --test db_unit_person_action_cycles_tests \
-            --test db_accrual_atomic_tests \
-            --test db_accrual_persistence_tests \
-            --test db_advance_exit_settlements_tests \
-            --test sale_clearance_tests \
-            --test accrual_corrections_tests \
-            --test finance_store_pg_tests \
-            -- --ignored --test-threads=4
+          cargo llvm-cov --no-report --locked --features e2e --test it
+          DB_NAME=sitepulse_cov cargo llvm-cov --no-report --locked --features e2e \
+            --test it -- --ignored --test-threads=4
           cargo llvm-cov report --lcov --output-path "${{ runner.temp }}/sitepulse-suite-rust/coverage/rust.lcov"
           cargo llvm-cov report --json --summary-only --output-path "${{ runner.temp }}/sitepulse-suite-rust/coverage/rust-summary.json"
       - name: Write rust suite manifest and run identity
@@ -228,6 +217,12 @@ jobs:
           workspaces: apps/development-time/SitePulse/backend
           # Red runs are the common case while a PR is iterated; keep their compile output too.
           cache-on-failure: true
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
+      - name: Verify cargo-nextest
+        run: cargo nextest --version
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: "3.47.5"
