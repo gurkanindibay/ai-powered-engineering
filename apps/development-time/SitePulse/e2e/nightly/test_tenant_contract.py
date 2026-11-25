@@ -194,10 +194,10 @@ def two_sites(api, actors):
     unit = created["id"]
     assert created["virtual_iban"], "The virtual IBAN read requires an already allocated value"
     receipt = api.record_manual_payment(second, unit, Decimal("25.00"), "Nightly Owner")
-    period = api.create_period(second, "Ekim 2025", "2025-10-15")
+    period = api.create_period(second, "Kasım 2026", "2026-11-30")
     budget = api.call(
         "POST", "/api/v1/operating-budgets", second.token,
-        body={"fiscal_year": 2026, "lines": [
+        body={"fiscal_year": 2025, "lines": [
             {"category": "CLEANING", "annual_amount": "10000.00", "allocation_key": "EQUAL"}
         ]},
     )
@@ -491,19 +491,19 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
     )
     assert_write_is_site_scoped(
         api, "/api/v1/dues/accrue-period", second, first,
-        {"site_id": ids["site"], "period": "2025-10", "amount": "1.00", "due_date": "2025-10-15"},
+        {"site_id": ids["site"], "period": "2026-11", "amount": "1.00", "due_date": "2026-11-30"},
         success={200},
     )
     active_period = next(
         (
             item for item in api.list_periods(second, site_id=ids["site"])
             if str(item.get("site_id")) == str(second.user["site_id"])
-            and item.get("period_name") == "Ekim 2025"
+            and item.get("period_name") == "Kasım 2026"
             and item.get("status") in {"OPEN", "ACTIVE"}
         ),
         None,
     )
-    assert active_period is not None, "Accruing 2025-10 should open its dues period"
+    assert active_period is not None, "Accruing 2026-11 should open its dues period"
     assert str(ids["site"]) == str(second.user["site_id"]), "Period fixture must use the close caller's site"
     ids["period"] = active_period["id"]
     assert_write_is_site_scoped(
