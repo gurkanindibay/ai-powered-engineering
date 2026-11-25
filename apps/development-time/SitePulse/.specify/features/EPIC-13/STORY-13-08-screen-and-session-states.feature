@@ -7,8 +7,8 @@ Feature: Manager screen and session states
   Background:
     Given a SaaS admin has onboarded a site and manager unique to this scenario attempt
 
-  # Pending: GUI journey automation for first sign-in password change flow is pending.
-  @SC-13-08-01 @J-15 @depth:2 @state:F5 @layer:gui @smoke @core @role_manager @pending
+  # Verified in the browser by test_first_manager_sign_in_unlocks_the_site_after_password_change.
+  @SC-13-08-01 @J-15 @depth:2 @state:F5 @layer:gui @smoke @core @role_manager @linked
   Scenario: The first manager sign-in unlocks a populated site after password change
     Given the site is in state F5 and the manager still has the provisioning password
     When the manager signs in and follows a protected collection deep link

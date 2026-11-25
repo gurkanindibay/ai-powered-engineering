@@ -11,7 +11,9 @@ from decimal import Decimal
 
 import pytest
 
-from pages import DuesManagement, Occupancy, ResidentHome, ResidentsTab, Shell, UnitWorkspace
+from pages import (
+    DuesManagement, ManagerCockpit, Occupancy, ResidentHome, ResidentsTab, SaasAdmin, Shell, UnitWorkspace,
+)
 from pages.login import LoginPage
 from support.flutter import by_id, fill
 from support.journey_gui import (
@@ -460,6 +462,51 @@ def test_f5_multiple_periods_add_up_per_unit_and_per_site(request, api, actors, 
         # exposes: wait for the amount instead of reading one snapshot.
         lines = page_lines_until(page, re.compile(r"1\.250,00"))
         assert any("1.250,00" in line for line in lines), "A-6 advance balance 1250.00 not shown"
+
+
+@pytest.mark.smoke
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.covers("SC-13-08-01")
+def test_first_manager_sign_in_unlocks_the_site_after_password_change(
+        request, api, actors, stack, page, login_page):
+    """SC-13-08-01: the provisioning password opens only the change screen, then the F5 site."""
+    with journey_site(request, api, actors, stack, "F5") as fixture:
+        # The seed already completed the onboarding password change; return the manager to the
+        # provisioning state that a fresh onboarding leaves behind.
+        stack.sql(
+            "UPDATE users SET must_change_password = TRUE "
+            f"WHERE lower(email) = lower('{fixture.manager_email}');")
+        stack.restart_backend()
+
+        login_page.open().login("manager", fixture.manager_email, fixture.manager_password)
+        by_id(page, "screen_force_password_change").wait_for(timeout=15_000)
+
+        requests: list[str] = []
+        page.on("request", lambda r: requests.append(r.url) if "/api/v1/" in r.url else None)
+        page.goto(f"{login_page.base_url.rstrip('/')}/#/manager/dues")
+        by_id(page, "screen_force_password_change").wait_for(timeout=15_000)
+        business = [url for url in requests
+                    if any(marker in url for marker in ("/dues", "/payments", "/residents", "/site-admin"))]
+        assert business == [], f"a protected deep link must not send a business request: {business}"
+
+        new_password = "E2E-F5-Manager-Permanent-1!"
+        SaasAdmin(page).change_password(fixture.manager_password, new_password)
+        by_id(page, "screen_force_password_change").wait_for(state="detached", timeout=20_000)
+        # The deep link that was refused is not resumed automatically; open the manager home.
+        page.goto(f"{login_page.base_url.rstrip('/')}/#/manager/home")
+        ManagerCockpit(page).wait()
+
+        open_dues_segment(page, 2)
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('flt-semantics')].some("
+            "e => /A Blok D:\\d+/.test((e.getAttribute('aria-label') || e.textContent || '').trim()))",
+            timeout=15_000,
+        )
+        rows = _aging_rows(page)
+        assert rows["A-5"][1] == Decimal("4797.50"), "the F5 A-5 debt must be recognizable on the dashboard"
+        assert sum(total for _, total in rows.values()) == Decimal("11117.50")
+        assert api.login(fixture.manager_email, new_password).user["must_change_password"] is False
 
 
 @pytest.mark.edge
