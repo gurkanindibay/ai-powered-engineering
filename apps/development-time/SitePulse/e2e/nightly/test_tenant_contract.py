@@ -486,24 +486,25 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
     )
     assert_write_is_site_scoped(
         api, "/api/v1/dues/periods", second, first,
-        {"site_id": ids["site"], "period_name": "2027-01", "due_date": "2027-01-31"},
+        {"site_id": ids["site"], "period_name": "2027-02", "due_date": "2027-02-28"},
         success={201},
     )
     assert_write_is_site_scoped(
         api, "/api/v1/dues/accrue-period", second, first,
-        {"site_id": ids["site"], "period": "2026-12", "amount": "1.00", "due_date": "2026-12-31"},
+        {"site_id": ids["site"], "period": "2027-01", "amount": "1.00", "due_date": "2027-01-31"},
         success={200},
     )
+    arrangement_period_id = ids["period"]
     active_period = next(
         (
             item for item in api.list_periods(second, site_id=ids["site"])
             if str(item.get("site_id")) == str(second.user["site_id"])
-            and item.get("period_name") == "Aralık 2026"
+            and item.get("period_name") == "Ocak 2027"
             and item.get("status") in {"OPEN", "ACTIVE"}
         ),
         None,
     )
-    assert active_period is not None, "Accruing 2026-12 should open its dues period"
+    assert active_period is not None, "Accruing 2027-01 should open its dues period"
     assert str(ids["site"]) == str(second.user["site_id"]), "Period fixture must use the close caller's site"
     ids["period"] = active_period["id"]
     assert_write_is_site_scoped(
@@ -951,6 +952,23 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         ("/api/v1/payments/receipts/{id}/rent-deduction-certificate", str(ids["receipt"])),
     ]
 
+    assert_write_is_site_scoped(
+        api, "/api/v1/dues/accrue-period", second, first,
+        {"site_id": ids["site"], "period": "2027-01", "amount": "1.00", "due_date": "2027-01-31"},
+        success={200},
+    )
+    active_period = next(
+        (
+            item for item in api.list_periods(second, site_id=ids["site"])
+            if str(item.get("site_id")) == str(second.user["site_id"])
+            and item.get("period_name") == "Ocak 2027"
+            and item.get("status") in {"OPEN", "ACTIVE"}
+        ),
+        None,
+    )
+    assert active_period is not None, "Accruing 2027-01 should open its dues period"
+    ids["period"] = active_period["id"]
+
     summary = api.call(
         "GET", f"/api/v1/dues/periods/{ids['period']}/summary", second.token,
     )
@@ -977,6 +995,7 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
         second, first, {"approve": False, "decision_note": "Nightly rejection"},
         success={200},
     )
+    ids["period"] = arrangement_period_id
     due_id, _ = arrange_open_due(api, stack, ids)
     vendor = api.call(
         "POST", "/api/v1/accounting/vendors", second.token,
