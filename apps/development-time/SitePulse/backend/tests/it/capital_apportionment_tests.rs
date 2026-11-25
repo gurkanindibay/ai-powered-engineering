@@ -218,6 +218,30 @@ async fn when_site_has_archived_unit_then_capital_accrual_excludes_it_and_shares
     let site_id_num: i64 = site_row.get("id");
     let site_id_str = site_id_num.to_string();
 
+    // The seeded site has two units; add live units until it has three, so one can
+    // be archived and the shares still have to be split across several live units.
+    for extra in 1..=3 {
+        let active: i64 = client
+            .query_one(
+                "SELECT COUNT(*) FROM units WHERE site_id = $1 AND deleted_at IS NULL",
+                &[&site_id_num],
+            )
+            .await
+            .expect("count active units")
+            .get(0);
+        if active >= 3 {
+            break;
+        }
+        client
+            .execute(
+                "INSERT INTO units (site_id, block_id, unit_number, floor)
+                 SELECT site_id, block_id, 900 + $2::int, floor FROM units
+                  WHERE site_id = $1 AND deleted_at IS NULL ORDER BY id LIMIT 1",
+                &[&site_id_num, &extra],
+            )
+            .await
+            .expect("add a live unit");
+    }
     let unit_rows = client
         .query(
             "SELECT id, land_share FROM units WHERE site_id = $1 AND deleted_at IS NULL ORDER BY id",
@@ -286,7 +310,7 @@ async fn when_site_has_archived_unit_then_capital_accrual_excludes_it_and_shares
     let p_num: i64 = project.id.parse().expect("parsed project id");
     let liabilities = client
         .query(
-            "SELECT unit_id, principal_amount FROM dues_liabilities WHERE project_id = $1 AND installment_number = 1",
+            "SELECT unit_id, principal_amount FROM dues_liabilities WHERE capital_project_id = $1 AND installment_number = 1",
             &[&p_num],
         )
         .await
