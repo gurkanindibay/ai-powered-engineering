@@ -33,7 +33,10 @@ pub fn route_policy(method: &str, path: &str) -> Option<RoutePolicy> {
         return policy;
     }
     #[cfg(feature = "e2e")]
-    if (path == "/__e2e/clock" || path == "/api/e2e/reload-state" || path == "/__e2e/reload-state")
+    if (path == "/__e2e/clock"
+        || path == "/api/e2e/clock"
+        || path == "/api/e2e/reload-state"
+        || path == "/__e2e/reload-state")
         && method.eq_ignore_ascii_case("POST")
         && crate::e2e_clock::validate_e2e_configuration().unwrap_or(false)
     {
@@ -370,6 +373,7 @@ pub fn build_router(state: AppState) -> Router {
     let routes = if state.e2e_clock.is_some() {
         routes
             .route("/__e2e/clock", post(crate::e2e_clock::control))
+            .route("/api/e2e/clock", post(crate::e2e_clock::control))
             .route(
                 "/api/e2e/reload-state",
                 post(crate::e2e_clock::reload_state),

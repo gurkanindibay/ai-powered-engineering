@@ -544,3 +544,38 @@ python3 -I scripts/test_strategy_scan.py --json              # the same summary 
 python3 -I scripts/test_strategy_scan.py --output scan.json  # every test and scenario row
 ```
 
+## 5b-7. Product Manager Test Workbench (`pm_workbench.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/pm_workbench.py](file:///apps/development-time/SitePulse/scripts/pm_workbench.py) (symlinked to `scripts/pm_workbench.py`)
+- **Purpose:** One-command sandbox launcher, scenario preset seeder, and deterministic E2E clock controller for Product Manager and manual verification workflows.
+- **Subcommands:**
+  - `up`: Starts local PostgreSQL database, Axum Rust backend (with `--features e2e`, `SITEPULSE_E2E=true`, `APP_ENV=development` on `:8080`), and Flutter Web client on `:9090`, recording runtime PIDs in `~/.sitepulse/workbench.pid`.
+  - `down`: Cleanly stops all workbench processes recorded in the pidfile (`--stop-db` to also stop database containers).
+  - `seed <preset>`: Seeds scenario presets (`F0`–`F7` and later `F8`–`F10`) via `pm_scenarios.seeder`, sets `/api/e2e/clock` to the preset's reference date, and outputs a formatted Cheat Sheet table or structured JSON.
+  - `clock <set|advance|tick|reset>`: CLI wrapper calling `/api/e2e/clock` for deterministic test time advancement.
+  - `status`: Inspects live workbench processes, PID state, and backend API health.
+- **Safety Guardrail:** Strictly refuses execution if `APP_ENV=production` or `ENVIRONMENT=production`.
+- **Output:** Supports `--help` and `--json` on all subcommands. Zero floating-point arithmetic for financial figures.
+
+### Quick Usage Examples:
+```bash
+# Start local development sandbox with E2E clock
+pm_workbench.py up
+
+# Seed reference scenario F5 and print Cheat Sheet
+pm_workbench.py seed F5
+
+# Output Scenario Manifest as JSON
+pm_workbench.py seed F5 --json
+
+# Advance deterministic clock to test overdue dues transitions
+pm_workbench.py clock advance 2026-11-29
+
+# Trigger deterministic scheduler tick
+pm_workbench.py clock tick
+
+# Shut down workbench processes
+pm_workbench.py down
+```
+
+
