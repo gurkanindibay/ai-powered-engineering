@@ -748,8 +748,17 @@ jobs:
           flutter-version: "3.47.5"
           channel: stable
           cache: true
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
+      - name: Verify cargo-nextest
+        run: cargo nextest --version
       - name: Flutter dependencies
         working-directory: apps/development-time/SitePulse/flutter
         run: flutter pub get

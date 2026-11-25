@@ -27,6 +27,8 @@ SITEPULSE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(SITEPULSE / "scripts"))
 
 import api_system_check as asc  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fixture_clock import fixture_instant, site_local_date  # noqa: E402
 
 E2E_API_PORT = int(os.environ.get("E2E_API_PORT", "8180"))
 E2E_WEB_PORT = int(os.environ.get("E2E_WEB_PORT", "9190"))
@@ -141,6 +143,8 @@ class E2EStack:
             })
         self.web = WebServer()
         self.e2e_clock_override: dict[str, str] | None = None
+        self.fixture_instant = fixture_instant()
+        self.fixture_today = site_local_date(self.fixture_instant).isoformat()
 
     # -- lifecycle -------------------------------------------------------
     def start(self) -> None:
@@ -177,6 +181,7 @@ class E2EStack:
         self.sql((seed_dir / "02-test-seed.sql").read_text(encoding="utf-8"))
         self.sql("INSERT INTO pii_settings (hmac_key) VALUES (gen_random_bytes(32)) ON CONFLICT (id) DO NOTHING;")
         self.backend.start()
+        self.pin_fixture_clock()
         # Seed actors have permanent test passwords. Temporary-account password
         # change scenarios create their own accounts after this fixture reset.
         self.sql("UPDATE users SET must_change_password=false;")
@@ -201,6 +206,7 @@ class E2EStack:
         self.sql((seed_dir / "01-system-seed.sql").read_text(encoding="utf-8"))
         self.sql("INSERT INTO pii_settings (hmac_key) VALUES (gen_random_bytes(32)) ON CONFLICT (id) DO NOTHING;")
         self.backend.start()
+        self.pin_fixture_clock()
         self.sql("UPDATE users SET must_change_password=false;")
 
     def restart_backend(self, *, preserve_e2e_clock: bool = True) -> None:
@@ -208,17 +214,24 @@ class E2EStack:
         if not preserve_e2e_clock:
             self.e2e_clock_override = None
         self.backend.restart()
-        if self.e2e_clock_override is not None:
-            status, body = asc.http(
-                "POST",
-                self.backend.base + "/__e2e/clock",
-                body=self.e2e_clock_override,
-            )
-            if status != 200:
-                raise SetupError(
-                    "could not restore the E2E clock after backend restart: "
-                    f"{status} {body[:200]}"
-                )
+        self.pin_fixture_clock()
+
+    def pin_fixture_clock(self) -> None:
+        """Freeze the backend clock so SQL arrange steps, expected values and the app share one date.
+
+        Without this the backend reads the wall clock per request, so a run that crosses midnight in
+        the site's time zone grows every late penalty by a day mid-test. A test that set its own
+        date keeps it across restarts (`e2e_clock_override`); otherwise the stack-wide fixture
+        instant (`SITEPULSE_E2E_NOW` or the start of the run) applies.
+        """
+        command = self.e2e_clock_override or {"action": "set_instant", "at": self.fixture_instant_text}
+        status, body = asc.http("POST", self.backend.base + "/__e2e/clock", body=command)
+        if status != 200:
+            raise SetupError(f"could not pin the E2E clock: {status} {body[:200]}")
+
+    @property
+    def fixture_instant_text(self) -> str:
+        return self.fixture_instant.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def remember_e2e_clock(self, command: dict[str, object]) -> None:
         """Keep the current deterministic instant available across backend restarts."""

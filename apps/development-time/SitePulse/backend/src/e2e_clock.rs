@@ -303,10 +303,53 @@ pub async fn control(
     Ok(axum::Json(response))
 }
 
+/// Handles the private E2E state reload endpoint to synchronize in-memory state with PostgreSQL.
+#[cfg(feature = "e2e")]
+pub async fn reload_state(
+    axum::extract::State(state): axum::extract::State<crate::state::AppState>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    if state.settings.is_production() || crate::state::AppStateInner::is_production() {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "E2E state reload is forbidden in production"
+            })),
+        )
+            .into_response();
+    }
+    match state.reload_from_db().await {
+        Ok(()) => {
+            tracing::info!("E2E state successfully reloaded from PostgreSQL");
+            (
+                axum::http::StatusCode::OK,
+                axum::Json(serde_json::json!({
+                    "status": "OK",
+                    "message": "State reloaded from PostgreSQL successfully"
+                })),
+            )
+                .into_response()
+        }
+        Err(err) => {
+            tracing::error!("Failed to reload state from PostgreSQL: {}", err);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(serde_json::json!({
+                    "status": "ERROR",
+                    "message": err
+                })),
+            )
+                .into_response()
+        }
+    }
+}
+
 #[cfg(test)]
 #[cfg(feature = "e2e")]
 mod tests {
     use super::*;
+    use axum::http::StatusCode;
     use chrono::NaiveDate;
 
     fn date(day: u32) -> NaiveDate {
@@ -331,5 +374,27 @@ mod tests {
         );
         assert_eq!(clock.set_date(date(2)), Ok(()));
         assert_eq!(clock.now().map(|now| now.date_naive()), Ok(date(2)));
+    }
+
+    #[tokio::test]
+    async fn reload_state_rejects_in_production_settings() {
+        let mut inner = crate::state::AppStateInner::blank();
+        inner.clear_all_data();
+        let mut state = crate::state::AppState::from_parts(inner, None);
+        state.settings.production = true;
+
+        let response = reload_state(axum::extract::State(state)).await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn reload_state_succeeds_in_development_without_db() {
+        let mut inner = crate::state::AppStateInner::blank();
+        inner.clear_all_data();
+        let mut state = crate::state::AppState::from_parts(inner, None);
+        state.settings.production = false;
+
+        let response = reload_state(axum::extract::State(state)).await;
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

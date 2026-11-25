@@ -74,4 +74,7 @@ python3 scripts/feature_traceability.py html                       # dashboard: 
 
 A task in `.specify/tasks/task-dag.json` can name scenarios as acceptance tests
 (`"acceptance_tests": ["scenario:SC-10-01-01"]`): the task verifies only when the scenario's
-latest recorded execution is PASS. Every `harness_cli.py verify` also runs `test-run-recorded` (a pass while it is switched off).
+latest recorded execution is PASS. CI's execution history holds only browser results, so use a
+`scenario:` acceptance test only for a Gherkin scenario or one linked to an `e2e/` test; for a
+scenario covered only by Flutter, backend or harness tests, name that test (`flutter:`, `rust:`,
+`system:`), or the master-only `record-evidence` job can never pass the task. Every `harness_cli.py verify` also runs `test-run-recorded` (a pass while it is switched off).
