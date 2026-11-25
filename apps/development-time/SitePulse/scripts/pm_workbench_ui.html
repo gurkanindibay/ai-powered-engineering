@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SitePulse PM Workbench</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1116;
+    --surface: #161b22;
+    --surface-2: #1c232c;
+    --border: #2a323d;
+    --text: #e6edf3;
+    --muted: #9aa7b4;
+    --accent: #4c8dff;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --radius: 10px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  header h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  main { padding: 24px 28px 64px; max-width: 1180px; margin: 0 auto; }
+  section { margin-bottom: 40px; }
+  h2 { font-size: 15px; font-weight: 600; text-transform: none; margin: 0 0 4px; }
+  h2 + .hint { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--surface-2);
+  }
+  .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+  .pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--border)); }
+  .pack { margin-bottom: 22px; }
+  .pack-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .pack-head h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+  .pack-head span { color: var(--muted); font-size: 12px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
+    gap: 12px;
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .preset { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .card h4 { margin: 0; font-size: 14px; font-weight: 600; }
+  .card p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .card .clock { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  button {
+    font: inherit;
+    font-size: 13px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.55; cursor: progress; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #04122b; font-weight: 600; }
+  button.danger { color: var(--bad); }
+  .card button { margin-top: auto; }
+  #banner {
+    display: none;
+    margin: 0 0 20px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--border));
+    background: color-mix(in srgb, var(--bad) 12%, var(--surface));
+    color: var(--text);
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+  #banner.show { display: block; }
+  #banner.warn {
+    border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+    background: color-mix(in srgb, var(--warn) 12%, var(--surface));
+  }
+  .empty {
+    padding: 22px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .active-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-bottom: none;
+  }
+  .active-head h3 { margin: 0 0 2px; font-size: 15px; }
+  .active-head .meta { color: var(--muted); font-size: 12.5px; font-family: var(--mono); }
+  .active-body {
+    padding: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+  .active-body h4 { margin: 22px 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .active-body h4:first-child { margin-top: 0; }
+  .totals { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .total {
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-2);
+  }
+  .total dt { color: var(--muted); font-size: 11.5px; }
+  .total dd { margin: 2px 0 0; font-family: var(--mono); font-size: 13.5px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.money { font-family: var(--mono); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); }
+  .tag.paid { color: var(--ok); }
+  .tag.overdue { color: var(--bad); }
+  .scroll { overflow-x: auto; }
+  ul.checklist { margin: 0; padding-left: 20px; color: var(--text); font-size: 13px; }
+  ul.checklist li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SitePulse PM Workbench</h1>
+  <p>One-click scenario preparation for manual product testing</p>
+  <span id="conn" class="pill">connecting</span>
+</header>
+<main>
+  <div id="banner" role="alert"></div>
+
+  <section aria-labelledby="gallery-title">
+    <h2 id="gallery-title">Scenario gallery</h2>
+    <p class="hint">Pick a complexity pack, then prepare the scenario you want to test. Preparing a scenario seeds a fresh site and pins the simulated clock to the preset's reference date.</p>
+    <div id="packs"><div class="empty">Loading presets…</div></div>
+  </section>
+
+  <section aria-labelledby="active-title">
+    <h2 id="active-title">Active scenario cheat sheet</h2>
+    <p class="hint">Expected values come from the same scenario catalogue the automated E2E suite uses.</p>
+    <div id="active"><div class="empty">No scenario is active yet. Prepare one above to see its balances and checklist.</div></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+const state = { presets: null, active: null, busy: false };
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+
+function showBanner(message, kind) {
+  const banner = document.getElementById("banner");
+  banner.textContent = message;
+  banner.className = message ? "show" + (kind === "warn" ? " warn" : "") : "";
+}
+
+function setConnection(kind, label) {
+  const pill = document.getElementById("conn");
+  pill.className = "pill " + (kind || "");
+  pill.textContent = label;
+}
+
+// Groups the integer part with thousands separators without parsing to a
+// float, so exact decimal strings such as "1522.50" stay exact.
+function formatTry(value) {
+  const raw = String(value === null || value === undefined ? "0" : value);
+  const negative = raw.startsWith("-");
+  const body = negative ? raw.slice(1) : raw;
+  const parts = body.split(".");
+  const grouped = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const text = parts.length > 1 ? grouped + "." + parts[1] : grouped;
+  return (negative ? "-" : "") + text + " TRY";
+}
+
+function labelize(key) {
+  return String(key).replace(/_/g, " ");
+}
+
+async function api(path, options) {
+  const response = await fetch(path, Object.assign({ headers: { "Accept": "application/json" } }, options));
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (_err) {
+    payload = null;
+  }
+  if (!response.ok) {
+    const detail = payload && payload.error ? payload.error : "Request failed with status " + response.status;
+    throw new Error(detail);
+  }
+  return payload;
+}
+
+function setBusy(busy) {
+  state.busy = busy;
+  document.querySelectorAll("button[data-action]").forEach(function (button) {
+    button.disabled = busy || button.dataset.blocked === "true";
+  });
+}
+
+async function prepare(preset) {
+  if (state.busy) return;
+  setBusy(true);
+  showBanner("");
+  const started = performance.now();
+  try {
+    const manifest = await api("/api/seed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ preset: preset })
+    });
+    state.active = manifest;
+    renderActive();
+    const seconds = ((performance.now() - started) / 1000).toFixed(1);
+    if (manifest.clock && manifest.clock.status !== "SET") {
+      showBanner("Scenario " + manifest.preset + " seeded in " + seconds + "s, but the E2E clock could not be set: " + (manifest.clock.error || "unknown error"), "warn");
+    }
+  } catch (err) {
+    showBanner("Could not prepare " + preset + ": " + err.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function resetActive() {
+  if (state.busy) return;
+  setBusy(true);
+  showBanner("");
+  try {
+    state.active = await api("/api/reset", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: "{}" });
+    renderActive();
+  } catch (err) {
+    showBanner("Could not reset the active scenario: " + err.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function renderGallery() {
+  const host = document.getElementById("packs");
+  host.replaceChildren();
+  const packs = (state.presets && state.presets.packs) || [];
+  if (!packs.length) {
+    host.appendChild(el("div", "empty", "No presets are available."));
+    return;
+  }
+  const activePreset = state.active ? state.active.preset : null;
+  packs.forEach(function (pack) {
+    const section = el("div", "pack");
+    const head = el("div", "pack-head");
+    head.appendChild(el("h3", null, "Pack " + pack.id + " — " + pack.title));
+    head.appendChild(el("span", null, pack.presets.length + " scenario" + (pack.presets.length === 1 ? "" : "s")));
+    section.appendChild(head);
+    const grid = el("div", "grid");
+    pack.presets.forEach(function (preset) {
+      const card = el("article", "card");
+      const top = el("div", "card-top");
+      top.appendChild(el("span", "preset", preset.preset));
+      if (activePreset === preset.preset) top.appendChild(el("span", "tag paid", "active"));
+      card.appendChild(top);
+      card.appendChild(el("h4", null, preset.label));
+      card.appendChild(el("p", null, preset.summary));
+      card.appendChild(el("p", "clock", "Clock " + preset.reference_clock + " · " + preset.unit_count + " units"));
+      const button = el("button", activePreset === preset.preset ? null : "primary", "Prepare " + preset.preset);
+      button.dataset.action = "prepare";
+      button.dataset.preset = preset.preset;
+      button.addEventListener("click", function () { prepare(preset.preset); });
+      card.appendChild(button);
+      grid.appendChild(card);
+    });
+    section.appendChild(grid);
+    host.appendChild(section);
+  });
+  setBusy(state.busy);
+}
+
+function renderTotals(totals) {
+  const list = el("dl", "totals");
+  Object.keys(totals || {}).forEach(function (key) {
+    if (key === "total_overdue" || key === "total_advance") return;
+    const cell = el("div", "total");
+    cell.appendChild(el("dt", null, labelize(key)));
+    const raw = totals[key];
+    const isMoneyKey = key === "overdue" || key === "advance" || key.indexOf("capital_") === 0;
+    cell.appendChild(el("dd", null, isMoneyKey ? formatTry(raw) : String(raw)));
+    list.appendChild(cell);
+  });
+  return list;
+}
+
+// Money values arrive as exact decimal strings; comparing them as strings
+// keeps the check exact without turning money into a float.
+function isZero(value) {
+  return String(value === null || value === undefined ? "0" : value).trim().replace(/^[-+]/, "").replace(/^0+(\.0*)?$/, "") === "";
+}
+
+function unitStatus(unit) {
+  if (!isZero(unit.amount_due)) return "overdue";
+  return unit.is_paid ? "paid" : "open";
+}
+
+function renderUnitBalances(units) {
+  if (!units || !units.length) return el("div", "empty", "This preset has no units.");
+  const hasCapital = units.some(function (unit) { return unit.capital_due !== undefined; });
+  const wrap = el("div", "scroll");
+  const table = el("table");
+  const headRow = el("tr");
+  ["Unit", "Type", "Due", "Advance"].forEach(function (title) {
+    headRow.appendChild(el("th", null, title));
+  });
+  if (hasCapital) headRow.appendChild(el("th", null, "Capital due"));
+  headRow.appendChild(el("th", null, "Status"));
+  table.appendChild(headRow);
+  units.forEach(function (unit) {
+    const row = el("tr");
+    row.appendChild(el("td", null, unit.unit));
+    row.appendChild(el("td", null, unit.house_type || "Flat"));
+    row.appendChild(el("td", "money", formatTry(unit.amount_due)));
+    row.appendChild(el("td", "money", formatTry(unit.advance_balance)));
+    if (hasCapital) row.appendChild(el("td", "money", formatTry(unit.capital_due || "0.00")));
+    const status = unitStatus(unit);
+    const statusCell = el("td");
+    statusCell.appendChild(el("span", "tag " + status, status));
+    row.appendChild(statusCell);
+    table.appendChild(row);
+  });
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function renderPersonas(personas) {
+  if (!personas || !personas.length) return el("div", "empty", "This preset has no persona accounts.");
+  const wrap = el("div", "scroll");
+  const table = el("table");
+  const headRow = el("tr");
+  ["Role", "Name", "Unit", "Email", "Password"].forEach(function (title) {
+    headRow.appendChild(el("th", null, title));
+  });
+  table.appendChild(headRow);
+  personas.forEach(function (persona) {
+    const row = el("tr");
+    row.appendChild(el("td", null, labelize(persona.role)));
+    row.appendChild(el("td", null, persona.name));
+    row.appendChild(el("td", null, persona.unit || "—"));
+    const emailCell = el("td");
+    emailCell.appendChild(el("code", null, persona.email));
+    row.appendChild(emailCell);
+    const passwordCell = el("td");
+    passwordCell.appendChild(el("code", null, persona.password || "—"));
+    row.appendChild(passwordCell);
+    table.appendChild(row);
+  });
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function renderChecklist(items) {
+  if (!items || !items.length) return el("div", "empty", "This preset has no PM checklist.");
+  const list = el("ul", "checklist");
+  items.forEach(function (item) { list.appendChild(el("li", null, item)); });
+  return list;
+}
+
+function renderActive() {
+  const host = document.getElementById("active");
+  host.replaceChildren();
+  const active = state.active;
+  renderGallery();
+  if (!active) {
+    host.appendChild(el("div", "empty", "No scenario is active yet. Prepare one above to see its balances and checklist."));
+    return;
+  }
+  const head = el("div", "active-head");
+  const titles = el("div");
+  titles.appendChild(el("h3", null, active.site_name));
+  const meta = el("div", "meta");
+  meta.textContent = "preset " + active.preset + " · site " + active.site_id + " · clock " + (active.clock && active.clock.reference_date ? active.clock.reference_date : active.reference_clock);
+  titles.appendChild(meta);
+  head.appendChild(titles);
+  const resetButton = el("button", "danger", "Reset Current Scenario");
+  resetButton.dataset.action = "reset";
+  resetButton.addEventListener("click", resetActive);
+  head.appendChild(resetButton);
+  host.appendChild(head);
+
+  const body = el("div", "active-body");
+  body.appendChild(el("h4", null, "Expected site totals"));
+  body.appendChild(renderTotals(active.expected_site_totals));
+  body.appendChild(el("h4", null, "Unit-by-unit expected balances"));
+  body.appendChild(renderUnitBalances(active.unit_by_unit_expected_balances));
+  body.appendChild(el("h4", null, "Persona credentials"));
+  body.appendChild(renderPersonas(active.personas));
+  body.appendChild(el("h4", null, "PM test checklist"));
+  body.appendChild(renderChecklist(active.pm_checklist));
+  host.appendChild(body);
+  setBusy(state.busy);
+}
+
+async function loadPresets() {
+  try {
+    state.presets = await api("/api/presets");
+    renderGallery();
+  } catch (err) {
+    document.getElementById("packs").replaceChildren(el("div", "empty", "Could not load presets: " + err.message));
+  }
+}
+
+async function loadActive() {
+  try {
+    const payload = await api("/api/active");
+    state.active = payload && payload.active ? payload.active : null;
+    renderActive();
+  } catch (err) {
+    document.getElementById("active").replaceChildren(el("div", "empty", "Could not load the active scenario: " + err.message));
+  }
+}
+
+async function boot() {
+  try {
+    await fetch("/healthz");
+    setConnection("ok", "connected");
+  } catch (_err) {
+    setConnection("bad", "disconnected");
+  }
+  await loadPresets();
+  await loadActive();
+}
+
+boot();
+</script>
+</body>
+</html>

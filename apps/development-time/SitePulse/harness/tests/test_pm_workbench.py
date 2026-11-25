@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -435,6 +436,7 @@ class TestPmWorkbenchUpAndDownLifecycle(unittest.TestCase):
                 web_port=9090,
                 skip_db=True,
                 skip_flutter=True,
+                skip_ui=True,
                 pid_file=self.pid_file,
                 as_json=True,
             )
@@ -443,11 +445,13 @@ class TestPmWorkbenchUpAndDownLifecycle(unittest.TestCase):
         data = json.loads(stdout.getvalue())
         self.assertEqual(data["status"], "ONLINE")
         self.assertEqual(data["backend_pid"], 4321)
+        self.assertIsNone(data["ui_pid"])
         self.assertTrue(self.pid_file.is_file())
 
         saved = wb.read_pidfile(self.pid_file)
         self.assertIsNotNone(saved)
         self.assertEqual(saved["backend_pid"], 4321)
+        self.assertIsNone(saved["ui_pid"])
 
     @patch("pm_workbench.terminate_process")
     def test_down_terminates_processes_and_cleans_pidfile(
@@ -479,6 +483,153 @@ class TestPmWorkbenchUpAndDownLifecycle(unittest.TestCase):
         self.assertEqual(code, 0)
         data = json.loads(stdout.getvalue())
         self.assertEqual(data["status"], "NOT_RUNNING")
+
+
+class TestPmWorkbenchWebUiWiring(unittest.TestCase):
+    """Tests the scenario-gallery Web UI wired into `up`, `down` and `serve`."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.pid_file = Path(self.temp_dir.name) / "test.pid"
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_up_parser_exposes_ui_flags(self) -> None:
+        parser = wb.build_parser()
+        defaults = parser.parse_args(["up"])
+        self.assertEqual(defaults.ui_port, 9095)
+        self.assertFalse(defaults.skip_ui)
+
+        custom = parser.parse_args(["up", "--ui-port", "9195", "--skip-ui"])
+        self.assertEqual(custom.ui_port, 9195)
+        self.assertTrue(custom.skip_ui)
+
+    def test_serve_parser_defaults_to_loopback_9095(self) -> None:
+        parser = wb.build_parser()
+        args = parser.parse_args(["serve"])
+        self.assertEqual(args.subcommand, "serve")
+        self.assertEqual(args.ui_port, 9095)
+        self.assertEqual(args.ui_host, "127.0.0.1")
+        self.assertEqual(args.api_url, "http://localhost:8080")
+        self.assertEqual(args.db_name, "sitepulse")
+        self.assertFalse(args.skip_reload)
+
+    @patch("pm_workbench.is_port_listening")
+    @patch("pm_workbench.check_url_health")
+    @patch("pm_workbench.subprocess.Popen")
+    @patch("shutil.which")
+    def test_up_launches_the_workbench_ui(
+        self,
+        mock_which: MagicMock,
+        mock_popen: MagicMock,
+        mock_health: MagicMock,
+        mock_port: MagicMock,
+    ) -> None:
+        mock_which.return_value = "/mock/cargo"
+        mock_health.return_value = True
+        mock_port.return_value = False
+
+        backend = MagicMock()
+        backend.pid = 4321
+        backend.poll.return_value = None
+        ui = MagicMock()
+        ui.pid = 9095
+        mock_popen.side_effect = [backend, ui]
+
+        stdout = io.StringIO()
+        with patch("sys.stdout", stdout):
+            code = wb.run_up(
+                skip_db=True,
+                skip_flutter=True,
+                pid_file=self.pid_file,
+                as_json=True,
+            )
+
+        self.assertEqual(code, 0)
+        saved = wb.read_pidfile(self.pid_file)
+        self.assertIsNotNone(saved)
+        self.assertEqual(saved["ui_pid"], 9095)
+        self.assertEqual(saved["ui_url"], "http://localhost:9095")
+
+        ui_cmd = mock_popen.call_args_list[-1].args[0]
+        self.assertTrue(any("pm_workbench_web.py" in str(part) for part in ui_cmd))
+        self.assertIn("--port", ui_cmd)
+        self.assertIn("9095", ui_cmd)
+
+    @patch("pm_workbench.is_port_listening")
+    @patch("pm_workbench.check_url_health")
+    @patch("pm_workbench.subprocess.Popen")
+    @patch("shutil.which")
+    def test_up_leaves_an_existing_ui_on_the_port_untouched(
+        self,
+        mock_which: MagicMock,
+        mock_popen: MagicMock,
+        mock_health: MagicMock,
+        mock_port: MagicMock,
+    ) -> None:
+        mock_which.return_value = "/mock/cargo"
+        mock_health.return_value = True
+        mock_port.return_value = True
+
+        backend = MagicMock()
+        backend.pid = 4321
+        backend.poll.return_value = None
+        mock_popen.return_value = backend
+
+        stdout = io.StringIO()
+        with patch("sys.stdout", stdout):
+            code = wb.run_up(
+                skip_db=True,
+                skip_flutter=True,
+                pid_file=self.pid_file,
+                as_json=True,
+            )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(mock_popen.call_count, 1)
+        saved = wb.read_pidfile(self.pid_file)
+        self.assertIsNotNone(saved)
+        self.assertIsNone(saved["ui_pid"])
+
+    @patch("pm_workbench.terminate_process")
+    def test_down_stops_the_workbench_ui(self, mock_term: MagicMock) -> None:
+        mock_term.return_value = True
+        wb.write_pidfile(self.pid_file, {
+            "backend_pid": 5555,
+            "flutter_pid": 6666,
+            "ui_pid": 7777,
+        })
+
+        stdout = io.StringIO()
+        with patch("sys.stdout", stdout):
+            code = wb.run_down(pid_file=self.pid_file, as_json=True)
+
+        self.assertEqual(code, 0)
+        data = json.loads(stdout.getvalue())
+        self.assertEqual(data["ui_pid"], 7777)
+        self.assertTrue(data["ui_stopped"])
+        mock_term.assert_any_call(7777)
+
+    @patch("pm_workbench.check_url_health")
+    def test_status_reports_the_workbench_ui(self, mock_health: MagicMock) -> None:
+        mock_health.return_value = True
+        wb.write_pidfile(self.pid_file, {
+            "backend_pid": os.getpid(),
+            "api_url": "http://localhost:8080",
+            "ui_pid": os.getpid(),
+            "ui_url": "http://localhost:9095",
+        })
+
+        stdout = io.StringIO()
+        with patch("sys.stdout", stdout):
+            code = wb.run_status(pid_file=self.pid_file, as_json=True)
+
+        self.assertEqual(code, 0)
+        data = json.loads(stdout.getvalue())
+        self.assertTrue(data["ui_running"])
+        self.assertTrue(data["ui_healthy"])
+        self.assertEqual(data["ui_url"], "http://localhost:9095")
 
 
 if __name__ == "__main__":
