@@ -35,9 +35,12 @@ impl CapitalProjectService {
         let site_id = req.site_id.unwrap_or_default();
         let category = req.category.unwrap_or(CapitalProjectCategory::Elevator);
         let allocation_basis = req.allocation_basis.unwrap_or(AllocationBasis::ByLandShare);
-        let target_start_date = req
-            .target_start_date
-            .unwrap_or_else(|| Utc::now().date_naive());
+        let target_start_date = match req.target_start_date {
+            Some(date) => date,
+            None => {
+                crate::services::finance_common::site_today_in_state(&self.state, &site_id).await
+            }
+        };
 
         let project_id_str: String;
         let now = Utc::now();
@@ -644,9 +647,12 @@ impl CapitalProjectService {
             return Err("Alıcı IBAN bilgisi boş olamaz.".to_string());
         }
 
-        let disbursement_date = req
-            .disbursement_date
-            .unwrap_or_else(|| Utc::now().date_naive());
+        let disbursement_date = match req.disbursement_date {
+            Some(date) => date,
+            None => {
+                crate::services::finance_common::site_today_in_state(&self.state, site_id).await
+            }
+        };
         let disbursement_method = req
             .disbursement_method
             .unwrap_or(DisbursementMethod::BankTransfer);

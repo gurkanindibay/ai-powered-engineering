@@ -139,4 +139,16 @@ mod tests {
         let drift = (Utc::now() - SystemClock.now()).num_seconds().abs();
         assert!(drift < 5);
     }
+
+    #[test]
+    fn default_license_end_counts_from_the_site_local_date() {
+        // 22:30 UTC on 2026-11-30 is already 2026-12-01 in Istanbul.
+        let now = utc(11, 30, 22, 30);
+        let expected = NaiveDate::from_ymd_opt(2027, 12, 1).unwrap_or(NaiveDate::MIN);
+        assert_eq!(default_license_end("Europe/Istanbul", now), expected);
+        assert_eq!(
+            default_license_end("UTC", now),
+            NaiveDate::from_ymd_opt(2027, 11, 30).unwrap_or(NaiveDate::MIN)
+        );
+    }
 }
