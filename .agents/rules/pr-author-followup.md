@@ -30,6 +30,7 @@ Then act on exactly one of these cases:
 1. **Nothing new** (no review or comment since your last push or last wake-up): do nothing and go back to watching.
 2. **Review notes to fix** (a `CHANGES_REQUESTED` review, or a comment or review body that lists problems): fix every note in your own worktree and branch, run the relevant local suite (rule 3), push, reply on the PR with what changed (one comment, citing the commit), wait for CI to go green (rule 12), then resume from the last handled baseline. The reviewer's watcher wakes it for the new head once CI finishes.
    - If you disagree with a note, do not silently skip it: reply with the reasoning and let the reviewer decide.
+   - If you delegate fixing review notes to a subagent, run it on Sonnet 5.5 (`claude-sonnet-5-5`; `model: "sonnet"`), set explicitly.
 3. **Approved with no notes**: go to Merge.
 4. **Approved with minor notes**: fix the notes, push, wait for CI to go green, then Merge. Do not wait for a second approval of the fix commits.
 5. **Merge conflict or `master` moved in a way that breaks CI**: merge or rebase `origin/master` into your branch, rerun the suite, push, wait for CI, go back to watching.
