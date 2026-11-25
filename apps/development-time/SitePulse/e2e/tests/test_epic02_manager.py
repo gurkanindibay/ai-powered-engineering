@@ -110,10 +110,10 @@ def test_overdue_badge_shows_the_exact_days_overdue(login_as, page, builders, st
     DuesManagement(page).open()
     by_id(page, "dues_filter_OVERDUE").click()
     for badge in (fourteen, eight):
-        by_id(page, f"dues_overdue_badge_{badge['unit_id']}").wait_for(timeout=10_000)
+        by_id(page, f"dues_status_badge_{badge['unit_id']}").wait_for(timeout=10_000)
 
-    assert text_of(by_id(page, f"dues_overdue_badge_{fourteen['unit_id']}")) == "14 Gün Gecikti"
-    assert text_of(by_id(page, f"dues_overdue_badge_{eight['unit_id']}")) == "8 Gün Gecikti"
+    assert text_of(by_id(page, f"dues_status_badge_{fourteen['unit_id']}")) == "14 Gün Gecikti"
+    assert text_of(by_id(page, f"dues_status_badge_{eight['unit_id']}")) == "8 Gün Gecikti"
 
 
 @pytest.mark.core

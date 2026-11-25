@@ -1447,7 +1447,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: testId(
-                  'dues_overdue_badge_${flat.id}',
+                  'dues_status_badge_${flat.id}',
                   Text(
                     flat.isPaid
                         ? (flat.amountDue == Decimal.zero ? 'BORÇ YOK' : 'ÖDENDİ (${flat.paidDateStr ?? "Banka"})')
