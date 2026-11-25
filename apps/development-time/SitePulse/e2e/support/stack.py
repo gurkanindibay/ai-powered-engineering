@@ -3,7 +3,11 @@
 Never touches the developer stack (backend :8080, database `sitepulse`):
 - the database is `sitepulse_e2e_<pid>`, created and dropped here;
 - the backend listens on E2E_API_PORT (8180) and gets test-only secrets;
-- the web bundle is served on E2E_WEB_PORT (9190).
+- the web bundle is served on E2E_WEB_PORT (9190);
+- an in-process fake SMS gateway listens on E2E_SMS_PORT (9191). Every test runs
+  with `SITEPULSE_NOTIFICATION_SENDER=WEBHOOK` and a test-only bearer token, so
+  the backend's notifications are captured here instead of reaching a provider;
+  `stack.sms.received()` returns the payloads.
 
 CI provides both the backend and the web bundle in SITEPULSE_E2E_PREBUILT_DIR.
 Local runs build the backend with Cargo and the web bundle in flutter/build/web-e2e.
@@ -16,6 +20,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import http.server
+import json
 import os
 import subprocess
 import sys
@@ -32,6 +37,7 @@ from fixture_clock import fixture_instant, site_local_date  # noqa: E402
 
 E2E_API_PORT = int(os.environ.get("E2E_API_PORT", "8180"))
 E2E_WEB_PORT = int(os.environ.get("E2E_WEB_PORT", "9190"))
+E2E_SMS_PORT = int(os.environ.get("E2E_SMS_PORT", "9191"))
 _prebuilt_dir = os.environ.get("SITEPULSE_E2E_PREBUILT_DIR")
 PREBUILT_DIR = Path(_prebuilt_dir).resolve() if _prebuilt_dir else None
 WEB_BUILD = (PREBUILT_DIR or SITEPULSE / "flutter" / "build") / "web-e2e"
@@ -41,6 +47,7 @@ FLUTTER = Path(os.environ.get("FLUTTER_ROOT", str(Path.home() / "flutter"))) / "
 SAAS_ADMIN_EMAIL = "admin@sitepulse.io"
 SAAS_ADMIN_PASSWORD = "E2E-Bootstrap-Admin-1"
 WEBHOOK_SECRET = "gui-e2e-webhook-secret"
+SMS_GATEWAY_TOKEN = "gui-e2e-sms-token"
 JWT_SECRET = "gui-e2e-jwt-secret-0123456789abcdef0123"
 
 # Tables are emptied between modules; schema bookkeeping is kept.
@@ -122,6 +129,54 @@ class WebServer:
         self.httpd.server_close()
 
 
+class _SmsGatewayHandler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            payload = json.loads(raw.decode() or "{}")
+        except ValueError:
+            payload = {"raw": raw.decode(errors="replace")}
+        gateway = self.server.gateway  # type: ignore[attr-defined]
+        gateway.messages.append({
+            "path": self.path,
+            "authorization": self.headers.get("Authorization"),
+            "payload": payload,
+        })
+        body = json.dumps({"id": f"sms-{len(gateway.messages)}"}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args) -> None:  # keep test output readable
+        pass
+
+
+class FakeSmsGateway:
+    """Isolated SMS provider for CI: records every message the backend sends."""
+
+    def __init__(self, port: int = E2E_SMS_PORT):
+        self.messages: list[dict] = []
+        self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), _SmsGatewayHandler)
+        self.httpd.gateway = self  # type: ignore[attr-defined]
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def stop(self) -> None:
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+    def clear(self) -> None:
+        self.messages.clear()
+
+    def received(self) -> list[dict]:
+        return list(self.messages)
+
+
 class E2EStack:
     def __init__(self, log_dir: Path, container: str = "sitepulse-postgres", keep_db: bool = False):
         self.log_dir = log_dir
@@ -140,8 +195,13 @@ class E2EStack:
                 "SITEPULSE_ENABLE_DEV_ROUTES": "false",
                 "SITEPULSE_E2E": "true",
                 "SITEPULSE_SEED_TEST_DATA": "false",
+                "SITEPULSE_NOTIFICATION_SENDER": "WEBHOOK",
+                "SITEPULSE_NOTIFICATION_WEBHOOK_URL": f"http://127.0.0.1:{E2E_SMS_PORT}/sms",
+                "SITEPULSE_NOTIFICATION_WEBHOOK_TOKEN": SMS_GATEWAY_TOKEN,
+                "SITEPULSE_PUBLIC_APP_URL": web_base(),
             })
         self.web = WebServer()
+        self.sms = FakeSmsGateway()
         self.e2e_clock_override: dict[str, str] | None = None
         self.fixture_instant = fixture_instant()
         self.fixture_today = site_local_date(self.fixture_instant).isoformat()
@@ -151,12 +211,14 @@ class E2EStack:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.psql.run("postgres", f"DROP DATABASE IF EXISTS {self.db_name};")
         self.psql.run("postgres", f"CREATE DATABASE {self.db_name};")
+        self.sms.start()
         self.backend.start()        # applies migrations + system seed
         self.reset()
         self.web.start()
 
     def stop(self) -> None:
         try:
+            self.sms.stop()
             self.web.stop()
         finally:
             self.backend.stop()

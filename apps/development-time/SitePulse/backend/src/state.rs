@@ -45,11 +45,24 @@ pub struct AppSettings {
     pub notification_webhook_url: Option<String>,
     pub notification_webhook_token: Option<String>,
     pub cors_origins: Vec<String>,
+    /// Public address of the Flutter app, without a trailing slash. Links sent to
+    /// people (activation, login) are built from it in one place.
+    pub public_app_url: String,
 }
 
 impl AppSettings {
     pub fn is_production(&self) -> bool {
         self.production
+    }
+
+    /// The app's hash route, e.g. `https://app.example/#/login`.
+    pub fn app_link(&self, path: &str) -> String {
+        format!("{}/#/{}", self.public_app_url, path.trim_start_matches('/'))
+    }
+
+    /// A single-use app link, e.g. `https://app.example/#/activate?token=...`.
+    pub fn app_link_with_token(&self, path: &str, token: &str) -> String {
+        format!("{}?token={}", self.app_link(path), token)
     }
 
     pub fn from_env() -> Self {
@@ -78,6 +91,11 @@ impl AppSettings {
         let notification_webhook_token = std::env::var("SITEPULSE_NOTIFICATION_WEBHOOK_TOKEN")
             .ok()
             .filter(|s| !s.is_empty());
+        let public_app_url = std::env::var("SITEPULSE_PUBLIC_APP_URL")
+            .ok()
+            .map(|url| url.trim().trim_end_matches('/').to_string())
+            .filter(|url| !url.is_empty())
+            .unwrap_or_else(|| "http://localhost:8080".to_string());
         let cors_origins = std::env::var("SITEPULSE_CORS_ORIGINS")
             .unwrap_or_default()
             .split(',')
@@ -95,6 +113,7 @@ impl AppSettings {
             notification_webhook_url,
             notification_webhook_token,
             cors_origins,
+            public_app_url,
         }
     }
 }

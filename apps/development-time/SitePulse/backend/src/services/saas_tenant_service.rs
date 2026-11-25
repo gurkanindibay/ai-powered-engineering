@@ -167,10 +167,39 @@ impl SaasTenantService {
         {
             let mut inner = self.state.inner.write().await;
             inner.sites.push(new_site);
-            inner.users.push(admin_user);
+            inner.users.push(admin_user.clone());
             for b in block_dtos {
                 inner.blocks.push(b);
             }
+        }
+
+        // The manager's own mobile number receives the credential alert. A
+        // delivery failure never rolls back the site: the SaaS admin still sees
+        // the password on the registration screen and can retry the reset.
+        let recipient = crate::services::notification_service::Recipient {
+            reference: admin_user.id.clone(),
+            name: admin_user.full_name.clone(),
+            email: Some(admin_user.email.clone()),
+            phone: Some(admin_user.phone.clone()).filter(|phone| !phone.trim().is_empty()),
+            has_app: true,
+        };
+        let body = credential_alert_body(
+            &admin_user.full_name,
+            &admin_user.email,
+            &temp_pass,
+            &self.state.settings.app_link("login"),
+        );
+        if let Err(error) = crate::services::notification_service::send_credential_sms(
+            &self.state.settings,
+            &recipient,
+            CREDENTIAL_ALERT_SUBJECT,
+            &body,
+        ) {
+            tracing::warn!(
+                user_id = %admin_user.id,
+                error = %error,
+                "The manager credential alert could not be delivered"
+            );
         }
 
         Ok(SiteRegistrationResponse {
@@ -790,4 +819,43 @@ pub fn to_slug(input: &str) -> String {
 
 fn generate_secure_temporary_password() -> String {
     crate::auth::generate_temporary_password("SP-")
+}
+
+const CREDENTIAL_ALERT_SUBJECT: &str = "SitePulse yönetici girişiniz";
+
+/// The SMS a new site manager receives: where to sign in and the temporary
+/// password the SaaS admin just saw. The first sign-in forces a new password.
+fn credential_alert_body(
+    full_name: &str,
+    email: &str,
+    temporary_password: &str,
+    login_link: &str,
+) -> String {
+    format!(
+        "Sayın {full_name}, SitePulse site yönetici hesabınız hazır.\n\
+         Giriş: {login_link}\n\
+         E-posta: {email}\n\
+         Geçici şifre: {temporary_password}\n\
+         İlk girişte şifrenizi değiştirmeniz istenecek."
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn credential_alert_carries_the_login_and_the_temporary_password() {
+        let body = credential_alert_body(
+            "Murat Yıldırım",
+            "murat@e2e.test",
+            "SP-TEMP-1234",
+            "https://sitepulse.test/#/login",
+        );
+        assert!(body.contains("Murat Yıldırım"));
+        assert!(body.contains("https://sitepulse.test/#/login"));
+        assert!(body.contains("murat@e2e.test"));
+        assert!(body.contains("SP-TEMP-1234"));
+        assert!(body.contains("şifrenizi değiştirmeniz"));
+    }
 }
