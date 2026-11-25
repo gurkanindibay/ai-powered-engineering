@@ -477,7 +477,7 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
         {
             "unit_id": str(ids["unit"]), "amount": "1.00",
             "payment_method": "MANUAL_CASH", "homeowner_name": "Nightly Owner",
-        }, success={201},
+        }, success={200},
     )
     assert_write_is_site_scoped(
         api, "/api/v1/payments/reverse", second, first,
