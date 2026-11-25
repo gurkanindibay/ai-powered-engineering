@@ -8,9 +8,11 @@ Subcommands:
   up:     Starts local PostgreSQL, Axum Rust backend (with --features e2e),
           and Flutter Web, recording runtime PIDs.
   down:   Cleanly terminates running workbench processes and removes the pidfile.
-  seed:   Seeds reference scenario presets (F0-F7) via pm_scenarios.seeder,
+  seed:   Seeds reference scenario presets (F0-F7 plus F8_CAPITAL, F9_RECON and
+          F10_GOVERNANCE) via pm_scenarios.seeder,
           synchronizes the E2E clock, and prints a formatted cheat sheet or JSON.
-  clock:  Controls the deterministic E2E clock (set, advance, tick, reset).
+  clock:  Controls the deterministic E2E clock (set, advance, tick, reset, clear,
+          status, get).
   status: Inspects running workbench processes and API health.
 
 Per AGENTS.md rules 4, 5, and 6:
@@ -855,7 +857,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser_down.add_argument("--json", action="store_true", help="Format output as JSON")
 
     # seed
-    parser_seed = subparsers.add_parser("seed", help="Seed a scenario preset (F0-F7) and set E2E clock")
+    parser_seed = subparsers.add_parser("seed", help="Seed a scenario preset (F0-F7, F8_CAPITAL, F9_RECON, F10_GOVERNANCE) and set E2E clock")
     parser_seed.add_argument("preset", nargs="?", default="F4", help="Scenario preset to seed (e.g. F0, F4, F5)")
     parser_seed.add_argument("--preset", dest="opt_preset", help="Alternative flag to specify preset")
     parser_seed.add_argument("--api-url", default="http://localhost:8080", help="Backend API base URL")

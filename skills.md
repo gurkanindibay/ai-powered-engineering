@@ -553,9 +553,10 @@ python3 -I scripts/test_strategy_scan.py --output scan.json  # every test and sc
   - `up`: Starts local PostgreSQL database, Axum Rust backend (with `--features e2e`, `SITEPULSE_E2E=true`, `APP_ENV=development` on `:8080`), Flutter Web client on `:9090`, and the Workbench Web UI on `:9095`, recording runtime PIDs in `~/.sitepulse/workbench.pid`.
   - `down`: Cleanly stops all workbench processes recorded in the pidfile, including the Workbench Web UI (`--stop-db` to also stop database containers).
   - `serve`: Runs only the Workbench Web UI in the foreground (`--ui-port`, `--api-url`, `--state-file`).
-  - `seed <preset>`: Seeds scenario presets (`F0`–`F7` and later `F8`–`F10`) via `pm_scenarios.seeder`, sets `/api/e2e/clock` to the preset's reference date, and outputs a formatted Cheat Sheet table or structured JSON.
-  - `clock <set|advance|tick|reset|status>`: CLI wrapper calling `/api/e2e/clock` (`status`/`get` read it with `GET`) for deterministic test time advancement.
+  - `seed <preset>`: Seeds any canonical preset via `pm_scenarios.seeder` — `F0`–`F7` plus `F8_CAPITAL`, `F9_RECON` and `F10_GOVERNANCE`, with `F8`/`F9`/`F10` accepted as aliases — sets the simulated clock to the preset's reference date, and outputs a formatted Cheat Sheet table or structured JSON.
+  - `clock <set|advance|tick|reset|clear|status|get>`: CLI wrapper calling `/api/clock` (`status`/`get` read it with `GET`; `reset`/`clear` return to the real wall clock) for deterministic test time advancement.
   - `status`: Inspects live workbench processes, PID state, backend API health and Workbench UI health.
+- **Manual playbook:** [PM_TEST_PLAYBOOK.md](apps/development-time/SitePulse/docs/testing/PM_TEST_PLAYBOOK.md) is the human-facing walkthrough built on this tool: quick start, the six complexity packs A–F with their exact expected balances, the 15-minute release smoke check and the bug-bundle handoff. [TEST_STRATEGY.md](apps/development-time/SitePulse/docs/testing/TEST_STRATEGY.md) names it as the manual and exploratory lane.
 - **Safety Guardrail:** Strictly refuses execution if `APP_ENV=production` or `ENVIRONMENT=production`.
 - **Output:** Supports `--help` and `--json` on all subcommands. Zero floating-point arithmetic for financial figures.
 

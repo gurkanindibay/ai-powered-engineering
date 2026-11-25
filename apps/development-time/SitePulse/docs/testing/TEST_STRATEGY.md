@@ -140,6 +140,7 @@ Every test starts from a named, versioned state, not from data it invents. The j
 | Money cases | `harness/fixtures/financial_cases.json` | Rust `financial_fixtures.rs`, Dart `financial_fixture_test.dart` | Add the liability decision table here so both languages run it |
 | Boundary partitions for capital dues | `TEST_PLAN_EPIC_10_CAPITAL_EXPENDITURE.md` §3 | Property tests | Generators draw from these partitions |
 | API data builders | `e2e/support/api.py` (listed in `GUI_TEST_PLAN.md` §4) | E2E arrange steps | Seed through the API or SQL, never through screens, except in the one UI test per flow |
+| PM scenario presets `F0`–`F10_GOVERNANCE` and the Workbench | `scripts/pm_scenarios` (`REFERENCE_CLOCKS`, `EXPECTED_TOTALS`, `EXPECTED_UNIT_BALANCES`, `PM_CHECKLISTS`, `PERSONAS`) | E2E seeder, `pm_workbench.py`, Workbench Web UI, manual sessions | One catalogue for automation and people: expected totals are literals in the preset, the cheat sheet is generated from it, and [PM_TEST_PLAYBOOK.md](PM_TEST_PLAYBOOK.md) quotes it rather than restating it |
 | Clock | `e2e` cargo feature clock | Backend, E2E | One `Clock` trait injected everywhere; no `Utc::now()` / `DateTime.now()` in tests |
 
 **Isolation.** Each scenario attempt gets its own site (`e2e-<run>-<shard>-<attempt>`, journey plan §5). Each PostgreSQL test gets its own database, created from a migrated template. Teardown must work from a half-built state (`test_teardown_works_after_half_built_state` already proves this).
@@ -179,6 +180,22 @@ Targeted PR lanes trade early cross-epic coverage for speed: a regression outsid
 | 13 | Post-merge evidence (M) | record-evidence re-runs global gates once per DAG task | Run global gates once per commit and reuse the results for every task | Shorter master post-merge time |
 
 Keep two things exactly as they are: the parallel gate groups with the guard test that fails if one is dropped, and cancel-in-progress for superseded PR pushes.
+
+### Manual and exploratory testing (PM lane)
+
+The manual lane answers a question no automated lane answers: **can a person do this job on this build?** It is a usability and sanity lane, not a verification lane. The walkthroughs, the six complexity packs and the 15-minute release smoke live in [PM_TEST_PLAYBOOK.md](PM_TEST_PLAYBOOK.md), which is the entry point for anyone testing by hand.
+
+| Concern | Rule |
+| --- | --- |
+| Tooling | [`scripts/pm_workbench.py`](../../scripts/pm_workbench.py) starts the local stack and seeds a preset; [`scripts/pm_workbench_web.py`](../../scripts/pm_workbench_web.py) serves the Workbench Web UI (`:9095`) with the scenario gallery, cheat sheet, Time Machine, companion files and bug-bundle export; [`scripts/pm_ledger_health.py`](../../scripts/pm_ledger_health.py) scores a seeded site against the twelve ledger invariants |
+| Starting state | Always a named preset from `scripts/pm_scenarios` (`F0`–`F10_GOVERNANCE`), the same catalogue the E2E seeder uses, so a cheat sheet cannot drift from the suite. The playbook's copies of those numbers are themselves checked by `harness/tests/test_pm_playbook.py` |
+| What it can prove | That the build is usable, that the documented numbers appear on screen, and that a defect reproduces on a known state |
+| What it cannot prove | That a rule holds. A manual pass is one observation on one site; the evidence of record stays the scenario and its named CI test (principle 1) |
+| Output of a failed session | A bug bundle (preset, clock, site, redacted roster, ledger-health scorecard, correlated `request_id`/`trace_id` fields) attached to an issue, plus the checklist line that failed |
+| Closing the loop | The defect gains a Gherkin scenario in `.specify/features/` and a test in the cheapest layer that can prove it. A manual pass alone never marks a scenario verified. |
+| Cadence | The 15-minute release smoke before a release-candidate tag or a stakeholder demo; exploratory sessions whenever a change touches money, dates or occupancy |
+
+The manual lane reads the same reference clock, the same expected totals and the same invariants as the automated lanes, so a disagreement between them is itself a finding: either the product drifted from the catalogue or the catalogue is stale.
 
 ## Quality signals and gates
 
