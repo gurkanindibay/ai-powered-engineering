@@ -1,10 +1,15 @@
 @Tags(['residents', 'finance'])
 library;
+import 'dart:convert';
+
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
+import 'package:sitepulse/domain/services/api_client.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/components/sp_effective_date_field.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_screen.dart';
@@ -212,8 +217,37 @@ void main() {
       controller.loadTestFixtures();
       controller.switchSessionRole(UserRole.siteManager);
       await controller.fetchHomeOwners(siteId: 'site-1');
+      final previousTransport = ApiClient.transport;
+      addTearDown(() => ApiClient.transport = previousTransport);
+      ApiClient.transport = MockClient((request) async {
+        if (request.url.path.endsWith('/statement')) {
+          final unitId = request.url.pathSegments[3];
+          final home = controller.homeOwners.firstWhere((item) => item.unitId == unitId);
+          return http.Response(
+            jsonEncode({
+              'unit_id': unitId,
+              'unit_label': 'A Blok 1',
+              'debtors': [
+                {
+                  'debtor_type': 'TENANT',
+                  'name': home.tenantFullName ?? 'Zeynep Kaya',
+                  'principal_outstanding': '100.00',
+                  'penalty_outstanding': '10.00',
+                  'total_outstanding': '110.00',
+                },
+              ],
+              'receipts': [],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('{}', 404, headers: {'content-type': 'application/json'});
+      });
 
       await openWorkspaceAction(tester, controller, 'move_out');
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
 
       expect(find.text('Sakin Ayrılışı (Move-Out / Tahliye)'), findsOneWidget);
       await tester.tap(find.text('Vazgeç'));

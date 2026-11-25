@@ -4,6 +4,8 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
+import '../../domain/models/payments_phase2_models.dart';
+import '../../domain/services/payments_phase2_api.dart';
 import '../../domain/models/unit_state.dart';
 import '../../domain/models/person_ref.dart';
 import '../components/app_fullscreen_page.dart';
