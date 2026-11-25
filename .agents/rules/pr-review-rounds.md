@@ -18,7 +18,7 @@ The goal is one reviewer wake-up per round. Pushes, CI runs and comments between
 
 ## No second user is needed
 
-The reviewer is the GitHub App `local-reviewer-agent` (rule 14), a separate identity from the author, so it can submit Approve and Request changes on the owner's PRs. For the author's side, GitHub's reviewer request does not fit this setup: authors cannot request themselves, and requested reviewers are users and teams, not App bots. Do not depend on the "Request review" or "Re-request review" buttons. The author uses **Ready for review**, which the PR author can press with their own account, either in the web UI or with `gh pr ready`.
+The reviewer is the GitHub App `local-reviewer-agent` (rule 14), a separate identity from the author, so it can submit Approve and Request changes on the owner's PRs. For the author's side, GitHub's reviewer request does not fit this setup: authors cannot request themselves, and requested reviewers are users and teams, not App bots. Checked on PR 488 (2026-11-25): requesting the author returns HTTP 422 `Review cannot be requested from pull request author`, and requesting the bot through GraphQL `requestReviews(botIds:)` reports success but adds no reviewer and no timeline event. The web UI's re-request icon after a bot review was not tested. Do not depend on the "Request review" or "Re-request review" buttons. The author uses **Ready for review**, which the PR author can press with their own account, either in the web UI or with `gh pr ready`.
 
 The queue also counts a `review_requested` timeline event that names the bot, so a request button works without a rule change if GitHub records one for the App.
 
