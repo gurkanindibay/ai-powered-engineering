@@ -303,11 +303,12 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ## 5b-6. CI Test Report (`ci_test_report.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/ci_test_report.py](file:///apps/development-time/SitePulse/scripts/ci_test_report.py) (symlinked to `scripts/ci_test_report.py`)
-- **Purpose:** Merges e2e shard JUnit and execution records with structured per-case results from the existing Cargo, Flutter, unittest, API and schema gates. It writes the suite manifest, gate timings, native count reconciliation, incomplete/reused attempt states, `case-results.jsonl`, and `suite-report.md` alongside the existing scenario and product reports, without touching committed history. Job `test-report` downloads attempt-specific artifacts and uploads the result as `e2e-test-report`. `ci_case_results.py --json` prints the expected suite manifest; its adapters preserve native case IDs and statuses. The CI unittest adapter uses the standard discovery loader through `unittest_json_runner.py` and writes machine-readable results when `SITEPULSE_GATE_ARTIFACT_DIR` is set.
+- **Purpose:** Merges e2e shard JUnit and execution records with structured per-case results from the existing Cargo, Flutter, unittest, API and schema gates. It writes the suite manifest, gate timings, native count reconciliation, incomplete/reused attempt states, `case-results.jsonl`, `suite-report.md`, and `scenario-evidence.json`/`.md` alongside the existing scenario and product reports, without touching committed history. The included `ci_scenario_evidence.py` joins stable scenario `covers:` declarations to named cases across lanes and reports passing, failing, skipped, scheduled and unresolved links. Job `test-report` downloads attempt-specific artifacts and uploads the result as `e2e-test-report`. `ci_case_results.py --json` prints the expected suite manifest; its adapters preserve native case IDs and statuses. The CI unittest adapter uses the standard discovery loader through `unittest_json_runner.py` and writes machine-readable results when `SITEPULSE_GATE_ARTIFACT_DIR` is set.
 
 ```bash
 ./scripts/ci_test_report.py --shards shards --out /tmp/e2e-test-report --task "PR 131"
 ./scripts/ci_test_report.py --shards shards --out /tmp/e2e-test-report --json --no-summary
+./apps/development-time/SitePulse/scripts/ci_scenario_evidence.py --artifact-dir /tmp/e2e-test-report --json
 ```
 
 ## 5b-7. Publish CI Test Report History (`publish_test_report.py`)
