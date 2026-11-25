@@ -524,6 +524,31 @@ class SameOriginGuardrailTests(unittest.TestCase):
         self.assertIn("Cross-origin", json.loads(raw.decode("utf-8"))["error"])
         self.assertEqual(seeded, [])
 
+    def test_seed_rejects_another_local_port_as_origin(self) -> None:
+        # Another loopback dev server is not this workbench's origin.
+        with Harness() as harness:
+            status, _headers, _raw = harness.request(
+                "/api/seed",
+                method="POST",
+                body={"preset": "F5"},
+                headers={"Origin": "http://localhost:3000"},
+            )
+            seeded = list(harness.seed_calls)
+        self.assertEqual(status, 403)
+        self.assertEqual(seeded, [])
+
+    def test_seed_rejects_an_origin_without_a_port(self) -> None:
+        with Harness() as harness:
+            status, _headers, _raw = harness.request(
+                "/api/seed",
+                method="POST",
+                body={"preset": "F5"},
+                headers={"Origin": "http://localhost"},
+            )
+            seeded = list(harness.seed_calls)
+        self.assertEqual(status, 403)
+        self.assertEqual(seeded, [])
+
     def test_get_rejects_a_foreign_host_header(self) -> None:
         # DNS rebinding: the page's own hostname resolves to 127.0.0.1, so a
         # non-loopback Host header must not be trusted.

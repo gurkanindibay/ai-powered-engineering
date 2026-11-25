@@ -452,11 +452,19 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
 
         def _check_origin(self) -> None:
             # A cross-site POST would otherwise land as a CORS "simple request".
-            # Browsers send Origin on POST; a present value must be our own.
+            # Browsers send Origin on POST; a present value must be our own
+            # origin, host and port: another loopback dev server is not us.
             origin = self.headers.get("Origin")
             if not origin:
                 return
-            if self._host_name(origin) not in LOOPBACK_HOSTNAMES:
+            parsed = urlparse(origin if "//" in origin else f"//{origin}")
+            try:
+                origin_port = parsed.port
+            except ValueError as err:
+                raise ForbiddenRequestError("Malformed Origin header.") from err
+            if (parsed.hostname or "").lower() not in LOOPBACK_HOSTNAMES:
+                raise ForbiddenRequestError("Cross-origin requests are not allowed.")
+            if origin_port != self.server.server_address[1]:
                 raise ForbiddenRequestError("Cross-origin requests are not allowed.")
 
         def _check_json_content_type(self) -> None:
