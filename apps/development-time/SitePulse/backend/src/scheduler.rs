@@ -148,8 +148,8 @@ pub async fn run_accrual_with_report(
             Ok((tenanted, owned)) => (Some(tenanted), Some(owned)),
             Err(e) => {
                 tracing::error!(
-                    "[Scheduler] Occupancy could not be read; accrual skipped: {}",
-                    e
+                    error = %e,
+                    "[Scheduler] Occupancy or ownership could not be read; accrual skipped"
                 );
                 return report;
             }
