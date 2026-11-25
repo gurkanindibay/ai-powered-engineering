@@ -1,4 +1,5 @@
 use deadpool_postgres::Pool;
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use tracing::info;
 
@@ -396,13 +397,23 @@ pub struct TitleTransfer<'a> {
     pub notes: Option<&'a str>,
 }
 
+/// The committed effect of a title deed transfer.
+#[derive(Debug, Clone)]
+pub struct TitleTransferOutcome {
+    /// Exit balance of the occupancy session the transfer closed, if any.
+    pub exit_balance: Option<Decimal>,
+    pub buyer_person_id: i64,
+    /// Seller advance now held for each person, in the same order as the owners.
+    pub held_advance: Vec<(i64, Decimal)>,
+}
+
 /// Closes the old ownership, opens the new one and applies the occupancy
 /// effect of the transfer in one transaction (§3.3 T6). Returns the exit
 /// balance of the occupancy session the transfer closed, if any.
 pub async fn transfer_unit_ownership_db(
     pool: &Pool,
     transfer: &TitleTransfer<'_>,
-) -> Result<(Option<Decimal>, i64), crate::db::occupancy_repository::OccupancyError> {
+) -> Result<TitleTransferOutcome, crate::db::occupancy_repository::OccupancyError> {
     use crate::db::occupancy_repository::{self as occupancy, OccupancyError, TransitionInput};
     use crate::domain::unit_state::{self, Command, SessionRole};
 
@@ -515,6 +526,12 @@ pub async fn transfer_unit_ownership_db(
     let incoming = plan.opens.map(|_| buyer);
     let outcome = occupancy::execute_plan(&tx, &snapshot, plan, incoming, &input).await?;
 
+    // 6. The seller's owner advance never passes to the buyer: it moves to a
+    //    person-scoped hold, per owner on record in proportion to their share.
+    let held_advance =
+        hold_owner_advance_for_sellers(&tx, unit_id_num, transfer.transfer_date, &snapshot.owners)
+            .await?;
+
     tx.commit().await?;
     info!(
         unit_id = unit_id_num,
@@ -522,7 +539,108 @@ pub async fn transfer_unit_ownership_db(
         to = %outcome.plan.to.label(),
         "Transferred unit ownership in PostgreSQL"
     );
-    Ok((outcome.closed.map(|c| c.exit_balance), buyer))
+    Ok(TitleTransferOutcome {
+        exit_balance: outcome.closed.map(|c| c.exit_balance),
+        buyer_person_id: buyer,
+        held_advance,
+    })
+}
+
+/// Moves the unit's OWNER advance to a person-scoped hold for the owners on
+/// record and writes both sides to the advance ledger. The role bucket returns
+/// to zero, so the buyer starts with no advance of their own.
+async fn hold_owner_advance_for_sellers(
+    tx: &deadpool_postgres::Transaction<'_>,
+    unit_id: i64,
+    transfer_date: chrono::NaiveDate,
+    owners: &[crate::db::occupancy_repository::OwnerOnRecord],
+) -> Result<Vec<(i64, Decimal)>, crate::db::occupancy_repository::OccupancyError> {
+    use crate::db::occupancy_repository::OccupancyError;
+
+    let balance: Decimal = tx
+        .query_opt(
+            "SELECT balance FROM advance_balances
+              WHERE unit_id = $1 AND debtor_type = 'OWNER' FOR UPDATE",
+            &[&unit_id],
+        )
+        .await
+        .map_err(|e| OccupancyError::Storage(e.to_string()))?
+        .map(|row| row.get(0))
+        .unwrap_or(Decimal::ZERO);
+    if balance <= Decimal::ZERO {
+        return Ok(Vec::new());
+    }
+    if owners.is_empty() {
+        return Err(OccupancyError::Storage(
+            "The unit has an owner advance but no owner on record to hold it".to_string(),
+        ));
+    }
+    let weights: Vec<u64> = owners
+        .iter()
+        .map(|owner| {
+            (owner.share_percentage * Decimal::ONE_HUNDRED)
+                .max(Decimal::ZERO)
+                .trunc()
+                .to_u64()
+                .unwrap_or(0)
+        })
+        .collect();
+    let shares = crate::domain::apportionment::apportion(balance, &weights)
+        .map_err(|e| OccupancyError::Storage(e.to_string()))?;
+    let mut held = Vec::with_capacity(owners.len());
+    for (owner, share) in owners.iter().zip(shares) {
+        if share <= Decimal::ZERO {
+            continue;
+        }
+        tx.execute(
+            "INSERT INTO person_advance_holds
+                 (site_id, unit_id, person_id, debtor_type, balance, updated_at)
+             SELECT site_id, id, $2, 'OWNER', $3, CURRENT_TIMESTAMP
+               FROM units WHERE id = $1
+             ON CONFLICT (unit_id, person_id, debtor_type) DO UPDATE SET
+                 balance = person_advance_holds.balance + EXCLUDED.balance,
+                 updated_at = CURRENT_TIMESTAMP",
+            &[&unit_id, &owner.person_id, &share],
+        )
+        .await
+        .map_err(|e| OccupancyError::Storage(e.to_string()))?;
+        tx.execute(
+            "INSERT INTO advance_ledger_entries
+                 (unit_id, debtor_type, person_id, entry_type, amount, reference_id, description)
+             VALUES ($1, 'OWNER', $2, 'TITLE_TRANSFER_HOLD', $3, $4, $5)",
+            &[
+                &unit_id,
+                &owner.person_id,
+                &share,
+                &format!("TITLE-TRANSFER-{transfer_date}"),
+                &format!("Seller's advance held after the title transfer on {transfer_date}"),
+            ],
+        )
+        .await
+        .map_err(|e| OccupancyError::Storage(e.to_string()))?;
+        held.push((owner.person_id, share));
+    }
+    tx.execute(
+        "UPDATE advance_balances SET balance = balance - $2, updated_at = CURRENT_TIMESTAMP
+          WHERE unit_id = $1 AND debtor_type = 'OWNER'",
+        &[&unit_id, &balance],
+    )
+    .await
+    .map_err(|e| OccupancyError::Storage(e.to_string()))?;
+    tx.execute(
+        "INSERT INTO advance_ledger_entries
+             (unit_id, debtor_type, entry_type, amount, reference_id, description)
+         VALUES ($1, 'OWNER', 'TITLE_TRANSFER_DEBIT', $2, $3, $4)",
+        &[
+            &unit_id,
+            &balance,
+            &format!("TITLE-TRANSFER-{transfer_date}"),
+            &format!("Seller's advance moved to the sellers' holds on {transfer_date}"),
+        ],
+    )
+    .await
+    .map_err(|e| OccupancyError::Storage(e.to_string()))?;
+    Ok(held)
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

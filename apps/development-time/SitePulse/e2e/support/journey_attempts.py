@@ -56,6 +56,7 @@ _SITE_SCOPED_DELETES = (
     "receipt_counters WHERE site_id = {site}",
     "advance_ledger_entries WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
     "advance_balances WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
+    "person_advance_holds WHERE site_id = {site}",
     "debt_aging_snapshots WHERE site_id = {site}",
     "reconciliation_queue WHERE site_id = {site}",
     "unit_sender_ibans WHERE unit_id IN (SELECT id FROM units WHERE site_id = {site})",
@@ -250,8 +251,19 @@ def site_in_state(
     return res.fixture
 
 
-def ledger_invariants(api: Api, manager: Session, site_id: str, *, stage: str) -> dict:
-    """Check the reusable API-level ledger totals at a named journey stage."""
+def ledger_invariants(
+    api: Api,
+    manager: Session,
+    site_id: str,
+    *,
+    stage: str,
+    held_advances: Decimal = Decimal("0.00"),
+) -> dict:
+    """Check the reusable API-level ledger totals at a named journey stage.
+
+    `held_advances` is advance the site holds for a person who no longer holds the
+    unit's role; the dashboard total carries it while the unit's own balance does not.
+    """
     overview = api.site_overview(manager, site_id)
     summary = overview["summary"]
     flats = overview["flats"]
@@ -268,7 +280,10 @@ def ledger_invariants(api: Api, manager: Session, site_id: str, *, stage: str) -
     if outstanding_from_units != dashboard_outstanding:
         raise AssertionError(f"[{stage}] I2: unit outstanding sum {outstanding_from_units} != dashboard {dashboard_outstanding}")
 
-    unit_advances = sum((decimal(flat["advance_balance"]) for flat in flats), Decimal("0.00"))
+    unit_advances = (
+        sum((decimal(flat["advance_balance"]) for flat in flats), Decimal("0.00"))
+        + held_advances
+    )
     dashboard_advances = decimal(summary["total_advance_balance"])
     if unit_advances != dashboard_advances:
         raise AssertionError(f"[{stage}] I4: unit advance sum {unit_advances} != dashboard {dashboard_advances}")

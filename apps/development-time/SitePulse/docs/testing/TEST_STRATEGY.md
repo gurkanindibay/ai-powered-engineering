@@ -123,7 +123,7 @@ SitePulse's hard cases are combinations: who is liable (owner, tenant, joint) ×
 
 1. **Ledger oracle after every journey step.** Journey stages check the detailed ledger invariants in §4. The autouse E2E/API pytest fixture also asserts that `v_integrity_violations` is empty after each test, so invariant regressions surface even outside journey scenarios.
 2. **Calendar matrix on the injectable clock.** Run accrual, due-day, late-fee and period-close rules over frozen dates: the 28th to 31st, February in leap and non-leap years, 23:30 and 00:30 at UTC+3, back-dated entries just inside and outside the window. The `e2e` clock already supports this; use it at the API layer, not the browser.
-3. **Model-based occupancy and ownership.** Generate sequences of move-in, move-out, handover, sale and reversal, including same-day handovers. Assert no gap or overlap in liable periods and that a split never gains or loses a kuruş. This covers SC-13-03-06, -07 and -09 once the product gaps close.
+3. **Model-based occupancy and ownership.** Generate sequences of move-in, move-out, handover, sale and reversal, including same-day handovers. Assert no gap or overlap in liable periods and that a split never gains or loses a kuruş. This covers SC-13-03-07 and -09 once the product gaps close (SC-13-03-06 is automated).
 4. **Concurrency and idempotency.** Two PostgreSQL connections with a barrier: two payments on one unit (SC-05-02-01), double approval of one statement line (SC-13-09-07), concurrent accrual of one period. Assert one committed result and one clean rejection.
 5. **Fault injection at the persistence boundary.** A failing repository or pool wrapper (or the `fail` crate's failpoints) in DB tests. Assert full rollback of occupancy, household and settlement (SC-13-03-14).
 6. **Volume and tenancy at scale, nightly.** Seed 50 sites × 200 units with the 88-unit onboarding fixture as the template. Time key API calls against a stated SLO, and run the cross-tenant id fuzz from the API row above.
@@ -351,14 +351,14 @@ Three systemic gaps sit behind these:
 | SC-13-03-03 Former tenant sees own debt only | core | gui | Needs SC-13-03-02 first |
 | SC-13-04-13, SC-13-05-17, SC-13-08-02, SC-13-08-04, SC-13-11-05, SC-13-13-05 | core | gui | GUI journeys not written (#273, #251) |
 | SC-02-02-02, SC-02-03-05, SC-02-05-02 | core | gui | Badge has no semantics id; scenario outdated (activation link); resident feed not opened |
-| SC-13-03-06, -07, -09 (advance, same-day handover, kuruş rounding) | edge | backend | **Product gaps**: advances keyed by role; split by role |
+| SC-13-03-07, -09 (same-day handover, kuruş rounding) | edge | backend | **Product gap**: accrual splits by role |
 | SC-13-03-14 Failed replacement rolls everything back | edge | backend | Needs fault injection at the persistence boundary |
 | SC-13-01-10, SC-13-01-15 | edge | backend | Needs F3 fixture (#271) |
 | SC-13-05-10, SC-13-08-06, SC-13-08-07, SC-13-10-08 | edge | gui | Excel import, lost-response, stale-action and late-response isolation journeys |
 | SC-05-02-01 Concurrent balance modification | none | backend | No test runs two concurrent payments on one unit |
 | SC-03-04-03, SC-06-05-02, SC-10-06-03, SC-10-06-04 | none | gui/flutter | SMS provider absent; Google IdP stub; capital card detail; banner text not implemented |
 
-Seven pending scenarios are blocked by product gaps, not by missing tests. They belong on the product backlog with the scenario as the acceptance test. Beyond the catalogue, `GUI_COVERAGE_GAPS.md` lists about 20 UI features with no browser scenario. EPIC-11 (payments phase 3) has no GUI scenarios at all.
+Six pending scenarios are blocked by product gaps, not by missing tests. They belong on the product backlog with the scenario as the acceptance test. Beyond the catalogue, `GUI_COVERAGE_GAPS.md` lists about 20 UI features with no browser scenario. EPIC-11 (payments phase 3) has no GUI scenarios at all.
 
 # Improvement plan
 

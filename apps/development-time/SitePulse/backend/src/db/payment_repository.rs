@@ -1094,7 +1094,15 @@ pub async fn fetch_site_payments_from_db(
     let total_units_count: i64 = units_count_row.get(0);
 
     // 3. Total advance
-    let advance_row = client.query_one("SELECT COALESCE(SUM(balance), 0)::numeric FROM advance_balances ab JOIN units u ON ab.unit_id = u.id WHERE u.site_id = $1", &[&site_id_num]).await?;
+    let advance_row = client
+        .query_one(
+            "SELECT COALESCE((SELECT SUM(balance) FROM advance_balances ab \
+                              JOIN units u ON ab.unit_id = u.id WHERE u.site_id = $1), 0) \
+                  + COALESCE((SELECT SUM(balance) FROM person_advance_holds h \
+                              WHERE h.site_id = $1), 0)::numeric",
+            &[&site_id_num],
+        )
+        .await?;
     let total_advance: Decimal = advance_row.get(0);
 
     // 4. Collect payments from reconciliation_queue for this site

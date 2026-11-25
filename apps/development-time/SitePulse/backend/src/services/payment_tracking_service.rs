@@ -2092,7 +2092,7 @@ impl PaymentTrackingService {
         if let Some(pool) = self.state.pool.clone() {
             let unit_index_id = inner.units[unit_idx].id.clone();
             drop(inner);
-            let (persisted, buyer_pid) = crate::db::transfer_unit_ownership_db(
+            let outcome = crate::db::transfer_unit_ownership_db(
                 &pool,
                 &crate::db::TitleTransfer {
                     unit_id: &unit_id,
@@ -2107,21 +2107,41 @@ impl PaymentTrackingService {
             )
             .await
             .map_err(|e| e.to_string())?;
-            buyer_person_id = Some(buyer_pid);
-            if let Some(balance) = persisted {
+            if let Some(balance) = outcome.exit_balance {
                 old_owner_exit_balance = balance;
             }
+            buyer_person_id = Some(outcome.buyer_person_id);
             inner = self.state.inner.write().await;
             unit_idx = inner
                 .units
                 .iter()
                 .position(|u| u.id == unit_index_id)
                 .ok_or_else(|| format!("Daire bulunamadı: {}", unit_id))?;
-        } else if transfer_date > today {
-            return Err(crate::domain::unit_state::TransitionError::FutureDate {
-                date: transfer_date,
+            // PostgreSQL already moved the seller's advance to each hold; mirror it.
+            for (person, amount) in &outcome.held_advance {
+                inner.adjust_advance(&unit_id, "OWNER", -*amount);
+                inner.hold_advance(&unit_id, &person.to_string(), "OWNER", *amount);
             }
-            .to_string());
+        } else {
+            if transfer_date > today {
+                return Err(crate::domain::unit_state::TransitionError::FutureDate {
+                    date: transfer_date,
+                }
+                .to_string());
+            }
+            // The same rule without a database: the money leaves the unit's role
+            // bucket and stays with the seller who paid it.
+            let seller_advance = inner.advance_of(&unit_id, "OWNER");
+            if seller_advance > Decimal::ZERO {
+                let Some(seller) = (old_person_id > 0).then_some(old_person_id) else {
+                    return Err(
+                        "The unit has an owner advance but no owner on record to hold it"
+                            .to_string(),
+                    );
+                };
+                inner.adjust_advance(&unit_id, "OWNER", -seller_advance);
+                inner.hold_advance(&unit_id, &seller.to_string(), "OWNER", seller_advance);
+            }
         }
 
         let assigned_person_id = buyer_person_id.unwrap_or_else(|| {

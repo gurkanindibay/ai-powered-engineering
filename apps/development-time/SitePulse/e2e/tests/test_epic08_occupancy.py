@@ -346,8 +346,14 @@ def test_previous_owner_advance_transfer_waits_for_second_approver(login_as, pag
         f"SELECT kind || '|' || status || '|' || source_debtor || '|' || target_debtor "
         f"FROM advance_exit_settlements WHERE id = {int(settlement_id)};"
     ) == "TRANSFER|PENDING|OWNER|TENANT"
+    # The sale moved the seller's advance to a hold: the buyer's owner bucket is
+    # empty and the money is still the previous owner's (issue #448).
     assert stack.sql(
-        f"SELECT balance FROM advance_balances WHERE unit_id = {int(a14)} AND debtor_type = 'OWNER';"
+        f"SELECT COALESCE((SELECT balance FROM advance_balances WHERE unit_id = {int(a14)} AND debtor_type = 'OWNER'), 0)::text;"
+    ) == "0.00"
+    assert stack.sql(
+        "SELECT COALESCE((SELECT balance FROM person_advance_holds "
+        f"WHERE unit_id = {int(a14)} AND person_id = {int(old_owner)} AND debtor_type = 'OWNER'), 0)::text;"
     ) == "800.00"
 
     api.call(
@@ -358,10 +364,14 @@ def test_previous_owner_advance_transfer_waits_for_second_approver(login_as, pag
     )
     assert stack.sql(
         f"SELECT balance FROM advance_balances WHERE unit_id = {int(a14)} AND debtor_type = 'OWNER';"
-    ) == "300.00"
+    ) == "0.00"
     assert stack.sql(
         f"SELECT balance FROM advance_balances WHERE unit_id = {int(a14)} AND debtor_type = 'TENANT';"
     ) == "500.00"
+    assert stack.sql(
+        "SELECT COALESCE((SELECT balance FROM person_advance_holds "
+        f"WHERE unit_id = {int(a14)} AND person_id = {int(old_owner)} AND debtor_type = 'OWNER'), 0)::text;"
+    ) == "300.00"
     assert stack.sql(
         f"SELECT owner_person_id = {int(old_owner)} FROM units WHERE id = {int(a14)};"
     ) == "f"

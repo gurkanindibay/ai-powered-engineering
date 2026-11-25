@@ -675,7 +675,9 @@ pub async fn get_site_overview(
             })
             .collect();
         let advance = inner.advance_total(&unit.id);
-        total_advance += advance;
+        // The site total also carries money held for a former owner or tenant;
+        // the flat shows only what its current holders have.
+        total_advance += advance + inner.held_advance_total(&unit.id);
 
         let (amount_due, billed_amount, collected_amount, is_paid, days_overdue, paid_date_str) =
             if !unit_dues.is_empty() {

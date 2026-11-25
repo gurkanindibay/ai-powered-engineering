@@ -56,7 +56,12 @@ class OccupancyJourney:
         return self.fixture.unit_ids[number - 1]
 
     def invariants(self, stage: str) -> dict:
-        return ledger_invariants(self.api, self.manager, self.site_id, stage=stage)
+        held = Decimal(self.stack.sql(
+            f"SELECT COALESCE(SUM(balance), 0)::text FROM person_advance_holds WHERE site_id = {int(self.site_id)};"
+        ) or "0.00")
+        return ledger_invariants(
+            self.api, self.manager, self.site_id, stage=stage, held_advances=held
+        )
 
     def accrue(self, period: str, due: str | None = None, amount: Decimal | None = None) -> dict:
         return self.api.accrue_period(self.manager, period, amount, due or DUE_DATES[period])

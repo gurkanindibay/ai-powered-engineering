@@ -75,6 +75,60 @@ impl TestDb {
         }
     }
 
+    /// Seeds a seller advance that has already left the unit's role bucket for a
+    /// person-scoped hold, with the same ledger entries a title transfer writes.
+    async fn seed_hold(&self, unit_id: i64, person_id: i64, debtor: &str, amount: Decimal) {
+        self.seed_advance(unit_id, debtor, amount).await;
+        let client = self.pool.get().await.expect("test connection");
+        client
+            .batch_execute("SET sitepulse.allow_ledger_purge = 'on'")
+            .await
+            .expect("enable test cleanup");
+        client
+            .execute(
+                "DELETE FROM person_advance_holds WHERE unit_id = $1 AND debtor_type = $2",
+                &[&unit_id, &debtor],
+            )
+            .await
+            .expect("clear test advance hold");
+        if amount > Decimal::ZERO {
+            client
+                .execute(
+                    "INSERT INTO person_advance_holds
+                        (site_id, unit_id, person_id, debtor_type, balance)
+                     SELECT site_id, id, $2, $3, $4 FROM units WHERE id = $1",
+                    &[&unit_id, &person_id, &debtor, &amount],
+                )
+                .await
+                .expect("seed person advance hold");
+            client
+                .execute(
+                    "INSERT INTO advance_ledger_entries
+                        (unit_id, debtor_type, person_id, entry_type, amount, description)
+                     VALUES ($1, $2, $3, 'TITLE_TRANSFER_HOLD', $4, 'Test: seller advance held')",
+                    &[&unit_id, &debtor, &person_id, &amount],
+                )
+                .await
+                .expect("seed hold ledger");
+            client
+                .execute(
+                    "UPDATE advance_balances SET balance = 0 WHERE unit_id = $1 AND debtor_type = $2",
+                    &[&unit_id, &debtor],
+                )
+                .await
+                .expect("empty the role bucket");
+            client
+                .execute(
+                    "INSERT INTO advance_ledger_entries
+                        (unit_id, debtor_type, entry_type, amount, description)
+                     VALUES ($1, $2, 'TITLE_TRANSFER_DEBIT', $3, 'Test: role bucket handed over')",
+                    &[&unit_id, &debtor, &amount],
+                )
+                .await
+                .expect("seed role-bucket ledger");
+        }
+    }
+
     async fn unit(&self) -> (i64, String) {
         let row = self
             .pool
@@ -530,6 +584,127 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .find(|item| item.id == stale.id)
         .expect("stale settlement remains");
     assert_eq!(pending.status, "PENDING");
+
+    db.drop_db().await;
+}
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+// covers: SC-13-03-06
+async fn seller_advance_held_after_a_title_transfer_is_paid_only_to_the_seller() {
+    let db = TestDb::create().await;
+    let (unit, site_id) = db.unit().await;
+    let seller: i64 = db
+        .pool
+        .get()
+        .await
+        .expect("test connection")
+        .query_one("SELECT owner_person_id FROM units WHERE id = $1", &[&unit])
+        .await
+        .expect("seeded owner")
+        .get(0);
+    // The title transfer already happened: the seller's 500.00 left the role
+    // bucket, so the buyer's owner advance is zero.
+    db.seed_hold(unit, seller, "OWNER", Decimal::new(50000, 2))
+        .await;
+    let state = AppState::with_pool(Some(db.pool.clone()));
+    state.reload_from_db().await.expect("load the hold");
+    {
+        let inner = state.inner.read().await;
+        assert_eq!(
+            inner.advance_of(&unit.to_string(), "OWNER"),
+            Decimal::ZERO,
+            "the buyer's role bucket starts empty"
+        );
+        assert_eq!(
+            inner.held_advance_of(&unit.to_string(), &seller.to_string(), "OWNER"),
+            Decimal::new(50000, 2),
+            "the advance is still the seller's"
+        );
+    }
+    let service = AdvanceExitSettlementService::new(&state);
+    let requester = caller(&site_id, "requester");
+    let checker = caller(&site_id, "checker");
+    let mut payout_request = request("PAYOUT", "OWNER", None, Decimal::new(50000, 2));
+    payout_request.beneficiary_person_id = Some(seller.to_string());
+    let payout = service
+        .create(&requester, &unit.to_string(), payout_request)
+        .await
+        .expect("the seller can claim the advance held for them");
+    let approved = service
+        .decide(
+            &checker,
+            payout.id,
+            DecideAdvanceExitSettlementRequest {
+                approve: true,
+                payment_reference: Some("BANK-REF-SELLER-1".to_string()),
+                note: None,
+            },
+        )
+        .await
+        .expect("approve the seller payout");
+    assert_eq!(approved.status, "APPROVED");
+
+    let client = db.pool.get().await.expect("test connection");
+    let held: Decimal = client
+        .query_one(
+            "SELECT COALESCE((SELECT balance FROM person_advance_holds
+                               WHERE unit_id = $1 AND person_id = $2 AND debtor_type = 'OWNER'), 0)::NUMERIC(15,2)",
+            &[&unit, &seller],
+        )
+        .await
+        .expect("read the seller hold")
+        .get(0);
+    assert_eq!(held, Decimal::ZERO, "the payout spends the seller's hold");
+    let role_bucket: Decimal = client
+        .query_one(
+            "SELECT COALESCE((SELECT balance FROM advance_balances
+                               WHERE unit_id = $1 AND debtor_type = 'OWNER'), 0)::NUMERIC(15,2)",
+            &[&unit],
+        )
+        .await
+        .expect("read the buyer bucket")
+        .get(0);
+    assert_eq!(
+        role_bucket,
+        Decimal::ZERO,
+        "the payout never touches the buyer's advance"
+    );
+    let disbursements: i64 = client
+        .query_one(
+            "SELECT COUNT(*) FROM advance_exit_disbursements WHERE settlement_id = $1",
+            &[&payout.id],
+        )
+        .await
+        .expect("read the disbursement")
+        .get(0);
+    assert_eq!(disbursements, 1);
+    let hold_ledger: i64 = client
+        .query_one(
+            "SELECT COUNT(*) FROM advance_ledger_entries
+              WHERE person_id = $1 AND entry_type = 'EXIT_PAYOUT_DEBIT'",
+            &[&seller],
+        )
+        .await
+        .expect("read the hold ledger")
+        .get(0);
+    assert_eq!(hold_ledger, 1, "the hold movement names the seller");
+    let violations: i64 = client
+        .query_one("SELECT COUNT(*) FROM v_integrity_violations", &[])
+        .await
+        .expect("check the ledger views")
+        .get(0);
+    assert_eq!(violations, 0, "the held advance reconciles with its ledger");
+    drop(client);
+
+    assert_eq!(
+        state
+            .inner
+            .read()
+            .await
+            .held_advance_of(&unit.to_string(), &seller.to_string(), "OWNER"),
+        Decimal::ZERO
+    );
 
     db.drop_db().await;
 }

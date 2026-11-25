@@ -339,6 +339,7 @@ pub(crate) async fn purge_site_rows(
         "receipt_counters WHERE site_id = $1",
         "advance_ledger_entries WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
         "advance_balances WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        "person_advance_holds WHERE site_id = $1",
         "debt_aging_snapshots WHERE site_id = $1",
         "reconciliation_queue WHERE site_id = $1",
         "unit_sender_ibans WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
@@ -437,6 +438,9 @@ pub async fn purge_site_cascade(
     inner.dues.retain(|d| !unit_ids.contains(&d.unit_id));
     for uid in &unit_ids {
         inner.advance_balances.remove(uid);
+        inner
+            .person_advance_holds
+            .retain(|(unit, _, _), _| unit != uid);
         inner
             .reconciliation_queue
             .retain(|q| q.matched_unit_id.as_deref() != Some(uid.as_str()));

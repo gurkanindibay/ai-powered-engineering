@@ -262,6 +262,7 @@ pub async fn reset_db_to_seed_data(
             TRUNCATE TABLE operating_budgets RESTART IDENTITY CASCADE;
             TRUNCATE TABLE reconciliation_queue CASCADE;
             TRUNCATE TABLE advance_balances CASCADE;
+            TRUNCATE TABLE person_advance_holds CASCADE;
             TRUNCATE TABLE pending_registrations CASCADE;
             TRUNCATE TABLE invitation_tokens CASCADE;
             TRUNCATE TABLE unit_sender_ibans CASCADE;

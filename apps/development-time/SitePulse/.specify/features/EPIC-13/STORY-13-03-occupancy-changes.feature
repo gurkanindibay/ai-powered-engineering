@@ -83,8 +83,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | requested, still pending          | Gül Tanrıverdi       |
       | requested, rejected               | Gül Tanrıverdi       |
 
-  # Pending: advance balances are keyed by unit and debtor role, not by person; the seller's retained advance is not automated yet.
-  @SC-13-03-06 @J-10 @depth:1 @state:F2 @layer:backend @edge @role_manager @pending
+  @SC-13-03-06 @J-10 @depth:1 @state:F2 @layer:backend @edge @role_manager @linked
   Scenario: The previous owner's advance is not silently given to the buyer
     Given the site is in state F2
     And "Ahmet Yılmaz" holds an advance of 500.00 on unit "A-4"

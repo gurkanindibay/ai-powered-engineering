@@ -70,6 +70,14 @@ impl SaleClearanceService {
                 .as_deref()
                 .and_then(|owner| inner.users.iter().find(|user| user.id == owner))
                 .map(|user| user.full_name.clone());
+            let seller_person = unit.owner_user_id.as_deref().and_then(|owner| {
+                inner
+                    .users
+                    .iter()
+                    .find(|user| user.id == owner)
+                    .and_then(|user| user.person_id)
+                    .or_else(|| owner.strip_prefix("person-").and_then(|n| n.parse().ok()))
+            });
             let mut debts: Vec<ClearanceDebtItem> = inner
                 .dues
                 .iter()
@@ -93,7 +101,10 @@ impl SaleClearanceService {
                 })
                 .collect();
             debts.sort_by(|a, b| (a.due_date, &a.period).cmp(&(b.due_date, &b.period)));
-            let advance = inner.advance_of(&unit.id, "OWNER");
+            let mut advance = inner.advance_of(&unit.id, "OWNER");
+            if let Some(person) = seller_person {
+                advance += inner.held_advance_of(&unit.id, &person.to_string(), "OWNER");
+            }
             (unit, label, seller_name, debts, advance)
         };
         let open_debt_principal: Decimal = debts.iter().map(|d| d.principal).sum();
