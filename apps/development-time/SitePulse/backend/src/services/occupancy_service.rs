@@ -740,6 +740,7 @@ impl OccupancyService {
         let site =
             crate::db::require_id("site", site_id).map_err(|_| OccupancyError::UnitNotFound)?;
         let unit = parse_unit_id(unit_id).ok_or(OccupancyError::UnitNotFound)?;
+        let today = self.today(site_id).await;
         let pool = self.state.pool.as_ref().ok_or_else(|| {
             OccupancyError::Storage("Database connection unavailable".to_string())
         })?;
@@ -750,7 +751,7 @@ impl OccupancyService {
         let tx = crate::db::begin_tenant_read(&mut client, site)
             .await
             .map_err(|e| OccupancyError::Storage(e.to_string()))?;
-        let snapshot = repo::read_unit_snapshot(&tx, site, unit).await?;
+        let snapshot = repo::read_unit_snapshot(&tx, site, unit, today).await?;
         tx.commit().await?;
         Ok(state_response(&snapshot))
     }

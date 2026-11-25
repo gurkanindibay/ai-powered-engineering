@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
@@ -282,7 +282,7 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
     let client = pool.get().await?;
     let rows = client
         .query(
-            "SELECT s.id, s.name, s.slug, s.address, s.status, s.plan_type, s.license_end_date FROM sites s WHERE s.deleted_at IS NULL ORDER BY s.id ASC",
+            "SELECT s.id, s.name, s.slug, s.address, s.status, s.plan_type, s.license_end_date, s.timezone FROM sites s WHERE s.deleted_at IS NULL ORDER BY s.id ASC",
             &[],
         )
         .await?;
@@ -367,8 +367,12 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
             address,
             status,
             plan_type,
-            license_end_date: license_end_date
-                .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
+            license_end_date: license_end_date.unwrap_or_else(|| {
+                let timezone = row
+                    .get::<_, Option<String>>(7)
+                    .unwrap_or_else(crate::models::default_site_timezone);
+                crate::domain::clock::default_license_end(&timezone, crate::e2e_clock::now_utc())
+            }),
             total_units: total_units as i32,
             monthly_dues_volume,
             primary_manager_name,

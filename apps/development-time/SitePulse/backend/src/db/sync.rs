@@ -42,6 +42,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 .get::<_, Option<PlanType>>(5)
                 .unwrap_or(PlanType::Standard);
             let license_end_date: Option<NaiveDate> = row.get(6);
+            let timezone = row
+                .get::<_, Option<String>>(7)
+                .unwrap_or_else(crate::models::default_site_timezone);
 
             let s = Site {
                 id: id.to_string(),
@@ -50,11 +53,13 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 slug,
                 status,
                 plan_type,
-                license_end_date: license_end_date
-                    .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
-                timezone: row
-                    .get::<_, Option<String>>(7)
-                    .unwrap_or_else(crate::models::default_site_timezone),
+                license_end_date: license_end_date.unwrap_or_else(|| {
+                    crate::domain::clock::default_license_end(
+                        &timezone,
+                        crate::e2e_clock::now_utc(),
+                    )
+                }),
+                timezone,
                 tax_id: row.get(8),
                 tax_office: row.get(9),
                 proration_enabled: row.get(10),

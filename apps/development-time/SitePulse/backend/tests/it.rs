@@ -47,6 +47,9 @@ mod db_person_api_tests;
 #[path = "it/db_person_merge_tests.rs"]
 mod db_person_merge_tests;
 
+#[path = "it/db_site_local_date_tests.rs"]
+mod db_site_local_date_tests;
+
 #[path = "it/db_tenant_isolation_tests.rs"]
 mod db_tenant_isolation_tests;
 

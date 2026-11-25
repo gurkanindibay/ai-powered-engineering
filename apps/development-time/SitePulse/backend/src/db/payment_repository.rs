@@ -776,11 +776,14 @@ pub async fn tx_load_entry_allocations(
 
 /// Un-allocates one reversed allocation line: the paid amounts go back down and
 /// the status is recomputed from them (PAID / PARTIALLY_PAID / OVERDUE / PENDING).
+/// `today` is the site-local date (from the injected clock), never the
+/// database session's `CURRENT_DATE`, which is UTC.
 pub async fn tx_unsettle_due(
     tx: &deadpool_postgres::Transaction<'_>,
     due_id: i64,
     principal: Decimal,
     penalty: Decimal,
+    today: NaiveDate,
 ) -> DbResult<()> {
     let n = tx
         .execute(
@@ -792,12 +795,12 @@ pub async fn tx_unsettle_due(
                 status = CASE
                     WHEN paid_principal - $2 >= principal_amount AND paid_penalty - $3 >= delay_penalty THEN 'PAID'
                     WHEN paid_amount - $2 - $3 > 0 THEN 'PARTIALLY_PAID'
-                    WHEN due_date < CURRENT_DATE THEN 'OVERDUE'
+                    WHEN due_date < $4 THEN 'OVERDUE'
                     ELSE 'PENDING' END,
                 version = version + 1
             WHERE id = $1 AND status <> 'CANCELLED' AND paid_principal >= $2 AND paid_penalty >= $3
             "#,
-            &[&due_id, &principal, &penalty],
+            &[&due_id, &principal, &penalty, &today],
         )
         .await?;
     if n != 1 {

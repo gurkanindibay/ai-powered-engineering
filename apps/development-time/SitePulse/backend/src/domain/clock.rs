@@ -43,6 +43,15 @@ pub fn local_date(timezone: &str, at: DateTime<Utc>) -> NaiveDate {
     at.with_timezone(&tz).date_naive()
 }
 
+/// The license end date assumed for a site that has none: 365 days after
+/// today's date in `timezone` as of `now`.
+pub fn default_license_end(timezone: &str, now: DateTime<Utc>) -> NaiveDate {
+    let today = local_date(timezone, now);
+    today
+        .checked_add_days(chrono::Days::new(365))
+        .unwrap_or(today)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

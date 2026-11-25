@@ -25,8 +25,11 @@ class RtmValidator:
     `.specify/evidence/<task>.json` records a passing run on the current commit
     in which every acceptance test named in the RTM row passed."""
 
-    def __init__(self, workspace_root: Optional[Path] = None, allow_stale_evidence: bool = False):
+    def __init__(self, workspace_root: Optional[Path] = None, allow_stale_evidence: bool = False,
+                 recording: Optional[bool] = None):
         self.allow_stale_evidence = allow_stale_evidence
+        # None: read the flag `verify --record` exports to the gates it runs.
+        self.recording = os.environ.get("SITEPULSE_RECORDING") == "1" if recording is None else recording
         if workspace_root is None:
             # SCRIPT_DIR is .../apps/development-time/SitePulse/harness
             script_dir = Path(__file__).resolve().parent
@@ -143,7 +146,6 @@ class RtmValidator:
         issues: List[str] = []
         # `harness_cli verify --record` completes tasks one by one in CI while the committed RTM
         # still says UNVERIFIED; that lag is expected during a recording run, not a defect.
-        recording = os.environ.get("SITEPULSE_RECORDING") == "1"
         verified_count = 0
         pending_count = 0
 
@@ -163,7 +165,7 @@ class RtmValidator:
                         f"[{req_id}] Status mismatch: RTM is 'VERIFIED' but task-dag.json is '{dag_status}'"
                     )
                 elif (status in ("PENDING", "UNVERIFIED") and dag_status == "COMPLETED"
-                      and not recording):
+                      and not self.recording):
                     issues.append(
                         f"[{req_id}] Status mismatch: RTM is '{status}' but task-dag.json is 'COMPLETED'"
                     )

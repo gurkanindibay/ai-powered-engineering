@@ -20,14 +20,18 @@ pub async fn save_unit(
         .await?
         .is_some();
     if !site_exists {
+        let license_end = crate::domain::clock::default_license_end(
+            crate::domain::clock::DEFAULT_TIMEZONE.name(),
+            crate::e2e_clock::now_utc(),
+        );
         client
             .execute(
                 r#"
                 INSERT INTO sites (id, name, address, slug, status, plan_type, license_end_date)
-                VALUES ($1, 'Site', 'Adres', 'site', 'ACTIVE', 'STANDARD', CURRENT_DATE + INTERVAL '1 year')
+                VALUES ($1, 'Site', 'Adres', 'site', 'ACTIVE', 'STANDARD', $2)
                 ON CONFLICT (id) DO NOTHING
                 "#,
-                &[&site_id_num],
+                &[&site_id_num, &license_end],
             )
             .await?;
     }
@@ -423,7 +427,8 @@ pub async fn transfer_unit_ownership_db(
     crate::db::tx_bind_tenant(&tx, site_id_num)
         .await
         .map_err(storage)?;
-    let snapshot = occupancy::lock_unit_snapshot(&tx, site_id_num, unit_id_num).await?;
+    let snapshot =
+        occupancy::lock_unit_snapshot(&tx, site_id_num, unit_id_num, transfer.today).await?;
     let buyer: i64 = match transfer.buyer_person_id {
         Some(person_id) => tx
             .query_opt(
@@ -846,4 +851,54 @@ pub async fn create_units_in_db(
 
     tx.commit().await?;
     Ok(result_dtos)
+}
+
+/// Whether a unit has financial history that forbids archiving it: any
+/// payment, receipt or advance movement, or a non-cancelled due that is paid
+/// or already matured on `today`, the site-local date from the injected clock
+/// (never the database session's UTC `CURRENT_DATE`).
+pub async fn tx_unit_has_financial_history(
+    tx: &deadpool_postgres::Transaction<'_>,
+    unit_id: i64,
+    today: chrono::NaiveDate,
+) -> DbResult<bool> {
+    let row = tx
+        .query_one(
+            r#"
+            SELECT EXISTS (SELECT 1 FROM payment_entries WHERE unit_id = $1)
+                OR EXISTS (SELECT 1 FROM payment_receipts WHERE unit_id = $1)
+                OR EXISTS (SELECT 1 FROM advance_ledger_entries WHERE unit_id = $1)
+                OR EXISTS (SELECT 1 FROM dues_liabilities WHERE unit_id = $1 AND status <> 'CANCELLED'
+                           AND (paid_amount > 0 OR status = 'PAID' OR due_date < $2))
+            "#,
+            &[&unit_id, &today],
+        )
+        .await?;
+    Ok(row.get(0))
+}
+
+/// Archives a unit's open history: cancels its untouched open dues and closes
+/// the active occupancy and ownership rows on `today`, the site-local date
+/// (an end date never precedes the row's start date).
+pub async fn tx_close_unit_history(
+    tx: &deadpool_postgres::Transaction<'_>,
+    unit_id: i64,
+    today: chrono::NaiveDate,
+) -> DbResult<()> {
+    tx.execute(
+        "UPDATE dues_liabilities SET status = 'CANCELLED' WHERE unit_id = $1 AND status IN ('PENDING', 'OVERDUE') AND paid_amount = 0",
+        &[&unit_id],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE unit_occupancies SET is_active = FALSE, end_date = GREATEST(start_date, $2) WHERE unit_id = $1 AND is_active = TRUE",
+        &[&unit_id, &today],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE unit_ownerships SET is_active = FALSE, end_date = GREATEST(start_date, $2) WHERE unit_id = $1 AND is_active = TRUE",
+        &[&unit_id, &today],
+    )
+    .await?;
+    Ok(())
 }
