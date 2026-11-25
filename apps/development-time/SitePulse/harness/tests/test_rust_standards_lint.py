@@ -124,11 +124,23 @@ class RustStandardsLintTests(unittest.TestCase):
             "// Utc::now().date_naive() in a comment\n"
             "fn e() -> &'static str { \"Utc::now().date_naive()\" }\n"
             "fn f() { let t = Utc::now(); let d = local_date(tz, t); }\n"
+            "fn g() { let now = Utc::now(); let d = now.date_naive(); }\n"
+            "fn h() { let d = now.with_timezone(&tz).date_naive(); }\n"
             "#[cfg(test)]\nmod tests {\n    fn t() { let d = Utc::now().date_naive(); }\n}\n"
+            "#[cfg(test)]\n#[cfg(feature = \"e2e\")]\nmod tests2 {\n    fn t() { let d = Utc::now().date_naive(); }\n}\n"
         )
         report = _lint({"src/a.rs": source})
-        self.assertEqual(_rules(report), ["utc-today"] * 4)
-        self.assertEqual([f["line"] for f in report["findings"]], [1, 2, 3, 5])
+        self.assertEqual(_rules(report), ["utc-today"] * 5)
+        self.assertEqual([f["line"] for f in report["findings"]], [1, 2, 3, 5, 9])
+
+    def test_utc_conversion_does_not_count_as_a_site_zone(self):
+        source = (
+            "fn a() { let d = t.with_timezone(&Utc).date_naive(); }\n"
+            "fn b() { let d = t.with_timezone( &chrono::Utc ).date_naive(); }\n"
+            "fn c() { let d = t.with_timezone(&DEFAULT_TIMEZONE).date_naive(); }\n"
+        )
+        report = _lint({"src/a.rs": source})
+        self.assertEqual([f["line"] for f in report["findings"]], [1, 2])
 
     def test_ratchet_fails_only_when_count_rises(self):
         source = "fn f() { a.unwrap(); b.unwrap(); }\n"

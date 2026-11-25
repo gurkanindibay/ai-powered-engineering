@@ -10,6 +10,19 @@ use crate::models::{
 };
 use crate::state::AppState;
 
+fn capital_db_error(
+    operation: &str,
+    error: &(dyn std::error::Error + Send + Sync + 'static),
+) -> String {
+    let detail = crate::db::describe_db_error(error);
+    tracing::error!(
+        operation,
+        error = %detail,
+        "Capital project persistence failed"
+    );
+    format!("Capital project {operation} failed")
+}
+
 #[derive(Clone)]
 pub struct CapitalProjectService {
     state: AppState,
@@ -457,91 +470,92 @@ impl CapitalProjectService {
             project.title, installment.installment_number, installment.total_installments
         );
         let now = Utc::now();
+        let mut charged_units_count = unit_shares.len() as i64;
+        let mut persisted_dues = Vec::new();
 
-        // Generate dues_liabilities in DB if available
+        // Persist the accrual under the project's tenant so row-level security
+        // applies to both the project and its generated liabilities.
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
-                    for (unit, share) in &unit_shares {
-                        if let Some(u_id) = crate::db::parse_id_to_i64(&unit.id) {
-                            // The owner on record at accrual owes the installment, unless an
-                            // approved seller-pays override names the seller (STORY-08-05).
-                            let seller =
-                                crate::services::sale_clearance_service::approved_seller_for_unit(
-                                    &client, u_id,
-                                )
-                                .await
-                                .map_err(|e| e.to_string())?;
-                            client
-                                .execute(
-                                    r#"
-                                    INSERT INTO dues_liabilities (
-                                        unit_id, period, debtor_type, expense_type,
-                                        principal_amount, due_date, status, delay_penalty,
-                                        paid_amount, capital_project_id, installment_number, created_at,
-                                        liable_person_id
-                                    )
-                                    VALUES (
-                                        $1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00, $5, $6, $7,
-                                        COALESCE($8::bigint, (SELECT owner_person_id FROM units WHERE id = $1))
-                                    )
-                                    "#,
-                                    &[
-                                        &u_id,
-                                        &period_name,
-                                        share,
-                                        &installment.due_date,
-                                        &p_id,
-                                        &installment_number,
-                                        &now,
-                                        &seller,
-                                    ],
-                                )
-                                .await.map_err(|e| e.to_string())?;
-                        }
-                    }
-
-                    // Mark installment accrued in DB
-                    client
-                        .execute(
-                            "UPDATE capital_project_installments SET is_accrued = TRUE, accrued_at = $1 WHERE project_id = $2 AND installment_number = $3",
-                            &[&now, &p_id, &installment_number],
-                        )
-                        .await.map_err(|e| e.to_string())?;
-                }
+            let p_id = crate::db::require_id("capital project", project_id)?;
+            let installment_id =
+                crate::db::require_id("capital project installment", &installment.id)?;
+            let site_num = crate::db::require_id("site", &project.site_id)?;
+            let mut client = pool
+                .get()
+                .await
+                .map_err(|e| capital_db_error("connection acquisition", &e))?;
+            let tx = client
+                .transaction()
+                .await
+                .map_err(|e| capital_db_error("transaction start", &e))?;
+            crate::db::tx_bind_tenant(&tx, site_num)
+                .await
+                .map_err(|e| capital_db_error("tenant binding", e.as_ref()))?;
+            // Database IDs are authoritative for tenant RLS; API fixtures can
+            // leave synthetic unit IDs in the in-memory store.
+            let db_units = tx
+                .query(
+                    "SELECT id, land_share FROM units WHERE site_id = $1 AND deleted_at IS NULL ORDER BY id",
+                    &[&site_num],
+                )
+                .await
+                .map_err(|e| capital_db_error("site unit lookup", &e))?;
+            if db_units.is_empty() {
+                return Err("Sitede kayıtlı bağımsız bölüm (daire) bulunamadı.".to_string());
             }
-        }
-
-        // Also update memory state
-        {
-            let mut inner = self.state.inner.write().await;
-            let mut next_due = inner
-                .dues
-                .iter()
-                .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
-                .max()
-                .unwrap_or(0);
-            for (unit, share) in &unit_shares {
-                next_due += 1;
-                let due_id = next_due.to_string();
-                let liable_person_id = unit.owner_user_id.as_deref().and_then(|id| {
-                    inner
-                        .users
-                        .iter()
-                        .find(|u| u.id == id)
-                        .and_then(|u| u.person_id)
-                        .or_else(|| {
-                            id.strip_prefix("person-")
-                                .and_then(|s| s.parse::<i64>().ok())
-                        })
-                });
-                inner.dues.push(DuesLiability {
-                    id: due_id,
-                    unit_id: unit.id.clone(),
+            charged_units_count = db_units.len() as i64;
+            let db_land_shares: Vec<i32> =
+                db_units.iter().map(|row| row.get("land_share")).collect();
+            let db_shares =
+                Self::apportion_by_land_shares(&project, installment_budget, &db_land_shares)
+                    .map_err(str::to_string)?;
+            for (row, share) in db_units.iter().zip(db_shares) {
+                let u_id: i64 = row.get("id");
+                // The owner on record at accrual owes the installment, unless an
+                // approved seller-pays override names the seller (STORY-08-05).
+                let seller =
+                    crate::services::sale_clearance_service::approved_seller_for_unit(&tx, u_id)
+                        .await
+                        .map_err(|e| capital_db_error("seller lookup", &e))?;
+                let due_row = tx
+                    .query_one(
+                        r#"
+                        INSERT INTO dues_liabilities (
+                            unit_id, period, debtor_type, expense_type,
+                            principal_amount, due_date, status, delay_penalty,
+                            paid_amount, capital_project_id, installment_number,
+                            capital_project_installment_id, created_at, liable_person_id
+                        )
+                        VALUES (
+                            $1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00,
+                            $5, $6, $7, $8, COALESCE($9::bigint,
+                                (SELECT owner_person_id FROM units WHERE id = $1))
+                        )
+                    RETURNING id, liable_person_id
+                    "#,
+                        &[
+                            &u_id,
+                            &period_name,
+                            &share,
+                            &installment.due_date,
+                            &p_id,
+                            &installment_number,
+                            &installment_id,
+                            &now,
+                            &seller,
+                        ],
+                    )
+                    .await
+                    .map_err(|e| capital_db_error("liability insertion", &e))?;
+                let due_id: i64 = due_row.get("id");
+                let liable_person_id: Option<i64> = due_row.get("liable_person_id");
+                persisted_dues.push(DuesLiability {
+                    id: due_id.to_string(),
+                    unit_id: u_id.to_string(),
                     period: period_name.clone(),
-                    principal_amount: *share,
+                    principal_amount: share,
                     delay_penalty: Decimal::ZERO,
-                    total_amount: *share,
+                    total_amount: share,
                     due_date: installment.due_date,
                     status: DebtStatus::Pending,
                     paid_principal: Decimal::ZERO,
@@ -553,6 +567,63 @@ impl CapitalProjectService {
                     effective_due_date: None,
                     liable_person_id,
                 });
+            }
+            tx.execute(
+                "UPDATE capital_project_installments SET is_accrued = TRUE, accrued_at = $1 WHERE project_id = $2 AND installment_number = $3",
+                &[&now, &p_id, &installment_number],
+            )
+            .await
+            .map_err(|e| capital_db_error("installment update", &e))?;
+            tx.commit()
+                .await
+                .map_err(|e| capital_db_error("transaction commit", &e))?;
+        }
+
+        // Also update memory state
+        {
+            let mut inner = self.state.inner.write().await;
+            if persisted_dues.is_empty() {
+                let mut next_due = inner
+                    .dues
+                    .iter()
+                    .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
+                    .max()
+                    .unwrap_or(0);
+                for (unit, share) in &unit_shares {
+                    next_due += 1;
+                    let due_id = next_due.to_string();
+                    let liable_person_id = unit.owner_user_id.as_deref().and_then(|id| {
+                        inner
+                            .users
+                            .iter()
+                            .find(|u| u.id == id)
+                            .and_then(|u| u.person_id)
+                            .or_else(|| {
+                                id.strip_prefix("person-")
+                                    .and_then(|s| s.parse::<i64>().ok())
+                            })
+                    });
+                    inner.dues.push(DuesLiability {
+                        id: due_id,
+                        unit_id: unit.id.clone(),
+                        period: period_name.clone(),
+                        principal_amount: *share,
+                        delay_penalty: Decimal::ZERO,
+                        total_amount: *share,
+                        due_date: installment.due_date,
+                        status: DebtStatus::Pending,
+                        paid_principal: Decimal::ZERO,
+                        paid_penalty: Decimal::ZERO,
+                        debtor_type: DebtorType::Owner,
+                        expense_type: ExpenseType::CapitalDues,
+                        penalty_accrued_through: None,
+                        grace_days: 0,
+                        effective_due_date: None,
+                        liable_person_id,
+                    });
+                }
+            } else {
+                inner.dues.extend(persisted_dues);
             }
 
             if let Some(inst) = inner
@@ -571,7 +642,7 @@ impl CapitalProjectService {
             installment.total_installments,
             project.title,
             installment_budget,
-            unit_shares.len()
+            charged_units_count
         );
         // Owners' advances settle the new installment dues of this site only.
         if let Err(e) = crate::services::advance_offset_service::settle_advances(
@@ -592,7 +663,7 @@ impl CapitalProjectService {
             project_id: project_id.to_string(),
             installment_number,
             total_accrued_amount: installment_budget,
-            charged_units_count: unit_shares.len() as i64,
+            charged_units_count,
             accrued_at: now,
         })
     }
@@ -616,18 +687,26 @@ impl CapitalProjectService {
         amount: Decimal,
         units: &[crate::models::IndependentUnit],
     ) -> Result<Vec<Decimal>, String> {
+        let land_shares: Vec<i32> = units.iter().map(|unit| unit.land_share).collect();
+        Self::apportion_by_land_shares(project, amount, &land_shares).map_err(str::to_string)
+    }
+
+    fn apportion_by_land_shares(
+        project: &CapitalProject,
+        amount: Decimal,
+        land_shares: &[i32],
+    ) -> Result<Vec<Decimal>, &'static str> {
         let weights: Vec<u64> = match project.allocation_basis {
-            AllocationBasis::EqualPerUnit => vec![1; units.len()],
-            AllocationBasis::ByLandShare => units
+            AllocationBasis::EqualPerUnit => vec![1; land_shares.len()],
+            AllocationBasis::ByLandShare => land_shares
                 .iter()
-                .map(|u| {
-                    u64::try_from(u.land_share).map_err(|_| {
-                        format!("Bağımsız bölüm {} için arsa payı negatif olamaz.", u.id)
-                    })
+                .map(|land_share| {
+                    u64::try_from(*land_share)
+                        .map_err(|_| "Bağımsız bölüm için arsa payı negatif olamaz.")
                 })
                 .collect::<Result<_, _>>()?,
         };
-        crate::domain::apportion(amount, &weights).map_err(|e| e.to_string())
+        crate::domain::apportion(amount, &weights).map_err(|_| "Taksit payları hesaplanamadı.")
     }
 
     /// Records a contractor progress payment (hakediş).

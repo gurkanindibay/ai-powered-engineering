@@ -672,6 +672,64 @@ pub async fn get_units_for_site_from_db(
     Ok(list)
 }
 
+/// Reads active unit IDs and labels using the same tenant-scoped DB inventory
+/// used by unit-facing APIs.
+pub async fn heat_share_inventory_from_db(
+    pool: &Pool,
+    site_id: &str,
+) -> DbResult<Vec<(String, String)>> {
+    let site_num = crate::db::require_id("site", site_id)?;
+    let mut client = pool.get().await?;
+    let tx = crate::db::tenant_guard::begin_tenant_read(&mut client, site_num).await?;
+    let rows = tx
+        .query(
+            r#"
+            SELECT u.id, b.block_name, u.unit_number
+            FROM units u
+            JOIN blocks b ON b.id = u.block_id
+            WHERE u.site_id = $1 AND u.deleted_at IS NULL
+            ORDER BY u.id
+            "#,
+            &[&site_num],
+        )
+        .await?;
+    let units = rows
+        .iter()
+        .map(|row| {
+            let id: i64 = row.get("id");
+            let block_name: String = row.get("block_name");
+            let unit_number: i32 = row.get("unit_number");
+            let block_name = block_name
+                .trim()
+                .trim_end_matches(" Blok")
+                .trim_end_matches(" blok")
+                .trim_end_matches(" BLOK")
+                .trim();
+            (id.to_string(), format!("{block_name} Blok D:{unit_number}"))
+        })
+        .collect();
+    tx.commit().await?;
+    Ok(units)
+}
+
+/// Canonical active unit ids of a site when PostgreSQL is enabled, `None` otherwise. In-memory
+/// unit lists can hold stale rows, so callers that write unit-owned rows filter by this set.
+pub async fn canonical_unit_ids(
+    pool: Option<&Pool>,
+    site_id: &str,
+) -> DbResult<Option<std::collections::HashSet<String>>> {
+    match pool {
+        Some(pool) => Ok(Some(
+            heat_share_inventory_from_db(pool, site_id)
+                .await?
+                .into_iter()
+                .map(|(id, _label)| id)
+                .collect(),
+        )),
+        None => Ok(None),
+    }
+}
+
 pub async fn create_units_in_db(
     pool: &Pool,
     site_id: &str,

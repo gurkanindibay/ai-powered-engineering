@@ -78,7 +78,7 @@
   .card h4 { margin: 0; font-size: 14px; font-weight: 600; }
   .card p { margin: 0; color: var(--muted); font-size: 12.5px; }
   .card .clock { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-  button {
+  button, a.button {
     font: inherit;
     font-size: 13px;
     padding: 7px 12px;
@@ -87,12 +87,15 @@
     background: var(--surface-2);
     color: var(--text);
     cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
   }
-  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:hover:not(:disabled), a.button:hover { border-color: var(--accent); }
   button:disabled { opacity: 0.55; cursor: progress; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #04122b; font-weight: 600; }
+  button.primary, a.button.primary { background: var(--accent); border-color: var(--accent); color: #04122b; font-weight: 600; }
   button.danger { color: var(--bad); }
-  .card button { margin-top: auto; }
+  .card button, .card a.button { margin-top: auto; }
   #banner {
     display: none;
     margin: 0 0 20px;
@@ -272,6 +275,40 @@
     <h2 id="active-title">Active scenario cheat sheet</h2>
     <p class="hint">Expected values come from the same scenario catalogue the automated E2E suite uses.</p>
     <div id="active"><div class="empty">No scenario is active yet. Prepare one above to see its balances and checklist.</div></div>
+  </section>
+
+  <section aria-labelledby="companion-title">
+    <h2 id="companion-title">Companion test files</h2>
+    <p class="hint">One-click companion files use test data and virtual IBANs derived from the active scenario. Use F9_RECON to exercise the exact A-1 match and A-2 multi-debtor reconciliation outcomes.</p>
+    <div class="grid" id="companion-files">
+      <article class="card">
+        <div class="card-top">
+          <span class="preset">CSV</span>
+          <span class="tag">Bank Statement</span>
+        </div>
+        <h4>Bank Statement (CSV)</h4>
+        <p>Contains 1 clean A-1 match, 1 A-2 multi-debtor transfer (Q11 UNMATCHED), 1 duplicate transaction ID, and 1 unknown Virtual IBAN. These reconciliation outcomes require the F9_RECON preset.</p>
+        <a href="/api/companion/bank-statement?format=csv" download="bank-statement.csv" class="button primary">Download CSV</a>
+      </article>
+      <article class="card">
+        <div class="card-top">
+          <span class="preset">MT940</span>
+          <span class="tag">Bank Statement</span>
+        </div>
+        <h4>Bank Statement (MT940)</h4>
+        <p>Standard SWIFT MT940 statement (:20:, :25:, :28C:, :60F:, :61:, :86:, :62F:) with test virtual IBANs. Use F9_RECON for the A-1 match and A-2 multi-debtor outcomes.</p>
+        <a href="/api/companion/bank-statement?format=mt940" download="bank-statement.mt940" class="button primary">Download MT940</a>
+      </article>
+      <article class="card">
+        <div class="card-top">
+          <span class="preset">XLSX</span>
+          <span class="tag">Resident Directory</span>
+        </div>
+        <h4>Resident Import (Excel .xlsx)</h4>
+        <p>5 sample residents, 1 invalid row, and 1 row that repeats the first resident's email to exercise duplicate reporting on every preset. In F9_RECON, the repeated phone also matches a seeded person for duplicate resolution.</p>
+        <a href="/api/companion/resident-import.xlsx" download="resident-import.xlsx" class="button primary">Download Excel</a>
+      </article>
+    </div>
   </section>
 </main>
 
@@ -689,6 +726,26 @@ function renderChecklist(items) {
   return list;
 }
 
+function renderCompanionSection(active) {
+  const wrap = el("div", "grid");
+  const files = [
+    { name: "Bank Statement (CSV)", url: "/api/companion/bank-statement?format=csv", file: "bank-statement.csv", desc: "F9_RECON: exact A-1 match, multi-debtor A-2, duplicate transaction ID, unknown IBAN" },
+    { name: "Bank Statement (MT940)", url: "/api/companion/bank-statement?format=mt940", file: "bank-statement.mt940", desc: "F9_RECON: MT940 with test virtual IBANs for A-1 and A-2" },
+    { name: "Resident Import (Excel)", url: "/api/companion/resident-import.xlsx", file: "resident-import.xlsx", desc: "5 sample rows, 1 invalid row, 1 repeated owner email; F9_RECON phone match for duplicate resolution" },
+  ];
+  files.forEach(function (f) {
+    const card = el("article", "card");
+    card.appendChild(el("h4", null, f.name));
+    card.appendChild(el("p", null, f.desc));
+    const btn = el("a", "button primary", "Download");
+    btn.href = f.url;
+    btn.download = f.file;
+    card.appendChild(btn);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
 function renderActive() {
   const host = document.getElementById("active");
   host.replaceChildren();
@@ -712,6 +769,8 @@ function renderActive() {
   host.appendChild(head);
 
   const body = el("div", "active-body");
+  body.appendChild(el("h4", null, "One-click companion files"));
+  body.appendChild(renderCompanionSection(active));
   body.appendChild(el("h4", null, "Expected site totals"));
   body.appendChild(renderTotals(active.expected_site_totals));
   body.appendChild(el("h4", null, "Unit-by-unit expected balances"));

@@ -39,6 +39,19 @@ impl FinanceStore {
         self.pool().is_some()
     }
 
+    /// Returns the canonical active unit inventory when PostgreSQL is enabled.
+    pub async fn heat_share_inventory(
+        &self,
+        site_id: &str,
+    ) -> DbResult<Option<Vec<(String, String)>>> {
+        match self.pool() {
+            Some(pool) => Ok(Some(
+                super::unit_repository::heat_share_inventory_from_db(pool, site_id).await?,
+            )),
+            None => Ok(None),
+        }
+    }
+
     /// Reads the in-memory state under a read lock (never held across `.await`).
     pub async fn read<R>(&self, f: impl FnOnce(&AppStateInner) -> R) -> R {
         let inner = self.state.inner.read().await;

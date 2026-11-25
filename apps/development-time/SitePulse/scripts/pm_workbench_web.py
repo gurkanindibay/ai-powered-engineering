@@ -38,7 +38,7 @@ from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 try:
     from zoneinfo import ZoneInfo
@@ -49,6 +49,26 @@ except Exception:
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+
+E2E_DIR = SCRIPT_DIR.parent / "e2e"
+if str(E2E_DIR) not in sys.path:
+    sys.path.insert(0, str(E2E_DIR))
+
+try:
+    from support.bank_files import (
+        build_companion_statement_rows,
+        resident_import_xlsx,
+        statement_csv,
+        statement_mt940,
+    )
+except ImportError:
+    COMPANION_FILES_AVAILABLE = False
+    build_companion_statement_rows = None  # type: ignore[assignment]
+    resident_import_xlsx = None  # type: ignore[assignment]
+    statement_csv = None  # type: ignore[assignment]
+    statement_mt940 = None  # type: ignore[assignment]
+else:
+    COMPANION_FILES_AVAILABLE = True
 
 from pm_scenarios import (  # noqa: E402  (sys.path is set up above)
     EXPECTED_TOTALS,
@@ -160,6 +180,10 @@ class NoActiveScenarioError(WorkbenchWebError):
 
 class SeedingFailedError(WorkbenchWebError):
     status = 502
+
+
+class CompanionFilesUnavailableError(WorkbenchWebError):
+    status = 503
 
 
 def normalize_preset(value: Any) -> str:
@@ -541,6 +565,26 @@ class WorkbenchService:
         }
         return json_safe(payload)
 
+    # -- companion files ---------------------------------------------------
+
+    def companion_bank_csv(self) -> str:
+        """Returns the dynamically populated companion bank statement CSV."""
+        active = self.active()
+        manifest = active.manifest if active else None
+        rows = build_companion_statement_rows(manifest)
+        return statement_csv(rows)
+
+    def companion_bank_mt940(self) -> str:
+        """Returns the dynamically populated companion bank statement MT940."""
+        active = self.active()
+        manifest = active.manifest if active else None
+        rows = build_companion_statement_rows(manifest)
+        return statement_mt940(rows)
+
+    def companion_resident_xlsx(self) -> bytes:
+        """Returns the companion resident directory Excel (.xlsx) file bytes."""
+        return resident_import_xlsx()
+
 
 def render_index_html() -> str:
     """Returns the single-page UI markup served at the root path."""
@@ -557,7 +601,16 @@ def render_index_html() -> str:
         )
 
 
-GET_ROUTES = ("/", "/index.html", "/api/presets", "/api/active", "/api/clock", "/healthz")
+GET_ROUTES = (
+    "/",
+    "/index.html",
+    "/api/presets",
+    "/api/active",
+    "/api/clock",
+    "/healthz",
+    "/api/companion/bank-statement",
+    "/api/companion/resident-import.xlsx",
+)
 POST_ROUTES = ("/api/seed", "/api/reset", "/api/clock")
 
 
@@ -626,6 +679,16 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
         def _send_body(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)
             self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+
+        def _send_download(self, filename: str, content_type: str, body: bytes) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -724,6 +787,38 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
                 self._send_json(200, service.get_clock())
             elif path == "/healthz":
                 self._send_json(200, {"status": "ok", "service": "pm-workbench-web"})
+            elif path == "/api/companion/bank-statement":
+                if not COMPANION_FILES_AVAILABLE:
+                    raise CompanionFilesUnavailableError(
+                        "Companion files unavailable: e2e/support is not importable."
+                    )
+                query = parse_qs(urlparse(self.path).query)
+                fmt = (query.get("format", ["csv"])[0]).lower()
+                if fmt == "mt940":
+                    self._send_download(
+                        "bank-statement.mt940",
+                        "text/plain; charset=utf-8",
+                        service.companion_bank_mt940().encode("utf-8"),
+                    )
+                elif fmt == "csv":
+                    self._send_download(
+                        "bank-statement.csv",
+                        "text/csv; charset=utf-8",
+                        service.companion_bank_csv().encode("utf-8"),
+                    )
+                else:
+                    raise InvalidRequestError("format must be csv or mt940.")
+            elif path == "/api/companion/resident-import.xlsx":
+                if not COMPANION_FILES_AVAILABLE:
+                    raise CompanionFilesUnavailableError(
+                        "Companion files unavailable: e2e/support is not importable."
+                    )
+                xlsx_bytes = service.companion_resident_xlsx()
+                self._send_download(
+                    "resident-import.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    xlsx_bytes,
+                )
             elif path in POST_ROUTES:
                 self._method_not_allowed("POST")
             else:

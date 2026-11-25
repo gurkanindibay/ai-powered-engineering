@@ -204,3 +204,143 @@ async fn when_units_have_negative_land_share_then_apportionment_is_rejected() {
         .unwrap();
     assert!(service.accrue_installment(&project.id, 1).await.is_err());
 }
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL"]
+async fn when_site_has_archived_unit_then_capital_accrual_excludes_it_and_shares_sum_to_budget() {
+    let test_db = crate::test_db::create("cap_archived_unit").await;
+    let client = test_db.pool.get().await.expect("db connection");
+
+    let site_row = client
+        .query_one("SELECT id FROM sites WHERE slug = 'begonya-sitesi'", &[])
+        .await
+        .expect("seeded site");
+    let site_id_num: i64 = site_row.get("id");
+    let site_id_str = site_id_num.to_string();
+
+    // The seeded site has two units; add live units until it has three, so one can
+    // be archived and the shares still have to be split across several live units.
+    for extra in 1..=3 {
+        let active: i64 = client
+            .query_one(
+                "SELECT COUNT(*) FROM units WHERE site_id = $1 AND deleted_at IS NULL",
+                &[&site_id_num],
+            )
+            .await
+            .expect("count active units")
+            .get(0);
+        if active >= 3 {
+            break;
+        }
+        client
+            .execute(
+                "INSERT INTO units (site_id, block_id, unit_number, floor)
+                 SELECT site_id, block_id, 900 + $2::int, floor FROM units
+                  WHERE site_id = $1 AND deleted_at IS NULL ORDER BY id LIMIT 1",
+                &[&site_id_num, &extra],
+            )
+            .await
+            .expect("add a live unit");
+    }
+    let unit_rows = client
+        .query(
+            "SELECT id, land_share FROM units WHERE site_id = $1 AND deleted_at IS NULL ORDER BY id",
+            &[&site_id_num],
+        )
+        .await
+        .expect("active units");
+    assert!(
+        unit_rows.len() >= 3,
+        "expected at least 3 active units in seeded site"
+    );
+
+    // Soft-delete the first unit
+    let archived_unit_id: i64 = unit_rows[0].get("id");
+    client
+        .execute(
+            "UPDATE units SET deleted_at = NOW() WHERE id = $1",
+            &[&archived_unit_id],
+        )
+        .await
+        .expect("soft-delete unit");
+
+    // Build AppState backed by the test DB
+    let mut state = AppState::new();
+    state.pool = Some(test_db.pool.clone());
+
+    // Populate in-memory units and owners so service can initialize project & fallback state
+    {
+        let mut inner = state.inner.write().await;
+        for row in &unit_rows {
+            let u_id: i64 = row.get("id");
+            let ls: i32 = row.get("land_share");
+            inner.units.push(IndependentUnit {
+                id: u_id.to_string(),
+                site_id: site_id_str.clone(),
+                block_id: "A".to_string(),
+                unit_number: u_id as i32,
+                floor: 1,
+                land_share: ls,
+                owner_user_id: None,
+                tenant_user_id: None,
+                virtual_iban: None,
+                house_type: None,
+                monthly_tariff_override: None,
+                created_on: None,
+            });
+        }
+    }
+
+    let service = CapitalProjectService::new(state);
+    let budget_str = "35000.00";
+    let req = project_request(
+        &site_id_str,
+        "Facade Renovation",
+        budget_str,
+        AllocationBasis::ByLandShare,
+    );
+
+    let project = service.create_project(req).await.expect("project created");
+    service
+        .accrue_installment(&project.id, 1)
+        .await
+        .expect("accrue installment 1");
+
+    // Verify in DB
+    let p_num: i64 = project.id.parse().expect("parsed project id");
+    let liabilities = client
+        .query(
+            "SELECT unit_id, principal_amount FROM dues_liabilities WHERE capital_project_id = $1 AND installment_number = 1",
+            &[&p_num],
+        )
+        .await
+        .expect("accrued liabilities");
+
+    // 1. Archived unit received no liability
+    let billed_unit_ids: Vec<i64> = liabilities.iter().map(|r| r.get("unit_id")).collect();
+    assert!(
+        !billed_unit_ids.contains(&archived_unit_id),
+        "archived unit {archived_unit_id} must not be charged"
+    );
+
+    // 2. All live units received a liability
+    let expected_live_count = unit_rows.len() - 1;
+    assert_eq!(
+        liabilities.len(),
+        expected_live_count,
+        "every live unit must receive a liability"
+    );
+
+    // 3. Sum of liabilities across live units equals installment budget (105000 / 3 = 35000)
+    let total_accrued: Decimal = liabilities
+        .iter()
+        .map(|r| r.get::<_, Decimal>("principal_amount"))
+        .sum();
+    let expected_installment_budget = d("35000.00");
+    assert_eq!(
+        total_accrued, expected_installment_budget,
+        "sum of shares must equal installment budget exactly"
+    );
+
+    test_db.drop_db().await;
+}

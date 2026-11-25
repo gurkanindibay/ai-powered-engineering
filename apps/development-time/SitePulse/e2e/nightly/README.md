@@ -29,13 +29,15 @@ in the matrix.
 
 The static tenant operation inventory classifies all 275 generated OpenAPI
 operations against the Rust route table. The nightly runtime contract checks
-42 tenant-reference reads with same-site success controls before cross-site
-denial, and 36 implicit-scope reads with distinct second-site data visible only
-to that site's manager. It also runs the multi-resource scenarios in
-`tests/test_journey_tenant_isolation.py`. The inventory currently maps runtime
-test evidence for 82 of 209 tenant-applicable operations; the others remain
-visible as uncovered rows. Classification completeness does not mean an
-operation has a runtime fixture.
+that every inventory operation is present in the live OpenAPI document, then
+82 tenant-reference operations with same-site success controls before
+cross-site denial, and 37 implicit-scope reads and scoped write reports with distinct second-site data
+visible only to that site's manager. It also runs the multi-resource scenarios
+in `tests/test_journey_tenant_isolation.py`. The inventory maps runtime test
+evidence for all 208 tenant-applicable operations. The inventory still
+distinguishes endpoint classification from runtime behavior; it requires a
+same-site control and foreign-site denial or a documented platform-scoped flow
+for every applicable operation.
 
 ## Local runs
 
@@ -46,6 +48,8 @@ run from `e2e/`:
 ```sh
 python -m pytest tests/ --ignore=tests/test_linked_backend_suites.py -m smoke --browser firefox
 python -m pytest tests/ --ignore=tests/test_linked_backend_suites.py -m smoke --browser webkit
+# One of the three nightly WebKit shards (the nightly runs shards 1/3, 2/3 and 3/3 on separate runners):
+SITEPULSE_E2E_SHARD=1/3 PYTHONPATH=../scripts python -m pytest tests/ --ignore=tests/test_linked_backend_suites.py -m smoke --browser webkit -p e2e_shard
 SITEPULSE_E2E_VIEWPORT_WIDTH=375 python -m pytest tests/ --ignore=tests/test_linked_backend_suites.py -m smoke
 python -m pytest nightly/test_performance.py -o junit_family=xunit1 --junitxml=.artifacts/junit.xml
 python -m pytest nightly/test_tenant_contract.py

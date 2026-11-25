@@ -18,6 +18,21 @@ use crate::state::{AppState, AppStateInner};
 pub const DEFAULT_CONSUMPTION_PERCENT: i64 = 70;
 pub const HEAT_NOTE: &str = "Paylaşım: toplam giderin tüketim payı ısı pay ölçer okumalarına, kalanı alan (arsa payı) ağırlığına göre dağıtılır. Oranlar Merkezi Isıtma ve Sıhhi Sıcak Su Giderlerinin Paylaştırılmasına İlişkin Yönetmelik'e göre doğrulanmalıdır (verify).";
 
+fn missing_reading_labels(
+    required_units: &[(String, String)],
+    shares: &[HeatShareView],
+) -> Vec<String> {
+    required_units
+        .iter()
+        .filter(|(unit_id, _)| {
+            !shares
+                .iter()
+                .any(|share| crate::auth::same_id(&share.unit_id, unit_id))
+        })
+        .map(|(_, label)| label.clone())
+        .collect()
+}
+
 fn readings_of(inner: &AppStateInner, period_id: i64) -> Vec<HeatMeterReading> {
     let mut r: Vec<HeatMeterReading> = inner
         .finance
@@ -242,21 +257,26 @@ impl HeatShareService {
         if period.status != "DRAFT" {
             return Err(conflict("The period is already approved"));
         }
-        let (shares, missing) = self
+        // Keep approval's required unit set aligned with the database-backed
+        // unit list accepted by record_readings. The cached in-memory snapshot
+        // can contain stale units after site provisioning or tenant changes.
+        let canonical_units = self
+            .store
+            .heat_share_inventory(&caller.site_id)
+            .await
+            .map_err(FinanceError::from)?;
+        let (shares, memory_units) = self
             .store
             .read(|inner| {
                 let shares = preview(inner, &period)?;
-                let missing: Vec<String> = site_units(inner, &caller.site_id)
-                    .filter(|u| {
-                        !shares
-                            .iter()
-                            .any(|s| crate::auth::same_id(&s.unit_id, &u.id))
-                    })
-                    .map(|u| unit_label(inner, u))
+                let units: Vec<(String, String)> = site_units(inner, &caller.site_id)
+                    .map(|unit| (unit.id.clone(), unit_label(inner, unit)))
                     .collect();
-                Ok::<_, FinanceError>((shares, missing))
+                Ok::<_, FinanceError>((shares, units))
             })
             .await?;
+        let required_units = canonical_units.as_ref().unwrap_or(&memory_units);
+        let missing = missing_reading_labels(required_units, &shares);
         if shares.is_empty() {
             return Err(conflict("Record the meter readings first"));
         }
@@ -311,5 +331,35 @@ impl HeatShareService {
         period.approved_at = Some(Utc::now());
         let saved = self.store.update(period, col::heat_periods).await?;
         self.store.read(|inner| view(inner, &saved)).await
+    }
+}
+
+#[cfg(test)]
+mod unit_inventory_tests {
+    use super::{missing_reading_labels, HeatShareView};
+    use rust_decimal::Decimal;
+
+    #[test]
+    fn approval_ignores_stale_memory_unit_when_database_inventory_is_canonical() {
+        let canonical_units = vec![("42".to_string(), "A Blok D:1".to_string())];
+        let stale_memory_units = vec![
+            ("99".to_string(), "A Blok D:1".to_string()),
+            canonical_units[0].clone(),
+        ];
+        let shares = vec![HeatShareView {
+            unit_id: "42".to_string(),
+            unit_label: "A Blok D:1".to_string(),
+            consumption: Decimal::new(5, 0),
+            fixed_amount: Decimal::new(50, 2),
+            consumption_amount: Decimal::new(50, 2),
+            total_amount: Decimal::ONE,
+            due_id: None,
+        }];
+
+        assert!(missing_reading_labels(&canonical_units, &shares).is_empty());
+        assert_eq!(
+            missing_reading_labels(&stale_memory_units, &shares),
+            vec!["A Blok D:1"]
+        );
     }
 }

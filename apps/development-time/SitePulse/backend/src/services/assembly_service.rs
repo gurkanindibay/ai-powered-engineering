@@ -239,10 +239,11 @@ impl AssemblyService {
             "NO_QUORUM"
         }
         .to_string();
-        meeting.held_on = Some(
-            req.held_on
-                .unwrap_or_else(|| meeting.scheduled_at.date_naive()),
-        );
+        let scheduled_on = self
+            .store
+            .read(|inner| local_date(inner, &caller.site_id, meeting.scheduled_at))
+            .await;
+        meeting.held_on = Some(req.held_on.unwrap_or(scheduled_on));
         let meeting = self.store.update(meeting, col::meetings).await?;
         Ok(self.store.read(|inner| meeting_view(inner, &meeting)).await)
     }
@@ -351,7 +352,7 @@ impl AssemblyService {
             ));
         }
         let rule = VoteRule::parse(&item.rule).map_err(|e| invalid(e.to_string()))?;
-        let (tally, e, number) = self
+        let (tally, e, number, scheduled_on) = self
             .store
             .read(|inner| {
                 let mut tally = Tally::default();
@@ -369,6 +370,7 @@ impl AssemblyService {
                     tally,
                     electorate(inner, &caller.site_id),
                     Self::next_decision_number(inner, &caller.site_id),
+                    local_date(inner, &caller.site_id, meeting.scheduled_at),
                 )
             })
             .await;
@@ -378,9 +380,7 @@ impl AssemblyService {
             site_id: caller.site_id.clone(),
             meeting_id: Some(meeting.id),
             decision_number: number,
-            decided_on: meeting
-                .held_on
-                .unwrap_or_else(|| meeting.scheduled_at.date_naive()),
+            decided_on: meeting.held_on.unwrap_or(scheduled_on),
             title: item.title.clone(),
             text,
             outcome: if accepted { "ACCEPTED" } else { "REJECTED" }.to_string(),
