@@ -201,15 +201,15 @@
       "stories_with_scenarios": 116
     },
     {
-      "automated": 440,
+      "automated": 441,
       "date": "2026-11-25",
       "epics": 13,
-      "scenarios": 470,
+      "scenarios": 471,
       "stories": 116,
       "stories_with_scenarios": 116
     }
   ],
-  "commit": "535284c556ea57818cbdbe4bd36dc5b4f02453c2",
+  "commit": "0798921f378cd847c31e5bd3304950f0187268a5",
   "epics": [
     {
       "automated": 10,
@@ -338,16 +338,16 @@
       "title": "EPIC-09"
     },
     {
-      "automated": 13,
+      "automated": 14,
       "failing": 0,
       "health": "in_progress",
       "id": "EPIC-10",
-      "no_result": 1,
+      "no_result": 2,
       "passing": 12,
       "planned": 2,
-      "scenarios": 15,
+      "scenarios": 16,
       "stories": 7,
-      "stories_passing": 5,
+      "stories_passing": 4,
       "stories_with_scenarios": 7,
       "title": "EPIC-10"
     },
@@ -394,18 +394,18 @@
       "title": "Site Admin Journeys"
     }
   ],
-  "generated_at": "2026-11-25T07:40:22Z",
+  "generated_at": "2026-11-25T09:57:45Z",
   "junit": {
     "errors": 0,
     "failures": 0,
     "files": 8,
     "passed": 308,
-    "seconds": 1987.8,
+    "seconds": 2084.9,
     "skipped": 1,
     "tests": 309
   },
   "recent_changes": [],
-  "run_id": "20261125T074020Z-535284c",
+  "run_id": "20261125T095743Z-0798921",
   "scenarios": {
     "SC-01-01-01": {
       "epic": "EPIC-01",
@@ -1779,6 +1779,12 @@
       "epic": "EPIC-10",
       "name": "Equal allocation gives every unit the same share",
       "state": "passing",
+      "story": "STORY-10-01"
+    },
+    "SC-10-01-03": {
+      "epic": "EPIC-10",
+      "name": "Installment accrual persists tenant-scoped liabilities",
+      "state": "no_result",
       "story": "STORY-10-01"
     },
     "SC-10-02-01": {
@@ -3231,17 +3237,17 @@
   "schema": 1,
   "status": "PASS",
   "totals": {
-    "automated": 440,
+    "automated": 441,
     "epics": 13,
     "epics_failing": 0,
     "epics_verified": 1,
     "failing": 0,
-    "no_result": 213,
+    "no_result": 214,
     "passing": 227,
     "planned": 30,
-    "scenarios": 470,
+    "scenarios": 471,
     "stories": 116,
-    "stories_passing": 34,
+    "stories_passing": 33,
     "stories_with_scenarios": 116
   }
 }
