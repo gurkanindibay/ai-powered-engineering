@@ -249,14 +249,9 @@ pub async fn statement_unit(
                         .joint_liability_owners
                         .get(&due.id)
                         .is_some_and(|owners| owners.iter().any(|o| o.person_id == pid)))
-        }) || inner
-            .person_advance_holds
-            .iter()
-            .any(|((held_unit, held_person, _), balance)| {
-                same_unit(held_unit, &target.id)
-                    && held_person == &pid.to_string()
-                    && *balance > rust_decimal::Decimal::ZERO
-            })
+        }) || !inner
+            .held_advances_for(&target.id, Some(pid), None)
+            .is_empty()
     });
     if has_history_on_unit {
         Ok(StatementAccess::Historical)

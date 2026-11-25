@@ -762,6 +762,31 @@ impl AppStateInner {
             .unwrap_or(Decimal::ZERO)
     }
 
+    /// Positive advance holds for a unit, optionally scoped to a person and role.
+    /// Returns durable person ids so callers do not reimplement the string-key lookup.
+    pub fn held_advances_for(
+        &self,
+        unit_id: &str,
+        person_id: Option<i64>,
+        debtor_type: Option<&str>,
+    ) -> Vec<(i64, String, Decimal)> {
+        self.person_advance_holds
+            .iter()
+            .filter(|((held_unit, held_person, held_role), balance)| {
+                crate::auth::same_id(held_unit, unit_id)
+                    && person_id.is_none_or(|pid| held_person == &pid.to_string())
+                    && debtor_type.is_none_or(|role| held_role == role)
+                    && **balance > Decimal::ZERO
+            })
+            .filter_map(|((_, held_person, held_role), balance)| {
+                held_person
+                    .parse::<i64>()
+                    .ok()
+                    .map(|person| (person, held_role.clone(), *balance))
+            })
+            .collect()
+    }
+
     /// Advance of a unit held for any person.
     pub fn held_advance_total(&self, unit_id: &str) -> Decimal {
         self.person_advance_holds
@@ -1163,6 +1188,10 @@ mod fixture_detection_tests {
         assert_eq!(
             state.held_advance_of("14", "7", "OWNER"),
             Decimal::new(50000, 2)
+        );
+        assert_eq!(
+            state.held_advances_for("14", Some(7), Some("OWNER")),
+            vec![(7, "OWNER".to_string(), Decimal::new(50000, 2))]
         );
         assert_eq!(state.held_advance_total("14"), Decimal::new(50000, 2));
         assert_eq!(state.held_advance_of("14", "8", "OWNER"), Decimal::ZERO);

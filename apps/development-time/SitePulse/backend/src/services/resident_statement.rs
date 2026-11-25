@@ -78,14 +78,10 @@ fn owed_roles(inner: &AppStateInner, unit: &IndependentUnit, person_id: i64) -> 
                 && due.status.is_collectable()
                 && due.liable_person_id == Some(person_id)
                 && due.debtor_type == role
-        }) || inner.person_advance_holds.iter().any(
-            |((unit_id, held_person, held_role), balance)| {
-                crate::auth::same_id(unit_id, &unit.id)
-                    && held_person == &person_id.to_string()
-                    && held_role == role.as_str()
-                    && *balance > Decimal::ZERO
-            },
-        )
+        }) || inner
+            .held_advances_for(&unit.id, Some(person_id), None)
+            .iter()
+            .any(|(_, held_role, _)| held_role == role.as_str())
     };
     // A joint owner owes alongside the charge's own debtor, and their share is
     // reported under the owner section, so joint liability always names `OWNER`.
@@ -443,16 +439,9 @@ pub fn build_statement_for_access(
 
         // A held advance keeps a former person's statement section reachable
         // after the role bucket has been cleared during a sale or move-out.
-        for ((held_unit, held_person, held_role), balance) in &inner.person_advance_holds {
-            if crate::auth::same_id(held_unit, &unit.id)
-                && held_role == debtor
-                && *balance > Decimal::ZERO
-            {
-                if let Ok(pid) = held_person.parse::<i64>() {
-                    if Some(pid) != current_person_id {
-                        items_by_person.entry(Some(pid)).or_default();
-                    }
-                }
+        for (pid, _, _) in inner.held_advances_for(&unit.id, None, Some(debtor)) {
+            if Some(pid) != current_person_id {
+                items_by_person.entry(Some(pid)).or_default();
             }
         }
 
