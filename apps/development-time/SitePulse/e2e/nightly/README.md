@@ -8,11 +8,12 @@ updates the existing open nightly failure issue with the run link.
 
 | Job | Check |
 | --- | --- |
-| Firefox and WebKit smoke | Existing `smoke` selection on each desktop browser |
+| Firefox and WebKit smoke | Existing `smoke` selection on each desktop browser; WebKit runs as three shards |
 | Mobile smoke | The same selection at 375 × 812 in Chromium |
 | Accessibility | axe-core audits ten screens with Flutter semantics enabled. Critical violations and missing accessible names fail the job. All violations appear in per-screen JSON artifacts. |
 | Performance | Runs the scheduler and measures API latency with 50 synthetic sites, each with 200 owned units. Measures 1,000 manual payments, 50 statements, and 50 bank previews with 20 transfers each. |
-| Tenant authorization | Verifies a fixed set of documented routes against two fixture sites. Each check proves the resource exists and is accessible to its site's manager before testing the denied read. |
+| Edge | Existing `edge` selection in Chromium |
+| Tenant authorization | Validates the operation inventory, then checks every tenant-applicable operation against two fixture sites. Each check proves the operation works for the owning site's manager before testing foreign-site denial, or follows a documented platform-scoped flow. |
 
 The accessibility audit excludes only Flutter Web's disabled hidden textarea used as its text-input
 bridge. User-facing semantics remain in the axe scan; the excluded proxy count is recorded in JUnit.
@@ -27,17 +28,30 @@ maximum latency. This run uses deterministic synthetic data and reports a
 point-in-time smoke measurement. Production SLOs use the observation windows
 in the matrix.
 
-The static tenant operation inventory classifies all 275 generated OpenAPI
-operations against the Rust route table. The nightly runtime contract checks
-that every inventory operation is present in the live OpenAPI document, then
-82 tenant-reference operations with same-site success controls before
-cross-site denial, and 37 implicit-scope reads and scoped write reports with distinct second-site data
-visible only to that site's manager. It also runs the multi-resource scenarios
-in `tests/test_journey_tenant_isolation.py`. The inventory maps runtime test
-evidence for all 208 tenant-applicable operations. The inventory still
-distinguishes endpoint classification from runtime behavior; it requires a
-same-site control and foreign-site denial or a documented platform-scoped flow
-for every applicable operation.
+The tenant operation inventory classifies all 275 generated OpenAPI operations
+against the Rust route table and maps runtime tests to the 208 tenant-applicable
+ones (151 tenant-reference and 57 implicit-scope). The `tenant-authorization`
+job runs it with `--require-runtime-evidence`, so the job fails when:
+
+- an operation is unclassified, stale or duplicated;
+- a tenant-applicable operation has no mapped runtime test;
+- a reference is not `e2e/<file>.py::<test function>` naming an existing test,
+  for example after a test is renamed.
+
+The runtime contract also checks that every inventory operation is present in
+the live OpenAPI document. Each applicable operation needs a same-site control
+and foreign-site denial, or a documented platform-scoped flow. Implicit-scope
+reads use distinct second-site data visible only to that site's manager. The job
+also runs the multi-resource scenarios in
+`tests/test_journey_tenant_isolation.py`. The inventory check proves that a
+mapped test exists; it does not prove what that test asserts, so review the
+assertion when you add a mapping.
+
+To run the same check locally from the SitePulse directory:
+
+```sh
+python3 scripts/tenant_operation_inventory.py --require-runtime-evidence
+```
 
 ## Local runs
 
