@@ -6,14 +6,19 @@ value thrown or rejected, or a cross-origin script error that the browser
 sanitises), which left failures reading just ``pageerror:``. This module turns
 the event into ``name: message`` plus the top of the stack, and installs a
 small in-page listener that records what ``window.onerror`` and
-``unhandledrejection`` saw (source URL, line, value type), so an empty error
-still says where it came from.
+``unhandledrejection`` saw (source URL, line, value type) in ``window[BUFFER]``,
+so an empty error still says where it came from. The guard reads that buffer
+only after a page error, never through a console listener: forwarding every
+console line of the chatty E2E build made WebKit runs several times slower.
 """
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any
 
-# Console prefix used by CAPTURE_SCRIPT; the page guard collects these lines.
+# Window property holding what CAPTURE_SCRIPT recorded (at most BUFFER_LIMIT entries).
+BUFFER = "__sitepulseUncaught"
+BUFFER_LIMIT = 20
+# Prefix of the console.error line each entry also gets, so a trace shows it in order.
 CAPTURE_PREFIX = "[sitepulse-e2e:uncaught]"
 
 STACK_LINES = 6
@@ -23,6 +28,11 @@ STACK_LINES = 6
 CAPTURE_SCRIPT = """
 (() => {
   const prefix = %r;
+  const buffer = window[%r] = [];
+  const record = (text) => {
+    if (buffer.length < %d) buffer.push(text);
+    console.error(prefix + ' ' + text);
+  };
   const describe = (value) => {
     if (value === undefined) return 'undefined';
     if (value === null) return 'null';
@@ -36,14 +46,14 @@ CAPTURE_SCRIPT = """
   window.addEventListener('error', (event) => {
     if (!(event instanceof ErrorEvent)) return;  // resource load errors are not exceptions
     const where = (event.filename || '<no source>') + ':' + event.lineno + ':' + event.colno;
-    console.error(prefix + ' error at ' + where + ' message=' + JSON.stringify(event.message || '')
+    record('error at ' + where + ' message=' + JSON.stringify(event.message || '')
       + ' value=' + describe(event.error));
   }, true);
   window.addEventListener('unhandledrejection', (event) => {
-    console.error(prefix + ' unhandledrejection value=' + describe(event.reason));
+    record('unhandledrejection value=' + describe(event.reason));
   });
 })();
-""" % CAPTURE_PREFIX
+""" % (CAPTURE_PREFIX, BUFFER, BUFFER_LIMIT)
 
 
 def _attr(exc: Any, name: str) -> str:
@@ -74,7 +84,15 @@ def describe_page_error(exc: Any) -> str:
     return "\n".join(lines)
 
 
-def uncaught_details(console_lines: Iterable[str]) -> list[str]:
-    """The CAPTURE_SCRIPT lines among the console messages, without the prefix."""
-    return [line[len(CAPTURE_PREFIX):].strip() for line in console_lines
-            if line.startswith(CAPTURE_PREFIX)]
+def uncaught_details(page: Any) -> list[str]:
+    """What CAPTURE_SCRIPT recorded on `page`; empty when the page is gone or unreadable.
+
+    Call it only after a page error: the page answered the driver then, so the read is short.
+    """
+    try:
+        if page.is_closed():
+            return []
+        entries = page.evaluate(f"() => window[{BUFFER!r}] || []")
+    except Exception:  # a navigated or broken page must not hide the original failure
+        return []
+    return [str(entry) for entry in entries or []][:BUFFER_LIMIT]

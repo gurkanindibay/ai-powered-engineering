@@ -21,6 +21,7 @@ from support.journey_gui import (
     open_dues_segment,
     open_people_directory,
     page_lines,
+    page_lines_until,
     page_text,
     resident_email,
     sign_in_manager,
@@ -170,10 +171,11 @@ def test_f0_every_page_shows_an_empty_state(request, api, actors, stack, page, l
         shown: dict[str, list[str]] = {}
         for index, name in enumerate(("collection", "live cash", "aging", "unmatched")):
             open_dues_segment(page, index)
-            shown[name] = page_lines(page)
-        shown["units"] = _units_page_lines(page)
+            shown[name] = page_lines_until(page, EMPTY_STATE)
+        _units_page_lines(page)
+        shown["units"] = page_lines_until(page, EMPTY_STATE)
         open_people_directory(page)
-        shown["people"] = page_lines(page)
+        shown["people"] = page_lines_until(page, EMPTY_STATE)
 
         missing = [name for name, lines in shown.items() if not any(EMPTY_STATE.search(line) for line in lines)]
         assert not missing, f"pages without an empty-state message: {missing}"
