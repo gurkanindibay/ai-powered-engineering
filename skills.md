@@ -311,6 +311,15 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ./apps/development-time/SitePulse/scripts/ci_scenario_evidence.py --artifact-dir /tmp/e2e-test-report --json
 ```
 
+## 5b-6a. Serenity Report from CI Results (`serenity_report.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/serenity_report.py](file:///apps/development-time/SitePulse/scripts/serenity_report.py)
+- **Purpose:** Converts the `e2e-test-report` artifact into Serenity BDD JSON outcomes, one per catalogue scenario, without running tests. Run it on a checkout of the commit CI tested, then render with the Serenity command line jar (`npm ci --ignore-scripts` in `e2e-cucumber/` installs it). CI job `serenity-report` does both.
+
+```bash
+python3 apps/development-time/SitePulse/scripts/serenity_report.py --artifact-dir /tmp/e2e-test-report --out /tmp/serenity-json --json
+```
+
 ## 5b-7. Publish CI Test Report History (`publish_test_report.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/publish_test_report.py](file:///apps/development-time/SitePulse/scripts/publish_test_report.py)

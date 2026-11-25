@@ -241,7 +241,7 @@ SERENITY_EXTENSIONS = {".html", ".css", ".js", ".json", ".png", ".jpg", ".jpeg",
                        ".woff", ".woff2", ".ttf", ".eot", ".map", ".txt"}
 SERENITY_TEXT_EXTENSIONS = {".html", ".css", ".js", ".json", ".svg", ".map", ".txt"}
 SERENITY_MAX_BYTES = 80 * 1024 * 1024
-SERENITY_RETAINED_RUNS = 8
+SERENITY_RETAINED_RUNS = 3
 SERENITY_TOKENS = re.compile(
     r"ci-only-password|-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
     r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}")
