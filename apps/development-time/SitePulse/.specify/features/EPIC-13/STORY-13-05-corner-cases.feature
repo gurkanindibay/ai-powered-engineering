@@ -156,6 +156,16 @@ Feature: Corner cases around accrual, occupancy, access and time
     When the clock moves forward 30 days
     Then unit "A-3" still owes 0.00 for "Eylül 2026"
 
+  @SC-13-05-19 @J-12 @depth:1 @layer:backend @edge @role_manager @linked
+  Scenario: Overdue status and closing end dates use the Istanbul date, not the database's UTC date
+    Given the clock is at "2026-11-30 22:30" UTC, already "2026-12-01" in Europe/Istanbul
+    When a payment of a liability due "2026-11-30" is reversed
+    Then the reopened liability is OVERDUE
+    When a payment of a liability due "2026-12-01" is reversed
+    Then the reopened liability is PENDING
+    When a unit whose occupancy and ownership started "2026-11-01" is archived
+    Then the occupancy and the ownership end on "2026-12-01"
+
   # ------------------------------------------------------------- persistence
 
   @SC-13-05-16 @J-12 @depth:1 @layer:backend @core @role_manager @linked

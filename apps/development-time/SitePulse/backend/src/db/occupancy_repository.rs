@@ -156,10 +156,13 @@ pub struct TransitionOutcome {
 }
 
 /// Locks the unit and reads its state from the source-of-truth tables.
+/// `today` is the site-local date; it stands in for the ownership start date
+/// when neither the ownership row nor the unit records one.
 pub async fn lock_unit_snapshot(
     tx: &Transaction<'_>,
     site_id: i64,
     unit_id: i64,
+    today: NaiveDate,
 ) -> Result<UnitSnapshot, OccupancyError> {
     tx.query_opt(
         "SELECT id FROM units WHERE id = $1 AND site_id = $2 AND deleted_at IS NULL FOR UPDATE",
@@ -167,26 +170,27 @@ pub async fn lock_unit_snapshot(
     )
     .await?
     .ok_or(OccupancyError::UnitNotFound)?;
-    read_snapshot(tx, site_id, unit_id, true).await
+    read_snapshot(tx, site_id, unit_id, today, true).await
 }
 
 async fn read_snapshot(
     tx: &Transaction<'_>,
     site_id: i64,
     unit_id: i64,
+    today: NaiveDate,
     lock: bool,
 ) -> Result<UnitSnapshot, OccupancyError> {
     let owners = tx
         .query(
             r#"
-            SELECT o.person_id, p.full_name, COALESCE(w.share_percentage, 100.00), COALESCE(w.start_date, u.created_at::date, CURRENT_DATE)
+            SELECT o.person_id, p.full_name, COALESCE(w.share_percentage, 100.00), COALESCE(w.start_date, u.created_at::date, $2::date)
             FROM sp_unit_owner_ids($1) o
             JOIN persons p ON p.id = o.person_id
             JOIN units u ON u.id = $1
             LEFT JOIN unit_ownerships w ON w.unit_id = $1 AND w.person_id = o.person_id AND w.is_active
             ORDER BY 3 DESC, 4, 1
             "#,
-            &[&unit_id],
+            &[&unit_id, &today],
         )
         .await?
         .into_iter()
@@ -241,7 +245,7 @@ pub async fn apply_occupancy_command(
     command: Command,
     input: &TransitionInput,
 ) -> Result<TransitionOutcome, OccupancyError> {
-    let snapshot = lock_unit_snapshot(tx, site_id, unit_id).await?;
+    let snapshot = lock_unit_snapshot(tx, site_id, unit_id, input.today).await?;
     let plan = unit_state::plan(snapshot.state, command)?;
     let incoming = incoming_person(&snapshot, &plan, input)?;
     unit_state::validate_effective_date(input.effective_date, input.today)?;
@@ -522,10 +526,13 @@ async fn record_transition(
 }
 
 /// Reads the unit's state without changing it (for the state endpoint and UI).
+/// `today` is the site-local date; it stands in for the ownership start date
+/// when neither the ownership row nor the unit records one.
 pub async fn read_unit_snapshot(
     tx: &Transaction<'_>,
     site_id: i64,
     unit_id: i64,
+    today: NaiveDate,
 ) -> Result<UnitSnapshot, OccupancyError> {
     tx.query_opt(
         "SELECT id FROM units WHERE id = $1 AND site_id = $2 AND deleted_at IS NULL",
@@ -533,5 +540,5 @@ pub async fn read_unit_snapshot(
     )
     .await?
     .ok_or(OccupancyError::UnitNotFound)?;
-    read_snapshot(tx, site_id, unit_id, false).await
+    read_snapshot(tx, site_id, unit_id, today, false).await
 }

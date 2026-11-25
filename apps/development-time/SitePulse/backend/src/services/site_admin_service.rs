@@ -1756,6 +1756,7 @@ impl SiteAdminService {
                                     &client,
                                     site_numeric,
                                     u_id,
+                                    edit_today,
                                 )
                                 .await
                                 .map_err(|e| e.to_string())?;
@@ -2037,6 +2038,13 @@ impl SiteAdminService {
     ) -> Result<(), String> {
         let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
+        // Site-local date from the injected clock: "matured" dues and the end
+        // date of the closed occupancy/ownership follow the site's calendar,
+        // not the database session's UTC CURRENT_DATE.
+        let today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::site_today(&inner, site_id)
+        };
 
         // 1. If DB pool is available, dissociate in PostgreSQL inside a single transaction
         if let Some(ref pool) = self.state.pool {
@@ -2085,38 +2093,19 @@ impl SiteAdminService {
                 // advance movement, paid due or matured receivable) is never removed; the
                 // manager uses move-out or ownership transfer instead. Only untouched,
                 // not-yet-due charges (e.g. the one issued at registration) are voided.
-                let has_history: bool = tx
-                    .query_one(
-                        r#"
-                        SELECT EXISTS (SELECT 1 FROM payment_entries WHERE unit_id = $1)
-                            OR EXISTS (SELECT 1 FROM payment_receipts WHERE unit_id = $1)
-                            OR EXISTS (SELECT 1 FROM advance_ledger_entries WHERE unit_id = $1)
-                            OR EXISTS (SELECT 1 FROM dues_liabilities WHERE unit_id = $1 AND status <> 'CANCELLED'
-                                       AND (paid_amount > 0 OR status = 'PAID' OR due_date < CURRENT_DATE))
-                        "#,
-                        &[&u_id],
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .get(0);
+                let has_history =
+                    crate::db::unit_repository::tx_unit_has_financial_history(&tx, u_id, today)
+                        .await
+                        .map_err(|e| e.to_string())?;
                 if has_history {
                     return Err(UNIT_HAS_FINANCIAL_HISTORY.to_string());
                 }
 
                 // Archive (soft-delete) the unit: untouched dues are cancelled, the
                 // occupancy and ownership history is closed, nothing is physically deleted.
-                tx.execute(
-                    "UPDATE dues_liabilities SET status = 'CANCELLED' WHERE unit_id = $1 AND status IN ('PENDING', 'OVERDUE') AND paid_amount = 0",
-                    &[&u_id],
-                ).await.map_err(|e| e.to_string())?;
-                tx.execute(
-                    "UPDATE unit_occupancies SET is_active = FALSE, end_date = GREATEST(start_date, CURRENT_DATE) WHERE unit_id = $1 AND is_active = TRUE",
-                    &[&u_id],
-                ).await.map_err(|e| e.to_string())?;
-                tx.execute(
-                    "UPDATE unit_ownerships SET is_active = FALSE, end_date = GREATEST(start_date, CURRENT_DATE) WHERE unit_id = $1 AND is_active = TRUE",
-                    &[&u_id],
-                ).await.map_err(|e| e.to_string())?;
+                crate::db::unit_repository::tx_close_unit_history(&tx, u_id, today)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 tx.execute(
                     "UPDATE units SET owner_person_id = NULL, tenant_person_id = NULL, deleted_at = CURRENT_TIMESTAMP WHERE id = $1",
                     &[&u_id],
@@ -2197,7 +2186,7 @@ impl SiteAdminService {
                         || inner.dues.iter().any(|d| {
                             &d.unit_id == uid
                                 && (d.paid_principal + d.paid_penalty > rust_decimal::Decimal::ZERO
-                                    || d.due_date < chrono::Utc::now().date_naive())
+                                    || d.due_date < today)
                         })
                 });
                 if has_history {
@@ -3403,7 +3392,7 @@ async fn register_occupancy(
         .await?;
         return Ok(());
     }
-    let snapshot = repo::lock_unit_snapshot(tx, site, unit).await?;
+    let snapshot = repo::lock_unit_snapshot(tx, site, unit, today).await?;
     if !snapshot.is_owner(person) {
         if snapshot.state.ownership == Ownership::Owned {
             return Err(crate::db::occupancy_repository::OccupancyError::UnitHasOwner);
