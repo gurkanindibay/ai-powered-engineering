@@ -725,6 +725,7 @@ def seed_preset(
     manifest: Any = None,
     name_suffix: str = "",
     reload_fn: Callable[[], None] | None = None,
+    set_clock: bool | None = None,
     api_url: str = "http://localhost:8080",
     saas_email: str = "admin@sitepulse.io",
     saas_password: str = "E2E-Bootstrap-Admin-1",
@@ -845,14 +846,21 @@ def seed_preset(
         else:
             api_client.call("POST", "/api/e2e/reload-state")
 
-        # Set reference clock
-        ref_clock = REFERENCE_CLOCKS[preset]
-        if hasattr(api_client, "e2e_clock"):
-            api_client.e2e_clock("set_date", ref_clock)
-        elif hasattr(api_client, "clock") and hasattr(api_client.clock, "set_date"):
-            api_client.clock.set_date(ref_clock)
+        # Determine whether to set clock
+        if set_clock is None:
+            should_set_clock = (preset in {"F4", "F5", "F6", "F7"}) if stack is not None else True
         else:
-            api_client.call("POST", "/__e2e/clock", body={"action": "set_date", "date": ref_clock})
+            should_set_clock = bool(set_clock)
+
+        # Set reference clock
+        if should_set_clock:
+            ref_clock = REFERENCE_CLOCKS[preset]
+            if hasattr(api_client, "e2e_clock"):
+                api_client.e2e_clock("set_date", ref_clock)
+            elif hasattr(api_client, "clock") and hasattr(api_client.clock, "set_date"):
+                api_client.clock.set_date(ref_clock)
+            else:
+                api_client.call("POST", "/__e2e/clock", body={"action": "set_date", "date": ref_clock})
 
         # Refresh manager session if backend was restarted
         if reload_fn is not None:
