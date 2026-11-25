@@ -416,7 +416,12 @@ impl OperatingBudgetService {
         budget_id: &str,
         req: IssueInterimBudgetRequest,
     ) -> BudgetResult<OperatingBudget> {
-        let issued_on = req.issued_on.unwrap_or_else(|| Utc::now().date_naive());
+        let issued_on = match req.issued_on {
+            Some(date) => date,
+            None => {
+                crate::services::finance_common::site_today_in_state(&self.state, site_id).await
+            }
+        };
         let updated = {
             let inner = self.state.inner.read().await;
             let b = find(&inner, site_id, budget_id)?;
@@ -660,7 +665,12 @@ impl OperatingBudgetService {
         if req.objector_name.trim().is_empty() {
             return Err(BudgetError::Invalid("objector_name is required".into()));
         }
-        let filed_on = req.filed_on.unwrap_or_else(|| Utc::now().date_naive());
+        let filed_on = match req.filed_on {
+            Some(date) => date,
+            None => {
+                crate::services::finance_common::site_today_in_state(&self.state, site_id).await
+            }
+        };
         let (mut budget, unit_id) = {
             let inner = self.state.inner.read().await;
             let b = find(&inner, site_id, budget_id)?;
@@ -725,6 +735,8 @@ impl OperatingBudgetService {
                 "status must be UPHELD or DISMISSED".into(),
             ));
         }
+        let resolved_on =
+            crate::services::finance_common::site_today_in_state(&self.state, site_id).await;
         let mut budget = {
             let inner = self.state.inner.read().await;
             find(&inner, site_id, budget_id)?.clone()
@@ -743,7 +755,7 @@ impl OperatingBudgetService {
             )));
         }
         objection.status = status;
-        objection.resolved_on = Some(Utc::now().date_naive());
+        objection.resolved_on = Some(resolved_on);
         objection.resolution_note = req.resolution_note.clone().filter(|n| !n.trim().is_empty());
         let saved = objection.clone();
         if let Some(ref pool) = self.state.pool {

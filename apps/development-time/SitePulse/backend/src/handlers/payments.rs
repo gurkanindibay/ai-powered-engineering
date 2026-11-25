@@ -117,7 +117,7 @@ pub async fn record_homeowner_payment(
             transaction_id: reference
                 .clone()
                 .unwrap_or_else(|| receipt.receipt_number.clone()),
-            date: Utc::now().date_naive(),
+            date: crate::services::finance_common::site_today(&inner, &unit.site_id),
             amount: payload.amount,
             currency: "TRY".to_string(),
             description: payload.note.clone().unwrap_or_else(|| {
@@ -698,6 +698,19 @@ pub async fn reverse_payment(
     Ok((StatusCode::CREATED, Json(reversal)))
 }
 
+/// The `as_of_date` reported for a debt aging snapshot: today in the site's
+/// time zone, or in the default site zone when no site was named.
+fn debt_aging_as_of(
+    inner: &crate::state::AppStateInner,
+    site_filter: Option<&str>,
+    now: chrono::DateTime<Utc>,
+) -> chrono::NaiveDate {
+    match site_filter {
+        Some(site_id) => crate::services::finance_common::site_today_at(inner, site_id, now),
+        None => crate::domain::clock::local_date(&crate::models::default_site_timezone(), now),
+    }
+}
+
 /// Writes today's debt aging snapshot (O-8). The daily worker does the same.
 pub async fn snapshot_debt_aging(
     State(state): State<AppState>,
@@ -705,9 +718,14 @@ pub async fn snapshot_debt_aging(
     Query(mut q): Query<SiteIdParam>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     scope.pin_opt(&mut q.site_id)?;
+    let site_filter = q.site_id.as_deref().filter(|s| !s.trim().is_empty());
+    let as_of_date = {
+        let inner = state.inner.read().await;
+        debt_aging_as_of(&inner, site_filter, crate::e2e_clock::now_utc())
+    };
     let service = crate::services::PaymentTrackingService::new(state);
     let rows = service
-        .snapshot_debt_aging(q.site_id.as_deref().filter(|s| !s.trim().is_empty()))
+        .snapshot_debt_aging(site_filter)
         .await
         .map_err(|e| {
             (
@@ -716,7 +734,7 @@ pub async fn snapshot_debt_aging(
             )
         })?;
     Ok(Json(
-        serde_json::json!({ "status": "OK", "rows": rows, "as_of_date": Utc::now().date_naive() }),
+        serde_json::json!({ "status": "OK", "rows": rows, "as_of_date": as_of_date }),
     ))
 }
 
@@ -836,4 +854,41 @@ async fn apply_new_owner_ref(
     payload.new_owner_phone = card.phone;
     payload.new_owner_email = card.email;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn istanbul_site(id: &str) -> Site {
+        Site {
+            id: id.to_string(),
+            name: "Site".to_string(),
+            address: "Kadıköy, İstanbul".to_string(),
+            slug: format!("site-{id}"),
+            status: SiteStatus::Active,
+            plan_type: PlanType::Premium,
+            license_end_date: chrono::NaiveDate::from_ymd_opt(2027, 1, 1).unwrap_or_default(),
+            timezone: "Europe/Istanbul".to_string(),
+            proration_enabled: false,
+            tax_id: None,
+            tax_office: None,
+        }
+    }
+
+    #[test]
+    fn debt_aging_as_of_is_the_site_local_date_after_21_utc() {
+        // 2026-11-30 22:30 UTC is 2026-12-01 01:30 in Istanbul.
+        let now = Utc
+            .with_ymd_and_hms(2026, 11, 30, 22, 30, 0)
+            .single()
+            .unwrap_or_default();
+        let mut inner = crate::state::AppStateInner::default();
+        inner.sites.push(istanbul_site("7"));
+        let next_day = chrono::NaiveDate::from_ymd_opt(2026, 12, 1).unwrap_or_default();
+        assert_eq!(debt_aging_as_of(&inner, Some("7"), now), next_day);
+        assert_eq!(debt_aging_as_of(&inner, None, now), next_day);
+        assert_ne!(debt_aging_as_of(&inner, Some("7"), now), now.date_naive());
+    }
 }

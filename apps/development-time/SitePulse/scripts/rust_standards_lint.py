@@ -21,6 +21,9 @@ Hard rules (any finding fails):
 * `query-flatten`          a struct extracted with `Query<T>` has no `#[serde(flatten)]` field:
                            flattening makes `serde_urlencoded` buffer values as strings, so
                            numeric parameters such as `page=1` fail with "expected i64".
+* `utc-today`              "today" is never `Utc::now().date_naive()` (one day behind the site
+                           between 21:00 and 24:00 UTC); use `finance_common::site_today` /
+                           `site_today_in_state` or `domain::clock::local_date`.
 
 Ratchet rules (counts may only go down; `--update-baseline` records a lower count):
 * `unwrap`              `.unwrap()` outside test code.
@@ -75,6 +78,7 @@ STRING_ERROR_RE = re.compile(r"Result<[^;{]*,\s*String\s*>")
 QUERY_TYPE_RE = re.compile(r"\bQuery<\s*(?:[A-Za-z_][A-Za-z0-9_]*::)*([A-Za-z_][A-Za-z0-9_]*)\s*>")
 STRUCT_RE = re.compile(r"\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)\b[^;{]*\{")
 SERDE_FLATTEN_RE = re.compile(r"#\[serde\([^\]]*\bflatten\b")
+UTC_TODAY_RE = re.compile(r"\bUtc\s*::\s*now\s*\(\s*\)\s*\.\s*date_naive\s*\(\s*\)")
 POOL_BRANCH_RE = re.compile(r"if let Some\((?:ref )?pool\)|\bstate\.pool\b")
 
 HASH_ALLOWED = ("src/domain/fingerprint.rs", "src/auth.rs", "src/migrations.rs")
@@ -234,6 +238,8 @@ def lint(backend: Path, baseline_path: Path | None = None, check_fmt: bool = Tru
         for m in REGEX_NEW_RE.finditer(code):
             if m.start() not in lazy_starts:
                 add("regex-per-call", m.start())
+        for m in UTC_TODAY_RE.finditer(code):
+            add("utc-today", m.start())
         for m in ROUND_DP_RE.finditer(code):
             add("implicit-rounding", m.start())
         if rel not in FLOAT_ALLOWED:

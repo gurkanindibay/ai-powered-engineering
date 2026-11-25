@@ -568,8 +568,7 @@ pub async fn provision_site_units(
                         slug: s_slug.unwrap_or_else(|| slug.clone()),
                         status: st,
                         plan_type: plan,
-                        license_end_date: lic_end
-                            .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
+                        license_end_date: lic_end.unwrap_or_else(new_site_license_end),
                         timezone: crate::models::default_site_timezone(),
                         proration_enabled: false,
                         tax_id: None,
@@ -649,8 +648,7 @@ pub async fn provision_site_units(
                         slug: s_slug.unwrap_or_else(|| slug.clone()),
                         status: st,
                         plan_type: plan,
-                        license_end_date: lic_end
-                            .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
+                        license_end_date: lic_end.unwrap_or_else(new_site_license_end),
                         timezone: crate::models::default_site_timezone(),
                         proration_enabled: false,
                         tax_id: None,
@@ -659,7 +657,7 @@ pub async fn provision_site_units(
                 }
                 id_str
             } else {
-                let license_end = Utc::now().date_naive() + chrono::Days::new(365);
+                let license_end = new_site_license_end();
                 let ins_row = match client
                     .query_one(
                         r#"
@@ -724,7 +722,7 @@ pub async fn provision_site_units(
                     slug,
                     status: SiteStatus::Active,
                     plan_type: PlanType::Premium,
-                    license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
+                    license_end_date: new_site_license_end(),
                     timezone: crate::models::default_site_timezone(),
                     proration_enabled: false,
                     tax_id: None,
@@ -759,6 +757,7 @@ pub async fn provision_site_units(
         "Leyla Aksoy",
     ];
 
+    let site_today = crate::services::finance_common::site_today(&inner, &site_id);
     let mut provisioned_dtos = Vec::new();
     let site_slug = crate::services::to_slug(&site_name);
     // Only this site's rows are persisted afterwards (never other tenants').
@@ -861,7 +860,7 @@ pub async fn provision_site_units(
                     "2+1".to_string()
                 }),
                 monthly_tariff_override: None,
-                created_on: Some(Utc::now().date_naive()),
+                created_on: Some(site_today),
             });
             new_unit_id
         };
@@ -903,7 +902,7 @@ pub async fn provision_site_units(
                 principal_amount: monthly_dues,
                 delay_penalty: Decimal::ZERO,
                 total_amount: monthly_dues,
-                due_date: Utc::now().date_naive() + chrono::Days::new(15),
+                due_date: site_today + chrono::Days::new(15),
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
@@ -1068,4 +1067,13 @@ pub async fn get_units_summary(State(state): State<AppState>) -> impl IntoRespon
     }
 
     (StatusCode::OK, Json(result)).into_response()
+}
+
+/// The license end assumed for a site created or loaded without one: 365 days
+/// after today in the default site time zone (new sites use that zone).
+fn new_site_license_end() -> chrono::NaiveDate {
+    crate::domain::clock::default_license_end(
+        &crate::models::default_site_timezone(),
+        crate::e2e_clock::now_utc(),
+    )
 }

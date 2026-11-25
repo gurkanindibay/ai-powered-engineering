@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use regex::Regex;
 use rust_decimal::Decimal;
 use std::str::FromStr;
@@ -41,15 +41,22 @@ impl BankStatementParser {
     }
 
     /// Automatically detects statement format or respects specified format, parsing rows into transactions.
-    /// Rows without a date are dated today; use [`Self::parse_statement_report`]
+    /// Rows without a date are dated today in the default site time zone; use [`Self::parse_statement_report`]
     /// to choose the fallback date and to see which rows were skipped.
     pub fn parse_statement(
         &self,
         content: &str,
         format_opt: Option<BankStatementFormat>,
     ) -> Result<Vec<BankTransactionItem>, String> {
-        self.parse_statement_report(content, format_opt, Utc::now().date_naive())
-            .map(|report| report.transactions)
+        self.parse_statement_report(
+            content,
+            format_opt,
+            crate::domain::clock::local_date(
+                &crate::models::default_site_timezone(),
+                crate::e2e_clock::now_utc(),
+            ),
+        )
+        .map(|report| report.transactions)
     }
 
     /// Parses a statement and reports every entry that was not imported.

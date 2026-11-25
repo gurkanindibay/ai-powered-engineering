@@ -167,6 +167,13 @@ pub fn site_today(inner: &AppStateInner, site_id: &str) -> NaiveDate {
     site_today_at(inner, site_id, crate::e2e_clock::PROCESS_CLOCK.now())
 }
 
+/// Today's site-local date for a service that holds the shared state; takes
+/// the read lock only for the time-zone lookup.
+pub async fn site_today_in_state(state: &crate::state::AppState, site_id: &str) -> NaiveDate {
+    let inner = state.inner.read().await;
+    site_today(&inner, site_id)
+}
+
 /// Today's site-local date as of a supplied instant.
 pub fn site_today_at(
     inner: &AppStateInner,
