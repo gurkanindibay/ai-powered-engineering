@@ -1,0 +1,23 @@
+{
+  "attempt": "1",
+  "commit": "535284c556ea57818cbdbe4bd36dc5b4f02453c2",
+  "generated_at": "2026-11-25T07:40:22Z",
+  "junit": {
+    "errors": 0,
+    "failures": 0,
+    "files": 8,
+    "passed": 308,
+    "seconds": 1987.8,
+    "skipped": 1,
+    "tests": 309
+  },
+  "run_id": "45568761048",
+  "run_number": 881,
+  "scenario_counts": {
+    "PASS": 327,
+    "SKIPPED": 1
+  },
+  "scenarios_covered": "227/440",
+  "schema": 1,
+  "status": "PASS"
+}
