@@ -6,6 +6,7 @@ import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/ui/components/dues_management_view.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_screen.dart';
+import 'package:sitepulse/ui/theme/app_theme.dart';
 import 'test_fixtures.dart';
 
 void main() {
@@ -100,6 +101,29 @@ void main() {
       // Verify unmatched cards and Daire Seç & Eşle button
       expect(find.text('Daire Belirlenemedi'), findsWidgets);
       expect(find.text('Daire Seç & Eşle'), findsWidgets);
+    });
+
+    // covers: SC-02-02-02
+    testWidgets('overdue badge shows the exact days overdue in the danger colour', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: DuesManagementView(controller: controller),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      controller.setFlatFilter('OVERDUE');
+      await tester.pumpAndSettle();
+
+      // The fixtures make A Blok D:14 ten days and A Blok D:15 five days overdue.
+      final tenDays = find.text('10 Gün Gecikti');
+      expect(tenDays, findsOneWidget);
+      expect(tester.widget<Text>(tenDays).style?.color, AppColors.dangerText(tester.element(tenDays)));
+      expect(find.text('5 Gün Gecikti'), findsOneWidget);
     });
 
     testWidgets('DuesManagementView opens intermediate import summary dialog when importing bank file', (tester) async {

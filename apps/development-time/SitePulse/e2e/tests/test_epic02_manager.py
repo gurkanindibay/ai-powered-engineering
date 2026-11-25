@@ -89,6 +89,35 @@ def test_overdue_filter_lists_every_overdue_flat(login_as, page, api, october_du
 
 @pytest.mark.core
 @pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-02-02")
+@pytest.mark.covers("SC-02-02-02")
+def test_overdue_badge_shows_the_exact_days_overdue(login_as, page, builders, stack):
+    """SC-02-02-02: the overdue filter renders each flat's exact day count in its danger badge."""
+    fourteen = builders.overdue_dues(unit_number=14, principal=Decimal("1400.00"), days_overdue=14)
+    eight = builders.overdue_dues(unit_number=3, principal=Decimal("1400.00"), days_overdue=8)
+    rows = stack.sql(
+        "SELECT u.id || '|' || b.block_name || '|' || u.unit_number FROM units u "
+        "JOIN blocks b ON b.id = u.block_id "
+        f"WHERE u.id IN ({int(fourteen['unit_id'])}, {int(eight['unit_id'])}) ORDER BY u.unit_number;"
+    ).splitlines()
+    assert rows == [
+        f"{int(eight['unit_id'])}|B Blok|3",
+        f"{int(fourteen['unit_id'])}|A Blok|14",
+    ], rows
+
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    DuesManagement(page).open()
+    by_id(page, "dues_filter_OVERDUE").click()
+    for badge in (fourteen, eight):
+        by_id(page, f"dues_overdue_badge_{badge['unit_id']}").wait_for(timeout=10_000)
+
+    assert text_of(by_id(page, f"dues_overdue_badge_{fourteen['unit_id']}")) == "14 Gün Gecikti"
+    assert text_of(by_id(page, f"dues_overdue_badge_{eight['unit_id']}")) == "8 Gün Gecikti"
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-05")
 @pytest.mark.covers("SC-02-03-03")
 def test_resident_without_history_can_be_deleted(login_as, page, stack):
