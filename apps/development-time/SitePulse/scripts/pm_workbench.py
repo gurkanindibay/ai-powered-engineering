@@ -63,6 +63,22 @@ except ImportError:
     }
     seed_preset = None  # type: ignore[assignment]
 
+try:
+    from pm_workbench_web import (
+        DEFAULT_STATE_PATH,
+        DEFAULT_UI_PORT,
+        WorkbenchService,
+        create_server,
+    )
+    WEB_UI_AVAILABLE = True
+except ImportError as web_import_err:  # pragma: no cover - only when the asset is missing
+    DEFAULT_STATE_PATH = Path.home() / ".sitepulse" / "workbench-active.json"
+    DEFAULT_UI_PORT = 9095
+    WorkbenchService = None  # type: ignore[assignment]
+    create_server = None  # type: ignore[assignment]
+    WEB_UI_AVAILABLE = False
+    WEB_UI_IMPORT_ERROR = web_import_err
+
 
 # ---------------------------------------------------------------------------
 # Production Guardrail
@@ -291,6 +307,8 @@ def run_up(
     timeout: float = 40.0,
     no_wait: bool = False,
     as_json: bool = False,
+    ui_port: int = DEFAULT_UI_PORT,
+    skip_ui: bool = False,
 ) -> int:
     """Brings up the SitePulse sandbox stack."""
     check_production_guardrail()
@@ -299,14 +317,17 @@ def run_up(
 
     backend_alive = existing and is_process_alive(existing.get("backend_pid"))
     flutter_alive = existing and is_process_alive(existing.get("flutter_pid"))
+    ui_alive = existing and is_process_alive(existing.get("ui_pid"))
 
     if backend_alive:
         res = {
             "status": "ALREADY_RUNNING",
             "backend_pid": existing.get("backend_pid"),
             "flutter_pid": existing.get("flutter_pid"),
+            "ui_pid": existing.get("ui_pid"),
             "api_url": existing.get("api_url", f"http://localhost:{api_port}"),
             "web_url": existing.get("web_url", f"http://localhost:{web_port}"),
+            "ui_url": existing.get("ui_url", f"http://localhost:{ui_port}"),
             "clock_url": f"{existing.get('api_url', f'http://localhost:{api_port}')}/api/e2e/clock",
             "message": "SitePulse workbench is already running.",
         }
@@ -318,6 +339,8 @@ def run_up(
             print(f"  ● E2E Clock API:  {res['clock_url']}")
             if flutter_alive:
                 print(f"  ● Flutter Web:    {res['web_url']} (PID: {res['flutter_pid']})")
+            if ui_alive:
+                print(f"  ● Workbench UI:   {res['ui_url']}/ (PID: {res['ui_pid']})")
         return 0
 
     # Clean up stale pidfile if any
@@ -403,14 +426,46 @@ def run_up(
             )
         flutter_pid = proc_flutter.pid
 
+    # 3b. Launch the Workbench Web UI (scenario gallery on http://localhost:9095)
+    ui_pid: int | None = None
+    ui_url = f"http://localhost:{ui_port}"
+    ui_log_path = Path("/tmp/sitepulse-workbench-ui.log")
+    if not skip_ui and WEB_UI_AVAILABLE:
+        if not is_port_listening("127.0.0.1", ui_port):
+            ui_cmd = [
+                sys.executable,
+                str(SCRIPT_DIR / "pm_workbench_web.py"),
+                "--port",
+                str(ui_port),
+                "--api-url",
+                f"http://localhost:{api_port}",
+            ]
+            if not as_json:
+                print(f"Launching Workbench UI on {ui_url} ...")
+            with open(ui_log_path, "a", encoding="utf-8") as ui_log_file:
+                proc_ui = subprocess.Popen(
+                    ui_cmd,
+                    cwd=str(SCRIPT_DIR),
+                    env={**os.environ, "APP_ENV": "development"},
+                    stdout=ui_log_file,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+            ui_pid = proc_ui.pid
+        elif not as_json:
+            print(f"Workbench UI port {ui_port} is already in use; leaving it running.")
+
     # Record runtime PID file
     pid_data = {
         "backend_pid": backend_pid,
         "flutter_pid": flutter_pid,
+        "ui_pid": ui_pid,
         "api_port": api_port,
         "web_port": web_port,
+        "ui_port": ui_port,
         "api_url": f"http://localhost:{api_port}",
         "web_url": f"http://localhost:{web_port}",
+        "ui_url": ui_url,
         "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     write_pidfile(pid_path, pid_data)
@@ -447,12 +502,16 @@ def run_up(
             print(" [ONLINE]")
 
     clock_url = f"http://localhost:{api_port}/api/e2e/clock"
+    ui_healthy = check_url_health(f"{ui_url}/healthz")
     summary = {
         "status": "ONLINE",
         "backend_pid": backend_pid,
         "flutter_pid": flutter_pid,
+        "ui_pid": ui_pid,
         "api_url": f"http://localhost:{api_port}",
         "web_url": f"http://localhost:{web_port}",
+        "ui_url": ui_url,
+        "ui_healthy": ui_healthy,
         "clock_url": clock_url,
         "adminer_url": "http://localhost:8081",
     }
@@ -467,10 +526,49 @@ def run_up(
         print(f"  ● E2E Clock API:   {clock_url}")
         if flutter_pid:
             print(f"  ● Flutter Web:     http://localhost:{web_port}/ (PID: {flutter_pid})")
+        if not skip_ui:
+            ui_state = "ONLINE" if ui_healthy else ("STARTING" if ui_pid else "UNAVAILABLE")
+            print(f"  ● Workbench UI:    {ui_url}/ [{ui_state}] (PID: {ui_pid or '-'})")
         print("  ● Adminer DB GUI:  http://localhost:8081")
         print("=" * 68)
-        print("Sandbox is ready. Run `pm_workbench.py seed F5` to seed a scenario.")
+        print("Sandbox is ready. Open the Workbench UI, or run `pm_workbench.py seed F5`.")
 
+    return 0
+
+
+def run_serve(
+    ui_port: int = DEFAULT_UI_PORT,
+    ui_host: str = "127.0.0.1",
+    api_url: str = "http://localhost:8080",
+    db_name: str = "sitepulse",
+    saas_email: str = "admin@sitepulse.io",
+    saas_password: str = "E2E-Bootstrap-Admin-1",
+    state_file: str | None = None,
+    skip_reload: bool = False,
+) -> int:
+    """Serves the Workbench Web UI in the foreground until interrupted."""
+    check_production_guardrail()
+    if not WEB_UI_AVAILABLE or WorkbenchService is None or create_server is None:
+        raise RuntimeError(f"pm_workbench_web is unavailable: {WEB_UI_IMPORT_ERROR}")
+
+    service = WorkbenchService(
+        state_path=state_file,
+        api_url=api_url,
+        db_name=db_name,
+        saas_email=saas_email,
+        saas_password=saas_password,
+        skip_reload=skip_reload,
+    )
+    server = create_server(service, host=ui_host, port=ui_port)
+    display_host = "localhost" if ui_host in ("127.0.0.1", "0.0.0.0", "::1") else ui_host
+    print(f"SitePulse PM Workbench UI listening on http://{display_host}:{ui_port}")
+    print("Press Ctrl+C to stop.")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nSitePulse PM Workbench UI stopped.")
+    finally:
+        server.server_close()
     return 0
 
 
@@ -500,6 +598,7 @@ def run_down(
 
     stopped_backend = terminate_process(backend_pid)
     stopped_flutter = terminate_process(flutter_pid)
+    stopped_ui = terminate_process(data.get("ui_pid"))
 
     if stop_db:
         if not as_json:
@@ -512,8 +611,10 @@ def run_down(
         "status": "STOPPED",
         "backend_pid": backend_pid,
         "flutter_pid": flutter_pid,
+        "ui_pid": data.get("ui_pid"),
         "backend_stopped": stopped_backend,
         "flutter_stopped": stopped_flutter,
+        "ui_stopped": stopped_ui,
     }
 
     if as_json:
@@ -653,11 +754,15 @@ def run_status(
 
     backend_pid = data.get("backend_pid") if data else None
     flutter_pid = data.get("flutter_pid") if data else None
+    ui_pid = data.get("ui_pid") if data else None
 
     backend_running = is_process_alive(backend_pid)
     flutter_running = is_process_alive(flutter_pid)
+    ui_running = is_process_alive(ui_pid)
     api_target = data.get("api_url", api_url) if data else api_url
     api_healthy = check_url_health(f"{api_target}/api/v1/health") or check_url_health(f"{api_target}/health")
+    ui_url = data.get("ui_url", f"http://localhost:{DEFAULT_UI_PORT}") if data else f"http://localhost:{DEFAULT_UI_PORT}"
+    ui_healthy = check_url_health(f"{ui_url}/healthz")
 
     status_str = "ONLINE" if backend_running and api_healthy else ("DEGRADED" if backend_running else "STOPPED")
 
@@ -670,6 +775,10 @@ def run_status(
         "flutter_running": flutter_running,
         "api_url": api_target,
         "web_url": data.get("web_url", "http://localhost:9090") if data else "http://localhost:9090",
+        "ui_pid": ui_pid,
+        "ui_running": ui_running,
+        "ui_healthy": ui_healthy,
+        "ui_url": ui_url,
     }
 
     if as_json:
@@ -680,6 +789,7 @@ def run_status(
         print(f"  ● Backend Process:  {'ALIVE' if backend_running else 'STOPPED'} (PID: {backend_pid or '-'})")
         print(f"  ● API Health:       {'OK' if api_healthy else 'UNREACHABLE'} ({api_target})")
         print(f"  ● Flutter Process:  {'ALIVE' if flutter_running else 'STOPPED'} (PID: {flutter_pid or '-'})")
+        print(f"  ● Workbench UI:     {'OK' if ui_healthy else 'UNREACHABLE'} ({ui_url}/) (PID: {ui_pid or '-'})")
 
     return 0 if status_str == "ONLINE" else 1
 
@@ -709,7 +819,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser_up.add_argument("--backend-release", action="store_true", help="Run backend with --release")
     parser_up.add_argument("--timeout", type=float, default=40.0, help="Timeout in seconds for health check")
     parser_up.add_argument("--no-wait", action="store_true", help="Do not wait for health checks before returning")
+    parser_up.add_argument("--ui-port", type=int, default=DEFAULT_UI_PORT, help="Workbench Web UI port")
+    parser_up.add_argument("--skip-ui", action="store_true", help="Skip launching the Workbench Web UI")
     parser_up.add_argument("--json", action="store_true", help="Format output as JSON")
+
+    # serve
+    parser_serve = subparsers.add_parser("serve", help="Serve the Workbench Web UI on http://localhost:9095")
+    parser_serve.add_argument("--ui-port", type=int, default=DEFAULT_UI_PORT, help="Workbench Web UI port")
+    parser_serve.add_argument("--ui-host", default="127.0.0.1", help="Interface to bind (loopback by default)")
+    parser_serve.add_argument("--api-url", default="http://localhost:8080", help="Backend API base URL")
+    parser_serve.add_argument("--db-name", default="sitepulse", help="PostgreSQL database name")
+    parser_serve.add_argument("--saas-email", default="admin@sitepulse.io", help="SaaS bootstrap admin email")
+    parser_serve.add_argument("--saas-password", default="E2E-Bootstrap-Admin-1", help="SaaS bootstrap admin password")
+    parser_serve.add_argument("--state-file", default=None, help="Active-scenario state file path")
+    parser_serve.add_argument("--skip-reload", action="store_true", help="Skip state reload while seeding")
 
     # down
     parser_down = subparsers.add_parser("down", help="Stop local workbench processes")
@@ -780,6 +903,19 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
                 timeout=args.timeout,
                 no_wait=args.no_wait,
                 as_json=as_json,
+                ui_port=args.ui_port,
+                skip_ui=args.skip_ui,
+            )
+        elif args.subcommand == "serve":
+            return run_serve(
+                ui_port=args.ui_port,
+                ui_host=args.ui_host,
+                api_url=args.api_url,
+                db_name=args.db_name,
+                saas_email=args.saas_email,
+                saas_password=args.saas_password,
+                state_file=args.state_file,
+                skip_reload=args.skip_reload,
             )
         elif args.subcommand == "down":
             return run_down(

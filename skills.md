@@ -549,18 +549,34 @@ python3 -I scripts/test_strategy_scan.py --output scan.json  # every test and sc
 - **Executable Script:** [apps/development-time/SitePulse/scripts/pm_workbench.py](file:///apps/development-time/SitePulse/scripts/pm_workbench.py) (symlinked to `scripts/pm_workbench.py`)
 - **Purpose:** One-command sandbox launcher, scenario preset seeder, and deterministic E2E clock controller for Product Manager and manual verification workflows.
 - **Subcommands:**
-  - `up`: Starts local PostgreSQL database, Axum Rust backend (with `--features e2e`, `SITEPULSE_E2E=true`, `APP_ENV=development` on `:8080`), and Flutter Web client on `:9090`, recording runtime PIDs in `~/.sitepulse/workbench.pid`.
-  - `down`: Cleanly stops all workbench processes recorded in the pidfile (`--stop-db` to also stop database containers).
+  - `up`: Starts local PostgreSQL database, Axum Rust backend (with `--features e2e`, `SITEPULSE_E2E=true`, `APP_ENV=development` on `:8080`), Flutter Web client on `:9090`, and the Workbench Web UI on `:9095`, recording runtime PIDs in `~/.sitepulse/workbench.pid`.
+  - `down`: Cleanly stops all workbench processes recorded in the pidfile, including the Workbench Web UI (`--stop-db` to also stop database containers).
+  - `serve`: Runs only the Workbench Web UI in the foreground (`--ui-port`, `--api-url`, `--state-file`).
   - `seed <preset>`: Seeds scenario presets (`F0`–`F7` and later `F8`–`F10`) via `pm_scenarios.seeder`, sets `/api/e2e/clock` to the preset's reference date, and outputs a formatted Cheat Sheet table or structured JSON.
   - `clock <set|advance|tick|reset>`: CLI wrapper calling `/api/e2e/clock` for deterministic test time advancement.
-  - `status`: Inspects live workbench processes, PID state, and backend API health.
+  - `status`: Inspects live workbench processes, PID state, backend API health and Workbench UI health.
 - **Safety Guardrail:** Strictly refuses execution if `APP_ENV=production` or `ENVIRONMENT=production`.
 - **Output:** Supports `--help` and `--json` on all subcommands. Zero floating-point arithmetic for financial figures.
 
+### Workbench Web UI (zero-dependency, `http://localhost:9095`)
+
+- **Modules:** [scripts/pm_workbench_web.py](file:///apps/development-time/SitePulse/scripts/pm_workbench_web.py) (standard-library `http.server`) and [scripts/pm_workbench_ui.html](file:///apps/development-time/SitePulse/scripts/pm_workbench_ui.html) (single page, no external assets or CDN).
+- **Scenario Gallery:** Presets grouped into packs A–F with a one-click **Prepare Scenario** button per preset; the button seeds the preset and pins the simulated clock to its reference date.
+- **Active Scenario Cheat Sheet:** Site name and ID, simulated reference date, expected site totals, unit-by-unit expected balances, persona credentials and the focused PM checklist.
+- **Reset Current Scenario:** Re-provisions the active preset exactly as it was first prepared.
+- **JSON API:** `GET /api/presets` (gallery), `POST /api/seed` (`{"preset": "F5"}`), `GET /api/active` (cheat sheet or `null`), `POST /api/reset` (re-provision), `GET /healthz`.
+- **Single source of truth:** Clocks, totals, unit balances and checklists come from `pm_scenarios`, so the UI cannot drift from the seeder the E2E suite uses.
+- **Active state:** Stored in `~/.sitepulse/workbench-active.json` so a UI restart keeps showing the last prepared scenario.
+- **Tests:** `python3 -m unittest harness.tests.test_pm_workbench_web harness.tests.test_pm_workbench`
+
 ### Quick Usage Examples:
 ```bash
-# Start local development sandbox with E2E clock
+# Start local development sandbox with E2E clock and the Workbench Web UI
 pm_workbench.py up
+# then open http://localhost:9095 and click "Prepare F5"
+
+# Run only the Workbench Web UI against an already-running backend
+pm_workbench.py serve
 
 # Seed reference scenario F5 and print Cheat Sheet
 pm_workbench.py seed F5
