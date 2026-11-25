@@ -104,15 +104,13 @@ class AddBlockForm:
         """Submit; waits for the form to close, or reports the refused-create reason."""
         by_id(self.page, "btn_save_block_units").click()
         error = by_id(self.page, "block_form_error")
-        form = by_id(self.page, "block_form_name")
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline:
-            if error.count() > 0:
-                raise AssertionError(f"block create refused: {text_of(error)}")
-            if form.count() == 0:
-                return
-            self.page.wait_for_timeout(100)
-        raise AssertionError("block create did not finish")
+        self.page.wait_for_function(
+            "() => !!document.querySelector('[flt-semantics-identifier=\"block_form_error\"]')"
+            " || !document.querySelector('[flt-semantics-identifier=\"block_form_name\"]')",
+            timeout=20_000,
+        )
+        if error.count() > 0:
+            raise AssertionError(f"block create refused: {text_of(error)}")
 
 
 class AddResidentForm:
@@ -142,7 +140,7 @@ class AddResidentForm:
         selector = by_id(self.page, "module_occupancy_status_selector")
         selector.wait_for(timeout=10_000)
         selector.get_by_text(label, exact=True).click()
-        self.page.wait_for_timeout(150)
+        self.page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
 
     def _set_house_type(self, type_name: str) -> None:
         """Choose the unit's existing tariff from the registration page's house type menu."""
@@ -153,7 +151,7 @@ class AddResidentForm:
         option = self.page.get_by_role("menuitem", name=re.compile(rf"^{re.escape(type_name)} \(")).last
         option.wait_for(timeout=5_000)
         option.click()
-        self.page.wait_for_timeout(150)
+        option.wait_for(state="detached", timeout=5_000)
 
     def save(self) -> None:
         """Save, then dismiss the 'Sakin Kaydedildi!' confirmation and close the module."""
@@ -241,7 +239,11 @@ class ImportSummary:
         return self._count_and_sum(text_of(by_id(self.page, "import_summary_unmatched")))
 
     def confirm_matched(self) -> None:
-        by_id(self.page, "btn_confirm_matched_import").click()
+        with self.page.expect_response(
+            lambda r: "/api/v1/" in r.url and r.request.method == "POST", timeout=15_000
+        ):
+            by_id(self.page, "btn_confirm_matched_import").click()
+        by_id(self.page, "btn_confirm_matched_import").wait_for(state="detached", timeout=10_000)
 
 
 class PaymentStream:

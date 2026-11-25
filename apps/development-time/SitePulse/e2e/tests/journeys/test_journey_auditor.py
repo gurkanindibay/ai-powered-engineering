@@ -35,18 +35,23 @@ def test_auditor_journey(journey, first_sign_in, sign_in_again, page, api, stack
     with j.step("the ledger shows the trial balance the API returns"):
         rows = api.call("GET", "/api/v1/accounting/trial-balance", session.token)["rows"]
         by_id(page, "finance_tab_ledger").click()
-        page.wait_for_timeout(1_500)
+        if rows:
+            by_id_prefix(page, "trial_balance_").first.wait_for(timeout=15_000)
+        else:
+            page.wait_for_load_state("networkidle")
         assert by_id(page, "finance_section_error").count() == 0
         assert by_id_prefix(page, "trial_balance_").count() == len(rows)
 
     with j.step("the desk is read-only: no resident requests, dunning or notice publishing"):
         assert by_id(page, "finance_tab_requests").count() == 0
         by_id(page, "finance_tab_collections").click()
-        page.wait_for_timeout(1_000)
+        page.wait_for_load_state("networkidle")
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
         assert by_id(page, "finance_section_error").count() == 0
         assert by_id(page, "finance_run_dunning").count() == 0
         by_id(page, "finance_tab_kvkk").click()
-        page.wait_for_timeout(1_000)
+        page.wait_for_load_state("networkidle")
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
         assert by_id(page, "finance_section_error").count() == 0
         assert by_id(page, "kvkk_publish_notice").count() == 0
 

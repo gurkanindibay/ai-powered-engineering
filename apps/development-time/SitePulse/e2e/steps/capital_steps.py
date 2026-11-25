@@ -9,7 +9,7 @@ from pytest_bdd import given, parsers, then, when
 
 from pages import CapitalProjects, DuesManagement, ManagerCockpit, ResidentHome
 from support.flutter import by_id, fill, text_of
-from support.money import last_amount
+from support.money import format_try, last_amount
 
 MONEY = {"Money": Decimal}
 VIRTUAL_IBANS = {"A14": "TR620020500009863791600001"}  # seed: A Blok D:14
@@ -132,9 +132,16 @@ def installment_stored_accrued(stack, number: int) -> None:
 @then(_parse('the "{metric}" capital metric shows {amount:Money}'))
 def capital_metric_shows(page, metric: str, amount: Decimal) -> None:
     by_id(page, f"capital_metric_{metric}").wait_for(timeout=10_000)
-    deadline = time.monotonic() + 10
-    while _metric(page, metric) != amount and time.monotonic() < deadline:
-        page.wait_for_timeout(250)  # the tile refreshes after the list reloads
+    page.wait_for_function(
+        """([id, expected]) => {
+            const el = document.querySelector(`[flt-semantics-identifier="${id}"]`);
+            if (!el) return false;
+            const txt = (el.getAttribute('aria-label') || el.innerText || '').replace(/\\s+/g, '');
+            return txt.includes(expected.replace(/\\s+/g, ''));
+        }""",
+        arg=[f"capital_metric_{metric}", format_try(amount)],
+        timeout=10_000,
+    )
     assert _metric(page, metric) == amount
 
 
@@ -168,7 +175,7 @@ def one_disbursement_stored(stack, amount: Decimal) -> None:
 
 @then("no contractor disbursement is stored")
 def no_disbursement_stored(page, stack) -> None:
-    page.wait_for_timeout(2_000)  # give a wrongly accepted request time to land
+    page.wait_for_load_state("networkidle")
     assert stack.sql("SELECT count(*) FROM capital_contractor_disbursements;") == "0"
 
 
@@ -295,9 +302,10 @@ def capital_card_shown(page) -> None:
 @when("the home owner signs in")
 def owner_signs_in(login_as, page) -> None:
     login_as("homeowner")
-    page.wait_for_timeout(2_000)
+    ResidentHome(page).wait()
 
 
 @then("the owner responsibility capital badge is shown")
 def owner_badge_shown(page) -> None:
+    by_id(page, "capital_owner_badge").wait_for(timeout=10_000)
     assert by_id(page, "capital_owner_badge").count() == 1

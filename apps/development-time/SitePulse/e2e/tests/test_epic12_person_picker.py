@@ -64,7 +64,7 @@ def test_picker_chooses_an_existing_person_through_the_live_search_api(login_as,
         if transfer.count() > 0:
             break
         page.mouse.wheel(0, 400)
-        page.wait_for_timeout(250)
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
     transfer.click()
 
     by_id(page, "module_transfer_new_owner_name_input").click()

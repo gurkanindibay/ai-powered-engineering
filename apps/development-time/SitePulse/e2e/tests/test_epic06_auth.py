@@ -14,8 +14,9 @@ from support.money import parse_try
 @pytest.mark.covers("SC-06-02-02")
 @pytest.mark.covers("SC-06-05-03")
 @pytest.mark.gui_id("GUI-06-01")
-def test_manager_login_reaches_cockpit(login_as, page):
-    login_as("manager")
+def test_manager_login_reaches_cockpit(login_page, actors, page):
+    actor = actors["manager"]
+    login_page.login("manager", actor["email"], actor["password"])
     expect(by_id(page, "btn_open_unified_dues_center")).to_be_visible(timeout=20_000)
     assert nav_tab_count(page) == 3
     assert by_id(page, "btn_cockpit_manage_residents").is_visible()
@@ -26,8 +27,9 @@ def test_manager_login_reaches_cockpit(login_as, page):
 @pytest.mark.role_homeowner
 @pytest.mark.covers("SC-06-02-03")
 @pytest.mark.gui_id("GUI-06-02")
-def test_homeowner_login_reaches_dashboard(login_as, page):
-    login_as("homeowner")
+def test_homeowner_login_reaches_dashboard(login_page, actors, page):
+    actor = actors["homeowner"]
+    login_page.login("homeowner", actor["email"], actor["password"])
     expect(by_id(page, "hero_balance_amount")).to_be_visible(timeout=20_000)
     assert nav_tab_count(page) == 2
     assert by_id(page, "btn_open_unified_dues_center").count() == 0
@@ -60,9 +62,9 @@ def test_logout_returns_to_login_screen(login_as, login_page, page):
 @pytest.mark.role_saas
 @pytest.mark.covers("SC-06-06-01")
 @pytest.mark.gui_id("GUI-06-06")
-def test_saas_admin_must_change_bootstrap_password(login_as, login_page, page, api, actors, stack):
+def test_saas_admin_must_change_bootstrap_password(login_page, page, api, actors, stack):
     stack.sql("UPDATE users SET must_change_password=true WHERE email='admin@sitepulse.io';")
-    login_as("saas")
+    login_page.login("saas", actors["saas"]["email"], actors["saas"]["password"])
     saas = SaasAdmin(page)
     saas.must_change_password_banner.wait_for(timeout=10_000)
 
@@ -127,7 +129,7 @@ def test_profile_logout_and_browser_back_stay_logged_out(login_as, page):
     Shell(page).open_profile().logout()
     by_id(page, "login_tab_quickAll").wait_for(timeout=10_000)
     page.go_back()
-    page.wait_for_timeout(1_500)
+    by_id(page, "login_tab_quickAll").wait_for(timeout=10_000)
     assert by_id(page, "btn_open_unified_dues_center").count() == 0
 
 
@@ -175,7 +177,7 @@ def test_logout_asks_for_confirmation_and_cancel_keeps_the_session(login_as, pag
     assert by_id(page, "btn_header_logout").count() == 0  # no one-tap logout in the app bar
 
     Shell(page).open_profile().logout(confirm=False)
-    page.wait_for_timeout(500)
+    by_id(page, "btn_confirmation_cancel").wait_for(state="detached", timeout=5_000)
     assert by_id(page, "login_tab_quickAll").count() == 0
     by_id(page, "btn_logout").wait_for(timeout=5_000)  # still on the profile sheet, still signed in
 

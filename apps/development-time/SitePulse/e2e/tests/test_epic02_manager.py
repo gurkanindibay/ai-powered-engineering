@@ -74,7 +74,12 @@ def test_overdue_filter_lists_every_overdue_flat(login_as, page, api, october_du
     DuesManagement(page).open()
 
     by_id(page, "dues_filter_OVERDUE").click()
-    page.wait_for_timeout(1_000)
+    page.wait_for_function(
+        "n => (document.querySelector('[flt-semantics-identifier=\"dues_filter_OVERDUE\"]')?.getAttribute('aria-label') || "
+        "document.querySelector('[flt-semantics-identifier=\"dues_filter_OVERDUE\"]')?.textContent || '').trim().endsWith(`(${n})`)",
+        arg=len(overdue_units),
+        timeout=10_000,
+    )
     shown = {i.removeprefix("dues_flat_resident_module_") for i in page.eval_on_selector_all(
         '[flt-semantics-identifier^="dues_flat_resident_module_"]',
         "els => els.map(e => e.getAttribute('flt-semantics-identifier'))")}
@@ -99,9 +104,11 @@ def test_resident_without_history_can_be_deleted(login_as, page, stack):
     unit_id = stack.sql("SELECT id FROM units WHERE unit_number = 25;")
 
     UnitWorkspace(page).open(card_id).action(card_id, "delete")
-    by_id(page, "btn_confirmation_confirm").click()
+    with page.expect_response(
+        lambda r: "/api/v1/" in r.url and r.request.method in ("DELETE", "POST"), timeout=15_000
+    ):
+        by_id(page, "btn_confirmation_confirm").click()
     by_id(page, "btn_confirmation_confirm").wait_for(state="detached", timeout=15_000)
-    page.wait_for_timeout(1_000)  # the delete call must finish before the database check
     assert stack.sql(f"SELECT count(*) FROM units WHERE id = {int(unit_id)} AND deleted_at IS NULL;") == "0"
 
     UnitWorkspace(page).close()
@@ -132,8 +139,11 @@ def test_refused_delete_keeps_the_resident_card(login_as, page, october_dues_b3_
     ResidentsTab(page).open()
 
     UnitWorkspace(page).open("1").action("1", "delete")
-    by_id(page, "btn_confirmation_confirm").click()
-    page.wait_for_timeout(2_000)
+    with page.expect_response(
+        lambda r: "/api/v1/" in r.url and r.request.method in ("DELETE", "POST"), timeout=15_000
+    ):
+        by_id(page, "btn_confirmation_confirm").click()
+    page.wait_for_load_state("networkidle")
 
     assert stack.sql("SELECT deleted_at IS NULL FROM units WHERE id = 1;") == "t"
     UnitWorkspace(page).back()
@@ -149,7 +159,7 @@ def test_manager_can_send_a_payment_reminder(builders, login_as, page):
     login_as("manager")
     ManagerCockpit(page).wait()
     DuesManagement(page).open().segment(2)  # aging
-    page.wait_for_timeout(1_500)
+    by_id_prefix(page, "btn_remind_").first.wait_for(timeout=10_000)
     assert by_id_prefix(page, "btn_remind_").count() > 0
 
 
@@ -192,9 +202,11 @@ def test_house_type_tariff_is_saved_and_negative_amount_rejected(login_as, page,
     assert stack.sql("SELECT dues_amount FROM house_types WHERE site_id = 1 AND type_name = '2+1';") == "1400.00"
 
     fill(page, "house_type_amount_field", "1450.50")
-    by_id(page, "btn_save_house_type").click()
+    with page.expect_response(
+        lambda r: "/api/v1/" in r.url and r.request.method in ("POST", "PUT", "PATCH"), timeout=15_000
+    ):
+        by_id(page, "btn_save_house_type").click()
     by_id(page, "btn_save_house_type").wait_for(state="detached", timeout=10_000)
-    page.wait_for_timeout(1_000)
     assert stack.sql("SELECT dues_amount FROM house_types WHERE site_id = 1 AND type_name = '2+1';") == "1450.50"
 
 
@@ -209,7 +221,7 @@ def test_house_type_tariff_rejects_more_than_two_decimals(login_as, page, stack)
 
     fill(page, "house_type_amount_field", "1400.555")
     by_id(page, "btn_save_house_type").click()
-    page.wait_for_timeout(1_500)
+    by_id(page, "house_type_error").wait_for(timeout=10_000)
 
     assert by_id(page, "house_type_error").count() == 1
     assert stack.sql("SELECT dues_amount FROM house_types WHERE site_id = 1 AND type_name = '2+1';") == "1400.00"
