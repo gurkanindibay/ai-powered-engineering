@@ -569,13 +569,9 @@ jobs:
           fi
       - name: Restore archive state
         if: steps.head.outputs.current == 'true'
-        run: |
-          if git ls-remote --exit-code origin refs/heads/gh-pages >/dev/null 2>&1; then
-            git fetch origin gh-pages:refs/remotes/origin/gh-pages
-            git worktree add -B pages-state "$RUNNER_TEMP/pages-state" origin/gh-pages
-          else
-            git worktree add --orphan -b pages-state "$RUNNER_TEMP/pages-state"
-          fi
+        env:
+          REPORT_SITE: ${{ runner.temp }}/pages-state
+        run: python3 scripts/pages_archive.py restore --site "$REPORT_SITE"
       - name: Build safe Pages site
         if: steps.head.outputs.current == 'true'
         env:
@@ -589,18 +585,14 @@ jobs:
             --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" \
             --run-number "${{ github.run_number }}" --commit "${{ github.sha }}" \
             --action-run-id "${{ github.run_id }}" --require-public-report
-      - name: Commit sanitized archive state
+      # The archive branch is replaced by one parentless commit so old report trees do not pile up.
+      - name: Publish sanitized archive state
         if: steps.head.outputs.current == 'true'
         env:
           REPORT_SITE: ${{ runner.temp }}/pages-state
         run: |
-          git -C "$REPORT_SITE" add -A
-          if ! git -C "$REPORT_SITE" diff --cached --quiet; then
-            git -C "$REPORT_SITE" -c user.name='github-actions[bot]' \
-              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-              commit -m "Publish SitePulse report ${{ github.run_id }}"
-            git -C "$REPORT_SITE" push origin HEAD:gh-pages
-          fi
+          python3 scripts/pages_archive.py publish --site "$REPORT_SITE" \
+            --message "Publish SitePulse report ${{ github.run_id }}"
       - name: Prepare and verify Pages artifact
         if: steps.head.outputs.current == 'true'
         env:
