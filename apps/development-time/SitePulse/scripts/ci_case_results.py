@@ -9,15 +9,22 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import sys
 from pathlib import Path
 from typing import Iterable
 
 
-def expected_suites() -> list[dict[str, object]]:
+def _e2e_enabled(override: bool | None) -> bool:
+    if override is not None:
+        return override
+    return os.environ.get("SITEPULSE_E2E_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def expected_suites(e2e_enabled: bool | None = None) -> list[dict[str, object]]:
     """Describe the suites CI intends to run, including explicit PG selections."""
-    return [
+    suites = [
         {"suite": "e2e", "runner": "pytest-playwright", "producer": "e2e", "shards": [f"{i}/8" for i in range(1, 9)]},
         {"suite": "rust", "runner": "cargo", "producer": "rust", "gate": "rust-test", "shards": ["rust-test"]},
         {"suite": "rust-db-test", "runner": "cargo", "producer": "rust", "gate": "rust-db-test", "shards": ["rust-db-test"]},
@@ -28,11 +35,14 @@ def expected_suites() -> list[dict[str, object]]:
         {"suite": "api-system", "runner": "sitepulse-check", "producer": "rust", "gate": "api-system", "shards": ["api-system"]},
         {"suite": "schema-integrity", "runner": "sitepulse-check", "producer": "rust", "gate": "schema-integrity", "shards": ["schema-integrity"]},
     ]
+    if not _e2e_enabled(e2e_enabled):
+        suites = [suite for suite in suites if suite["suite"] != "e2e"]
+    return suites
 
 
-def expected_gates() -> dict[str, list[str]]:
+def expected_gates(e2e_enabled: bool | None = None) -> dict[str, list[str]]:
     """Mirror CI's group partition so absent gate artifacts are visible in reports."""
-    return {
+    gates = {
         "lint": ["harness-selftest", "persistence-lint", "rust-standards-lint", "test-quality-lint", "tenant-lint", "lock-lint",
                  "testid-lint", "feature-traceability", "ui-style-lint", "flutter-reuse", "logging-standards-lint", "security-lint"],
         "rust": ["rust-build", "rust-clippy", "rust-test", "schema-integrity", "rust-db-test", "api-system"],
@@ -40,6 +50,9 @@ def expected_gates() -> dict[str, list[str]]:
         "e2e": ["gui-e2e"],
         "verify": ["test-run-recorded"],
     }
+    if not _e2e_enabled(e2e_enabled):
+        gates.pop("e2e")
+    return gates
 
 
 def _case(runner: str, suite: str, native_id: str, status: str, *, duration_s: float | None = None,
@@ -199,7 +212,17 @@ def native_totals(output: str, runner: str, payload: dict[str, object] | None = 
             totals["passed"] += int(match.group(1))
             totals["failed"] += int(match.group(2))
             totals["skipped"] += int(match.group(3))
-        return totals if found else None
+        if found:
+            return totals
+        if isinstance(payload, dict) and isinstance(payload.get("cases"), list):
+            rows = [row for row in payload["cases"] if isinstance(row, dict)]
+            return {
+                "total": len(rows),
+                "passed": sum(row.get("status") == "passed" for row in rows),
+                "failed": sum(row.get("status") in {"failed", "error"} for row in rows),
+                "skipped": sum(row.get("status") == "skipped" for row in rows),
+            }
+        return None
     if runner == "unittest":
         match = re.search(r"^Ran (\d+) tests? in ", output, re.MULTILINE)
         if not match:

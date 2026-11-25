@@ -39,8 +39,14 @@ class PersonPicker:
             fill(self.page, "person_form_phone", phone)
         if email:
             fill(self.page, "person_form_email", email)
-        self.page.wait_for_timeout(400)  # the duplicate check starts after a 350 ms pause
-        by_id(self.page, "person_form_checking").wait_for(state="detached", timeout=15_000)
+        if email or phone:
+            checking = by_id(self.page, "person_form_checking")
+            candidate_any = by_id_prefix(self.page, "person_form_use_").first
+            try:
+                checking.or_(candidate_any).first.wait_for(timeout=1_500)
+            except PlaywrightTimeoutError:
+                pass
+            checking.wait_for(state="detached", timeout=15_000)
         candidate = by_id_prefix(self.page, "person_form_use_").first
         if reuse_existing and candidate.count() > 0:
             candidate.click()
@@ -82,7 +88,7 @@ class UnitWorkspace:
                     row.click()
                     return name
             self.page.mouse.wheel(0, 400)
-            self.page.wait_for_timeout(250)
+            self.page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
         raise AssertionError(f"unit {unit_id}: none of the workspace actions {names} is offered")
 
     def back(self) -> None:

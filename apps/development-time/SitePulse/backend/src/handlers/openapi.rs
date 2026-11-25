@@ -1,20 +1,17 @@
 use axum::{
+    extract::State,
     http::{header, StatusCode},
     response::{Html, IntoResponse, Response},
 };
 
-/// API documentation is public in development; production needs an explicit opt-in.
-fn docs_enabled() -> bool {
-    !crate::state::AppStateInner::is_production()
-        || std::env::var("SITEPULSE_ENABLE_API_DOCS").is_ok_and(|v| v == "true")
-}
+use crate::state::AppState;
 
 fn docs_disabled() -> Response {
     StatusCode::NOT_FOUND.into_response()
 }
 
-pub async fn openapi_spec() -> Response {
-    if !docs_enabled() {
+pub async fn openapi_spec(State(state): State<AppState>) -> Response {
+    if !state.settings.public_api_docs_enabled {
         return docs_disabled();
     }
     let spec = crate::openapi::get_openapi_spec_json();
@@ -28,15 +25,15 @@ pub async fn openapi_spec() -> Response {
         .into_response()
 }
 
-pub async fn swagger_ui() -> Response {
-    if !docs_enabled() {
+pub async fn swagger_ui(State(state): State<AppState>) -> Response {
+    if !state.settings.public_api_docs_enabled {
         return docs_disabled();
     }
     Html(crate::openapi::swagger_ui_html()).into_response()
 }
 
-pub async fn scalar_ui() -> Response {
-    if !docs_enabled() {
+pub async fn scalar_ui(State(state): State<AppState>) -> Response {
+    if !state.settings.public_api_docs_enabled {
         return docs_disabled();
     }
     Html(crate::openapi::scalar_ui_html()).into_response()

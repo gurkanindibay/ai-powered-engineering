@@ -22,7 +22,8 @@ def two_registrations(api):
 def test_pending_registrations_are_listed_for_the_manager(login_as, page, two_registrations):
     login_as("manager")
     cockpit = ManagerCockpit(page).wait()
-    page.wait_for_timeout(2_000)  # give the queue time to load; the count is the assertion
+    for request in two_registrations:
+        cockpit.pending_card(request["request_id"]).wait_for(timeout=10_000)
     assert cockpit.pending_count() == 2
     for request in two_registrations:
         assert cockpit.pending_card(request["request_id"]).count() == 1

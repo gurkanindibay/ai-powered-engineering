@@ -57,6 +57,9 @@ jobs:
           - name: tenant-authorization
             browser: chromium
             selection: nightly/test_tenant_contract.py tests/test_journey_tenant_isolation.py
+          - name: edge
+            browser: chromium
+            selection: tests/ --ignore=tests/test_linked_backend_suites.py -m edge
     services:
       postgres:
         image: postgres:16-alpine

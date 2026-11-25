@@ -104,15 +104,29 @@ class TestGateFixesTheStrategyReliesOn(unittest.TestCase):
     def _argvs(self, gate):
         return [" ".join(spec.argv) for spec in self.gates[gate]]
 
-    def test_sale_clearance_postgresql_tests_run_in_the_db_gate(self):
-        ignored_run = next(a for a in self._argvs("rust-db-test") if "--ignored" in a)
-        self.assertIn("--test sale_clearance_tests", ignored_run)
+    def test_postgresql_tests_run_ignored_cases_from_the_consolidated_crate(self):
+        ignored_run = next(a for a in self._argvs("rust-db-test") if "--run-ignored" in a)
+        self.assertIn("--test it", ignored_run)
+        self.assertIn("ignored-only", ignored_run)
+        self.assertIn("--profile db", ignored_run)
 
     def test_e2e_feature_clock_tests_run_in_rust_test(self):
         feature_runs = [a for a in self._argvs("rust-test") if "--features e2e" in a]
         self.assertTrue(feature_runs, "rust-test must compile the e2e feature for the clock tests")
-        self.assertIn("--test e2e_clock_tests", feature_runs[0])
-        self.assertIn("--test e2e_clock_reset_tests", feature_runs[0])
+        self.assertIn("cargo nextest run", feature_runs[0])
+        self.assertIn("--profile ci", feature_runs[0])
+        self.assertIn("--features e2e", feature_runs[0])
+
+    def test_postgresql_tests_use_one_migrated_template(self):
+        backend_tests = PROJECT_ROOT / "backend" / "tests"
+        sources = list((backend_tests / "it").glob("*.rs"))
+        migrations = [path for path in sources if "db::init_db(" in path.read_text(encoding="utf-8")]
+        self.assertEqual([path.name for path in migrations], ["test_db.rs"])
+        fixture = migrations[0].read_text(encoding="utf-8")
+        self.assertIn("db::seed_test_data(&template_pool)", fixture)
+        self.assertIn("CREATE DATABASE {name} TEMPLATE {template}", fixture)
+        self.assertIn("NEXTEST_RUN_ID", fixture)
+        self.assertIn("pg_advisory_lock", fixture)
 
 
 class TestScannerRuns(unittest.TestCase):

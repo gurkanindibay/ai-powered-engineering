@@ -32,7 +32,7 @@ EMPTY_STATE = re.compile(r"Henüz|bulunamadı|bulunmuyor", re.IGNORECASE)
 def _units_page_lines(page) -> list[str]:
     Shell(page).nav("residents")
     by_id(page, "add_resident_btn").wait_for(timeout=15_000)
-    page.wait_for_timeout(1_500)
+    page.wait_for_load_state("networkidle")
     return page_lines(page)
 
 
@@ -435,6 +435,11 @@ def test_f5_multiple_periods_add_up_per_unit_and_per_site(request, api, actors, 
     with journey_site(request, api, actors, stack, "F5") as fixture:
         sign_in_manager(page, login_page, fixture)
         open_dues_segment(page, 2)
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('flt-semantics')].some("
+            "e => /A Blok D:\\d+/.test((e.getAttribute('aria-label') || e.textContent || '').trim()))",
+            timeout=15_000,
+        )
         rows = _aging_rows(page)
         expected = {
             "A-2": Decimal("3122.50"), "A-3": Decimal("1675.00"),
@@ -447,7 +452,8 @@ def test_f5_multiple_periods_add_up_per_unit_and_per_site(request, api, actors, 
         Shell(page).nav("residents")
         unit = fixture.unit_ids[5]
         UnitWorkspace(page).open(unit).action(unit, "statement")
-        page.wait_for_timeout(1_500)
+        page.wait_for_load_state("networkidle")
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
         assert any("1.250,00" in line for line in page_lines(page)), "A-6 advance balance 1250.00 not shown"
 
 
@@ -494,7 +500,7 @@ def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack,
         try:
             by_id(page, "units_filtered_empty_state").wait_for(timeout=10_000)
         except Exception:
-            page.wait_for_timeout(1_500)
+            page.wait_for_load_state("networkidle")
 
         # Directory reports zero matches
         lines = page_lines(page)
@@ -513,7 +519,7 @@ def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack,
         try:
             by_id(page, "units_filtered_empty_state").wait_for(state="detached", timeout=10_000)
         except Exception:
-            page.wait_for_timeout(1_500)
+            page.wait_for_load_state("networkidle")
 
         # All units reappear and site unit count remains 7
         refreshed_lines = page_lines(page)

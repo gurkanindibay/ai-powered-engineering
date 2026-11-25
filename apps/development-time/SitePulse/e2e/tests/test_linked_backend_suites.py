@@ -19,6 +19,23 @@ FLUTTER = SITEPULSE / "flutter"
 
 
 def run_suite(command: list[str], cwd: Path) -> None:
+    command = list(command)
+    if command[:2] == ["cargo", "test"] and "--test" in command:
+        target_index = command.index("--test") + 1
+        module = command[target_index]
+        if module != "it":
+            command[target_index] = "it"
+            module_filter = f"{module}::"
+            if "--" in command:
+                separator = command.index("--")
+                if separator > target_index + 1:
+                    command[separator - 1] = f"{module}::{command[separator - 1]}"
+                else:
+                    command.insert(separator + 1, module_filter)
+            elif target_index + 1 < len(command):
+                command[target_index + 1] = f"{module}::{command[target_index + 1]}"
+            else:
+                command.extend(["--", module_filter])
     result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
         output = (result.stdout + "\n" + result.stderr)[-6000:]

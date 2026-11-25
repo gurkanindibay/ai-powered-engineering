@@ -26,6 +26,7 @@ sys.path.insert(0, str(E2E))
 from support import stack as st  # noqa: E402
 from support.api import Api, Builders  # noqa: E402
 from support.journey_attempts import reclaim_stale_attempts  # noqa: E402
+from support.flutter import by_id, wait_for_app  # noqa: E402
 from pages import LoginPage  # noqa: E402
 
 ARTIFACTS = E2E / ".artifacts"
@@ -86,6 +87,11 @@ def fresh_data(stack):
     """Every test starts from the seed; a reset takes about a second."""
     stack.reset()
     yield
+    violations = stack.sql("SELECT count(*) FROM v_integrity_violations;").strip()
+    assert violations == "0", (
+        "ledger integrity invariant failed after E2E/API test: "
+        f"v_integrity_violations contains {violations} row(s)"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -149,9 +155,38 @@ def login_page(page, stack) -> LoginPage:
 
 
 @pytest.fixture
-def login_as(login_page, actors):
-    """login_as('manager') -> logs in through the UI with the seed account."""
+def login_as(page, api, actors):
+    """login_as('manager') -> seeds authenticated storage_state via API without UI sign-in."""
     def _login(role: str) -> None:
         actor = actors[role]
-        login_page.login(role, actor["email"], actor["password"])
+        data = api.call(
+            "POST",
+            "/api/v1/auth/login",
+            body={"email": actor["email"], "password": actor["password"]},
+        )
+        state_path = ARTIFACTS / f"storage_state_{os.getpid()}_{role}.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        payload_str = json.dumps(data)
+        state = {
+            "cookies": [],
+            "origins": [
+                {
+                    "origin": st.web_base(),
+                    "localStorage": [{"name": "sitepulse.e2e_session", "value": payload_str}],
+                }
+            ],
+        }
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        entries_js = json.dumps([["sitepulse.e2e_session", payload_str]])
+        page.add_init_script(
+            f"""(() => {{
+                if (!window.sessionStorage.getItem('__e2e_seeded')) {{
+                    window.sessionStorage.setItem('__e2e_seeded', '1');
+                    for (const [k, v] of {entries_js}) window.localStorage.setItem(k, v);
+                }}
+            }})();"""
+        )
+        page.goto(st.web_base())
+        wait_for_app(page)
+        by_id(page, "login_tab_quickAll").wait_for(state="detached", timeout=20_000)
     return _login

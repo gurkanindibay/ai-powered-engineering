@@ -66,7 +66,7 @@ def test_residents_module_search_by_name_and_unit(login_as, page, stack):
 
     for width in (320, 390, 768, 1024, 1440):
         page.set_viewport_size({"width": width, "height": 900})
-        page.wait_for_timeout(250)
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
         action = by_id(page, action_id)
         details = by_id(page, details_id)
         action.wait_for(state="attached", timeout=3_000)

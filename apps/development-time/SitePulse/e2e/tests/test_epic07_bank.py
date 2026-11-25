@@ -56,7 +56,6 @@ def test_confirming_matched_rows_records_the_payment(login_as, page, tmp_path, o
     login_as("manager")
     ManagerCockpit(page).wait()
     DuesManagement(page).open().upload_statement(_statement(tmp_path)).confirm_matched()
-    page.wait_for_timeout(2_000)  # no UI signal for persistence; the database is the assertion
 
     a14 = stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "
                     "WHERE b.block_name = 'A Blok' AND u.unit_number = 14;")
@@ -141,7 +140,6 @@ def test_approved_statement_match_clears_the_homeowners_balance(login_as, login_
     login_as("manager")
     ManagerCockpit(page).wait()
     DuesManagement(page).open().upload_statement(_statement(tmp_path)).confirm_matched()
-    page.wait_for_timeout(2_000)
     homeowner = api.login(**actors["homeowner"])
     assert api_amount(api.resident_dashboard(homeowner)["total_debt"]) == Decimal("0.00")
 
@@ -313,8 +311,11 @@ def test_manual_assignment_records_the_payment(login_as, page, tmp_path, october
     dues.segment(3)
     page.locator('[flt-semantics-identifier^="btn_assign_unmatched_"]').first.click()
     by_id(page, f"assign_flat_{a14}").click()
-    by_id(page, "btn_confirm_assignment").click()
-    page.wait_for_timeout(2_000)
+    with page.expect_response(
+        lambda r: "/api/v1/" in r.url and r.request.method == "POST", timeout=15_000
+    ):
+        by_id(page, "btn_confirm_assignment").click()
+    by_id(page, "btn_confirm_assignment").wait_for(state="detached", timeout=10_000)
 
     assert stack.sql("SELECT count(*) FROM payment_entries WHERE amount = 250.00;") == "1"
 
@@ -327,6 +328,5 @@ def test_confirming_matched_rows_keeps_the_unmatched_ones(login_as, page, tmp_pa
     ManagerCockpit(page).wait()
     dues = DuesManagement(page).open()
     dues.upload_statement(_statement(tmp_path)).confirm_matched()
-    page.wait_for_timeout(1_500)
     dues.segment(3)
     page.locator('[flt-semantics-identifier^="btn_assign_unmatched_"]').first.wait_for(timeout=5_000)

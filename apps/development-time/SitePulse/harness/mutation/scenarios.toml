@@ -20,42 +20,42 @@ timeout = 900
 
 [suites.rust-integration]
 cwd = "backend"
-cmd = ["cargo", "test", "--locked", "--test", "*"]
+cmd = ["cargo", "nextest", "run", "--locked", "--profile", "ci", "--test", "it"]
 timeout = 1200
 
 [suites.rust-statement-grouping]
 cwd = "backend"
-cmd = ["cargo", "test", "--locked", "--test", "statement_access_tests",
-       "open_items_remain_grouped_under_their_liable_people"]
+cmd = ["cargo", "nextest", "run", "--locked", "--profile", "ci", "--test", "it",
+       "-E", "test(/statement_access_tests::open_items_remain_grouped_under_their_liable_people/)"]
 timeout = 1200
 
 [suites.rust-statement-totals]
 cwd = "backend"
-cmd = ["cargo", "test", "--locked", "--test", "statement_access_tests",
-       "joint_exposure_is_separate_from_principal_penalty_and_total"]
+cmd = ["cargo", "nextest", "run", "--locked", "--profile", "ci", "--test", "it",
+       "-E", "test(/statement_access_tests::joint_exposure_is_separate_from_principal_penalty_and_total/)"]
 timeout = 1200
 
 [suites.rust-db]
 cwd = "backend"
-cmd = ["cargo", "test", "--locked", "--test", "db_*", "--", "--ignored", "--test-threads=1"]
+cmd = ["cargo", "nextest", "run", "--locked", "--profile", "db", "--test", "it", "--run-ignored", "ignored-only", "--test-threads", "1"]
 timeout = 1800
 requires = ["postgres"]
 
 [suites.rust-db-accrual]
 cwd = "backend"
-cmd = ["cargo", "test", "--locked", "--test", "db_accrual_atomic_tests", "--", "--ignored", "--test-threads=1"]
+cmd = ["cargo", "nextest", "run", "--locked", "--profile", "db", "--test", "it", "-E", "test(/db_accrual_atomic_tests::/)", "--run-ignored", "ignored-only", "--test-threads", "1"]
 timeout = 900
 requires = ["postgres"]
 
 [suites.rust-db-accrual-spelling]
 cwd = "backend"
-cmd = ["cargo", "test", "--locked", "--test", "db_accrual_atomic_tests", "--", "another_spelling_of_an_accrued_month_creates_nothing_in_the_database", "--ignored", "--test-threads=1"]
+cmd = ["cargo", "nextest", "run", "--locked", "--profile", "db", "--test", "it", "-E", "test(/db_accrual_atomic_tests::another_spelling_of_an_accrued_month_creates_nothing_in_the_database/)", "--run-ignored", "ignored-only", "--test-threads", "1"]
 timeout = 900
 requires = ["postgres"]
 
 [suites.rust-db-accrual-rollback]
 cwd = "backend"
-cmd = ["cargo", "test", "--locked", "--test", "db_accrual_atomic_tests", "--", "a_failure_partway_through_a_batch_writes_nothing_and_a_rerun_links_every_liability", "--ignored", "--test-threads=1"]
+cmd = ["cargo", "nextest", "run", "--locked", "--profile", "db", "--test", "it", "-E", "test(/db_accrual_atomic_tests::a_failure_partway_through_a_batch_writes_nothing_and_a_rerun_links_every_liability/)", "--run-ignored", "ignored-only", "--test-threads", "1"]
 timeout = 900
 requires = ["postgres"]
 

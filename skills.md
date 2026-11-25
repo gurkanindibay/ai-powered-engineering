@@ -216,12 +216,18 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ### 5b-2a. E2E Shard Planner (`e2e_shard.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/e2e_shard.py](file:///apps/development-time/SitePulse/scripts/e2e_shard.py)
-- **Purpose:** Splits the GUI suite into N shards of similar run time, using the latest `duration_s` per test from `.specify/executions/runs` (a test with no recorded duration counts as the median). `gui_e2e.py run --shard I/N` (or `$SITEPULSE_E2E_SHARD`) loads it as a pytest plugin that deselects other shards' tests after marker and `-k` filtering. The partition is deterministic, so each test runs in exactly one shard. `sitepulse-ci.yml` runs the `e2e` job as an 8-shard matrix and ignores `e2e/tests/test_linked_backend_suites.py` there, because other CI gates already run the suites it wraps (`harness/tests/test_ci_linked_suites.py` enforces this). Self-tests: `harness/tests/test_e2e_shard.py`.
+- **Purpose:** Splits the GUI suite into N shards of similar run time, using the latest `duration_s` per test from `.specify/executions/runs` plus cache-fed CI JUnit durations (a test with no recorded duration counts as the median). `gui_e2e.py run --shard I/N` (or `$SITEPULSE_E2E_SHARD`) loads it as a pytest plugin that deselects other shards' tests after marker and `-k` filtering. `ingest-junit` merges master shard timings into the compact duration store for following runs. The partition is deterministic, so each test runs in exactly one shard. `sitepulse-ci.yml` runs the `e2e` job as an 8-shard matrix and ignores `e2e/tests/test_linked_backend_suites.py` there, because other CI gates already run the suites it wraps (`harness/tests/test_ci_linked_suites.py` enforces this). Self-tests: `harness/tests/test_e2e_shard.py`.
 
 ```bash
 python3 apps/development-time/SitePulse/scripts/e2e_shard.py plan --shards 4          # expected seconds per shard
 python3 apps/development-time/SitePulse/scripts/e2e_shard.py --json plan --shards 3
+python3 apps/development-time/SitePulse/scripts/e2e_shard.py ingest-junit --junit-dir e2e/.artifacts --store /tmp/durations/ci-cache/durations.jsonl
 ```
+
+### 5b-2b. CI E2E Lane Planner (`ci_e2e_plan.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/ci_e2e_plan.py](file:///apps/development-time/SitePulse/scripts/ci_e2e_plan.py)
+- **Purpose:** Uses `feature_traceability.py affected` to run smoke/core plus impact-selected epics on PRs, keep full coverage for shared code and master, and skip browser setup for docs-only PRs. Supports `--help`, `--json`, and GitHub Actions output through `--github-output` or `GITHUB_OUTPUT`. Self-tests: `harness/tests/test_ci_e2e_plan.py`.
 
 ## 5b-3. testId Lint (`testid_lint.py`)
 
@@ -347,6 +353,19 @@ python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py run --chan
 python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py run --area late-fee --markdown /tmp/mut.md --output /tmp/mut.json
 python3 apps/development-time/SitePulse/scripts/mutation_scenarios.py restore   # after an interrupted run
 python3 apps/development-time/SitePulse/scripts/ci_mutation_report.py --reports-dir /tmp/shards --out /tmp/report
+```
+
+## 5b-10. Cucumber Pilot Safe Report (`cucumber_pilot_report.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/cucumber_pilot_report.py](file:///apps/development-time/SitePulse/scripts/cucumber_pilot_report.py)
+- **Purpose:** Reconciles the Cucumber pilot's native JUnit case totals with its private execution JSONL, then emits a fixed public-safe summary for the five pilot cases. It includes static labels, distinct outline example IDs, status, duration, comparison-only labels, and Actions run metadata; it never copies step text, failure bodies, example values, or raw JUnit fields. The opt-in workflow retains only this JSON as artifact `cucumber-pilot-results-<run-id>-<attempt>`.
+
+```bash
+python3 apps/development-time/SitePulse/scripts/cucumber_pilot_report.py --help
+python3 apps/development-time/SitePulse/scripts/cucumber_pilot_report.py \
+  --junit /tmp/junit-report.xml --executions /tmp/executions.jsonl \
+  --run-id 1234 --attempt 1 --commit 0123456789abcdef0123456789abcdef01234567 \
+  --repository owner/repository --out /tmp/cucumber-results.json --json
 ```
 
 ## 5c. Test Execution & Verification Run (`run_tests.py`)

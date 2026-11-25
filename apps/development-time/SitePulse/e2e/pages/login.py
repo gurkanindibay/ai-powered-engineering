@@ -21,6 +21,10 @@ class LoginPage:
         self.base_url = base_url
 
     def open(self) -> "LoginPage":
+        try:
+            self.page.add_init_script("window.localStorage.removeItem('sitepulse.e2e_session');")
+        except Exception:
+            pass
         self.page.goto(self.base_url)
         wait_for_app(self.page)
         by_id(self.page, "login_tab_quickAll").wait_for()

@@ -55,7 +55,11 @@ def test_virtual_iban_shown_and_copied(login_as, page, api, actors, stack, brows
 
     home.copy_iban()
     if browser_name == "chromium":
-        page.wait_for_timeout(300)
+        page.wait_for_function(
+            "expected => navigator.clipboard.readText().then(t => t === expected)",
+            arg=expected,
+            timeout=5_000,
+        )
         assert page.evaluate("navigator.clipboard.readText()") == expected
 
 

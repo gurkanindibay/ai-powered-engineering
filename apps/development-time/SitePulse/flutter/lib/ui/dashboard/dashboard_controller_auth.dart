@@ -19,6 +19,7 @@ extension DashboardControllerAuth on DashboardController {
 
   void logout() {
     unawaited(ApiClient.logout());
+    if (kE2E) writePreference(DashboardController._e2eSessionKey, null);
     _userSession = _userSession.copyWith(permissions: const []);
     _isAuthenticated = false;
     _authMessage = null;

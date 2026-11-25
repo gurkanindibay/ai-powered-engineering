@@ -16,7 +16,7 @@ The suite is broad and well traced, but "traced" is not the same as "verified". 
 
 | Layer | Tests | Runs in CI | Strength | Main gap |
 | --- | --- | --- | --- | --- |
-| Rust backend (unit + integration + DB) | 679 | 673 (68 via `--ignored` DB gate) | Money rules, RLS tenant isolation, state machines | 6 never run; `is_err()`-only error checks; env-var races |
+| Rust backend (unit + integration + DB) | 678 | 678 (70 via `rust-db-test`) | Money rules, RLS tenant isolation, state machines | 6 never run; `is_err()`-only error checks; env-var races |
 | Flutter frontend | 366 | 366 | Widget + Decimal money behaviour | 13 untagged files invisible to `--area` runs; no coverage numbers |
 | Browser E2E (pytest + Playwright) | 250 | 228, plus 1 that always skips (wrapper file ignored in CI) | Journeys per role, 8-way sharding | \~7 s median per test, 41 fixed waits, 30 pending GUI scenarios |
 | Harness / tooling (Python) | 410 | 410 (6 env-conditional, all met in CI) | Lints, traceability, report tooling | Validates tooling, not product |
@@ -113,7 +113,7 @@ SitePulse's hard cases are combinations: who is liable (owner, tenant, joint) ×
 | --- | --- | --- | --- |
 | A money rule (split, proration, fee, apportionment) | Rust domain unit | Decision tables plus property-based invariants | `financial_fixtures` shared Rust/Dart, `heat_share`, `installments` |
 | Who pays what for each combination | Rust domain + Dart use case | **One decision table** (liable party × expense type × occupancy × payer) loaded by both languages, one row = one case id | Partly: `financial_fixtures` covers amounts, not liability |
-| State changes over time (occupancy, periods) | Rust domain | **Model-based testing**: random command sequences against the state machine and a tiny reference model, with invariants checked after every step | `occupancy_state_machine_tests` (example-based) |
+| State changes over time (occupancy, periods) | Rust domain | **Model-based testing**: deterministic generated command sequences against the state machine and a tiny reference model, with invariants checked after every step | `occupancy_state_machine_tests` |
 | Persistence invariants and RLS | PostgreSQL tests | Direct SQL constraint checks, two-connection concurrency, fault injection | `db_*` tests, `MUT-DB-002` control |
 | API contract and authorisation | API system check | Generated from OpenAPI: every endpoint called with another tenant's ids must return 403/404 | `openapi_tests.rs`, `api_system_check.py` |
 | UI shows the right thing | Flutter widget | Fixture JSON validated against OpenAPI; exact Decimal text | 366 widget tests |
@@ -121,7 +121,7 @@ SitePulse's hard cases are combinations: who is liable (owner, tenant, joint) ×
 
 **Six techniques for the hard cases:**
 
-1. **Ledger oracle after every journey step.** Turn the ledger invariants of the journey plan (§4) into an autouse E2E/API fixture. After each test, check per unit and person that accrued minus paid equals the balance, that bank cash equals recorded collections, and that no liability lacks a liable person. Failure-only bugs like SC-13-03-21 then surface everywhere, not just in one scenario.
+1. **Ledger oracle after every journey step.** Journey stages check the detailed ledger invariants in §4. The autouse E2E/API pytest fixture also asserts that `v_integrity_violations` is empty after each test, so invariant regressions surface even outside journey scenarios.
 2. **Calendar matrix on the injectable clock.** Run accrual, due-day, late-fee and period-close rules over frozen dates: the 28th to 31st, February in leap and non-leap years, 23:30 and 00:30 at UTC+3, back-dated entries just inside and outside the window. The `e2e` clock already supports this; use it at the API layer, not the browser.
 3. **Model-based occupancy and ownership.** Generate sequences of move-in, move-out, handover, sale and reversal, including same-day handovers. Assert no gap or overlap in liable periods and that a split never gains or loses a kuruş. This covers SC-13-03-06, -07 and -09 once the product gaps close.
 4. **Concurrency and idempotency.** Two PostgreSQL connections with a barrier: two payments on one unit (SC-05-02-01), double approval of one statement line (SC-13-09-07), concurrent accrual of one period. Assert one committed result and one clean rejection.
@@ -136,7 +136,7 @@ Every test starts from a named, versioned state, not from data it invents. The j
 | --- | --- | --- | --- |
 | Starting states F0–F7 (empty site to residents added after accruals) | `docs/testing/journey-plan/README.md` §3 | E2E journeys today; API and DB tests next | A new test names its state (`Given the site is in state F5`) or declares one small boundary fixture next to it |
 | Reference data (clock 2026-11-19 12:00 Europe/Istanbul, tariffs, due day, KMK 5% late fee) | journey plan §2 | All layers | Expected amounts are written as literals in the scenario, never recomputed by the test |
-| Ledger invariants | journey plan §4 | Journey stages | Becomes an autouse check after every E2E and API test (Strategy for complex business cases, technique 1) |
+| Ledger invariants | journey plan §4 and `v_integrity_violations` | Journey stages and autouse E2E/API pytest teardown | Detailed balance checks run at journey checkpoints; the database view must be empty after every E2E/API pytest test |
 | Money cases | `harness/fixtures/financial_cases.json` | Rust `financial_fixtures.rs`, Dart `financial_fixture_test.dart` | Add the liability decision table here so both languages run it |
 | Boundary partitions for capital dues | `TEST_PLAN_EPIC_10_CAPITAL_EXPENDITURE.md` §3 | Property tests | Generators draw from these partitions |
 | API data builders | `e2e/support/api.py` (listed in `GUI_TEST_PLAN.md` §4) | E2E arrange steps | Seed through the API or SQL, never through screens, except in the one UI test per flow |
@@ -148,7 +148,9 @@ Every test starts from a named, versioned state, not from data it invents. The j
 
 ## Execution lanes and CI
 
-CI already went from about 27 minutes in one sequential job to 11.5 minutes (run 129). That came from parallel gate groups, cache-on-failure, lints first, 8 duration-balanced E2E shards and dropping the duplicate wrapper suites (time analysis steps A–E). Every PR still runs the full browser suite, and every test still signs in through the UI. The lanes below decide what runs when. The table after them tracks the speed-ups, with time-analysis step letters where one exists.
+CI already went from about 27 minutes in one sequential job to 11.5 minutes (run 129). That came from parallel gate groups, cache-on-failure, lints first, 8 duration-balanced E2E shards and dropping the duplicate wrapper suites (time analysis steps A–E). PRs now run `smoke` and `core` plus any epic selected by `impact-map.json`; shared-code changes still run the full browser suite. Docs-only PRs skip the browser build and shards. Master runs the full suite, and nightly runs `edge`. The lanes below decide what runs when. The table after them tracks the speed-ups, with time-analysis step letters where one exists.
+
+Targeted PR lanes trade early cross-epic coverage for speed: a regression outside the selected epic tests may only be caught by the full E2E suite on master. When a master E2E run fails, the author of the merged change owns triage and a fix or revert; maintainers coordinate when several changes may be involved.
 
 ### Lanes: what runs when
 
@@ -157,7 +159,7 @@ CI already went from about 27 minutes in one sequential job to 11.5 minutes (run
 | Local pre-push | Developer | `run_tests.py --changed --skip-gui`: lints, affected Rust, Flutter by tag | No | Under 3 min |
 | PR | Every push to a PR | All lints; Rust unit, integration and DB; Flutter; money fixtures; E2E `smoke or core` plus impact-map picks; changed-lines coverage; mutation in-diff (report-only first) | Yes, except mutation | Critical path 30% below today's measured baseline |
 | Merge to master | Push to master | Everything in PR plus the full E2E suite; records evidence and updates traceability | Reverts on red | As today |
-| Nightly | 02:00 UTC | Full mutation catalogue; E2E `edge`; mobile viewport; calendar matrix; volume and tenancy fuzz; flake report | Opens issues | Under 45 min |
+| Nightly | 03:30 UTC | Full mutation catalogue; E2E `edge`; mobile viewport; calendar matrix; volume and tenancy fuzz; flake report | Opens issues | Under 45 min |
 | Release candidate | Tag | Full suite on a clean environment, cross-browser smoke, accessibility smoke | Yes | n/a |
 
 | # | Area | Today | Change | Expected effect |
@@ -165,11 +167,11 @@ CI already went from about 27 minutes in one sequential job to 11.5 minutes (run
 | 1 | E2E setup | Each of the 8 shards installed Rust and Flutter, compiled the backend with `--features e2e`, and restored or built the web bundle | Implemented in #375. One `build-e2e` job builds the backend binary and `flutter/build/web-e2e` once and uploads them. Shards download and run both artifacts. | Removes 7 redundant compiles per PR |
 | 2 | E2E per-test cost | Median 6.9 s per test, 20–30 s per journey; every test signs in through the UI | Playwright `storage_state` per role, created once per worker. Seed data through the API or SQL fixtures (F0–F6), not through screens. Keep one UI sign-in test per role | Typically 30–50% off GUI test time |
 | 3 | Fixed waits | 41 `wait_for_timeout` calls, about 48 s per full pass | State-based waits (`expect`, `wait_for_response`) | Saves about 48 s per pass and removes timing flakes |
-| 4 | Shard balance | 1 min 52 s spread between shards. Balancing uses local recorded runs, which hold only 115 of 250 E2E tests | Feed CI JUnit durations from every shard into the `e2e_shard.py` duration store | Shards converge on the mean, about 1 min off the critical path |
-| 5 | Risk-based lanes | `smoke`/`core`/`edge` markers are declared as P0/P1/P2 but CI runs everything on every PR | **PR**: lint, unit, integration, DB, Flutter, E2E `smoke or core` plus tests the impact map selects. **Merge to master**: the full suite. **Nightly**: `edge`, the full mutation catalogue, mobile viewport, flake report | PR E2E shrinks to 72% of tests (164 of 229 are smoke or core; 14 carry no priority marker yet) without losing merge-time coverage |
-| 6 | Change-based selection | `run_tests.py --changed` and `.specify/features/impact-map.json` exist but CI doesn't use them | Use `feature_traceability.py affected` to add epic-scoped E2E tests on PRs; `paths-filter` skips E2E for docs-only changes | Docs and harness-only PRs finish in lint time |
+| 4 | Shard balance | 1 min 52 s spread between shards. Balancing used local recorded runs, which hold only 115 of 250 E2E tests | Master CI ingests JUnit durations from every shard into a cache-backed `e2e_shard.py` store; PR shards restore the latest master store | Shard assignments use recent CI timings and converge |
+| 5 | Risk-based lanes | `smoke`/`core`/`edge` markers are declared as P0/P1/P2 but CI ran everything on every PR | **PR**: lint, unit, integration, DB, Flutter, E2E `smoke or core` plus tests from affected epics. **Merge to master**: the full suite. **Nightly**: `edge`, the full mutation catalogue, mobile viewport, flaky tests and random journeys | Faster PR feedback; full coverage still runs |
+| 6 | Change-based selection | `run_tests.py --changed` and `.specify/features/impact-map.json` existed but CI did not use them | `ci_e2e_plan.py` runs `feature_traceability.py affected` and skips E2E for PRs with no behaviour paths; shared code changes retain the full suite | Docs-only PRs skip E2E build and shards |
 | 7 | Rust test runner | `cargo test` over 41 separate integration-test binaries | `cargo nextest` (parallel per test, JUnit, retries reported as flaky) and merge `tests/*.rs` into one `tests/it/` crate with modules | Fewer link steps; nextest is commonly 2–3× faster on many-binary suites |
-| 8 | PostgreSQL tests | Each test creates a throwaway database and migrates it; 4 threads | Migrate once into a template, then `CREATE DATABASE … TEMPLATE sitepulse_tpl` per test; raise threads to the runner's cores | Per-test setup goes from a full migration run to a file copy |
+| 8 | PostgreSQL tests | Each test creates a throwaway database and migrates it; 4 threads | Migrate and seed once into a template database per nextest run, then `CREATE DATABASE … TEMPLATE …` per test; keep four concurrent DB tests | Per-test setup clones the migrated seed instead of rerunning migrations |
 | 9 | Mutation on PRs | Nightly only, about 24 min; a survivor stops the aggregator before it publishes | PR job: `cargo-mutants --in-diff` on changed `domain/` and `services/` files, 10-minute cap, non-blocking at first. Fix the aggregator to publish before failing | Mutation signal while the author is still on the change |
 | 10 | Retries and evidence | Flaky failures look like real failures | `pytest-rerunfailures --reruns 1` reported as FLAKY, never PASS; the flake rate feeds quarantine (suggestion 10) | Fewer red reruns without hiding flakes |
 | 11 | Backend profile (F) | E2E compiled a release backend next to the debug build every other gate uses | Implemented in #375. The shared E2E backend uses Cargo's dev profile. | Avoids release compilation and retains the dev profile's optimized password hashing |
@@ -243,15 +245,15 @@ Every test function was parsed from source (Rust attributes, Dart `test`/`testWi
 | Suite | Location | Tests | CI gate (group) | Runs in CI | Not run |
 | --- | --- | --- | --- | --- | --- |
 | Rust unit | `backend/src/**` `#[cfg(test)]` | 204 | `rust-test` (rust) | 204 | 0 |
-| Rust integration | `backend/tests/*.rs` | 401 | `rust-test` (rust) | 401 | 0 |
-| Rust PostgreSQL | `backend/tests/db_*`, `#[ignore]` + 2 env opt-ins | 68 | `rust-db-test` (rust) | 68 | 0 |
+| Rust integration | `backend/tests/it/*.rs` modules | 404 | `rust-test` (rust) | 404 | 0 |
+| Rust PostgreSQL | `backend/tests/it/db_*`, `#[ignore]` + 2 env opt-ins | 70 | `rust-db-test` (rust) | 70 | 0 |
 | Rust, never reached | `sale_clearance_tests`, `payments_phase2_tests`, `e2e_clock*` | 6 | none | 0 | **6** |
 | Flutter | `flutter/test/*_test.dart` | 366 | `flutter-test`, `money-fixtures` (flutter) | 366 | 0 |
 | Browser E2E | `e2e/tests/**` | 229 | `gui-e2e`, 8 shards (e2e) | 229 | 0 |
 | E2E suite wrappers | `e2e/tests/test_linked_backend_suites.py` | 21 | ignored in CI (`PYTEST_ADDOPTS --ignore`) | 0 | 21 by design |
 | SitePulse harness | `harness/tests` | 267 | `harness-selftest` (lint) | 267 | 0 |
 | Engineering harness | `tests/**` | 143 | `engineering-harness-ci.yml` | 143 | 0 |
-| Retired Cucumber/Serenity pilot | git tag `pilot/cucumber-serenity-arm-b` | 5 cases, 4 scenarios | archived | n/a | reference only |
+| Cucumber/Serenity pilot | `e2e-cucumber/` | 5 cases, 4 scenarios | master push (`serenity-report` job, never gates); on-demand `sitepulse-cucumber-pilot.yml` | 0 | reference only; its Serenity site is published on Pages |
 | Mutation catalogue | `scripts/mutation_scenarios.py` | 66 mutants | `mutation-testing.yml`, direct PR changes and nightly 02:00 UTC | PR and nightly | report only on PRs |
 
 CI is structured well. Five gate groups (lint, rust, flutter, e2e, final) run as parallel jobs, and `test_run_tests_groups.py` fails if a gate is dropped from CI. PR runs cancel superseded pushes. The `continue-on-error: true` flags sit only on artifact and metadata steps, so they never mask a red gate. The six env-conditional harness tests (`HARNESS_DOCKER_IMAGE`, workflow-file presence) do run in CI, because CI sets those preconditions.
@@ -273,7 +275,7 @@ There are no active xfail markers. `e2e/pytest.ini` keeps `xfail_strict = true` 
 | Gherkin `@pending` | `.specify/features` | 30 scenarios | Deselected | See mis-coverage |
 | Gherkin `@linked` | `.specify/features` | 425 scenarios | Deselected, verified through `covers` | Check what the link points at |
 | Gherkin `@smoke` / `@core` / `@edge` | features | 38 / 266 / 101 tag uses | Priority only; no CI lane selects on them | Use them for PR vs nightly lanes |
-| pytest `smoke` / `core` / `edge` | e2e | 31 / 141 / 51 | Declared "P0 every change, P1 each merge, P2 nightly", but CI runs all of them on every PR | Lanes not implemented |
+| pytest `smoke` / `core` / `edge` | e2e | 31 / 141 / 51 | Declared "P0 every change, P1 each merge, P2 nightly" | Implemented in #377: PR selects smoke/core plus impacted epics, master runs all, nightly selects edge |
 | Flutter `@Tags([...])` | `flutter/test` | 40 of 53 files | `--area` runs select by tag | 13 files untagged, so `--area` skips them |
 
 The untagged Flutter files are `money_format`, `dues_models_penalty_row`, `sale_clearance`, `unit_state`, `unit_registration_person_refs`, `unit_directory_row`, `unit_directory_benchmark`, `resident_directory`, `person_components`, `person_directory_repository`, `responsible_contact_selection`, `sp_directory_scaffold` and `standardized_logging`. `money_format` and `sale_clearance` are finance tests, so a `--area finance` run misses them. Smaller issue: `pytest.ini` declares `depth`, `state` and `layer` twice.

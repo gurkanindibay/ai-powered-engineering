@@ -410,10 +410,10 @@ def test_tenant_statement_excludes_owner_private_transactions(request, api, acto
             "BEGIN; "
             f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, "
             f"principal_amount, due_date, status) VALUES "
-            f"({unit_2}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {selin_person_id}, 1500.00, CURRENT_DATE - 36, 'PENDING'); "
+            f"({unit_2}, 'Ekim 2026', 'TENANT', 'OPERATIONAL_DUES', {selin_person_id}, 1500.00, DATE '{stack.fixture_today}' - 36, 'PENDING'); "
             f"INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, liable_person_id, "
             f"principal_amount, due_date, status) VALUES "
-            f"({unit_2}, 'Ekim 2026', 'OWNER', 'CAPITAL_DUES', {ahmet_person_id}, 1000.00, CURRENT_DATE - 36, 'PENDING'); "
+            f"({unit_2}, 'Ekim 2026', 'OWNER', 'CAPITAL_DUES', {ahmet_person_id}, 1000.00, DATE '{stack.fixture_today}' - 36, 'PENDING'); "
             "COMMIT;"
         )
 

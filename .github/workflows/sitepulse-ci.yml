@@ -31,9 +31,44 @@ env:
   CARGO_TERM_COLOR: never
 
 jobs:
+  e2e-plan:
+    name: Select browser lane
+    runs-on: ubuntu-24.04
+    outputs:
+      run_e2e: ${{ steps.plan.outputs.run_e2e }}
+      pytest_addopts: ${{ steps.plan.outputs.pytest_addopts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Restore CI-fed E2E duration history
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sitepulse-e2e-duration/ci-cache
+          key: sitepulse-e2e-duration-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            sitepulse-e2e-duration-master-
+      - id: plan
+        name: Apply impact-map and lane selection
+        run: python3 scripts/ci_e2e_plan.py --json
+      - name: Ensure duration store exists for artifact upload
+        if: steps.plan.outputs.run_e2e == 'true'
+        run: mkdir -p "${{ runner.temp }}/sitepulse-e2e-duration/ci-cache" && touch "${{ runner.temp }}/sitepulse-e2e-duration/ci-cache/durations.jsonl"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.plan.outputs.run_e2e == 'true'
+        with:
+          name: sitepulse-e2e-duration-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sitepulse-e2e-duration/ci-cache/durations.jsonl
+          if-no-files-found: error
+          retention-days: 1
+
   # The gates run as parallel jobs, one per group in scripts/run_tests.py (GATE_GROUPS);
   # harness/tests/test_run_tests_groups.py fails when a gate or group is missing here.
   lint:
+    needs: e2e-plan
     name: lint (Python gates)
     runs-on: ubuntu-24.04
     steps:
@@ -59,6 +94,7 @@ jobs:
         continue-on-error: true
         env:
           JOB_RESULT: ${{ job.status }}
+          SITEPULSE_E2E_ENABLED: ${{ needs.e2e-plan.outputs.run_e2e }}
         run: |
           mkdir -p "${{ runner.temp }}/sitepulse-suite-lint"
           python3 scripts/ci_case_results.py --json --job lint \
@@ -77,6 +113,7 @@ jobs:
           retention-days: 30
 
   rust:
+    needs: e2e-plan
     name: rust (build, clippy, tests, schema, API system)
     runs-on: ubuntu-24.04
     services:
@@ -109,10 +146,27 @@ jobs:
         run: |
           curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz \
             | tar xzf - -C "${CARGO_HOME:-$HOME/.cargo}/bin"
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
+      - name: Verify cargo-nextest
+        run: cargo nextest --version
       - name: Rust and database gates
         env:
           SITEPULSE_GATE_ARTIFACT_DIR: ${{ runner.temp }}/sitepulse-suite-rust/gates
         run: python3 scripts/run_tests.py --group rust
+      - name: Upload Rust nextest reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-nextest-junit
+          path: |
+            apps/development-time/SitePulse/backend/target/nextest/ci/junit.xml
+            apps/development-time/SitePulse/backend/target/nextest/db/junit.xml
+          if-no-files-found: warn
+          retention-days: 30
       - name: Collect Rust coverage
         working-directory: apps/development-time/SitePulse/backend
         run: |
@@ -121,20 +175,9 @@ jobs:
             -c "DROP DATABASE IF EXISTS sitepulse_cov;" -c "CREATE DATABASE sitepulse_cov;"
           cargo llvm-cov clean --workspace
           cargo llvm-cov --no-report --locked
-          cargo llvm-cov --no-report --locked --features e2e --test e2e_clock_tests --test e2e_clock_reset_tests
-          DB_NAME=sitepulse_cov cargo llvm-cov --no-report --locked \
-            --test db_tenant_isolation_tests \
-            --test db_occupancy_transitions_tests \
-            --test db_person_api_tests \
-            --test db_person_merge_tests \
-            --test db_unit_person_action_cycles_tests \
-            --test db_accrual_atomic_tests \
-            --test db_accrual_persistence_tests \
-            --test db_advance_exit_settlements_tests \
-            --test sale_clearance_tests \
-            --test accrual_corrections_tests \
-            --test finance_store_pg_tests \
-            -- --ignored --test-threads=4
+          cargo llvm-cov --no-report --locked --features e2e --test it
+          DB_NAME=sitepulse_cov cargo llvm-cov --no-report --locked --features e2e \
+            --test it -- --ignored --test-threads=4
           cargo llvm-cov report --lcov --output-path "${{ runner.temp }}/sitepulse-suite-rust/coverage/rust.lcov"
           cargo llvm-cov report --json --summary-only --output-path "${{ runner.temp }}/sitepulse-suite-rust/coverage/rust-summary.json"
       - name: Write rust suite manifest and run identity
@@ -142,6 +185,7 @@ jobs:
         continue-on-error: true
         env:
           JOB_RESULT: ${{ job.status }}
+          SITEPULSE_E2E_ENABLED: ${{ needs.e2e-plan.outputs.run_e2e }}
         run: |
           mkdir -p "${{ runner.temp }}/sitepulse-suite-rust"
           python3 scripts/ci_case_results.py --json --job rust \
@@ -160,6 +204,7 @@ jobs:
           retention-days: 30
 
   flutter:
+    needs: e2e-plan
     name: flutter (analyze, tests, money fixtures)
     runs-on: ubuntu-24.04
     steps:
@@ -172,6 +217,12 @@ jobs:
           workspaces: apps/development-time/SitePulse/backend
           # Red runs are the common case while a PR is iterated; keep their compile output too.
           cache-on-failure: true
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
+      - name: Verify cargo-nextest
+        run: cargo nextest --version
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: "3.47.5"
@@ -198,6 +249,7 @@ jobs:
         continue-on-error: true
         env:
           JOB_RESULT: ${{ job.status }}
+          SITEPULSE_E2E_ENABLED: ${{ needs.e2e-plan.outputs.run_e2e }}
         run: |
           mkdir -p "${{ runner.temp }}/sitepulse-suite-flutter"
           python3 scripts/ci_case_results.py --json --job flutter \
@@ -216,6 +268,8 @@ jobs:
           retention-days: 30
 
   build-e2e:
+    needs: e2e-plan
+    if: needs.e2e-plan.outputs.run_e2e == 'true'
     name: build-e2e (backend and web bundle)
     runs-on: ubuntu-24.04
     outputs:
@@ -259,7 +313,8 @@ jobs:
   # (scripts/e2e_shard.py, on the durations recorded in .specify/executions/runs).
   # Each shard has its own PostgreSQL, backend and web server; every test runs in exactly one shard.
   e2e:
-    needs: build-e2e
+    needs: [build-e2e, e2e-plan]
+    if: always() && needs.e2e-plan.outputs.run_e2e == 'true' && needs.build-e2e.result == 'success'
     name: e2e (browser suite, shard ${{ matrix.shard }}/8)
     runs-on: ubuntu-24.04
     strategy:
@@ -272,7 +327,8 @@ jobs:
       # (harness-selftest, rust-test, flutter-test, api-system), so CI shards skip it;
       # recorded local runs keep it for scenario traceability.
       # harness/tests/test_ci_linked_suites.py fails if a wrapped suite loses its CI gate.
-      PYTEST_ADDOPTS: --ignore=tests/test_linked_backend_suites.py
+      # The planner retains the single linked-suite exclusion: --ignore=tests/test_linked_backend_suites.py
+      PYTEST_ADDOPTS: ${{ needs.e2e-plan.outputs.pytest_addopts }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -291,6 +347,10 @@ jobs:
           # A shard-only rerun reuses the successful build job's output from its attempt.
           artifact-ids: ${{ needs.build-e2e.outputs.artifact-id }}
           path: ${{ runner.temp }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sitepulse-e2e-duration-attempt-${{ github.run_attempt }}
+          path: apps/development-time/SitePulse/.specify/executions/runs/ci-cache
       - name: Unpack E2E build
         run: |
           mkdir "$RUNNER_TEMP/sitepulse-e2e"
@@ -332,9 +392,75 @@ jobs:
   # HTML dashboard and product status snapshot as artifact `e2e-test-report`; the execution
   # history needed by record-evidence is uploaded separately as `sitepulse-actions-evidence`.
   # This replaces committing a recorded run with every task (gate test-run-recorded is off).
+  # Generates the Serenity BDD living-documentation site from the Cucumber pilot on master pushes and
+  # hands a sanitized copy (static assets only, secrets redacted) to build-pages. It never gates the
+  # workflow: a failing pilot only means no Serenity report is added to that run's Pages archive.
+  serenity-report:
+    name: serenity (Cucumber pilot site)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.SITEPULSE_PAGES_ACTIONS_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sitepulse_user
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: sitepulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sitepulse_user -d sitepulse"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.22.2"
+          cache: npm
+          cache-dependency-path: apps/development-time/SitePulse/e2e-cucumber/package-lock.json
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
+      - name: Configure isolated stack dependencies
+        run: |
+          echo "FLUTTER_ROOT=$(dirname "$(dirname "$(command -v flutter)")")" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Install Cucumber and browser dependencies
+        working-directory: apps/development-time/SitePulse/e2e-cucumber
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run lint:money
+      - name: Run isolated Cucumber and Serenity pilot
+        run: |
+          rm -rf e2e-cucumber/target
+          python3 e2e-cucumber/scripts/run_pilot.py > "$RUNNER_TEMP/cucumber-pilot-private.log" 2>&1 || {
+            tail -40 "$RUNNER_TEMP/cucumber-pilot-private.log"; exit 1; }
+      - name: Sanitize Serenity site
+        run: >-
+          python3 scripts/pages_site.py sanitize-serenity
+          --source e2e-cucumber/target/site/serenity --out "$RUNNER_TEMP/serenity-site"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: serenity-site
+          path: ${{ runner.temp }}/serenity-site
+          if-no-files-found: error
+          retention-days: 7
+
   test-report:
     if: always()
-    needs: [lint, rust, flutter, e2e, verify]
+    needs: [lint, rust, flutter, e2e, verify, e2e-plan]
     outputs:
       evidence_artifact: ${{ steps.evidence_metadata.outputs.artifact_name }}
       evidence_path: ${{ steps.evidence_metadata.outputs.evidence_path }}
@@ -363,6 +489,7 @@ jobs:
         env:
           SITEPULSE_TASK: ${{ github.event_name == 'pull_request' && format('PR {0} ({1})', github.event.pull_request.number, github.head_ref) || github.ref_name }}
           SITEPULSE_PRODUCER_STATUS: '{"lint":"${{ needs.lint.result }}","rust":"${{ needs.rust.result }}","flutter":"${{ needs.flutter.result }}","e2e":"${{ needs.e2e.result }}","verify":"${{ needs.verify.result }}"}'
+          SITEPULSE_E2E_ENABLED: ${{ needs.e2e-plan.outputs.run_e2e }}
           SITEPULSE_COVERAGE_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || 'HEAD~1' }}
         run: >-
           python3 scripts/ci_test_report.py
@@ -375,6 +502,26 @@ jobs:
           --commit "$GITHUB_SHA"
           --producer-status "$SITEPULSE_PRODUCER_STATUS"
           --require-diff-cover
+      - name: Restore master E2E duration history
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.e2e-plan.outputs.run_e2e == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sitepulse-e2e-duration/ci-cache
+          key: sitepulse-e2e-duration-master-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            sitepulse-e2e-duration-master-
+      - name: Feed shard JUnit durations into next run
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.e2e-plan.outputs.run_e2e == 'true'
+        run: >-
+          python3 scripts/e2e_shard.py ingest-junit
+          --junit-dir "${{ runner.temp }}/shards"
+          --store "${{ runner.temp }}/sitepulse-e2e-duration/ci-cache/durations.jsonl"
+      - name: Save master E2E duration history
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.e2e-plan.outputs.run_e2e == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sitepulse-e2e-duration/ci-cache
+          key: sitepulse-e2e-duration-master-${{ github.run_id }}-${{ github.run_attempt }}
       - id: evidence_metadata
         name: Name this attempt's evidence artifact
         run: |
@@ -396,7 +543,7 @@ jobs:
   # gated until the repository Pages source and the public inventory contract are ready.
   build-pages:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.SITEPULSE_PAGES_ACTIONS_ENABLED == 'true'
-    needs: test-report
+    needs: [test-report, serenity-report]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -412,6 +559,12 @@ jobs:
         with:
           name: e2e-test-report
           path: ${{ runner.temp }}/e2e-test-report
+      - name: Download Serenity site (optional)
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: serenity-site
+          path: ${{ runner.temp }}/serenity-site
       - name: Check this run is still the current master revision
         id: head
         env:
@@ -439,8 +592,11 @@ jobs:
         env:
           REPORT_SITE: ${{ runner.temp }}/pages-state
           REPORT_DIR: ${{ runner.temp }}/e2e-test-report
+          SERENITY_DIR: ${{ runner.temp }}/serenity-site
         run: |
-          python3 scripts/pages_site.py build --site "$REPORT_SITE" --report "$REPORT_DIR" \
+          serenity_args=()
+          if [ -f "$SERENITY_DIR/index.html" ]; then serenity_args=(--serenity "$SERENITY_DIR"); fi
+          python3 scripts/pages_site.py build --site "$REPORT_SITE" --report "$REPORT_DIR" "${serenity_args[@]}" \
             --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" \
             --run-number "${{ github.run_number }}" --commit "${{ github.sha }}" \
             --action-run-id "${{ github.run_id }}" --require-public-report
@@ -517,7 +673,7 @@ jobs:
   # fails (a skipped required check would count as passing) and fails unless every group passed.
   verify:
     if: always()
-    needs: [lint, rust, flutter, e2e]
+    needs: [lint, rust, flutter, e2e, e2e-plan]
     runs-on: ubuntu-24.04
     steps:
       - name: Every gate group passed
@@ -527,7 +683,10 @@ jobs:
           test '${{ needs.lint.result }}' = success
           test '${{ needs.rust.result }}' = success
           test '${{ needs.flutter.result }}' = success
-          test '${{ needs.e2e.result }}' = success
+          if [ '${{ needs.e2e.result }}' != success ]; then
+            test '${{ needs.e2e.result }}' = skipped
+            test '${{ needs.e2e-plan.outputs.run_e2e }}' = false
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:

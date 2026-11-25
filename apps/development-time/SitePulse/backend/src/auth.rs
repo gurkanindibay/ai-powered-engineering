@@ -370,6 +370,22 @@ pub fn token_digest(token: &str) -> String {
 /// Environment variable holding the shared bank webhook secret.
 pub const BANK_WEBHOOK_SECRET_ENV: &str = "SITEPULSE_BANK_WEBHOOK_SECRET";
 
+/// Verifies `hex(HMAC-SHA256(secret, raw_body))` in constant time against an
+/// explicit `secret` slice. A missing or empty secret rejects every request.
+pub fn verify_webhook_signature_with_secret(
+    secret: Option<&str>,
+    raw_body: &[u8],
+    signature_hex: Option<&str>,
+) -> bool {
+    let Some(secret) = secret.filter(|s| !s.is_empty()) else {
+        return false;
+    };
+    let Some(sig) = signature_hex else {
+        return false;
+    };
+    crate::domain::fingerprint::verify_hmac_sha256_hex(secret.as_bytes(), raw_body, sig)
+}
+
 /// Verifies `hex(HMAC-SHA256(secret, raw_body))` in constant time against the
 /// secret configured in [`BANK_WEBHOOK_SECRET_ENV`]. A missing or empty secret
 /// rejects every request. The cryptography lives in
@@ -379,13 +395,8 @@ pub const BANK_WEBHOOK_SECRET_ENV: &str = "SITEPULSE_BANK_WEBHOOK_SECRET";
 /// No timestamp or replay window is enforced: redeliveries are handled by the
 /// payload-hash idempotency claim, not by the signature.
 pub fn verify_webhook_signature(raw_body: &[u8], signature_hex: Option<&str>) -> bool {
-    let Ok(secret) = std::env::var(BANK_WEBHOOK_SECRET_ENV) else {
-        return false;
-    };
-    let Some(sig) = signature_hex else {
-        return false;
-    };
-    crate::domain::fingerprint::verify_hmac_sha256_hex(secret.as_bytes(), raw_body, sig)
+    let secret = std::env::var(BANK_WEBHOOK_SECRET_ENV).ok();
+    verify_webhook_signature_with_secret(secret.as_deref(), raw_body, signature_hex)
 }
 
 pub fn sign_webhook_body(secret: &str, raw_body: &[u8]) -> String {
@@ -1061,12 +1072,29 @@ mod tests {
 
     #[test]
     fn webhook_signature() {
-        std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", "unit-test-secret");
+        let secret = uuid::Uuid::new_v4().to_string();
         let body = br#"{"amount":"10.00"}"#;
-        let sig = sign_webhook_body("unit-test-secret", body);
-        assert!(verify_webhook_signature(body, Some(&sig)));
-        assert!(!verify_webhook_signature(b"tampered", Some(&sig)));
-        assert!(!verify_webhook_signature(body, None));
+        let sig = sign_webhook_body(&secret, body);
+        assert!(verify_webhook_signature_with_secret(
+            Some(&secret),
+            body,
+            Some(&sig)
+        ));
+        assert!(!verify_webhook_signature_with_secret(
+            Some(&secret),
+            b"tampered",
+            Some(&sig)
+        ));
+        assert!(!verify_webhook_signature_with_secret(
+            Some(&secret),
+            body,
+            None
+        ));
+        assert!(!verify_webhook_signature_with_secret(
+            None,
+            body,
+            Some(&sig)
+        ));
     }
 
     fn token_with_lifetime(seconds: i64) -> String {

@@ -22,7 +22,7 @@ def _open_unit_invite(page) -> tuple[str, str]:
 def test_manager_shares_a_site_invite_link(login_as, page):
     login_as("manager")
     ManagerCockpit(page).wait()
-    page.wait_for_timeout(1_500)
+    by_id(page, "btn_invite_resident_link").wait_for(timeout=10_000)
     assert by_id(page, "btn_invite_resident_link").count() == 1
     by_id(page, "btn_invite_resident_link").click()
     by_id(page, "invite_link_text").wait_for(timeout=10_000)
@@ -72,8 +72,9 @@ def test_rejected_registration_leaves_the_queue(login_as, page, api, stack):
     request = api.submit_registration("begonya-sitesi", "Kerem Yılmaz", "kerem.yilmaz@e2e.test", "B Blok", 18)
     login_as("manager")
     ManagerCockpit(page).wait()
-    by_id(page, f"btn_reject_{request['request_id']}").click(timeout=5_000)
-    page.wait_for_timeout(1_000)
+    reject_btn = by_id(page, f"btn_reject_{request['request_id']}")
+    reject_btn.click(timeout=5_000)
+    reject_btn.wait_for(state="detached", timeout=10_000)
     assert stack.sql(f"SELECT status FROM pending_registrations WHERE request_id = '{request['request_id']}';") \
         == "REJECTED"
 

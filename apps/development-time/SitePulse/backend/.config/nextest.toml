@@ -1,0 +1,18 @@
+[profile.ci]
+retries = 1
+flaky-result = "fail"
+fail-fast = false
+status-level = "retry"
+final-status-level = "flaky"
+
+[profile.ci.junit]
+path = "junit.xml"
+report-skipped = "none"
+
+[profile.db]
+inherits = "ci"
+test-threads = 4
+
+[profile.db.junit]
+path = "junit.xml"
+report-skipped = "none"

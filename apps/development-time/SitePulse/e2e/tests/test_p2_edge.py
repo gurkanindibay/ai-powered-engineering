@@ -63,7 +63,7 @@ def test_google_sign_in_redirects_to_the_provider(login_page, page):
     )
     by_id(page, "login_tab_homeOwner").click()
     by_id(page, "btn_google_sign_in").click()
-    page.wait_for_timeout(3_000)
+    page.wait_for_load_state("networkidle")
     assert google_requests or "accounts.google.com" in page.url
 
 
@@ -80,7 +80,7 @@ def test_offline_state_shows_a_banner_and_keeps_the_balance(login_as, page, cont
     before = home.balance()
 
     context.set_offline(True)
-    page.wait_for_timeout(2_000)
+    by_id(page, "offline_banner").wait_for(timeout=10_000)
 
     assert home.balance() == before
     assert by_id(page, "offline_banner").count() == 1
@@ -122,7 +122,8 @@ def test_adding_a_resident_to_an_occupied_unit_warns_and_saves_nothing(login_as,
     by_id(page, "module_save_new_resident_btn").click()
     by_id(page, "btn_confirmation_cancel").wait_for(timeout=10_000)
     by_id(page, "btn_confirmation_cancel").click()
-    page.wait_for_timeout(1_000)
+    by_id(page, "btn_confirmation_cancel").wait_for(state="detached", timeout=10_000)
+    page.wait_for_load_state("networkidle")
 
     # The card chosen in the picker exists without a role (REQ-042); the unit is untouched.
     person = stack.sql("SELECT id FROM persons WHERE email = 'deneme.kisi@e2e.test';")

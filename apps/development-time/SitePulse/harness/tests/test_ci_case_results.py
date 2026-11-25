@@ -27,6 +27,12 @@ class CaseAdapterTests(unittest.TestCase):
         db = next(row for row in manifest if row["suite"] == "rust-db-test")
         self.assertEqual(db["shards"], ["rust-db-test"])
 
+    def test_intentionally_skipped_browser_lane_is_not_expected_in_manifests(self):
+        suites = cases.expected_suites(e2e_enabled=False)
+        gates_manifest = cases.expected_gates(e2e_enabled=False)
+        self.assertNotIn("e2e", {row["suite"] for row in suites})
+        self.assertNotIn("e2e", gates_manifest)
+
     def test_cargo_parser_keeps_doctest_names_and_ignored_status(self):
         output = """Running unittests src/lib.rs (target/debug/deps/sitepulse)
 running 2 tests
@@ -81,6 +87,22 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
         self.assertEqual([row["status"] for row in parsed], ["failed", "error"])
         self.assertEqual([row["detail"] for row in parsed], ["no", "broken"])
         self.assertEqual([row["duration_s"] for row in parsed], [None, None])
+
+    def test_nextest_junit_marks_flaky_failures_and_reports_runner_totals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "junit.xml"
+            path.write_text('<testsuites><testsuite><testcase classname="sitepulse_backend::it" name="payments::flaky" time="0.2">'
+                            '<failure message="flaky test failed after retry"><flakyFailure>first attempt failed</flakyFailure></failure>'
+                            '</testcase><testcase classname="sitepulse_backend::it" name="payments::ok" time="0.1"/>'
+                            '<testcase classname="sitepulse_backend::it" name="payments::ignored" time="0"><skipped/></testcase>'
+                            '</testsuite></testsuites>')
+            parsed = cases.parse_junit(path, runner="cargo", suite="rust-test")
+        self.assertEqual([row["native_id"] for row in parsed], [
+            "sitepulse_backend::it::payments::flaky", "sitepulse_backend::it::payments::ok",
+            "sitepulse_backend::it::payments::ignored"])
+        self.assertEqual([row["status"] for row in parsed], ["failed", "passed", "skipped"])
+        self.assertEqual(cases.native_totals("", "cargo", {"cases": parsed}), {
+            "total": 3, "passed": 1, "failed": 1, "skipped": 1})
 
     def test_unittest_parser_retains_fail_error_and_skip(self):
         output = """test_a (module.Case.test_a) ... ok

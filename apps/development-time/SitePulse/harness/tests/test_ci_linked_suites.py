@@ -49,17 +49,26 @@ def _ci_gate_argv(gate):
 
 
 class LinkedSuitesCoveredInCi(unittest.TestCase):
+    def test_rust_integration_tests_use_one_target_and_every_module_is_registered(self):
+        tests = PROJECT_ROOT / "backend" / "tests"
+        targets = sorted(path.name for path in tests.glob("*.rs"))
+        self.assertEqual(targets, ["it.rs"])
+        source_modules = {path.stem for path in (tests / "it").glob("*.rs") if path.name != "test_db.rs"}
+        re = __import__("re")
+        registered_modules = set(re.findall(r"^mod (\w+);$", (tests / "it.rs").read_text(), re.M))
+        self.assertEqual(registered_modules - {"test_db", "support"}, source_modules)
+
     def test_every_linked_suite_also_runs_in_a_ci_gate(self):
         commands = _linked_commands()
         self.assertTrue(commands, "no run_suite calls found in test_linked_backend_suites.py")
         for name, argv in commands:
             with self.subTest(test=name, command=" ".join(argv)):
                 if argv[:2] == ["cargo", "test"]:
-                    # rust-test runs `cargo test --locked` with no filter: every test target.
+                    # The linked wrapper names the module; the CI gate runs the consolidated crate.
                     target = argv[argv.index("--test") + 1]
-                    self.assertTrue((PROJECT_ROOT / "backend" / "tests" / f"{target}.rs").exists())
+                    self.assertTrue((PROJECT_ROOT / "backend" / "tests" / "it" / f"{target}.rs").exists())
                     gate = "rust-test"
-                    expected = ["cargo", "test", "--locked"]
+                    expected = ["cargo", "nextest", "run", "--locked"]
                 elif argv[:2] == ["flutter", "test"]:
                     # flutter-test runs `flutter test` with no path: every test file.
                     self.assertTrue((PROJECT_ROOT / "flutter" / argv[2]).exists())
