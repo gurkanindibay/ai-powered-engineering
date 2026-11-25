@@ -222,6 +222,17 @@ pub async fn run_accrual_with_report(
                     if already {
                         continue;
                     }
+                    // Occupancy-aware accrual never charges a unit without a titled owner: the
+                    // manual run reports such units separately (units_without_owner) and leaves
+                    // them uncharged, so a unit no one owns must not accrue a debt the scheduler
+                    // would then allocate to nobody.
+                    if proration_enabled && unit.owner_user_id.is_none() {
+                        batch.skipped.push(format!(
+                            "{}: no titled owner",
+                            inner.unit_label(&unit.block_id, unit.unit_number)
+                        ));
+                        continue;
+                    }
                     let basis =
                         match crate::services::operating_budget_service::operational_dues_basis(
                             &inner, unit, due_date,
