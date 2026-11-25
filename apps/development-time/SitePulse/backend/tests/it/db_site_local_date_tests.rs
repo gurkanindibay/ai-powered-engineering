@@ -219,8 +219,8 @@ async fn when_payment_recorded_late_in_istanbul_evening_then_payment_history_pri
     let late = clock.now();
     let pe_id: i64 = tx
         .query_one(
-            "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel, settlement_status, payment_date, entry_type)
-             VALUES ($1, $2, 'Test Resident', 100.00, 'BANK_TRANSFER', 'SETTLED', $3, 'COLLECTION')
+            "INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, settlement_status, payment_date, entry_type)
+             VALUES ($1, $2, 'Test Resident', 'OWNER', 100.00, 'BANK_TRANSFER', 'SETTLED', $3, 'COLLECTION')
              RETURNING id",
             &[&site_id, &unit_id, &late],
         )
@@ -268,8 +268,8 @@ async fn when_payment_recorded_late_in_istanbul_evening_then_tx_load_payments_fo
     let late = clock.now();
     let pe_id: i64 = client
         .query_one(
-            "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel, settlement_status, payment_date, entry_type)
-             VALUES ($1, $2, 'Test Resident', 100.00, 'BANK_TRANSFER', 'SETTLED', $3, 'COLLECTION')
+            "INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, settlement_status, payment_date, entry_type)
+             VALUES ($1, $2, 'Test Resident', 'OWNER', 100.00, 'BANK_TRANSFER', 'SETTLED', $3, 'COLLECTION')
              RETURNING id",
             &[&site_id, &unit_id, &late],
         )
