@@ -1,7 +1,8 @@
 """EPIC-13 journey: a confirmed bank transfer appears consistently in both views.
 
-Covers SC-13-04-13: a resident's confirmed payment appears in their dashboard,
-their statement and the manager's collection and unit views.
+Covers SC-13-04-13: a resident's confirmed payment appears in their statement,
+the manager's collection total and the manager's unit view, while the resident
+dashboard keeps showing the remaining debt.
 """
 from __future__ import annotations
 
@@ -86,8 +87,8 @@ def test_confirmed_payment_appears_in_resident_and_manager_views(
         )
         receipt_number = payment_receipts[0]["receipt_number"]
 
-        # Resident view: a refreshed dashboard drops by the same amount and the statement
-        # shows the receipt.
+        # Resident view: the statement total drops by the same amount, the dashboard still
+        # shows the remaining primary liability, and the statement lists the receipt.
         resident = page.context.new_page()
         try:
             LoginPage(resident, login_page.base_url).open().login(
