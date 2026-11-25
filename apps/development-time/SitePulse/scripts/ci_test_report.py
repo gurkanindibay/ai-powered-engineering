@@ -40,7 +40,6 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-PUBLIC_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/()'&+-]{0,119}$")
 PUBLIC_SCENARIO_ID = re.compile(r"^SC-\d{2}-\d{2}-\d{2,}$")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -49,6 +48,8 @@ import product_status as ps  # noqa: E402
 import ci_suite_collection as sc  # noqa: E402
 import ci_coverage_report as cov  # noqa: E402
 import ci_scenario_evidence as scenario_evidence  # noqa: E402
+from ci_scenario_evidence import safe_public_label as _safe_public_label  # noqa: E402
+from ci_scenario_evidence import safe_static_case_name as _safe_static_case_name  # noqa: E402
 
 
 def junit_totals(files: list[Path]) -> dict:
@@ -142,16 +143,14 @@ def _public_duration(value: object) -> float | None:
     return round(duration, 3)
 
 
-def _safe_public_label(value: object, fallback: str = "") -> str:
-    return value if isinstance(value, str) and PUBLIC_LABEL.fullmatch(value) else fallback
+def _evidence_cases(collected: object, inventory_cases: list[dict]) -> list[dict]:
+    """Cases for scenario matching: the collected ones with their full names, never to be published.
 
-
-def _safe_static_case_name(value: object) -> str:
-    if not isinstance(value, str):
-        return "test case"
-    # Pytest and JUnit commonly append parameter IDs in brackets. Do not publish that suffix.
-    base = value.split("[", 1)[0].strip()
-    return _safe_public_label(base, "test case")[:100]
+    `_public_inventory` truncates names. It keeps the collected cases first and in order, so the
+    entries after them are the legacy JUnit cases `collect_inventory` appended.
+    """
+    full = [case for case in collected if isinstance(case, dict)] if isinstance(collected, list) else []
+    return full + inventory_cases[len(full):]
 
 
 def _public_inventory(suites: object, gates: object, cases: object) -> dict:
@@ -525,8 +524,9 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
     if coverage is not None:
         summary["coverage"] = coverage
     snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history(), inventory=inventory)
-    evidence = scenario_evidence.build_evidence(snapshot["scenarios"], inventory.get("cases", []),
-                                                catalogue.links, meta["run_id"], commit_override or meta["commit"])
+    evidence = scenario_evidence.build_evidence(
+        snapshot["scenarios"], _evidence_cases(collection.get("cases"), inventory.get("cases", [])),
+        scenario_evidence.named_links(catalogue), meta["run_id"], commit_override or meta["commit"])
     feature_page = (out / "feature-report.html").read_text(encoding="utf-8")
     (out / "feature-report.html").write_text(scenario_evidence.add_html_section(feature_page, evidence),
                                              encoding="utf-8")

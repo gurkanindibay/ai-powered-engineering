@@ -19,10 +19,43 @@ import feature_traceability as ft
 
 CASE_STATUSES = {"passed": "passing", "failed": "failing", "error": "failing",
                  "skipped": "skipped", "cancelled": "skipped", "not-run": "skipped"}
+PUBLIC_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/()'&+-]{0,119}$")
+DART_INTERPOLATION = re.compile(r"(?<!\\)\$(?:\{[^{}]*\}|[A-Za-z_]\w*)")
+# An interpolated title needs this much literal text to identify its cases.
+MIN_TEMPLATE_LITERAL = 12
+
+
+def safe_public_label(value: object, fallback: str = "") -> str:
+    return value if isinstance(value, str) and PUBLIC_LABEL.fullmatch(value) else fallback
+
+
+def safe_static_case_name(value: object) -> str:
+    if not isinstance(value, str):
+        return "test case"
+    # Pytest and JUnit commonly append parameter IDs in brackets. Do not publish that suffix.
+    base = value.split("[", 1)[0].strip()
+    return safe_public_label(base, "test case")[:100]
 
 
 def _normalize(value: object) -> str:
     return re.sub(r"[^a-z0-9]", "", str(value).lower())
+
+
+def _name_components(native_id: str, producer: str) -> set[str]:
+    # A pytest parameter suffix is not part of the declared test name.
+    if producer != "flutter":
+        native_id = native_id.split("[", 1)[0]
+    return {_normalize(part) for part in re.split(r"::|[./]", native_id)}
+
+
+def _matches_template(native_id: str, title: str) -> bool:
+    """Match a Dart title such as 'cannot change for $status' against the names it expands to."""
+    literals = DART_INTERPOLATION.split(title)
+    if len(literals) < 2 or len(_normalize("".join(literals))) < MIN_TEMPLATE_LITERAL:
+        return False
+    # Each interpolated value must be a single word, so a longer sibling title cannot stand in.
+    pattern = r"\S+".join(map(re.escape, literals))
+    return re.search(rf"(?:^| ){pattern}$", native_id.split("::", 1)[-1]) is not None
 
 
 def _has_title(native_id: str, title: str) -> bool:
@@ -64,17 +97,19 @@ def _case_matches(ref: dict, case: dict) -> bool:
     native_id = str(case.get("native_id", ""))
     native = _normalize(native_id)
     test = _normalize(ref.get("test", ""))
-    if not test or test not in native:
-        return False
     source = str(ref.get("file", ""))
     stem = _normalize(Path(source).stem)
     producer = str(case.get("producer", ""))
+    if producer == "flutter" and DART_INTERPOLATION.search(str(ref.get("test", ""))):
+        return stem in native and _matches_template(native_id, str(ref["test"]))
+    if not test or test not in native:
+        return False
     # Flutter reports carry their source path. Rust and Python reporters expose native test ids,
     # where the declared test name is the stable identifier and source stem disambiguates when
     # present (Rust module paths and Python module/class paths commonly include it).
     if producer == "flutter":
         return stem in native and _has_title(native_id, str(ref.get("test", "")))
-    components = [_normalize(part) for part in re.split(r"::|[./]", native_id)]
+    components = _name_components(native_id, producer)
     return stem in native and test in components
 
 
@@ -82,17 +117,41 @@ def _markdown_cell(value: object) -> str:
     return str(value).replace("|", r"\|").replace("`", r"\`").replace("\n", " ")
 
 
+def named_links(catalogue: ft.Catalogue) -> dict[str, list[dict]]:
+    """Attach each `covers:` link to the test the traceability gate's lexical resolver names.
+
+    A line-by-line read misses a multi-line Dart declaration and can give a marker inside a test body
+    to the test after it. A registered API system check also gets its case id.
+    """
+    resolved, _, _ = ft.scenario_evidence(catalogue)
+    links: dict[str, list[dict]] = {}
+    for scenario_id, entries in resolved.items():
+        links[scenario_id] = []
+        for entry in entries:
+            ref = dict(entry["ref"])
+            test = entry["test"] if entry["kind"] == "test" else None
+            if test:
+                ref["test"] = test["name"]
+                if test.get("case_id"):
+                    ref["case_id"] = test["case_id"]
+            links[scenario_id].append(ref)
+    return links
+
+
 def build_evidence(scenarios: dict, cases: list[dict], links: dict[str, list[dict]],
                    run_id: object = None, commit: object = None) -> dict:
+    """Match on the cases' full names; every case field in the result is sanitized for publication."""
     by_test: dict[str, list[tuple[str, int]]] = defaultdict(list)
     by_flutter_stem: dict[str, list[int]] = defaultdict(list)
     by_explicit_scenario: dict[str, list[int]] = defaultdict(list)
+    by_api_check: dict[str, list[int]] = defaultdict(list)
     for index, case in enumerate(cases):
         native_id = str(case.get("native_id", ""))
         producer = str(case.get("producer", ""))
-        components = {_normalize(part) for part in re.split(r"::|[./]", native_id)}
-        for component in components:
+        for component in _name_components(native_id, producer):
             by_test[component].append((producer, index))
+        if case.get("suite") == "api-system":
+            by_api_check[native_id].append(index)
         if producer == "flutter":
             by_flutter_stem[_normalize(Path(native_id.split("::", 1)[0]).stem)].append(index)
         scenario_ids = case.get("scenario_ids", [])
@@ -105,6 +164,8 @@ def build_evidence(scenarios: dict, cases: list[dict], links: dict[str, list[dic
         refs = links.get(scenario_id, [])
         matched_indexes = set(by_explicit_scenario.get(scenario_id, []))
         for ref in refs:
+            # An API system check runs under its registry key, not its function name.
+            matched_indexes.update(by_api_check.get(str(ref.get("case_id", "")), []))
             test = _normalize(ref.get("test", ""))
             stem = _normalize(Path(str(ref.get("file", ""))).stem)
             if not test:
@@ -117,14 +178,15 @@ def build_evidence(scenarios: dict, cases: list[dict], links: dict[str, list[dic
             for index in by_flutter_stem.get(stem, []):
                 if _case_matches(ref, cases[index]):
                     matched_indexes.add(index)
-        matched = [{"producer": cases[index].get("producer", "unknown"),
-                    "suite": cases[index].get("suite", "unknown"),
-                    "native_id": cases[index].get("native_id", ""),
+        matched = [{"producer": safe_public_label(cases[index].get("producer"), "unknown"),
+                    "suite": safe_public_label(cases[index].get("suite"), "unknown"),
+                    "native_id": safe_static_case_name(cases[index].get("native_id")),
                     "status": CASE_STATUSES.get(str(cases[index].get("status", "")).lower(), "unresolved")}
                    for index in sorted(matched_indexes)]
         state = scenarios[scenario_id].get("state", "unresolved")
-        if matched:
-            statuses = {item["status"] for item in matched}
+        statuses = {item["status"] for item in matched}
+        # A @pending scenario is not automated, so a linked partial test cannot make it pass.
+        if matched and (state != "planned" or "failing" in statuses):
             evidence_status = ("failing" if "failing" in statuses else
                                "passing" if "passing" in statuses else
                                "skipped" if statuses == {"skipped"} else "unresolved")
@@ -150,7 +212,7 @@ def compare(artifact_dir: Path, repository_root: Path) -> dict:
     if not isinstance(scenarios, dict):
         raise ValueError("product-status.json has no scenario catalogue")
     return build_evidence(scenarios, _load_cases(artifact_dir / "case-results.jsonl"),
-                          ft.load_links(repository_root), status.get("run_id"), status.get("commit"))
+                          named_links(ft.load_catalogue(repository_root)), status.get("run_id"), status.get("commit"))
 
 
 def render_markdown(report: dict) -> str:
