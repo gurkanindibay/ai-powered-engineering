@@ -7,7 +7,7 @@ Provides:
 - `resident_import_xlsx`: resident directory Excel import (.xlsx) compatible with PersonImportXlsx
 - `make_viban`: deterministic flat Virtual IBAN generator matching VirtualIbanService
 - `build_companion_statement_rows`: dynamically builds the 4 companion statement transactions
-- `DEFAULT_RESIDENT_IMPORT_ROWS`: 5 valid rows + 1 invalid format row + 1 duplicate person row
+- `DEFAULT_RESIDENT_IMPORT_ROWS`: 5 sample rows + 1 invalid row + 1 repeated-email row
 """
 from __future__ import annotations
 
@@ -22,22 +22,9 @@ from xml.sax.saxutils import escape
 try:
     from .money import format_try
 except ImportError:
-    try:
-        from support.money import format_try
-    except ImportError:
-        def format_try(amount: Decimal) -> str:
-            s = f"{amount:.2f}"
-            integer_part, decimal_part = s.split(".")
-            negative = integer_part.startswith("-")
-            digits = integer_part.lstrip("-")
-            grouped = ""
-            for i, ch in enumerate(reversed(digits)):
-                if i > 0 and i % 3 == 0:
-                    grouped = "." + grouped
-                grouped = ch + grouped
-            if negative:
-                grouped = "-" + grouped
-            return f"₺{grouped},{decimal_part}"
+    from support.money import format_try
+
+from pm_scenarios.seeder import make_viban
 
 
 @dataclass(frozen=True)
@@ -87,21 +74,6 @@ def _col_name(idx: int) -> str:
         s = chr(65 + (n - 1) % 26) + s
         n = (n - 1) // 26
     return s
-
-
-def make_viban(bank_code: str | int, site_id: str | int, block_name: str, unit_number: int) -> str:
-    """Generate deterministic flat virtual IBAN matching VirtualIbanService."""
-    bank_code_str = str(bank_code).strip().zfill(5)
-    site_id_str = str(site_id)
-    site_hash = 9863791
-    for b in site_id_str.encode("ascii"):
-        site_hash = ((site_hash * 31) + b) & 0xFFFFFFFFFFFFFFFF
-    block_hash = sum(block_name.encode("ascii")) & 0xFFFFFFFFFFFFFFFF
-    site_prefix = f"{(site_hash + block_hash) % 10_000_000_000:010d}"
-    bban = f"{bank_code_str}0{site_prefix}{unit_number:06d}"
-    rem = int(f"{bban}292700") % 97
-    check = f"{98 - rem:02d}"
-    return f"TR{check}{bban}"
 
 
 def kuveyt_xlsx(path: Path, rows: list[StatementRow], iban: str = "TR620020500009863791600001") -> Path:
@@ -199,15 +171,15 @@ DEFAULT_RESIDENT_IMPORT_COLUMNS: list[str] = [
 DEFAULT_RESIDENT_IMPORT_ROWS: list[list[str]] = [
     DEFAULT_RESIDENT_IMPORT_COLUMNS,
     # 5 valid resident rows
-    ["B Blok", "1", "1", "Kemal Sunal", "kemal.sunal@example.test", "0532 101 00 01", "10", "1.250,00", "evet", "", "", ""],
-    ["B Blok", "2", "1", "Şener Şen", "sener.sen@example.test", "0532 101 00 02", "10", "1.250,00", "evet", "", "", ""],
-    ["B Blok", "3", "2", "Halit Akçatepe", "halit.akcatepe@example.test", "0532 101 00 03", "12", "1.500,00", "hayır", "Tarık Akan", "tarik.akan@example.test", "0532 201 00 01"],
-    ["B Blok", "4", "2", "Adile Naşit", "adile.nasit@example.test", "0532 101 00 04", "10", "1.250,00", "evet", "", "", ""],
-    ["B Blok", "5", "3", "Münir Özkul", "munir.ozkul@example.test", "0532 101 00 05", "14", "1.750,00", "evet", "", "", ""],
+    ["B Blok", "1", "1", "Test Resident One", "resident.one@example.test", "0532 101 00 01", "10", "1.250,00", "evet", "", "", ""],
+    ["B Blok", "2", "1", "Test Resident Two", "resident.two@example.test", "0532 101 00 02", "10", "1.250,00", "evet", "", "", ""],
+    ["B Blok", "3", "2", "Test Resident Three", "resident.three@example.test", "0532 101 00 03", "12", "1.500,00", "hayır", "Test Tenant Three", "tenant.three@example.test", "0532 201 00 01"],
+    ["B Blok", "4", "2", "Test Resident Four", "resident.four@example.test", "0532 101 00 04", "10", "1.250,00", "evet", "", "", ""],
+    ["B Blok", "5", "3", "Test Resident Five", "resident.five@example.test", "0532 101 00 05", "14", "1.750,00", "evet", "", "", ""],
     # 1 intentionally invalid row (bad format)
     ["B Blok", "XYZ", "abc", "", "invalid-email", "bad-phone", "-5", "not-a-number", "maybe", "", "", ""],
-    # 1 duplicate national ID to exercise partial-import error reporting and person merge
-    ["B Blok", "6", "3", "Ahmet Yılmaz (10000000146)", "ahmet.duplicate@example.test", "+90 532 111 22 33", "10", "1.250,00", "evet", "", "", ""],
+    # Repeat row 1's email so duplicate detection is exercised on every preset.
+    ["B Blok", "6", "3", "Test Resident Six", "resident.one@example.test", "+90 532 111 22 33", "10", "1.250,00", "evet", "", "", ""],
 ]
 
 

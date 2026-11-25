@@ -55,10 +55,13 @@ try:
         statement_mt940,
     )
 except ImportError:
+    COMPANION_FILES_AVAILABLE = False
     build_companion_statement_rows = None  # type: ignore[assignment]
     resident_import_xlsx = None  # type: ignore[assignment]
     statement_csv = None  # type: ignore[assignment]
     statement_mt940 = None  # type: ignore[assignment]
+else:
+    COMPANION_FILES_AVAILABLE = True
 
 from pm_scenarios import (  # noqa: E402  (sys.path is set up above)
     EXPECTED_TOTALS,
@@ -169,6 +172,10 @@ class NoActiveScenarioError(WorkbenchWebError):
 
 class SeedingFailedError(WorkbenchWebError):
     status = 502
+
+
+class CompanionFilesUnavailableError(WorkbenchWebError):
+    status = 503
 
 
 def normalize_preset(value: Any) -> str:
@@ -453,15 +460,8 @@ GET_ROUTES = (
     "/api/presets",
     "/api/active",
     "/healthz",
-    "/api/companion/bank-statement.csv",
-    "/api/companion/bank-csv",
-    "/api/companion/bank-statement.mt940",
-    "/api/companion/bank-statement.sta",
-    "/api/companion/bank-mt940",
     "/api/companion/bank-statement",
     "/api/companion/resident-import.xlsx",
-    "/api/companion/resident-import",
-    "/api/companion/resident-xlsx",
 )
 POST_ROUTES = ("/api/seed", "/api/reset")
 
@@ -531,6 +531,16 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
         def _send_body(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)
             self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+
+        def _send_download(self, filename: str, content_type: str, body: bytes) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -627,70 +637,38 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
                 )
             elif path == "/healthz":
                 self._send_json(200, {"status": "ok", "service": "pm-workbench-web"})
-            elif path in ("/api/companion/bank-statement.csv", "/api/companion/bank-csv"):
-                csv_bytes = service.companion_bank_csv().encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "text/csv; charset=utf-8")
-                self.send_header("Content-Disposition", 'attachment; filename="bank-statement.csv"')
-                self.send_header("Content-Length", str(len(csv_bytes)))
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                if self.command != "HEAD":
-                    self.wfile.write(csv_bytes)
-            elif path in (
-                "/api/companion/bank-statement.mt940",
-                "/api/companion/bank-statement.sta",
-                "/api/companion/bank-mt940",
-            ):
-                mt940_bytes = service.companion_bank_mt940().encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.send_header("Content-Disposition", 'attachment; filename="bank-statement.mt940"')
-                self.send_header("Content-Length", str(len(mt940_bytes)))
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                if self.command != "HEAD":
-                    self.wfile.write(mt940_bytes)
             elif path == "/api/companion/bank-statement":
+                if not COMPANION_FILES_AVAILABLE:
+                    raise CompanionFilesUnavailableError(
+                        "Companion files unavailable: e2e/support is not importable."
+                    )
                 query = parse_qs(urlparse(self.path).query)
                 fmt = (query.get("format", ["csv"])[0]).lower()
-                if fmt in ("mt940", "sta"):
-                    mt940_bytes = service.companion_bank_mt940().encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/plain; charset=utf-8")
-                    self.send_header("Content-Disposition", 'attachment; filename="bank-statement.mt940"')
-                    self.send_header("Content-Length", str(len(mt940_bytes)))
-                    self.send_header("Cache-Control", "no-store")
-                    self.end_headers()
-                    if self.command != "HEAD":
-                        self.wfile.write(mt940_bytes)
+                if fmt == "mt940":
+                    self._send_download(
+                        "bank-statement.mt940",
+                        "text/plain; charset=utf-8",
+                        service.companion_bank_mt940().encode("utf-8"),
+                    )
+                elif fmt == "csv":
+                    self._send_download(
+                        "bank-statement.csv",
+                        "text/csv; charset=utf-8",
+                        service.companion_bank_csv().encode("utf-8"),
+                    )
                 else:
-                    csv_bytes = service.companion_bank_csv().encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/csv; charset=utf-8")
-                    self.send_header("Content-Disposition", 'attachment; filename="bank-statement.csv"')
-                    self.send_header("Content-Length", str(len(csv_bytes)))
-                    self.send_header("Cache-Control", "no-store")
-                    self.end_headers()
-                    if self.command != "HEAD":
-                        self.wfile.write(csv_bytes)
-            elif path in (
-                "/api/companion/resident-import.xlsx",
-                "/api/companion/resident-import",
-                "/api/companion/resident-xlsx",
-            ):
+                    raise InvalidRequestError("format must be csv or mt940.")
+            elif path == "/api/companion/resident-import.xlsx":
+                if not COMPANION_FILES_AVAILABLE:
+                    raise CompanionFilesUnavailableError(
+                        "Companion files unavailable: e2e/support is not importable."
+                    )
                 xlsx_bytes = service.companion_resident_xlsx()
-                self.send_response(200)
-                self.send_header(
-                    "Content-Type",
+                self._send_download(
+                    "resident-import.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    xlsx_bytes,
                 )
-                self.send_header("Content-Disposition", 'attachment; filename="resident-import.xlsx"')
-                self.send_header("Content-Length", str(len(xlsx_bytes)))
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                if self.command != "HEAD":
-                    self.wfile.write(xlsx_bytes)
             elif path in POST_ROUTES:
                 self._method_not_allowed("POST")
             else:

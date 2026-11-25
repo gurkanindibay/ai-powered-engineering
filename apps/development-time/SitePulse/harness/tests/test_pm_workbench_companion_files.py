@@ -1,21 +1,20 @@
 """Unit tests for the PM Workbench companion file endpoints (issue #418).
 
 Verifies the one-click downloadable companion file endpoints:
-  - GET /api/companion/bank-statement.csv
-  - GET /api/companion/bank-statement.mt940
+  - GET /api/companion/bank-statement?format=csv|mt940
   - GET /api/companion/resident-import.xlsx
-  - Query parameter formats and alternate alias routes
+  - Query parameter format selection
 
 Verifies:
-  1. Bank Statement (CSV & MT940): dynamically populated with the active seeded site's
-     real Virtual IBANs (read from active manifest):
-     - 1 clean exact-match payment (real virtual IBAN from the active manifest for unit A-1)
+  1. Bank Statement (CSV & MT940): dynamically populated with test virtual IBANs
+     derived from the active manifest:
+     - 1 clean exact-match payment (test virtual IBAN derived from the active manifest for unit A-1)
      - 1 ambiguous multi-debtor Virtual IBAN transfer (unit A-2) that lands in the UNMATCHED queue (Q11)
      - 1 duplicate bank transaction ID (idempotency check)
      - 1 unknown Virtual IBAN
   2. Resident Import Excel (.xlsx):
      - OpenXML XLSX format compatible with PersonImportXlsx in flutter
-     - 5 valid resident rows + 1 intentionally invalid row (bad format) + 1 duplicate national ID
+     - 5 sample resident rows + 1 invalid row + 1 repeated owner email
      - Semicolon-separated columns: block, unit_no, floor, owner_full_name, owner_email,
        owner_phone, land_share, monthly_dues, is_resident, tenant_full_name, tenant_email, tenant_phone.
   3. Safe fallback when no scenario is currently active.
@@ -32,9 +31,11 @@ import unittest
 import urllib.error
 import urllib.request
 import zipfile
+from collections import Counter
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from unittest import mock
 import xml.etree.ElementTree as ET
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -179,7 +180,7 @@ class CompanionTestHarness:
 class CompanionFilesTest(unittest.TestCase):
     def test_bank_statement_csv_endpoint_with_active_manifest(self) -> None:
         with CompanionTestHarness(active_manifest=F9_TEST_MANIFEST) as h:
-            status, headers, body = h.get("/api/companion/bank-statement.csv")
+            status, headers, body = h.get("/api/companion/bank-statement?format=csv")
             self.assertEqual(status, 200)
             self.assertIn("text/csv", headers.get("content-type", ""))
             self.assertIn('filename="bank-statement.csv"', headers.get("content-disposition", ""))
@@ -189,7 +190,7 @@ class CompanionFilesTest(unittest.TestCase):
             self.assertEqual(len(lines), 5, f"Expected header + 4 rows, got: {lines}")
             self.assertEqual(lines[0], "Tarih;Referans;Açıklama;Tutar")
 
-            # Check real Virtual IBANs computed from manifest site_id (7788)
+            # Check test Virtual IBANs computed from manifest site_id (7788)
             viban_a1 = make_viban("00205", "7788", "A", 1)
             viban_a2 = make_viban("00205", "7788", "A", 2)
             viban_unknown = make_viban("00205", 99999, "Z", 99)
@@ -215,7 +216,7 @@ class CompanionFilesTest(unittest.TestCase):
 
     def test_bank_statement_mt940_endpoint_with_active_manifest(self) -> None:
         with CompanionTestHarness(active_manifest=F9_TEST_MANIFEST) as h:
-            status, headers, body = h.get("/api/companion/bank-statement.mt940")
+            status, headers, body = h.get("/api/companion/bank-statement?format=mt940")
             self.assertEqual(status, 200)
             self.assertIn("text/plain", headers.get("content-type", ""))
             self.assertIn('filename="bank-statement.mt940"', headers.get("content-disposition", ""))
@@ -311,20 +312,32 @@ class CompanionFilesTest(unittest.TestCase):
             self.assertEqual(invalid_row.get("E"), "invalid-email")
             self.assertEqual(invalid_row.get("F"), "bad-phone")
 
-            # Row 8: duplicate person candidate (Ahmet Yılmaz with national ID / phone matching seeder)
+            # Row 8: a duplicate email that is also the key checked for in-file duplicates.
             dup_row = parsed_rows[7]
-            self.assertIn("Ahmet Yılmaz", dup_row.get("D", ""))
-            self.assertIn("10000000146", dup_row.get("D", ""))
+            self.assertEqual(dup_row.get("E"), parsed_rows[1].get("E"))
             self.assertEqual(dup_row.get("F"), "+90 532 111 22 33")
+            email_counts = Counter(row.get("E", "").strip().casefold() for row in parsed_rows[1:])
+            self.assertEqual(email_counts[parsed_rows[1]["E"].casefold()], 2)
+            self.assertEqual(sum(count > 1 for count in email_counts.values()), 1)
+            seen_emails: set[str] = set()
+            duplicate_rows: list[dict[str, str]] = []
+            for row in parsed_rows[1:]:
+                email = row.get("E", "").strip().casefold()
+                if email in seen_emails:
+                    duplicate_rows.append(row)
+                seen_emails.add(email)
+            self.assertEqual(duplicate_rows, [dup_row])
+            invalid_rows = [row for row in parsed_rows[1:] if not row.get("D", "").strip()]
+            self.assertEqual(invalid_rows, [parsed_rows[6]])
 
     def test_companion_endpoints_fallback_when_no_active_scenario(self) -> None:
         """When no scenario has been prepared yet, endpoints return valid default files."""
         with CompanionTestHarness(active_manifest=None) as h:
-            status, _, body = h.get("/api/companion/bank-statement.csv")
+            status, _, body = h.get("/api/companion/bank-statement?format=csv")
             self.assertEqual(status, 200)
             self.assertIn("TXN-20261115-001", body.decode("utf-8"))
 
-            status, _, body = h.get("/api/companion/bank-statement.mt940")
+            status, _, body = h.get("/api/companion/bank-statement?format=mt940")
             self.assertEqual(status, 200)
             self.assertIn(":20:STARTMR", body.decode("utf-8"))
 
@@ -332,23 +345,9 @@ class CompanionFilesTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertTrue(len(body) > 1000)
 
-    def test_companion_alternate_routes_and_query_formats(self) -> None:
+    def test_companion_download_routes_and_query_formats(self) -> None:
         with CompanionTestHarness(active_manifest=F9_TEST_MANIFEST) as h:
-            # /api/companion/bank-csv alias
-            s, hdrs, b = h.get("/api/companion/bank-csv")
-            self.assertEqual(s, 200)
-            self.assertIn("text/csv", hdrs.get("content-type", ""))
-
-            # /api/companion/bank-statement.sta and /api/companion/bank-mt940 aliases
-            s, hdrs, b = h.get("/api/companion/bank-statement.sta")
-            self.assertEqual(s, 200)
-            self.assertIn("text/plain", hdrs.get("content-type", ""))
-
-            s, hdrs, b = h.get("/api/companion/bank-mt940")
-            self.assertEqual(s, 200)
-            self.assertIn("text/plain", hdrs.get("content-type", ""))
-
-            # /api/companion/bank-statement with ?format=mt940 vs ?format=csv
+            # One bank-statement route selects its format via query parameter.
             s, hdrs, b = h.get("/api/companion/bank-statement?format=mt940")
             self.assertEqual(s, 200)
             self.assertIn("text/plain", hdrs.get("content-type", ""))
@@ -359,19 +358,33 @@ class CompanionFilesTest(unittest.TestCase):
             self.assertIn("text/csv", hdrs.get("content-type", ""))
             self.assertIn("Tarih;Referans;Açıklama;Tutar", b.decode("utf-8"))
 
-            # /api/companion/resident-import and /api/companion/resident-xlsx aliases
-            s, hdrs, b = h.get("/api/companion/resident-import")
+            req = urllib.request.Request(h.url("/api/companion/bank-statement?format=pdf"), method="GET")
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(req)
+            self.assertEqual(ctx.exception.code, 400)
+
+            s, hdrs, b = h.get("/api/companion/resident-import.xlsx")
             self.assertEqual(s, 200)
             self.assertIn("spreadsheetml.sheet", hdrs.get("content-type", ""))
 
-            s, hdrs, b = h.get("/api/companion/resident-xlsx")
-            self.assertEqual(s, 200)
-            self.assertIn("spreadsheetml.sheet", hdrs.get("content-type", ""))
+            for obsolete_alias in (
+                "/api/companion/bank-csv",
+                "/api/companion/bank-statement.csv",
+                "/api/companion/bank-statement.mt940",
+                "/api/companion/bank-statement.sta",
+                "/api/companion/bank-mt940",
+                "/api/companion/resident-import",
+                "/api/companion/resident-xlsx",
+            ):
+                req = urllib.request.Request(h.url(obsolete_alias), method="GET")
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(req)
+                self.assertEqual(ctx.exception.code, 404, obsolete_alias)
 
     def test_head_and_method_guards(self) -> None:
         with CompanionTestHarness(active_manifest=F9_TEST_MANIFEST) as h:
             # HEAD request returns 200 with 0 body bytes
-            status, headers, body = h.head("/api/companion/bank-statement.csv")
+            status, headers, body = h.head("/api/companion/bank-statement?format=csv")
             self.assertEqual(status, 200)
             self.assertEqual(body, b"")
             self.assertIn("text/csv", headers.get("content-type", ""))
@@ -382,7 +395,7 @@ class CompanionFilesTest(unittest.TestCase):
 
             # POST method is refused with 405 Method Not Allowed
             req = urllib.request.Request(
-                h.url("/api/companion/bank-statement.csv"),
+                h.url("/api/companion/bank-statement?format=csv"),
                 data=b"{}",
                 headers={"Content-Type": "application/json"},
                 method="POST",
@@ -390,6 +403,21 @@ class CompanionFilesTest(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as ctx:
                 urllib.request.urlopen(req)
             self.assertEqual(ctx.exception.code, 405)
+
+    def test_companion_generators_report_unavailable(self) -> None:
+        with CompanionTestHarness(active_manifest=F9_TEST_MANIFEST) as h, mock.patch.object(
+            web, "COMPANION_FILES_AVAILABLE", False
+        ):
+            for path in (
+                "/api/companion/bank-statement?format=csv",
+                "/api/companion/bank-statement?format=mt940",
+                "/api/companion/resident-import.xlsx",
+            ):
+                req = urllib.request.Request(h.url(path), method="GET")
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(req)
+                self.assertEqual(ctx.exception.code, 503)
+                self.assertIn("e2e/support is not importable", ctx.exception.read().decode("utf-8"))
 
 
 if __name__ == "__main__":

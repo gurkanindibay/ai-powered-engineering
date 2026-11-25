@@ -187,7 +187,7 @@
 
   <section aria-labelledby="companion-title">
     <h2 id="companion-title">Companion test files</h2>
-    <p class="hint">One-click companion files dynamically populated with the active scenario's real Virtual IBANs. Download and upload directly into SitePulse during manual testing.</p>
+    <p class="hint">One-click companion files use test data and virtual IBANs derived from the active scenario. Use F9_RECON to exercise the exact A-1 match and A-2 multi-debtor reconciliation outcomes.</p>
     <div class="grid" id="companion-files">
       <article class="card">
         <div class="card-top">
@@ -195,8 +195,8 @@
           <span class="tag">Bank Statement</span>
         </div>
         <h4>Bank Statement (CSV)</h4>
-        <p>Contains 1 clean exact match, 1 multi-debtor transfer (Q11 UNMATCHED), 1 duplicate transaction ID (idempotency check), and 1 unknown Virtual IBAN.</p>
-        <a href="/api/companion/bank-statement.csv" download="bank-statement.csv" class="button primary">Download CSV</a>
+        <p>Contains 1 clean A-1 match, 1 A-2 multi-debtor transfer (Q11 UNMATCHED), 1 duplicate transaction ID, and 1 unknown Virtual IBAN. These reconciliation outcomes require the F9_RECON preset.</p>
+        <a href="/api/companion/bank-statement?format=csv" download="bank-statement.csv" class="button primary">Download CSV</a>
       </article>
       <article class="card">
         <div class="card-top">
@@ -204,8 +204,8 @@
           <span class="tag">Bank Statement</span>
         </div>
         <h4>Bank Statement (MT940)</h4>
-        <p>Standard SWIFT MT940 statement (:20:, :25:, :28C:, :60F:, :61:, :86:, :62F:) with real Virtual IBANs matching backend reconciliation.</p>
-        <a href="/api/companion/bank-statement.mt940" download="bank-statement.mt940" class="button primary">Download MT940</a>
+        <p>Standard SWIFT MT940 statement (:20:, :25:, :28C:, :60F:, :61:, :86:, :62F:) with test virtual IBANs. Use F9_RECON for the A-1 match and A-2 multi-debtor outcomes.</p>
+        <a href="/api/companion/bank-statement?format=mt940" download="bank-statement.mt940" class="button primary">Download MT940</a>
       </article>
       <article class="card">
         <div class="card-top">
@@ -213,7 +213,7 @@
           <span class="tag">Resident Directory</span>
         </div>
         <h4>Resident Import (Excel .xlsx)</h4>
-        <p>5 valid resident rows, 1 intentionally invalid format row, and 1 duplicate person/national ID to test partial import reporting and person merge.</p>
+        <p>5 sample residents, 1 invalid row, and 1 row that repeats the first resident's email to exercise duplicate reporting on every preset. In F9_RECON, the repeated phone also matches a seeded person for duplicate resolution.</p>
         <a href="/api/companion/resident-import.xlsx" download="resident-import.xlsx" class="button primary">Download Excel</a>
       </article>
     </div>
@@ -448,9 +448,9 @@ function renderChecklist(items) {
 function renderCompanionSection(active) {
   const wrap = el("div", "grid");
   const files = [
-    { name: "Bank Statement (CSV)", url: "/api/companion/bank-statement.csv", file: "bank-statement.csv", desc: "4 transactions: 1 clean match, 1 multi-debtor (Q11), 1 duplicate ID, 1 unknown Virtual IBAN" },
-    { name: "Bank Statement (MT940)", url: "/api/companion/bank-statement.mt940", file: "bank-statement.mt940", desc: "SWIFT MT940 format (:20:, :25:, :61:, :86:) with active Virtual IBANs" },
-    { name: "Resident Import (Excel)", url: "/api/companion/resident-import.xlsx", file: "resident-import.xlsx", desc: "5 valid rows, 1 invalid format row, 1 duplicate person/national ID" },
+    { name: "Bank Statement (CSV)", url: "/api/companion/bank-statement?format=csv", file: "bank-statement.csv", desc: "F9_RECON: exact A-1 match, multi-debtor A-2, duplicate transaction ID, unknown IBAN" },
+    { name: "Bank Statement (MT940)", url: "/api/companion/bank-statement?format=mt940", file: "bank-statement.mt940", desc: "F9_RECON: MT940 with test virtual IBANs for A-1 and A-2" },
+    { name: "Resident Import (Excel)", url: "/api/companion/resident-import.xlsx", file: "resident-import.xlsx", desc: "5 sample rows, 1 invalid row, 1 repeated owner email; F9_RECON phone match for duplicate resolution" },
   ];
   files.forEach(function (f) {
     const card = el("article", "card");
