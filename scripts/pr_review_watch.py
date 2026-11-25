@@ -26,6 +26,10 @@ Right after a push GitHub briefly reports no checks for the new head. Such a
 head is held for ``--ci-grace`` seconds (default 300) and counts as ready only if
 no check shows up by then (a PR that really runs no CI).
 
+A PR is ready only when the author has sent it since the bot's last review (see
+pr_review_queue.py and .agents/rules/pr-review-rounds.md). Pushes and comments
+between rounds do not wake the reviewer; ``--any-change`` makes them do so.
+
 A ready PR that you have already handled for this head (for example one you
 left with a COMMENT because CI is red) can be ignored with ``--seen N@SHA``. The
 suppression is tied to the CI state: ``N@SHA:failed`` pins it (preferred: pass
@@ -140,12 +144,14 @@ class QueueCheck:
     """Recompute the ready list, skipping review lookups while the PR list is unchanged."""
 
     def __init__(self, gh: Gh, bot_login: str, skip_authors: set[str], limit: int,
-                 seen_activity: set[str] | None = None) -> None:
+                 seen_activity: set[str] | None = None, any_change: bool = False) -> None:
+        self.any_change = any_change
         self.seen_activity = seen_activity or set()
         self.gh, self.bot_login, self.skip_authors, self.limit = gh, bot_login, skip_authors, limit
         self._fingerprint: dict[int, tuple[str, bool, str, str | None]] | None = None
         self._feedback: dict[int, tuple[str, str, str | None, list[Entry]]] = {}
         self._ready: list[Entry] = []
+        self._submissions: queue_tool.Submissions = {}
 
     def fingerprint(self) -> dict[int, tuple[str, bool, str, str | None]]:
         fields = "number,isDraft,headRefOid,updatedAt,statusCheckRollup"
@@ -159,11 +165,15 @@ class QueueCheck:
 
     def __call__(self, force: bool = False) -> list[Entry]:
         current = self.fingerprint()
+        if force:
+            self._submissions.clear()  # the safety refresh trusts nothing cached
         if force or current != self._fingerprint:
-            queue = queue_tool.build_queue(self.gh, self.bot_login, self.skip_authors, self.limit)
+            queue = queue_tool.build_queue(self.gh, self.bot_login, self.skip_authors, self.limit,
+                                           self.any_change, self._submissions)
             ready = queue["ready"]
             feedback = {}
-            for entry in queue["skipped"]:
+            # In rounds mode comments never wake the reviewer: the author submits instead.
+            for entry in (queue["skipped"] if self.any_change else []):
                 reviewed_at = entry.get("reviewed_at")
                 if reviewed_at is None:
                     continue
@@ -396,6 +406,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--repo", help="owner/name for the listener, PR listing and review history (default: current repository)")
     p.add_argument("--bot-login", default=queue_tool.BOT_LOGIN, help=f"reviewer login (default {queue_tool.BOT_LOGIN})")
     p.add_argument("--skip-author", action="append", default=[], metavar="LOGIN", help="skip PRs by this author (repeatable)")
+    p.add_argument("--any-change", action="store_true",
+                   help="wake for every new head and new comment, not only when an author submits")
     p.add_argument("--limit", type=int, default=100, help="max open PRs to inspect")
     args = p.parse_args(argv)
     if args.interval <= 0 or args.recheck <= 0 or args.debounce < 0 or args.ci_grace < 0:
@@ -456,7 +468,8 @@ def main(argv: list[str] | None = None, gh: Gh = queue_tool.run_gh) -> int:
         if args.author_pr is not None:
             check = author_check(scoped, repo, args.author_pr, args.after)
         else:
-            check = QueueCheck(scoped, args.bot_login, set(args.skip_author), args.limit, set(args.seen_activity))
+            check = QueueCheck(scoped, args.bot_login, set(args.skip_author), args.limit,
+                               set(args.seen_activity), args.any_change)
         if args.source in ("auto", "webhook"):
             if webhook_available():
                 listener = WebhookListener().start()

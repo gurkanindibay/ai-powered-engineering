@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """List the open PRs a reviewer agent should review now (AGENTS.md rule 16).
 
-A PR is *ready for review* when it is not a draft, its CI checks have all
-finished, and the reviewer bot has not already given a final verdict on the
-current head commit. The bot's own review history is the state, so nothing is
-stored locally. Reasons a PR needs a review:
+Reviews run in rounds (.agents/rules/pr-review-rounds.md). Any review the bot
+submits (APPROVE, REQUEST_CHANGES or COMMENT) ends a round, and the next one
+starts only when the author submits the PR again: "Ready for review" on a draft,
+or a review request naming the bot. A PR is *ready for review* when it is not a
+draft, its CI checks have all finished, and it has a submission the bot has not
+answered. The bot's review history and the PR timeline are the state, so nothing
+is stored locally. Reasons a PR needs a review:
 
-    new          the bot never reviewed this PR (new PR, or a draft marked ready)
-    new_head     commits were pushed after the bot's last review
-    unfinished   the bot's last review of this head is a COMMENT or was dismissed,
-                 so no final verdict (APPROVED / CHANGES_REQUESTED) exists yet
+    new          the bot never reviewed this PR (opened ready, or a draft marked ready)
+    new_head     submitted again after the bot's last review, with new commits
+    requested    submitted again after the bot's last review, same commit
+    unfinished   the bot's last review of this head was dismissed (with
+                 --any-change, also when it is a COMMENT)
+
+`--any-change` ignores submissions: any new head, or a head with no final
+verdict, needs a review.
 
 A PR that needs a review but whose checks are still running is reported under
 `waiting_ci`, not `ready`: look again next cycle (or `gh pr checks <n> --watch`).
@@ -39,6 +46,8 @@ PENDING_STATES = {"PENDING", "EXPECTED"}
 FAILED_CONCLUSIONS = {"FAILURE", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE", "ACTION_REQUIRED", "ERROR"}
 
 Gh = Callable[[list[str]], str]
+# number -> ((PR updatedAt, last bot review time), last submission): one watcher's timeline cache.
+Submissions = dict[int, tuple[tuple[str, str], "str | None"]]
 
 
 class GhError(RuntimeError):
@@ -84,7 +93,19 @@ def review_reason(head: str, last_review: dict[str, Any] | None) -> str | None:
     return "unfinished"
 
 
-def classify(pr: dict[str, Any], last_review: dict[str, Any] | None, skip_authors: set[str]) -> dict[str, Any]:
+def round_reason(head: str, last_review: dict[str, Any] | None,
+                 submitted_at: str | None) -> tuple[str | None, str]:
+    """(why a review is owed, why not) when only an author submission opens a round."""
+    if last_review is None or last_review.get("state") == "DISMISSED":
+        return review_reason(head, last_review), ""
+    same_head = last_review.get("commit_id") == head
+    if submitted_at and submitted_at > (last_review.get("submitted_at") or ""):
+        return ("requested" if same_head else "new_head"), ""
+    return None, ("already_reviewed" if same_head else "not_submitted")
+
+
+def classify(pr: dict[str, Any], last_review: dict[str, Any] | None, skip_authors: set[str],
+             submitted_at: str | None = None, any_change: bool = False) -> dict[str, Any]:
     head = pr.get("headRefOid", "")
     ci = ci_state(pr.get("statusCheckRollup"))
     entry = {
@@ -100,9 +121,12 @@ def classify(pr: dict[str, Any], last_review: dict[str, Any] | None, skip_author
         return {**entry, "bucket": "skipped", "reason": "draft"}
     if entry["author"] in skip_authors:
         return {**entry, "bucket": "skipped", "reason": "own_pr"}
-    reason = review_reason(head, last_review)
+    if any_change:
+        reason, idle = review_reason(head, last_review), "already_reviewed"
+    else:
+        reason, idle = round_reason(head, last_review, submitted_at)
     if reason is None:
-        return {**entry, "bucket": "skipped", "reason": "already_reviewed",
+        return {**entry, "bucket": "skipped", "reason": idle,
                 "reviewed_at": (last_review or {}).get("submitted_at")}
     if ci == "pending":
         return {**entry, "bucket": "waiting_ci", "reason": reason}
@@ -117,15 +141,42 @@ def last_bot_review(gh: Gh, number: int, bot_login: str) -> dict[str, Any] | Non
     return reviews[-1] if reviews else None
 
 
+def last_submission(gh: Gh, number: int, bot_login: str) -> str | None:
+    """When the author last sent the PR to review: "Ready for review", or a request naming the bot."""
+    jq = ('.[]|select(.event=="ready_for_review" or (.event=="review_requested" and '
+          f'.requested_reviewer.login=="{bot_login}"))|.created_at')
+    out = gh(["api", f"repos/{{owner}}/{{repo}}/issues/{number}/timeline", "--paginate", "--jq", jq])
+    return max((line.strip() for line in out.splitlines() if line.strip()), default=None)
+
+
+def cached_submission(gh: Gh, pr: dict[str, Any], review: dict[str, Any], bot_login: str,
+                      cache: Submissions | None) -> str | None:
+    """`last_submission`, re-read only when the PR or the bot's last review changed.
+    A submission updates the PR's `updatedAt`; without that field nothing is cached."""
+    updated = pr.get("updatedAt")
+    if cache is None or not updated:
+        return last_submission(gh, pr["number"], bot_login)
+    key = (updated, review.get("submitted_at") or "")
+    hit = cache.get(pr["number"])
+    if hit is None or hit[0] != key:
+        hit = cache[pr["number"]] = (key, last_submission(gh, pr["number"], bot_login))
+    return hit[1]
+
+
 def build_queue(gh: Gh, bot_login: str = BOT_LOGIN, skip_authors: set[str] | None = None,
-                limit: int = 100) -> dict[str, list[dict[str, Any]]]:
-    fields = "number,title,isDraft,headRefOid,author,statusCheckRollup"
+                limit: int = 100, any_change: bool = False,
+                submissions: Submissions | None = None) -> dict[str, list[dict[str, Any]]]:
+    fields = "number,title,isDraft,headRefOid,updatedAt,author,statusCheckRollup"
     prs = json.loads(gh(["pr", "list", "--state", "open", "--limit", str(limit), "--json", fields]) or "[]")
     queue: dict[str, list[dict[str, Any]]] = {"ready": [], "waiting_ci": [], "skipped": []}
     for pr in prs:
         # Drafts are skipped without a review lookup.
         review = None if pr.get("isDraft") else last_bot_review(gh, pr["number"], bot_login)
-        entry = classify(pr, review, skip_authors or set())
+        # The timeline is read only when an earlier review makes the submission time matter.
+        submitted = None
+        if review is not None and not any_change:
+            submitted = cached_submission(gh, pr, review, bot_login, submissions)
+        entry = classify(pr, review, skip_authors or set(), submitted, any_change)
         queue[entry.pop("bucket")].append(entry)
     return queue
 
@@ -145,13 +196,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--bot-login", default=BOT_LOGIN, help=f"reviewer login (default {BOT_LOGIN})")
     p.add_argument("--skip-author", action="append", default=[], metavar="LOGIN", help="skip PRs by this author (repeatable)")
     p.add_argument("--limit", type=int, default=100, help="max open PRs to inspect")
+    p.add_argument("--any-change", action="store_true",
+                   help="review every new head, without waiting for the author to submit it")
     return p.parse_args(argv)
 
 
 def main(argv: list[str] | None = None, gh: Gh = run_gh) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        queue = build_queue(gh, args.bot_login, set(args.skip_author), args.limit)
+        queue = build_queue(gh, args.bot_login, set(args.skip_author), args.limit, args.any_change)
     except (GhError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
