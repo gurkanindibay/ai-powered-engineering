@@ -313,7 +313,7 @@ class TestPmSeederExecution(unittest.TestCase):
         self.assertTrue(any("INSERT INTO dues_period_snapshots" in s for s in self.stack.statements))
 
     def test_unknown_preset_raises_value_error(self) -> None:
-        for bad in ["F8", "F9", "F_UNKNOWN", ""]:
+        for bad in ["F99", "FX", "F_UNKNOWN", ""]:
             with self.assertRaises(ValueError):
                 seed_preset(
                     preset=bad,
