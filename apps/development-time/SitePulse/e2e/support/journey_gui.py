@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import os
+import re
 from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 
 from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from pages import DuesManagement, ManagerCockpit, Shell
 from support.flutter import by_id, text_of
@@ -30,6 +32,30 @@ def page_lines(page: Page) -> list[str]:
         }"""
     )
     return [part.strip() for line in raw for part in line.split("\n") if part.strip()]
+
+
+def page_lines_until(page: Page, pattern: re.Pattern[str], timeout_ms: int = 10_000) -> list[str]:
+    """Page lines once one of them matches `pattern`, or the lines shown when time runs out.
+
+    A screen's body (for example a list's empty state) can paint a frame or a fetch after the
+    control the test waited for; slower engines such as WebKit expose that gap.
+    """
+    flags = "i" if pattern.flags & re.IGNORECASE else ""
+    try:
+        page.wait_for_function(
+            """([source, flags]) => {
+                const re = new RegExp(source, flags);
+                return [...document.querySelectorAll('flt-semantics')].some(e => {
+                    const own = [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
+                    return re.test(e.getAttribute('aria-label') || own || '');
+                });
+            }""",
+            arg=[pattern.pattern, flags],
+            timeout=timeout_ms,
+        )
+    except PlaywrightTimeoutError:
+        pass  # the caller asserts on the lines and reports what the page showed
+    return page_lines(page)
 
 
 def page_text(page: Page) -> str:
