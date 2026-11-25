@@ -30,6 +30,7 @@ import json
 import logging
 import sys
 import threading
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -57,6 +58,10 @@ DEFAULT_API_URL = "http://localhost:8080"
 DEFAULT_STATE_PATH = Path.home() / ".sitepulse" / "workbench-active.json"
 UI_HTML_PATH = SCRIPT_DIR / "pm_workbench_ui.html"
 MAX_REQUEST_BYTES = 64 * 1024
+
+# Hostnames a browser may use to reach a loopback-only workbench. Any other
+# Host header is rejected so a DNS-rebinding page cannot masquerade as the UI.
+LOOPBACK_HOSTNAMES = ("localhost", "127.0.0.1", "::1")
 
 # Canonical presets: the E2E state names a PM may prepare, grouped into the
 # six complexity packs of the test plan. Aliases (F8/F9/F10) are accepted on
@@ -127,8 +132,18 @@ class InvalidRequestError(WorkbenchWebError):
     status = 400
 
 
+class ForbiddenRequestError(WorkbenchWebError):
+    """A request that a browser from another origin must not be able to make."""
+
+    status = 403
+
+
 class PayloadTooLargeError(WorkbenchWebError):
     status = 413
+
+
+class UnsupportedMediaTypeError(WorkbenchWebError):
+    status = 415
 
 
 class NoActiveScenarioError(WorkbenchWebError):
@@ -416,6 +431,43 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
             path = urlparse(self.path).path or "/"
             return path.rstrip("/") or "/"
 
+        # -- same-origin guardrails ---------------------------------------
+
+        def _host_name(self, value: str) -> str:
+            """Returns the lowercase hostname of a Host/Origin authority."""
+            parsed = urlparse(value if "//" in value else f"//{value}")
+            return (parsed.hostname or "").lower()
+
+        def _check_host(self) -> None:
+            # A DNS-rebinding page resolves its own name to 127.0.0.1, so the
+            # only trustworthy signal is that the browser used a loopback Host.
+            host_header = self.headers.get("Host")
+            if not host_header:
+                return  # HTTP/1.0 clients without a Host header are not browsers
+            if self._host_name(host_header) not in LOOPBACK_HOSTNAMES:
+                raise ForbiddenRequestError(
+                    "This workbench only accepts loopback Host headers "
+                    f"({', '.join(LOOPBACK_HOSTNAMES)})."
+                )
+
+        def _check_origin(self) -> None:
+            # A cross-site POST would otherwise land as a CORS "simple request".
+            # Browsers send Origin on POST; a present value must be our own.
+            origin = self.headers.get("Origin")
+            if not origin:
+                return
+            if self._host_name(origin) not in LOOPBACK_HOSTNAMES:
+                raise ForbiddenRequestError("Cross-origin requests are not allowed.")
+
+        def _check_json_content_type(self) -> None:
+            # Requiring application/json forces a CORS preflight that this
+            # server never approves, so a form or text/plain POST cannot seed.
+            content_type = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if content_type != "application/json":
+                raise UnsupportedMediaTypeError(
+                    "POST requests must use Content-Type: application/json."
+                )
+
         def _send_body(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)
             self.send_header("Content-Type", content_type)
@@ -476,15 +528,30 @@ def make_handler(service: WorkbenchService) -> type[BaseHTTPRequestHandler]:
         def _dispatch(self, method: str) -> None:
             path = self._path()
             try:
+                self._check_host()
                 if method == "GET":
                     self._handle_get(path)
                 else:
+                    self._check_origin()
+                    self._check_json_content_type()
                     self._handle_post(path)
             except WorkbenchWebError as err:
                 self._send_error_payload(err)
-            except Exception as err:  # noqa: BLE001 - never leak a stack trace to the browser
-                LOGGER.exception("Unhandled workbench UI error for %s %s", method, path)
-                self._send_json(500, {"error": f"Internal workbench error: {err}"})
+            except Exception as err:  # noqa: BLE001 - never leak internals to the browser
+                request_id = uuid.uuid4().hex[:12]
+                LOGGER.exception(
+                    "Unhandled workbench UI error for %s %s (request id %s)",
+                    method,
+                    path,
+                    request_id,
+                )
+                self._send_json(
+                    500,
+                    {
+                        "error": "Internal workbench error; see the workbench log.",
+                        "request_id": request_id,
+                    },
+                )
 
         def _handle_get(self, path: str) -> None:
             if path in ("/", "/index.html"):
@@ -527,11 +594,17 @@ def create_server(
     *,
     host: str = DEFAULT_UI_HOST,
     port: int = DEFAULT_UI_PORT,
+    allow_remote: bool = False,
 ) -> ThreadingHTTPServer:
     """Creates the Workbench UI server, refusing to bind in production."""
     from pm_workbench import check_production_guardrail  # imported late: pm_workbench imports this module
 
     check_production_guardrail()
+    if host not in LOOPBACK_HOSTNAMES and not allow_remote:
+        raise OSError(
+            f"Refusing to bind {host!r}: the workbench exposes persona credentials. "
+            "Pass --allow-remote to serve it beyond loopback."
+        )
     server = ThreadingHTTPServer((host, port), make_handler(service))
     server.daemon_threads = True
     return server
@@ -542,11 +615,15 @@ def serve(
     host: str = DEFAULT_UI_HOST,
     port: int = DEFAULT_UI_PORT,
     service: WorkbenchService | None = None,
+    allow_remote: bool = False,
 ) -> None:
     """Runs the UI until interrupted."""
-    server = create_server(service or WorkbenchService(), host=host, port=port)
+    server = create_server(
+        service or WorkbenchService(), host=host, port=port, allow_remote=allow_remote
+    )
     bound_host, bound_port = server.server_address[:2]
-    display_host = "localhost" if str(bound_host) in ("127.0.0.1", "0.0.0.0", "::1") else bound_host
+    # Print the real bind address: "0.0.0.0" or a LAN address must not look local.
+    display_host = "localhost" if str(bound_host) in ("127.0.0.1", "::1") else bound_host
     sys.stderr.write(f"SitePulse PM Workbench UI listening on http://{display_host}:{bound_port}\n")
     try:
         server.serve_forever()
@@ -564,6 +641,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--host", default=DEFAULT_UI_HOST, help="Loopback interface to bind")
     parser.add_argument("--port", type=int, default=DEFAULT_UI_PORT, help="UI port")
+    parser.add_argument(
+        "--allow-remote",
+        action="store_true",
+        help="Allow binding a non-loopback host (exposes persona credentials)",
+    )
     parser.add_argument("--api-url", default=DEFAULT_API_URL, help="Backend API base URL")
     parser.add_argument("--db-name", default="sitepulse", help="PostgreSQL database name")
     parser.add_argument("--saas-email", default="admin@sitepulse.io", help="SaaS bootstrap admin email")
@@ -585,7 +667,12 @@ def main(argv: list[str] | None = None) -> int:
         skip_reload=args.skip_reload,
     )
     try:
-        serve(host=args.host, port=args.port, service=service)
+        serve(
+            host=args.host,
+            port=args.port,
+            service=service,
+            allow_remote=args.allow_remote,
+        )
     except OSError as err:
         sys.stderr.write(f"Could not start the Workbench UI on {args.host}:{args.port}: {err}\n")
         return 1

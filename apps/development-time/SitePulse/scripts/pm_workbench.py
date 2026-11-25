@@ -545,6 +545,7 @@ def run_serve(
     saas_password: str = "E2E-Bootstrap-Admin-1",
     state_file: str | None = None,
     skip_reload: bool = False,
+    allow_remote: bool = False,
 ) -> int:
     """Serves the Workbench Web UI in the foreground until interrupted."""
     check_production_guardrail()
@@ -559,8 +560,8 @@ def run_serve(
         saas_password=saas_password,
         skip_reload=skip_reload,
     )
-    server = create_server(service, host=ui_host, port=ui_port)
-    display_host = "localhost" if ui_host in ("127.0.0.1", "0.0.0.0", "::1") else ui_host
+    server = create_server(service, host=ui_host, port=ui_port, allow_remote=allow_remote)
+    display_host = "localhost" if ui_host in ("127.0.0.1", "::1") else ui_host
     print(f"SitePulse PM Workbench UI listening on http://{display_host}:{ui_port}")
     print("Press Ctrl+C to stop.")
     try:
@@ -827,6 +828,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser_serve = subparsers.add_parser("serve", help="Serve the Workbench Web UI on http://localhost:9095")
     parser_serve.add_argument("--ui-port", type=int, default=DEFAULT_UI_PORT, help="Workbench Web UI port")
     parser_serve.add_argument("--ui-host", default="127.0.0.1", help="Interface to bind (loopback by default)")
+    parser_serve.add_argument(
+        "--allow-remote",
+        action="store_true",
+        help="Allow binding a non-loopback host (exposes persona credentials)",
+    )
     parser_serve.add_argument("--api-url", default="http://localhost:8080", help="Backend API base URL")
     parser_serve.add_argument("--db-name", default="sitepulse", help="PostgreSQL database name")
     parser_serve.add_argument("--saas-email", default="admin@sitepulse.io", help="SaaS bootstrap admin email")
@@ -916,6 +922,7 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
                 saas_password=args.saas_password,
                 state_file=args.state_file,
                 skip_reload=args.skip_reload,
+                allow_remote=args.allow_remote,
             )
         elif args.subcommand == "down":
             return run_down(

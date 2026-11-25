@@ -567,6 +567,7 @@ python3 -I scripts/test_strategy_scan.py --output scan.json  # every test and sc
 - **JSON API:** `GET /api/presets` (gallery), `POST /api/seed` (`{"preset": "F5"}`), `GET /api/active` (cheat sheet or `null`), `POST /api/reset` (re-provision), `GET /healthz`.
 - **Single source of truth:** Clocks, totals, unit balances and checklists come from `pm_scenarios`, so the UI cannot drift from the seeder the E2E suite uses.
 - **Active state:** Stored in `~/.sitepulse/workbench-active.json` so a UI restart keeps showing the last prepared scenario.
+- **Same-origin guardrails:** the UI accepts only loopback `Host` headers (so a DNS-rebinding page cannot read the cheat sheet), rejects a foreign `Origin`, and requires `Content-Type: application/json` on `POST` (which forces a CORS preflight this server never approves). It binds to loopback and refuses a non-loopback bind unless `--allow-remote` is given.
 - **Tests:** `python3 -m unittest harness.tests.test_pm_workbench_web harness.tests.test_pm_workbench`
 
 ### Quick Usage Examples:

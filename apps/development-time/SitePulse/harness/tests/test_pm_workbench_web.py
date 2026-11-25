@@ -324,7 +324,10 @@ class SeedEndpointTests(unittest.TestCase):
     def test_seed_rejects_non_object_json(self) -> None:
         with Harness() as harness:
             status, payload = harness.json(
-                "/api/seed", method="POST", raw_body=b'["F5"]'
+                "/api/seed",
+                method="POST",
+                raw_body=b'["F5"]',
+                headers={"Content-Type": "application/json"},
             )
         self.assertEqual(status, 400)
         self.assertIn("JSON object", payload["error"])
@@ -335,7 +338,10 @@ class SeedEndpointTests(unittest.TestCase):
                 "/api/seed",
                 method="POST",
                 raw_body=b"{}",
-                headers={"Content-Length": str(web.MAX_REQUEST_BYTES + 1)},
+                headers={
+                    "Content-Type": "application/json",
+                    "Content-Length": str(web.MAX_REQUEST_BYTES + 1),
+                },
             )
         self.assertEqual(status, 413)
         self.assertIn("exceeds", payload["error"])
@@ -356,7 +362,12 @@ class SeedEndpointTests(unittest.TestCase):
 
     def test_seed_without_content_length_defaults_to_empty_body(self) -> None:
         with Harness() as harness:
-            status, payload = harness.json("/api/seed", method="POST", raw_body=b"")
+            status, payload = harness.json(
+                "/api/seed",
+                method="POST",
+                raw_body=b"",
+                headers={"Content-Type": "application/json"},
+            )
         self.assertEqual(status, 400)
         self.assertIn("preset name is required", payload["error"])
 
@@ -477,6 +488,70 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("packs", payload)
 
 
+class SameOriginGuardrailTests(unittest.TestCase):
+    """A browser page from another origin or a rebinding host cannot drive the UI."""
+
+    def test_seed_rejects_text_plain_post(self) -> None:
+        # A CORS "simple request" can send text/plain without a preflight; the
+        # UI only ever sends application/json, so this must not seed.
+        with Harness() as harness:
+            status, headers, raw = harness.request(
+                "/api/seed",
+                method="POST",
+                raw_body=b'{"preset": "F5"}',
+                headers={"Content-Type": "text/plain"},
+            )
+            seeded = list(harness.seed_calls)
+        self.assertEqual(status, 415)
+        self.assertIn("application/json", json.loads(raw.decode("utf-8"))["error"])
+        self.assertEqual(seeded, [])
+
+    def test_reset_rejects_missing_content_type(self) -> None:
+        with Harness() as harness:
+            status, _headers, _raw = harness.request("/api/reset", method="POST", raw_body=b"")
+        self.assertEqual(status, 415)
+
+    def test_seed_rejects_a_foreign_origin(self) -> None:
+        with Harness() as harness:
+            status, _headers, raw = harness.request(
+                "/api/seed",
+                method="POST",
+                body={"preset": "F5"},
+                headers={"Origin": "https://evil.example"},
+            )
+            seeded = list(harness.seed_calls)
+        self.assertEqual(status, 403)
+        self.assertIn("Cross-origin", json.loads(raw.decode("utf-8"))["error"])
+        self.assertEqual(seeded, [])
+
+    def test_get_rejects_a_foreign_host_header(self) -> None:
+        # DNS rebinding: the page's own hostname resolves to 127.0.0.1, so a
+        # non-loopback Host header must not be trusted.
+        with Harness() as harness:
+            status, _headers, raw = harness.request(
+                "/api/active", headers={"Host": "rebind.evil.example"}
+            )
+        self.assertEqual(status, 403)
+        self.assertIn("loopback Host", json.loads(raw.decode("utf-8"))["error"])
+
+    def test_own_origin_and_json_content_type_still_work(self) -> None:
+        # Exactly what pm_workbench_ui.html sends from the served page.
+        with Harness() as harness:
+            status, payload = harness.json(
+                "/api/seed",
+                method="POST",
+                body={"preset": "F5"},
+                headers={"Origin": harness.url(""), "Accept": "application/json"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["preset"], "F5")
+
+    def test_ui_sends_json_content_type_on_every_post(self) -> None:
+        markup = (SCRIPTS_DIR / "pm_workbench_ui.html").read_text(encoding="utf-8")
+        self.assertIn('"Content-Type": "application/json"', markup)
+        self.assertNotIn("text/plain", markup)
+
+
 class GuardrailTests(unittest.TestCase):
     """The UI refuses to run in production and binds to loopback."""
 
@@ -495,6 +570,26 @@ class GuardrailTests(unittest.TestCase):
     def test_default_host_is_loopback(self) -> None:
         self.assertEqual(web.DEFAULT_UI_HOST, "127.0.0.1")
         self.assertEqual(web.DEFAULT_UI_PORT, 9095)
+
+    def test_non_loopback_bind_requires_explicit_opt_in(self) -> None:
+        service = web.WorkbenchService(
+            seed_fn=lambda preset: FakeSeedResult(F5_MANIFEST),
+            clock_fn=lambda date: {},
+            state_path=Path(tempfile.gettempdir()) / "unused-workbench-state.json",
+        )
+        with mock.patch.object(wb, "check_production_guardrail"):
+            with self.assertRaises(OSError):
+                web.create_server(service, host="0.0.0.0", port=0)
+
+    def test_internal_error_does_not_leak_details(self) -> None:
+        with Harness() as harness:
+            with mock.patch.object(
+                harness.service, "presets", side_effect=RuntimeError("postgres://secret@db")
+            ):
+                status, payload = harness.json("/api/presets")
+        self.assertEqual(status, 500)
+        self.assertNotIn("secret", payload["error"])
+        self.assertIn("request_id", payload)
 
 
 if __name__ == "__main__":
