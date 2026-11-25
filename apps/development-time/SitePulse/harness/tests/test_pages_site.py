@@ -148,6 +148,7 @@ class PagesSiteTests(unittest.TestCase):
             self.assertFalse((site / "reports/400-1/serenity/run.sh").exists())
             self.assertIn("reports/400-1/serenity/index.html", (site / "serenity/index.html").read_text(encoding="utf-8"))
             self.assertIn("serenity/index.html", (site / "latest.html").read_text(encoding="utf-8"))
+            self.assertIn('href="serenity/index.html"', (site / "index.html").read_text(encoding="utf-8"))
             pages.verify_local(site, json.loads((site / "sitepulse-pages.json").read_text(encoding="utf-8")))
 
             # A later run without a Serenity report keeps the earlier archive and the root redirect.
@@ -155,6 +156,7 @@ class PagesSiteTests(unittest.TestCase):
             self.assertIsNone(later["serenity"])
             self.assertTrue((site / "reports/400-1/serenity/css/a.css").is_file())
             self.assertIn("reports/400-1/serenity", (site / "serenity/index.html").read_text(encoding="utf-8"))
+            self.assertIn('href="serenity/index.html"', (site / "index.html").read_text(encoding="utf-8"))
             pages.verify_local(site, json.loads((site / "sitepulse-pages.json").read_text(encoding="utf-8")))
 
     def test_serenity_retention_oversize_and_bundled_js(self):

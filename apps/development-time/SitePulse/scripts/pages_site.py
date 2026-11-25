@@ -568,17 +568,20 @@ def _render_dashboard(site: Path, current: dict | None) -> None:
                                                    "status": latest_summary["status"],
                                                    "junit": latest_summary["junit"]})
     snapshots = ps.load_site_snapshots(site)
+    serenity_href = "serenity/index.html" if _latest_serenity(site) else None
     full = [snapshot for snapshot in snapshots if snapshot.get("totals") and snapshot.get("epics")
             and snapshot.get("scenarios") is not None]
     if full:
-        (site / "index.html").write_text(ps.render_html(snapshots), encoding="utf-8")
+        (site / "index.html").write_text(
+            ps.render_html(snapshots, {"serenity": serenity_href}), encoding="utf-8")
     else:
         run = html.escape(str(marker["run_id"]))
+        serenity_link = f' · <a href="{serenity_href}">Serenity BDD report</a>' if serenity_href else ""
         (site / "index.html").write_text(f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SitePulse product status</title><style>body{{font:16px system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1rem;color:#172033}}a{{color:#1459a6}}.card{{padding:1rem;border:1px solid #d8dee8;border-radius:10px}}</style></head>
 <body><h1>SitePulse product status</h1><p>The safe historical coverage dashboard is being rebuilt from reviewed report data.</p>
 <section class="card"><h2>Latest CI run</h2><p>Run <a href="https://github.com/gurkanindibay/ai-powered-engineering/actions/runs/{run}">{run}</a></p>
-<p><a href="latest.html">Latest report</a> · <a href="history.html">All runs</a></p></section></body></html>\n""", encoding="utf-8")
+<p><a href="latest.html">Latest report</a> · <a href="history.html">All runs</a>{serenity_link}</p></section></body></html>\n""", encoding="utf-8")
 
 
 def verify_local(site: Path, expected: dict) -> None:
@@ -599,6 +602,8 @@ def verify_local(site: Path, expected: dict) -> None:
         raise ValueError("Serenity report is missing its index.html")
     if _latest_serenity(site) and not (site / "serenity" / "index.html").is_file():
         raise ValueError("required Pages route is missing: serenity/index.html")
+    if _latest_serenity(site) and 'href="serenity/index.html"' not in (site / "index.html").read_text(encoding="utf-8"):
+        raise ValueError("home page does not link the Serenity report")
     for relative, link in (("index.html", "latest.html"), ("index.html", "history.html"),
                            ("history.html", report_folder), ("latest.html", "history.html")):
         if link not in (site / relative).read_text(encoding="utf-8"):

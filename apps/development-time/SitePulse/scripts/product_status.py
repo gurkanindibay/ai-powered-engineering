@@ -512,6 +512,8 @@ def _inventory_html(latest: dict) -> str:
 def render_html(snapshots: list[dict], links: dict | None = None) -> str:
     """The dashboard. `snapshots` are oldest first; the newest one with epics drives the page."""
     links = {"detail": "latest.html", "history": "history.html", **(links or {})}
+    serenity_nav = (f'<a href="{_esc(links["serenity"])}">Serenity BDD report</a>'
+                    if links.get("serenity") else "")
     full = [s for s in snapshots if s.get("totals")]
     if not full:
         raise ValueError("no product status snapshot to render")
@@ -568,7 +570,7 @@ def render_html(snapshots: list[dict], links: dict | None = None) -> str:
 <style>{CSS}</style></head>
 <body><main>
 <header><div><h1>SitePulse product status</h1><p class="meta">{meta}</p></div>
-<nav><a href="{_esc(links["detail"])}">Detailed feature test report</a><a href="{_esc(links["history"])}">All test runs</a></nav></header>
+<nav><a href="{_esc(links["detail"])}">Detailed feature test report</a><a href="{_esc(links["history"])}">All test runs</a>{serenity_nav}</nav></header>
 
 <section class="tiles">{tiles}</section>
 
