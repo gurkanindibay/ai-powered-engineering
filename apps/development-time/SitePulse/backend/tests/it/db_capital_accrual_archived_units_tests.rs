@@ -4,7 +4,7 @@
 //! must neither bill it nor reserve a land-share slice for it.
 //! The `rust-db-test` harness gate runs this target with `--ignored`.
 
-use chrono::Utc;
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use sitepulse_backend::models::{
     AllocationBasis, CapitalProjectCategory, CreateCapitalProjectRequest, CreateInstallmentItem,
@@ -59,7 +59,7 @@ async fn when_a_unit_is_archived_then_installment_accrual_does_not_charge_it() {
         .await
         .expect("load state from PostgreSQL");
     let service = CapitalProjectService::new(state);
-    let today = Utc::now().date_naive();
+    let today = NaiveDate::from_ymd_opt(2026, 12, 1).expect("fixed fixture date");
     let project = service
         .create_project(CreateCapitalProjectRequest {
             site_id: Some(site.to_string()),
