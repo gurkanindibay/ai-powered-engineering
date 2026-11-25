@@ -27,6 +27,7 @@ from support import stack as st  # noqa: E402
 from support.api import Api, Builders  # noqa: E402
 from support.journey_attempts import reclaim_stale_attempts  # noqa: E402
 from support.flutter import by_id, wait_for_app  # noqa: E402
+from support.page_errors import CAPTURE_SCRIPT, describe_page_error, uncaught_details  # noqa: E402
 from pages import LoginPage  # noqa: E402
 
 ARTIFACTS = E2E / ".artifacts"
@@ -125,7 +126,12 @@ def page_guard(request, page):
     errors: list[str] = []
     client_errors: list[str] = []
     gate_errors: list[str] = []
-    page.on("pageerror", lambda exc: errors.append(f"pageerror: {exc}"))
+    console_errors: list[str] = []
+    page.add_init_script(CAPTURE_SCRIPT)
+    page.on("pageerror", lambda exc: errors.append(describe_page_error(exc)))
+    page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+    # A crashed renderer makes every later call hang until its timeout; say so instead.
+    page.on("crash", lambda _page: errors.append("page crashed: the browser's renderer process died"))
 
     def on_response(resp):
         if f":{st.E2E_API_PORT}" in resp.url:
@@ -146,6 +152,10 @@ def page_guard(request, page):
     if "allow_password_gate" not in request.keywords:
         errors += gate_errors
     if errors:
+        details = uncaught_details(console_errors)
+        if details:
+            errors.append("uncaught events seen by the page:")
+            errors += [f"    {line}" for line in details]
         pytest.fail("page/server errors during test:\n" + "\n".join(errors), pytrace=False)
 
 
