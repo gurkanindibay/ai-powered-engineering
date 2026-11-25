@@ -320,9 +320,12 @@ pub async fn control(
 fn current_clock_response(clock: &E2eClock) -> Result<ClockResponse, E2eClockError> {
     let now = clock.now()?;
     let local = now.with_timezone(&chrono_tz::Europe::Istanbul);
+    // Same site-local rule as the rest of the backend, so the reported day can never
+    // disagree with the day the scheduler writes (one day behind between 21:00-24:00 UTC).
+    let local_date = crate::domain::clock::local_date(REPORTING_TIMEZONE, now);
     Ok(ClockResponse::Current {
         utc: now,
-        date: local.date_naive(),
+        date: local_date,
         time: local.format("%H:%M:%S").to_string(),
         iso: local.to_rfc3339(),
         timezone: REPORTING_TIMEZONE.to_string(),
