@@ -1015,7 +1015,6 @@ def main(argv: list[str] | None = None) -> int:
         print("\nPersonas:")
         for p in m.personas:
             print(f"  [{p['role']:15s}] {p['name']:18s} {p.get('unit') or '-':5s} -> {p['email']}")
-        print(f"  Password for all accounts: {m.personas[0]['password']}")
         if m.unit_by_unit_expected_balances:
             print("\nUnit Balances:")
             for u in m.unit_by_unit_expected_balances:
