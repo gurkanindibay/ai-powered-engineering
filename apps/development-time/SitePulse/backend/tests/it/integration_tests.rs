@@ -5,6 +5,16 @@ use sitepulse_backend::models::*;
 use sitepulse_backend::services::*;
 use sitepulse_backend::state::AppState;
 
+/// Today in the site's time zone, the date every service works with. Using the runner's
+/// UTC calendar date instead makes due dates look one day overdue between 21:00 and
+/// 24:00 UTC, when Istanbul has already moved to the next day.
+fn site_today() -> NaiveDate {
+    sitepulse_backend::scheduler::site_local_date(
+        &sitepulse_backend::models::default_site_timezone(),
+        Utc::now(),
+    )
+}
+
 /// The seeded fixture due (`b-101`, "Eylül 2026") is dated 2026-09-15, so by the
 /// real clock it is overdue and the canonical payment path first collects its
 /// KMK 20 delay penalty (TBK 100, SPEC-005). Tests whose subject is not the
@@ -3969,6 +3979,9 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
 ) {
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
+    // The services decide "today" in the site's time zone; a UTC calendar date would be a
+    // day behind it between 21:00 and 24:00 UTC and the due below would already be overdue.
+    let today = site_today();
 
     // Setup: Unit d-14 has ₺3000 advance balance and ₺1400 unpaid capital dues
     {
@@ -3988,7 +4001,7 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
             principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
             delay_penalty: Decimal::ZERO,
             total_amount: Decimal::from_str_exact("1400.00").unwrap(),
-            due_date: Utc::now().date_naive(),
+            due_date: today,
             status: DebtStatus::Pending,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,

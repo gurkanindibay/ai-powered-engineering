@@ -62,8 +62,12 @@ async fn state_with(dues: Vec<DuesLiability>) -> AppState {
     state
 }
 
+/// Today in the site's time zone, the date every service works with.
 fn today() -> NaiveDate {
-    Utc::now().date_naive()
+    sitepulse_backend::scheduler::site_local_date(
+        &sitepulse_backend::models::default_site_timezone(),
+        Utc::now(),
+    )
 }
 
 async fn webhook(
