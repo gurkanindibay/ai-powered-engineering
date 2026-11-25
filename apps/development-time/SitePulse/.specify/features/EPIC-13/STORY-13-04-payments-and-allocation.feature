@@ -120,13 +120,13 @@ Feature: Paying, allocation and advance across periods
     Then the approval is refused
     And the liability is unchanged
 
-  # Pending: Resident confirmed payment view updates pending.
-  @SC-13-04-13 @J-11 @depth:1 @state:F5 @layer:gui @core @role_resident @pending
+  # Verified in the browser by test_confirmed_payment_appears_in_resident_and_manager_views.
+  @SC-13-04-13 @J-11 @depth:1 @state:F5 @layer:gui @core @role_resident @linked
   Scenario: A resident's confirmed payment appears in their statement and the admin view
     Given the site is in state F5
     When a bank webhook confirms a transfer of 1675.00 for tenant "Deniz Arslan"
     And the resident and manager refresh their respective views
-    Then her dashboard balance drops by 1675.00
+    Then her statement total drops by 1675.00
     And the admin collection page total outstanding drops by 1675.00
     And a receipt exists for the payment
     And the ledger invariants hold
