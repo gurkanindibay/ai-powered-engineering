@@ -313,8 +313,8 @@ class PublicSafeReportingTests(unittest.TestCase):
             self.assertEqual(unmapped_in_json[0]["native_id"], "test_unmapped_backend_check")
 
             # 7. VERIFY: Pending requirements remain in the scenario view
-            self.assertIn("SC-06-05-02", latest_html)
-            self.assertEqual(status_json["scenarios"]["SC-06-05-02"]["state"], "planned")
+            self.assertIn("SC-13-01-10", latest_html)
+            self.assertEqual(status_json["scenarios"]["SC-13-01-10"]["state"], "planned")
 
             # 8. VERIFY: Distinct outline examples are shown distinctly
             self.assertIn("example-1", latest_html)

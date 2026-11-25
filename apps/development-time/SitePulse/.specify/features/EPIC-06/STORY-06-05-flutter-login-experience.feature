@@ -2,15 +2,13 @@
 Feature: Cross-platform Flutter login and registration experience
   The Flutter app offers email/password and Google sign-in and shows the active profile.
 
-  # Pending: in-repo fake Google OIDC provider is planned for Phase 2/future E2E environment.
-  @SC-06-05-01 @GUI-06-11 @pending @layer:gui @edge
+  @SC-06-05-01 @GUI-06-11 @linked @layer:gui @edge
   Scenario: Google sign-in option is offered on the login screen
     Given the user is on the SitePulse login screen
     When they tap the Google sign-in button
     Then the Google authentication flow starts
 
-  # Pending: real Google sign-in cannot run in CI; kept pending by decision until a Google identity provider stub (fake token verifier) exists.
-  @SC-06-05-02 @pending @layer:flutter
+  @SC-06-05-02 @GUI-06-11 @linked @layer:gui
   Scenario: Google sign-in completes and the dashboard shows the Google profile
     Given the user is on the SitePulse login screen
     When they tap "Google ile Giriş Yap"

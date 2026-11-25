@@ -46,6 +46,36 @@ def test_wrong_password_shows_error_and_stays_on_login(login_page, actors):
     assert login_page.is_shown()
 
 
+@pytest.mark.core
+@pytest.mark.role_homeowner
+@pytest.mark.covers("SC-06-05-01")
+@pytest.mark.covers("SC-06-05-02")
+@pytest.mark.gui_id("GUI-06-11")
+def test_google_sign_in_option_completes_with_the_fake_provider(login_page, page, stack):
+    # The seeded homeowner owns a linked Google identity; the fake provider
+    # returns the mock token the backend verifies outside production.
+    stack.sql(
+        "UPDATE users SET google_sub = 'e2e-google-sub', auth_provider = 'GOOGLE', "
+        "avatar_url = 'https://lh3.googleusercontent.com/a/e2e-google-user' "
+        "WHERE email = 'ahmet.yilmaz@begonya.com';")
+    stack.restart_backend()
+    login_page.open()
+
+    by_id(page, "login_tab_homeOwner").click()
+    google_option = by_id(page, "btn_google_sign_in")
+    expect(google_option).to_be_visible()
+    google_option.click()
+
+    page.wait_for_url("**/fake-google.html", timeout=15_000)
+    page.locator("#fake-google-account").click()
+    ResidentHome(page).wait()
+
+    Shell(page).open_profile()
+    expect(page.get_by_text("Ahmet Yılmaz", exact=False).first).to_be_visible()
+    expect(page.get_by_text("ahmet.yilmaz@begonya.com", exact=False).first).to_be_visible()
+    expect(page.get_by_text("Server-authorized scope", exact=False).first).to_be_visible()
+
+
 @pytest.mark.smoke
 @pytest.mark.role_homeowner
 @pytest.mark.covers("SC-06-04-03")

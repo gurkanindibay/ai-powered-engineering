@@ -64,9 +64,62 @@ def web_base() -> str:
     return f"http://localhost:{E2E_WEB_PORT}"
 
 
+FAKE_GOOGLE_TOKEN = (
+    "mock-google-token:e2e-google-sub:e2e.google@example.test:Google E2E Kullanıcı"
+)
+
+
+def fake_google_page() -> str:
+    """The in-repo Google sign-in page the E2E web bundle redirects to.
+
+    It is part of the bundle so CI ships it with the prebuilt artifact. The
+    "account chooser" returns a mock token that the backend verifies outside
+    production; no request leaves the machine.
+    """
+    token_literal = json.dumps(FAKE_GOOGLE_TOKEN)
+    return f"""<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>Google ile oturum açma</title>
+  <style>
+    body {{ font-family: Roboto, Arial, sans-serif; margin: 0; padding: 48px; color: #202124; }}
+    h1 {{ font-size: 22px; font-weight: 400; }}
+    p {{ color: #5f6368; }}
+    button {{ display: flex; align-items: center; gap: 12px; width: 360px; padding: 12px 16px;
+             font-size: 14px; color: #3c4043; background: #fff; border: 1px solid #dadce0;
+             border-radius: 8px; cursor: pointer; text-align: left; }}
+    button:hover {{ background: #f8f9fa; }}
+    .initial {{ width: 32px; height: 32px; border-radius: 50%; background: #1a73e8; color: #fff;
+                display: inline-flex; align-items: center; justify-content: center; font-weight: 500; }}
+  </style>
+</head>
+<body>
+  <p>Google</p>
+  <h1>Hesap seçin</h1>
+  <p>SitePulse test sitesi, Google hesabınızla oturum açmanızı istiyor.</p>
+  <button id="fake-google-account" type="button">
+    <span class="initial">G</span>
+    <span>Google E2E Kullanıcı<br><small>e2e.google@example.test</small></span>
+  </button>
+  <script>
+    document.getElementById('fake-google-account').addEventListener('click', function () {{
+      // The app reads and clears this one-shot token on the login screen
+      // (its preference helper adds the `sitepulse.` prefix itself).
+      window.localStorage.setItem('sitepulse.e2e.googleToken', {token_literal});
+      window.location.replace('/#/login');
+    }});
+  </script>
+</body>
+</html>
+"""
+
+
 def build_web(force: bool = False) -> None:
     """Build the E2E web bundle (semantics on, API pointed at the E2E backend)."""
     digest = hashlib.sha256(api_base().encode())
+    fake_page = fake_google_page()
+    digest.update(fake_page.encode())
     flutter = SITEPULSE / "flutter"
     inputs = [flutter / "pubspec.yaml", flutter / "pubspec.lock"]
     for directory in ("lib", "web", "assets"):
@@ -100,6 +153,7 @@ def build_web(force: bool = False) -> None:
         cwd=SITEPULSE / "flutter", capture_output=True, text=True)
     if proc.returncode != 0:
         raise SetupError("flutter build web failed:\n" + proc.stdout[-2000:] + proc.stderr[-2000:])
+    (WEB_BUILD / "fake-google.html").write_text(fake_page, encoding="utf-8")
     stamp.write_text(fingerprint, encoding="utf-8")
 
 
@@ -199,6 +253,7 @@ class E2EStack:
                 "SITEPULSE_NOTIFICATION_WEBHOOK_URL": f"http://127.0.0.1:{E2E_SMS_PORT}/sms",
                 "SITEPULSE_NOTIFICATION_WEBHOOK_TOKEN": SMS_GATEWAY_TOKEN,
                 "SITEPULSE_PUBLIC_APP_URL": web_base(),
+                "SITEPULSE_ALLOW_MOCK_GOOGLE_TOKENS": "true",
             })
         self.web = WebServer()
         self.sms = FakeSmsGateway()

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../testing/test_id.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -56,6 +58,9 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _showManualLogin = true;
+    // In E2E builds the fake Google provider returns to /#/login with a token;
+    // consume it once so the controller can finish the sign-in.
+    unawaited(widget.controller.consumeFakeGoogleRedirect());
 
     final pCred = widget.controller.provisionedCredentials;
     final pHo = widget.controller.provisionedHomeOwner;
