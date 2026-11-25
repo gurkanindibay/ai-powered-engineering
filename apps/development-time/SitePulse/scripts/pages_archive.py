@@ -8,7 +8,9 @@ force-pushes; it is only read, to seed `gh-pages-archive` while that branch does
 not exist yet.
 
 Because the replaced commit is not kept, `publish` refuses a tree that is missing
-any report archived in the commit it replaces.
+any report archived in the commit it replaces. A future retention policy for
+`reports/` therefore fails the publish until this guard gets an explicit
+allow-list or flag for the reports it prunes.
 """
 from __future__ import annotations
 
