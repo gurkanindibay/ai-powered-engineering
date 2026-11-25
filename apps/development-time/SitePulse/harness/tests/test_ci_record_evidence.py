@@ -60,16 +60,20 @@ class ScenarioAcceptanceTestsAreRecordableInCi(unittest.TestCase):
 class NamedAcceptanceTestsExist(unittest.TestCase):
     def test_rust_and_flutter_acceptance_tests_name_tests_that_exist(self):
         """A renamed test otherwise fails its task only in the post-merge recording."""
-        rust = "\n".join(path.read_text(encoding="utf-8")
-                         for folder in ("src", "tests")
-                         for path in (PROJECT_ROOT / "backend" / folder).rglob("*.rs"))
-        defined = set(re.findall(r"\bfn\s+(\w+)", rust))
+        backend = PROJECT_ROOT / "backend"
         dag = json.loads((PROJECT_ROOT / ".specify" / "tasks" / "task-dag.json").read_text(encoding="utf-8"))
         missing = []
         for task in dag["tasks"]:
             for test_id in task.get("acceptance_tests", []):
-                if test_id.startswith("rust:") and test_id.split("::")[-1] not in defined:
-                    missing.append(f"{task['id']} {test_id}")
+                if test_id.startswith("rust:"):
+                    target, name = test_id.removeprefix("rust:").split("::", 1)
+                    # `lib` tests live anywhere under src/; any other target is a module of the `it` crate.
+                    sources = (list((backend / "src").rglob("*.rs")) if target == "lib"
+                               else [backend / "tests" / "it" / f"{target}.rs"])
+                    pattern = rf"\bfn\s+{re.escape(name.split('::')[-1])}\b"
+                    if not any(path.is_file() and re.search(pattern, path.read_text(encoding="utf-8"))
+                               for path in sources):
+                        missing.append(f"{task['id']} {test_id}")
                 if test_id.startswith("flutter:") and not (PROJECT_ROOT / "flutter" / test_id[8:]).is_file():
                     missing.append(f"{task['id']} {test_id}")
         self.assertEqual(missing, [])
