@@ -38,6 +38,7 @@ extension DashboardControllerAuth on DashboardController {
     _flatsList = [];
     _monthlyFlats.clear();
     _availableDuesMonths.clear();
+    _duesPeriods.clear();
     _selectedDuesMonth = '';
     _pendingRegistrations = [];
     _reconciliationQueue = [];

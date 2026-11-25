@@ -74,8 +74,7 @@ Feature: Every status of the billing state machines is reached and left correctl
       | CLOSED | close        | refused                                 |
       | CLOSED | reopen       | pending until a second manager approves |
 
-  # Pending: the periods GUI has no automated status/action matrix scenario.
-  @SC-13-11-05 @J-18 @depth:1 @state:F2 @layer:gui @core @role_manager @pending
+  @SC-13-11-05 @J-18 @depth:1 @state:F2 @layer:gui @core @role_manager @linked
   Scenario: The periods screen shows each status with only its allowed actions
     Given the site is in state F2
     And periods "Eylül 2026" CLOSED, "Ekim 2026" OPEN and "Kasım 2026" DRAFT exist

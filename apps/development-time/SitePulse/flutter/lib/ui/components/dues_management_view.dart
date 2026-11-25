@@ -23,6 +23,8 @@ import 'sp_dialog_pages.dart';
 import '../design_system/sp_metric.dart';
 import '../design_system/sp_tone.dart';
 import '../design_system/sp_guidance_card.dart';
+import '../design_system/sp_status_badge.dart';
+
 class DuesManagementView extends StatefulWidget {
   final DashboardController controller;
   final int initialSegment;
@@ -49,6 +51,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     _activeSegment = widget.initialSegment;
     widget.controller.fetchReconciliationQueue();
     widget.controller.fetchBankAccount();
+    widget.controller.fetchDuesPeriods();
   }
 
   @override
@@ -756,7 +759,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
             testId(
               'btn_open_accrual_dialog',
               ElevatedButton.icon(
-                onPressed: widget.controller.flatsList.isEmpty ? null : _showAccrueDuesDialog,
+                onPressed: widget.controller.flatsList.isEmpty ||
+                        !widget.controller.canAccrueSelectedDuesPeriod
+                    ? null
+                    : _showAccrueDuesDialog,
                 icon: const Icon(Icons.event_repeat, size: 14),
                 label: const Text('Toplu Aidat Tahakkuku', style: TextStyle(fontSize: 12)),
                 style: ElevatedButton.styleFrom(
@@ -849,6 +855,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
+        if (widget.controller.duesPeriods.isNotEmpty) ...[
+          _buildPeriodStatusMatrix(context),
+          const SizedBox(height: 12),
+        ],
         if (widget.controller.userSession.siteName.isEmpty && widget.controller.currentManagedSite == null) ...[
           Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -1282,6 +1292,62 @@ class _DuesManagementViewState extends State<DuesManagementView> {
         else
           ...flats.map((flat) => _buildFlatStatusCard(flat)),
       ],
+    );
+  }
+
+  Widget _buildPeriodStatusMatrix(BuildContext context) {
+    String stateLabel(DuesPeriodStatus status) => switch (status) {
+      DuesPeriodStatus.draft => 'TASLAK',
+      DuesPeriodStatus.active => 'AÇIK',
+      DuesPeriodStatus.closed => 'KAPALI',
+    };
+
+    SpTone stateTone(DuesPeriodStatus status) => switch (status) {
+      DuesPeriodStatus.draft => SpTone.warning,
+      DuesPeriodStatus.active => SpTone.success,
+      DuesPeriodStatus.closed => SpTone.neutral,
+    };
+
+    String allowedActions(DuesPeriodStatus status) => switch (status) {
+      DuesPeriodStatus.draft => 'Tahakkuk et',
+      DuesPeriodStatus.active => 'Dönemi kapat',
+      DuesPeriodStatus.closed => 'Yeniden açma iste',
+    };
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Aidat dönemi durumları',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            ...widget.controller.duesPeriods.map((period) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+              child: Row(
+                children: [
+                  Expanded(child: Text(period.periodName)),
+                  testId(
+                    'period_status_${period.id}',
+                    SpStatusBadge(
+                      label: stateLabel(period.periodStatus),
+                      tone: stateTone(period.periodStatus),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  testId(
+                    'period_action_${period.id}',
+                    Text(allowedActions(period.periodStatus)),
+                  ),
+                ],
+              ),
+            )),
+          ],
+        ),
+      ),
     );
   }
 

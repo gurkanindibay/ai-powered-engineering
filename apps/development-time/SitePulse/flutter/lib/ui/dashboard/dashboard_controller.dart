@@ -340,6 +340,38 @@ class DashboardController extends ChangeNotifier {
   List<String> get availableDuesMonths => _availableDuesMonths;
   List<String> _availableDuesMonths = [];
 
+  List<DuesPeriodItem> get duesPeriods => _duesPeriods;
+  List<DuesPeriodItem> _duesPeriods = [];
+
+  bool get canAccrueSelectedDuesPeriod {
+    for (final period in _duesPeriods) {
+      if (period.periodName == _selectedDuesMonth) {
+        return period.periodStatus == DuesPeriodStatus.draft;
+      }
+    }
+    return true;
+  }
+
+  Future<void> fetchDuesPeriods() async {
+    final siteId = _currentManagedSite?.id;
+    if (siteId == null || siteId.isEmpty || isTestMode) return;
+    try {
+      final response = await ApiClient.get(ApiClient.uri(
+        '/api/v1/dues/periods',
+        {'site_id': siteId},
+      )).timeout(const Duration(seconds: 6));
+      if (response.statusCode != 200) return;
+      final rows = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+      _duesPeriods = rows
+          .whereType<Map<String, dynamic>>()
+          .map(DuesPeriodItem.fromJson)
+          .toList();
+      notifyListeners();
+    } catch (_) {
+      // Preserve the last known period state while the screen remains usable.
+    }
+  }
+
   final Map<String, List<FlatPaymentStatus>> _monthlyFlats = {};
 
   void setSelectedDuesMonth(String month) {
