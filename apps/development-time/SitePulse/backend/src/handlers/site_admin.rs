@@ -686,8 +686,8 @@ fn import_error(e: PersonImportError) -> AppError {
     }
 }
 
-/// Checks a CSV of owners and, unless `dry_run`, registers them when no row has an
-/// error (person F8).
+/// Checks a CSV of owners and, unless `dry_run`, registers valid rows while reporting
+/// errors on rejected rows (person F8).
 pub async fn import_persons(
     State(state): State<AppState>,
     ctx: AuthzContext,

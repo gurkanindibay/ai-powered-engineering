@@ -23,6 +23,7 @@ class _FakeApi extends PersonDirectoryApi {
   final List<bool> importRuns = [];
   final List<String> nationalIds = [];
   int invalidRows = 0;
+  bool failCommit = false;
   bool stepUpNeeded = false;
   ContactPreferences preferences = const ContactPreferences();
   String? masked;
@@ -30,19 +31,20 @@ class _FakeApi extends PersonDirectoryApi {
   @override
   Future<ImportReport> importCsv(String csv, {required bool dryRun}) async {
     importRuns.add(dryRun);
+    final commitFailed = !dryRun && failCommit;
     return ImportReport(
       dryRun: dryRun,
-      committed: !dryRun && invalidRows == 0,
+      committed: !dryRun && invalidRows < 2 && !commitFailed,
       total: 2,
-      invalid: invalidRows,
-      created: dryRun ? 0 : 2,
+      invalid: invalidRows + (commitFailed ? 1 : 0),
+      created: dryRun ? 0 : (commitFailed ? 0 : 2 - invalidRows),
       rows: [
         ImportRowResult(
           line: 2,
           block: 'A Blok',
           unitNo: 1,
           ownerName: 'Bir',
-          errors: invalidRows > 0 ? const ['Malik telefonu: geçersiz'] : const [],
+          errors: invalidRows > 0 || commitFailed ? const ['Malik telefonu: geçersiz'] : const [],
         ),
         const ImportRowResult(line: 3, block: 'A Blok', unitNo: 2, ownerName: 'İki'),
       ],
@@ -117,7 +119,7 @@ void main() {
     expect(commit().onPressed, isNull);
   });
 
-  testWidgets('a dry run with errors lists them and allows no import', (tester) async {
+  testWidgets('a dry run with errors lists the row and commits only valid rows', (tester) async {
     final api = _FakeApi()..invalidRows = 1;
     await tester.pumpWidget(_host(PersonImportPage(api: api)));
     await tester.enterText(find.byKey(const Key('person_import_text')), PersonImportPage.template());
@@ -127,7 +129,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1 satırda hata var'), findsOneWidget);
     expect(find.text('Malik telefonu: geçersiz'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.byKey(const Key('person_import_commit_btn'))).onPressed, isNull);
+    final commit = find.byKey(const Key('person_import_commit_btn'));
+    expect(tester.widget<FilledButton>(commit).onPressed, isNotNull);
+    await tester.tap(commit);
+    await tester.pumpAndSettle();
+    expect(api.importRuns, [true, false]);
+    expect(find.text('1 / 2 kayıt eklendi'), findsOneWidget);
+    expect(find.text('1 satır kayıt sırasında reddedildi; aşağıda nedenleri var.'), findsOneWidget);
+    expect(find.text('1 kayıt eklendi; 1 satır hatalı.'), findsOneWidget);
+    expect(tester.widget<FilledButton>(commit).onPressed, isNull);
+  });
+
+  testWidgets('a commit with no registered rows reports the failure', (tester) async {
+    final api = _FakeApi()..failCommit = true;
+    await tester.pumpWidget(_host(PersonImportPage(api: api)));
+    await tester.enterText(find.byKey(const Key('person_import_text')), PersonImportPage.template());
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('person_import_check_btn')));
+    await tester.tap(find.byKey(const Key('person_import_check_btn')));
+    await tester.pumpAndSettle();
+    final commit = find.byKey(const Key('person_import_commit_btn'));
+    await tester.tap(commit);
+    await tester.pumpAndSettle();
+    expect(find.text('1 satırda hata var'), findsOneWidget);
+    expect(find.text('Malik telefonu: geçersiz'), findsOneWidget);
+    expect(find.text('0 kayıt eklendi; 1 satır hatalı.'), findsOneWidget);
+    expect(tester.widget<FilledButton>(commit).onPressed, isNull);
   });
 
   test('the template has every column the server reads', () {

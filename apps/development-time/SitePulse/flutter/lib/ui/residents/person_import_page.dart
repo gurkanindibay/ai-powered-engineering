@@ -16,8 +16,8 @@ import '../design_system/sp_tone.dart';
 import '../theme/app_theme.dart';
 
 /// Registers many owners from a CSV file (person module F8). The file is checked
-/// first (a dry run that changes nothing); the import button is enabled only once
-/// that check finds no errors, and only for the exact text that was checked.
+/// first (a dry run that changes nothing); the import button is enabled only after
+/// checking the exact text, and commits valid rows while leaving invalid rows visible.
 /// Pops with `true` when rows were registered.
 class PersonImportPage extends StatefulWidget {
   final PersonDirectoryApi api;
@@ -47,7 +47,11 @@ class _PersonImportPageState extends State<PersonImportPage> {
   }
 
   bool get _canCommit =>
-      !_busy && _report != null && _report!.dryRun && _report!.invalid == 0 && _checkedText == _text.text;
+      !_busy &&
+      _report != null &&
+      _report!.dryRun &&
+      _report!.invalid < _report!.total &&
+      _checkedText == _text.text;
 
   void _downloadTemplate() {
     final saved = downloadBytes('kisi_sablonu.csv', utf8.encode(PersonImportPage.template()), 'text/csv');
@@ -98,12 +102,15 @@ class _PersonImportPageState extends State<PersonImportPage> {
         _report = report;
         _checkedText = text;
       });
-      if (!dryRun && report.committed) {
+      if (!dryRun) {
+        final complete = report.invalid == 0;
         messenger.showSnackBar(spSnackBar(
-          kind: ToastKind.success,
-          content: Text('${report.created} kayıt eklendi; etkinleştirme bağlantıları gönderildi.'),
+          kind: complete ? ToastKind.success : ToastKind.warning,
+          content: Text(complete
+              ? '${report.created} kayıt eklendi; etkinleştirme bağlantıları gönderildi.'
+              : '${report.created} kayıt eklendi; ${report.invalid} satır hatalı.'),
         ));
-        if (report.invalid == 0) navigator.pop(true);
+        if (report.committed && complete) navigator.pop(true);
       }
     } on ApiException catch (e) {
       messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: Text(e.message)));
@@ -130,7 +137,7 @@ class _PersonImportPageState extends State<PersonImportPage> {
             message: '1. Şablonu indirip doldurun (sütun adlarını değiştirmeyin).\n'
                 '2. Excel (.xlsx) veya CSV dosyasını seçin ya da içeriği yapıştırın.\n'
                 '3. "Kontrol et" hiçbir şeyi kaydetmez, her satırın hatasını gösterir.\n'
-                '4. Hata kalmadığında "İçe aktar" tüm satırları kaydeder ve etkinleştirme bağlantılarını gönderir.',
+                '4. "İçe aktar" geçerli satırları kaydeder; hatalı satırlar nedenleriyle görünür kalır.',
           ),
           const SizedBox(height: AppSpacing.md),
           Wrap(
@@ -189,14 +196,24 @@ class _PersonImportPageState extends State<PersonImportPage> {
                   onPressed: _canCommit ? () => _run(dryRun: false) : null,
                   child: Text(report != null && report.dryRun && report.invalid == 0
                       ? 'İçe aktar (${report.total} kayıt)'
-                      : 'İçe aktar'),
+                      : report != null && report.dryRun && report.invalid < report.total
+                          ? 'Geçerli ${report.total - report.invalid} kaydı içe aktar'
+                          : 'İçe aktar'),
                 ), label: 'İçe aktar; önce kontrol edilmeli'),
               ),
             ],
           ),
           if (report != null) ...[
             const SizedBox(height: AppSpacing.lg),
-            _summary(report),
+            testId(
+              'person_import_summary',
+              _summary(report),
+              label: report.committed
+                  ? '${report.created} / ${report.total} kayıt eklendi; ${report.invalid} satır hatalı.'
+                  : report.invalid == 0
+                      ? '${report.total} satır kaydedilmeye hazır.'
+                      : '${report.invalid} satırda hata var.',
+            ),
             const SizedBox(height: AppSpacing.sm),
             for (final row in report.rows)
               if (!row.ok || row.warnings.isNotEmpty || report.committed) _RowResult(row: row),
@@ -246,12 +263,10 @@ class _RowResult extends StatelessWidget {
     final tone = !row.ok ? SpTone.danger : (row.warnings.isNotEmpty ? SpTone.warning : SpTone.success);
     final where = [row.block, if (row.unitNo != null) 'Daire ${row.unitNo}'].where((v) => v.isNotEmpty).join(' • ');
     final lines = [...row.errors, ...row.warnings];
-    return Semantics(
-      container: true,
-      label: '${row.line}. satır, $where, ${row.ownerName}, '
-          '${row.ok ? 'hata yok' : '${row.errors.length} hata'}',
-      child: ExcludeSemantics(
-        child: testId('person_import_row_${row.line}', ListTile(
+    return testId(
+      'person_import_row_${row.line}',
+      ExcludeSemantics(
+        child: ListTile(
           key: Key('person_import_row_${row.line}'),
           contentPadding: EdgeInsets.zero,
           leading: SpStatusBadge(label: '${row.line}. satır', tone: tone),
@@ -259,8 +274,10 @@ class _RowResult extends StatelessWidget {
           subtitle: lines.isEmpty
               ? Text(row.activation == 'SENT' ? 'Kaydedildi, bağlantı gönderildi.' : 'Kaydedildi.')
               : Text(lines.join('\n')),
-        )),
+        ),
       ),
+      label: '${row.line}. satır, $where, ${row.ownerName}, '
+          '${row.ok ? 'hata yok' : lines.join(', ')}',
     );
   }
 }

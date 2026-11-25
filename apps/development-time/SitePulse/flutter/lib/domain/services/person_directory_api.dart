@@ -426,8 +426,8 @@ class PersonDirectoryApi {
         .toList();
   }
 
-  /// Checks a CSV of owners; with [dryRun] false it also registers them when no row
-  /// has an error.
+  /// Checks a CSV of owners; with [dryRun] false it registers valid rows while
+  /// retaining errors for rejected rows in the report.
   Future<ImportReport> importCsv(String csv, {required bool dryRun}) async {
     final response = await ApiClient.post(
       ApiClient.uri('/api/v1/site-admin/persons/import'),

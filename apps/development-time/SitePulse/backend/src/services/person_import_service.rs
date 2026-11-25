@@ -2,8 +2,9 @@
 //!
 //! A dry run parses and checks every row (fields, duplicates inside the file, units
 //! and emails already taken, likely duplicate people) and changes nothing. A commit
-//! runs the same checks and registers the rows only when none has an error; each row
-//! is then registered like a single registration, activation link included.
+//! runs the same checks and registers every valid row; invalid rows stay in the
+//! report with their errors. Each accepted row is registered like a single
+//! registration, activation link included.
 
 use std::collections::HashMap;
 
@@ -96,7 +97,7 @@ pub struct ImportRow {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ImportReport {
     pub dry_run: bool,
-    /// The rows were registered; false when any row has an error.
+    /// At least one row was successfully registered by this request.
     pub committed: bool,
     pub total: usize,
     pub invalid: usize,
@@ -523,7 +524,7 @@ impl PersonImportService {
             }
         }
         let invalid = checked.iter().filter(|c| !c.row.errors.is_empty()).count();
-        let commit = !dry_run && invalid == 0;
+        let commit = !dry_run && invalid < checked.len();
         let mut created = 0;
         if commit {
             let service = SiteAdminService::new(self.state.clone());
@@ -548,7 +549,7 @@ impl PersonImportService {
         let invalid = rows.iter().filter(|r| !r.errors.is_empty()).count();
         Ok(ImportReport {
             dry_run,
-            committed: commit,
+            committed: created > 0,
             total: rows.len(),
             invalid,
             created,
