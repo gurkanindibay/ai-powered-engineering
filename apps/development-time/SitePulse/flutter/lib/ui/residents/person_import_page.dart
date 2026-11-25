@@ -204,7 +204,13 @@ class _PersonImportPageState extends State<PersonImportPage> {
           ),
           if (report != null) ...[
             const SizedBox(height: AppSpacing.lg),
-            _summary(report),
+            testId(
+              'person_import_summary',
+              _summary(report),
+              label: report.committed
+                  ? '${report.created} / ${report.total} kayıt eklendi; ${report.invalid} satır hatalı.'
+                  : '${report.invalid} satırda hata var.',
+            ),
             const SizedBox(height: AppSpacing.sm),
             for (final row in report.rows)
               if (!row.ok || row.warnings.isNotEmpty || report.committed) _RowResult(row: row),
@@ -254,12 +260,10 @@ class _RowResult extends StatelessWidget {
     final tone = !row.ok ? SpTone.danger : (row.warnings.isNotEmpty ? SpTone.warning : SpTone.success);
     final where = [row.block, if (row.unitNo != null) 'Daire ${row.unitNo}'].where((v) => v.isNotEmpty).join(' • ');
     final lines = [...row.errors, ...row.warnings];
-    return Semantics(
-      container: true,
-      label: '${row.line}. satır, $where, ${row.ownerName}, '
-          '${row.ok ? 'hata yok' : '${row.errors.length} hata'}',
-      child: ExcludeSemantics(
-        child: testId('person_import_row_${row.line}', ListTile(
+    return testId(
+      'person_import_row_${row.line}',
+      ExcludeSemantics(
+        child: ListTile(
           key: Key('person_import_row_${row.line}'),
           contentPadding: EdgeInsets.zero,
           leading: SpStatusBadge(label: '${row.line}. satır', tone: tone),
@@ -267,8 +271,10 @@ class _RowResult extends StatelessWidget {
           subtitle: lines.isEmpty
               ? Text(row.activation == 'SENT' ? 'Kaydedildi, bağlantı gönderildi.' : 'Kaydedildi.')
               : Text(lines.join('\n')),
-        )),
+        ),
       ),
+      label: '${row.line}. satır, $where, ${row.ownerName}, '
+          '${row.ok ? 'hata yok' : lines.join(', ')}',
     );
   }
 }
