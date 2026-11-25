@@ -486,7 +486,7 @@ def test_tenant_resources_require_membership(api, stack, two_sites, record_prope
     )
     assert_write_is_site_scoped(
         api, "/api/v1/dues/periods", second, first,
-        {"site_id": ids["site"], "period_name": "Nightly Scope Period", "due_date": "2026-11-30"},
+        {"site_id": ids["site"], "period_name": "2026-11", "due_date": "2026-11-30"},
         success={201},
     )
     assert_write_is_site_scoped(
@@ -907,9 +907,13 @@ def test_additional_tenant_resource_reads_require_membership(api, stack, actors,
     assert_write_is_site_scoped(
         api, "/api/v1/assembly/meetings/" + str(meeting["id"]) + "/attendance",
         second, first,
-        {"attendance": [{
-            "unit_id": str(ids["unit"]), "attendee_name": "Nightly Owner",
-        }], "held_on": date.today().isoformat()},
+        {"attendance": [
+            {
+                "unit_id": str(unit["id"]),
+                "attendee_name": "Nightly Owner",
+            }
+            for unit in api.get_units(second, site_id=ids["site"])
+        ], "held_on": date.today().isoformat()},
         success={200},
     )
     assert_write_is_site_scoped(
