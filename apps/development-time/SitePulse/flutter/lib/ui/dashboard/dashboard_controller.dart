@@ -16,6 +16,7 @@ import '../../domain/services/bank_file_parser.dart';
 import '../../domain/services/person_directory_api.dart';
 import '../../domain/services/payments_phase3_api.dart';
 import '../../domain/services/platform_env.dart';
+import '../../domain/logging/app_logger.dart';
 import '../../testing/test_id.dart';
 import '../../domain/usecases/calculate_dues_usecase.dart';
 import '../design_system/money_formatter.dart';
@@ -343,6 +344,16 @@ class DashboardController extends ChangeNotifier {
   List<DuesPeriodItem> get duesPeriods => _duesPeriods;
   List<DuesPeriodItem> _duesPeriods = [];
 
+  bool get canAccrueSelectedDuesPeriod {
+    for (final period in _duesPeriods) {
+      if (period.periodName == _selectedDuesMonth) {
+        return period.periodStatus != DuesPeriodStatus.closed;
+      }
+    }
+    // The backend enforces the status machine and answers repeat OPEN accruals idempotently.
+    return true;
+  }
+
   Future<void> fetchDuesPeriods() async {
     final siteId = _currentManagedSite?.id;
     if (siteId == null || siteId.isEmpty || isTestMode) return;
@@ -351,15 +362,63 @@ class DashboardController extends ChangeNotifier {
         '/api/v1/dues/periods',
         {'site_id': siteId},
       )).timeout(const Duration(seconds: 6));
-      if (response.statusCode != 200) return;
+      if (response.statusCode != 200) {
+        AppLogger.warn(
+          'Period list request failed',
+          tag: 'DuesPeriods',
+          context: {'status_code': response.statusCode},
+        );
+        return;
+      }
       final rows = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
       _duesPeriods = rows
           .whereType<Map<String, dynamic>>()
           .map(DuesPeriodItem.fromJson)
           .toList();
       notifyListeners();
-    } catch (_) {
-      // Preserve the last known period state while the screen remains usable.
+    } catch (error, stackTrace) {
+      AppLogger.warn(
+        'Period list request failed before receiving a response',
+        tag: 'DuesPeriods',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  Future<bool> closeDuesPeriod(String periodId) async {
+    try {
+      await PaymentsPhase3Api.closeBillingPeriod(periodId);
+      await fetchDuesPeriods();
+      await fetchSiteManagerOverview(
+        siteId: _currentManagedSite?.id,
+        period: _selectedDuesMonth,
+      );
+      return true;
+    } catch (error, stackTrace) {
+      AppLogger.warn(
+        'Billing period close request failed',
+        tag: 'DuesPeriods',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  Future<bool> requestDuesPeriodReopen(String periodId, String reason) async {
+    try {
+      await PaymentsPhase3Api.requestBillingPeriodReopen(periodId, reason);
+      await fetchDuesPeriods();
+      return true;
+    } catch (error, stackTrace) {
+      AppLogger.warn(
+        'Billing period reopen request failed',
+        tag: 'DuesPeriods',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
     }
   }
 

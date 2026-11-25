@@ -131,14 +131,16 @@ def test_period_rows_show_status_and_only_the_matching_action(request, api, acto
         open_dues_segment(page, 0)
         periods = {row["id"]: row["period_name"] for row in api.list_periods(manager)}
         expected = {
-            "Eylül 2026": ("KAPALI", "Yeniden açma iste"),
-            "Ekim 2026": ("AÇIK", "Tahakkuk tekrar (zaten yapıldı) · Dönemi kapat"),
-            "Kasım 2026": ("TASLAK", "Tahakkuk et"),
+            "Eylül 2026": ("KAPALI", (False, False, True)),
+            "Ekim 2026": ("AÇIK", (True, True, False)),
+            "Kasım 2026": ("TASLAK", (True, False, False)),
         }
-        for name, (status, action) in expected.items():
+        for name, (status, actions) in expected.items():
             period_id = next(key for key, value in periods.items() if value == name)
             assert text_of(by_id(page, f"period_status_{period_id}")) == status
-            assert text_of(by_id(page, f"period_action_{period_id}")) == action
+            for action, is_enabled in zip(("accrue", "close", "reopen"), actions):
+                assert by_id(page, f"period_action_{action}_{period_id}").is_enabled() is is_enabled
+
 
 
 @pytest.mark.covers("SC-13-11-02")

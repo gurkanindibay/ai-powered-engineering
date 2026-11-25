@@ -74,6 +74,17 @@ class PaymentsPhase3Api {
 
   static String _money(Decimal d) => d.toStringAsFixed(2);
 
+  static Future<void> closeBillingPeriod(String periodId) async {
+    await _post('/api/v1/dues/periods/$periodId/close');
+  }
+
+  static Future<Map<String, dynamic>> requestBillingPeriodReopen(
+    String periodId,
+    String reason,
+  ) async => (await _post('/api/v1/dues/periods/$periodId/reopen', {
+    'reason': reason,
+  })) as Map<String, dynamic>;
+
   // ---- R2: KVKK ------------------------------------------------------------
 
   static Future<PrivacyStatus> privacyStatus() async =>
