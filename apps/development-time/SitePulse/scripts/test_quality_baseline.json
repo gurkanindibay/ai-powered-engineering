@@ -5,7 +5,7 @@
     "fixed-sleep-calls": 2,
     "scenario-over-cap-tests": 8,
     "unwrap-only-tests": 3,
-    "utc-now-backend-test-reads": 84,
+    "utc-now-backend-test-reads": 50,
     "wait-only-gui-tests": 3,
     "weak-only-tests": 6
   },
