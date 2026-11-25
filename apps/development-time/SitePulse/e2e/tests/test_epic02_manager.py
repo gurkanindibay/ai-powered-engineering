@@ -25,6 +25,8 @@ def test_manual_owner_registration_hands_off_an_activation_link(login_as, page, 
     by_id(page, "module_save_new_resident_btn").click()
     close = by_id(page, "btn_close_resident_provisioned")
     confirm = by_id(page, "btn_confirmation_confirm")
+    # A brand-new unit saves directly; a unit that already exists on a started site asks
+    # for confirmation before provisioning, so wait for whichever state appears.
     confirm.or_(close).first.wait_for(timeout=15_000)
     if confirm.count() > 0:
         confirm.click()
@@ -43,6 +45,9 @@ def test_manual_owner_registration_hands_off_an_activation_link(login_as, page, 
     UnitWorkspace(page).close()
 
     assert int(stack.sql("SELECT count(*) FROM units WHERE site_id = 1;")) == units_before + 1
+    assert stack.sql(
+        "SELECT password_hash IS NULL FROM users WHERE lower(email) = 'fatma.activation@e2e.test';"
+    ) == "t", "a pending activation account must not hold a usable password"
     assert stack.sql(
         "SELECT count(*) FROM account_activations activations "
         "JOIN users u ON u.id = activations.user_id "
