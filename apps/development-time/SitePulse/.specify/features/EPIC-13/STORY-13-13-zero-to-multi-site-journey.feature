@@ -29,8 +29,8 @@ Feature: Zero to multi-site financial journey
   # Note: Occupancy transitions and title transfers are specified and verified in STORY-13-14 (Issue #249 / PR #256).
   # Note: Operating cash and open debt reconciliations are specified and verified in STORY-13-25 (Issue #250 / PR #254).
 
-  # Pending: GUI manager screens and statement views are verified in Issue #251
-  @SC-13-13-05 @J-17 @layer:gui @core @role_manager @pending
+  # Verified in the browser by test_multi_site_journey_accruals_and_mixed_payments (Issue #462).
+  @SC-13-13-05 @J-17 @layer:gui @core @role_manager @linked
   Scenario: Manager screens display consistent statements and collection summaries
     Given the four-period multi-site journey is complete
     When the site managers inspect unit statements and collection dashboards

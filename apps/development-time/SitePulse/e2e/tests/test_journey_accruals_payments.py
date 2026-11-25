@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from support.api import ApiError
-from support.flutter import by_id
+from support.flutter import by_id, text_of
 from support.journey_attempts import (
     JourneyManifest,
     ledger_invariants,
@@ -29,8 +29,10 @@ from support.journey_attempts import (
     teardown_sites,
     teardown_with_evidence,
 )
+from support.journey_gui import amount_of
 from support.journey_live_reconciliation import assert_cash_matches_model, assert_statements_match_model, posted_cash
 from support.journey_multi_site import build_multi_site_journey
+from support.money import format_try
 from support.journey_reconciliation import CHECKPOINTS
 from support.journey_snapshots import current_section
 from pages.login import LoginPage
@@ -1038,6 +1040,7 @@ def test_multi_site_journey_accruals_through_march_first(request, api, actors, s
 
 
 @pytest.mark.covers("SC-13-13-02")
+@pytest.mark.covers("SC-13-13-05")
 @pytest.mark.covers("SC-13-26-02")
 @pytest.mark.covers("SC-13-25-02")
 @pytest.mark.covers("SC-13-25-03")
@@ -1526,33 +1529,58 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         j.invariants_a("April final")
         j.invariants_b("April final")
 
-        # Manager browser evidence: a unit statement shows the debtor's receipts and the
-        # site cash view shows the posted gross receipt total for the same manager scope.
+        # Manager browser evidence (SC-13-13-05): each manager sees only their own site, the
+        # four-period journey's unit statement renders the ledger's payer identity, open period
+        # history and exact totals, and the cash view renders the same posted site cash.
         login_page.login("manager", j.manager_a.user["email"], j.manager_a_password)
         ResidentsTab(page).open()
-        assert set(ResidentsTab(page).unit_card_ids()) == set(j.units_a.values())
+        units_a = set(ResidentsTab(page).unit_card_ids())
+        assert units_a == set(j.units_a.values())
         unit_id_a = j.unit_a("A-03")
+        unit_id_b = j.unit_b("B2-01")
+        assert unit_id_b not in units_a, "Site A's manager must not see Site B's units"
+
         UnitWorkspace(page).open(unit_id_a).action(unit_id_a, "statement")
         by_id(page, "statement_debtor_owner").wait_for(timeout=15_000)
         statement_a = api.resident_statement(j.manager_a, unit_id_a)
-        expected_receipt_a = Decimal("1000.00")
-        receipt_a = next(
-            (r for r in statement_a["receipts"] if Decimal(str(r["total_amount"])) == expected_receipt_a),
-            None,
+        owner_a = next(d for d in statement_a["debtors"] if d["debtor_type"] == "OWNER")
+        owner_section_a = text_of(by_id(page, "statement_debtor_owner"))
+        assert f"{owner_a['name']} · Kat maliki" in owner_section_a, (
+            f"Site A, April 2027, unit A-03 ({unit_id_a}): the statement should name the "
+            f"owner payer {owner_a['name']!r}; it showed {owner_section_a!r}"
         )
-        assert receipt_a is not None, (
-            f"Site A, April 2027, unit A-03 ({unit_id_a}), debtor Fay Çelik: "
-            f"expected receipt TRY {expected_receipt_a} in the unit statement"
+        assert by_id(page, "statement_debtor_tenant").count() == 0, (
+            f"Site A, April 2027, unit A-03 ({unit_id_a}): the owner-paid unit has no tenant "
+            "debtor, so the statement must not render a tenant section"
         )
-        by_id(page, f"statement_receipt_{receipt_a['receipt_number']}").wait_for(timeout=15_000)
+        # A-03 is paid in January and April, so February and March stay open in the period history.
+        assert [item["period"] for item in owner_a["open_items"]] == ["Şubat 2027", "Mart 2027"], (
+            f"Site A, April 2027, unit A-03 ({unit_id_a}): expected the unpaid February and March "
+            f"periods, got {[item['period'] for item in owner_a['open_items']]}"
+        )
+        for item in owner_a["open_items"]:
+            assert item["period"] in owner_section_a, (
+                f"Site A, unit A-03: period {item['period']!r} missing from the owner section"
+            )
+            assert format_try(Decimal(str(item["total_outstanding"]))) in owner_section_a, (
+                f"Site A, unit A-03, {item['period']}: open amount "
+                f"{format_try(Decimal(str(item['total_outstanding'])))} missing from the owner section"
+            )
+        assert amount_of(page, "statement_total_owner") == Decimal(str(owner_a["total_outstanding"])), (
+            f"Site A, April 2027, unit A-03 ({unit_id_a}): statement total does not match the ledger"
+        )
+        assert statement_a["receipts"], f"Site A, unit A-03 ({unit_id_a}) should list its paid periods"
+        for receipt in statement_a["receipts"]:
+            by_id(page, f"statement_receipt_{receipt['receipt_number']}").wait_for(timeout=15_000)
         page.keyboard.press("Escape")
         UnitWorkspace(page).close()
         PaymentStream(page).open()
         # The Canlı Kasa segment lists receipts but renders no site total; the posted cash total is
         # reconciliation evidence from the API (plan figure from the #246 contract, April 10).
         stream_a = api.payment_stream(j.manager_a)
-        assert Decimal(str(stream_a["total_volume"])) == j.expected_posted_cash_a, (
-            f"Site A, April 2027: posted cash TRY {stream_a['total_volume']}, "
+        cash_a = posted_cash(stack, j.site_a_id)
+        assert Decimal(str(stream_a["total_volume"])) == cash_a == j.expected_posted_cash_a, (
+            f"Site A, April 2027: cash view TRY {stream_a['total_volume']}, ledger TRY {cash_a}, "
             f"expected {j.expected_posted_cash_a}"
         )
         PaymentStream(page).wait_for_entries("return ids.length > 0")
@@ -1564,27 +1592,44 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
                 "manager", j.manager_b.user["email"], j.manager_b_password,
             )
             ResidentsTab(manager_b_page).open()
-            assert set(ResidentsTab(manager_b_page).unit_card_ids()) == set(j.units_b.values())
-            unit_id_b = j.unit_b("B2-01")
+            units_b = set(ResidentsTab(manager_b_page).unit_card_ids())
+            assert units_b == set(j.units_b.values())
+            assert unit_id_a not in units_b, "Site B's manager must not see Site A's units"
             UnitWorkspace(manager_b_page).open(unit_id_b).action(unit_id_b, "statement")
             by_id(manager_b_page, "statement_debtor_tenant").wait_for(timeout=15_000)
             statement_b = api.resident_statement(j.manager_b, unit_id_b)
-            expected_receipt_b = Decimal("750.00")
-            receipt_b = next(
-                (r for r in statement_b["receipts"] if Decimal(str(r["total_amount"])) == expected_receipt_b),
-                None,
+            tenant_b = next(d for d in statement_b["debtors"] if d["debtor_type"] == "TENANT")
+            tenant_section_b = text_of(by_id(manager_b_page, "statement_debtor_tenant"))
+            assert f"{tenant_b['name']} · Kiracı" in tenant_section_b, (
+                f"Site B, April 2027, unit B2-01 ({unit_id_b}): the statement should name the "
+                f"tenant payer {tenant_b['name']!r}; it showed {tenant_section_b!r}"
             )
-            assert receipt_b is not None, (
-                f"Site B, April 2027, unit B2-01 ({unit_id_b}), debtor Juno Yıldız: "
-                f"expected receipt TRY {expected_receipt_b} in the unit statement"
+            # B2-01 is paid in January and April, so February and March stay open.
+            assert [item["period"] for item in tenant_b["open_items"]] == ["Şubat 2027", "Mart 2027"], (
+                f"Site B, April 2027, unit B2-01 ({unit_id_b}): expected the unpaid February and "
+                f"March periods, got {[item['period'] for item in tenant_b['open_items']]}"
             )
-            by_id(manager_b_page, f"statement_receipt_{receipt_b['receipt_number']}").wait_for(timeout=15_000)
+            for item in tenant_b["open_items"]:
+                assert item["period"] in tenant_section_b, (
+                    f"Site B, unit B2-01: period {item['period']!r} missing from the tenant section"
+                )
+                assert format_try(Decimal(str(item["total_outstanding"]))) in tenant_section_b, (
+                    f"Site B, unit B2-01, {item['period']}: open amount "
+                    f"{format_try(Decimal(str(item['total_outstanding'])))} missing from the tenant section"
+                )
+            assert amount_of(manager_b_page, "statement_total_tenant") == Decimal(
+                str(tenant_b["total_outstanding"])
+            ), f"Site B, April 2027, unit B2-01 ({unit_id_b}): statement total does not match the ledger"
+            assert statement_b["receipts"], f"Site B, unit B2-01 ({unit_id_b}) should list its paid periods"
+            for receipt in statement_b["receipts"]:
+                by_id(manager_b_page, f"statement_receipt_{receipt['receipt_number']}").wait_for(timeout=15_000)
             manager_b_page.keyboard.press("Escape")
             UnitWorkspace(manager_b_page).close()
             PaymentStream(manager_b_page).open()
             stream_b = api.payment_stream(j.manager_b)
-            assert Decimal(str(stream_b["total_volume"])) == j.expected_posted_cash_b, (
-                f"Site B, April 2027: posted cash TRY {stream_b['total_volume']}, "
+            cash_b = posted_cash(stack, j.site_b_id)
+            assert Decimal(str(stream_b["total_volume"])) == cash_b == j.expected_posted_cash_b, (
+                f"Site B, April 2027: cash view TRY {stream_b['total_volume']}, ledger TRY {cash_b}, "
                 f"expected {j.expected_posted_cash_b}"
             )
             PaymentStream(manager_b_page).wait_for_entries("return ids.length > 0")
