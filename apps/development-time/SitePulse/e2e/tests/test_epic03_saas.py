@@ -1,4 +1,6 @@
 """EPIC-03 SaaS multi-tenancy."""
+import uuid
+
 import pytest
 
 from pages import SaasAdmin
@@ -69,6 +71,45 @@ def test_onboarding_a_site_issues_working_manager_credentials(login_page, page, 
     # ... and the password shown on screen is the one that works.
     manager = api.login("murat.yildirim@e2e.test", temporary_password)
     assert manager.user["role"] == "SITE_MANAGER" and manager.user["must_change_password"] is True
+
+
+@pytest.mark.covers("SC-03-04-03")
+@pytest.mark.core
+@pytest.mark.role_saas
+def test_onboarding_dispatches_the_manager_credential_sms(api, actors, stack):
+    """The new manager's own mobile gets the credential alert, through the fake gateway."""
+    from support.stack import SMS_GATEWAY_TOKEN
+
+    saas = api.login(**actors["saas"])
+    suffix = uuid.uuid4().hex[:6]
+    email = f"sms.onboarding.{suffix}@e2e.test"
+    phone = "+90 532 904 13 07"
+    site_name = f"SMS Onboarding Site {suffix}"
+    stack.sms.clear()
+
+    created = api.call("POST", "/api/v1/saas/sites", saas.token, body={
+        "site_name": site_name, "address": "Kadıköy, İstanbul",
+        "site_admin_full_name": "Sude Yönetici", "site_admin_email": email,
+        "site_admin_phone": phone, "plan_type": "STANDARD", "blocks": ["A Blok"],
+    })
+
+    messages = [
+        message for message in stack.sms.received()
+        if message["payload"].get("channel") == "SMS"
+        and message["payload"].get("recipient", {}).get("email") == email
+    ]
+    assert len(messages) == 1, f"expected one credential SMS, got {stack.sms.received()}"
+    sent = messages[0]
+    assert sent["path"] == "/sms"
+    assert sent["authorization"] == f"Bearer {SMS_GATEWAY_TOKEN}"
+    payload = sent["payload"]
+    assert payload["recipient"]["reference"] == str(created["admin_user_id"])
+    assert payload["recipient"]["phone"] == phone
+    assert payload["recipient"]["name"] == "Sude Yönetici"
+    assert "SitePulse" in payload["subject"]
+    assert created["temporary_password"] in payload["body"]
+    assert email in payload["body"]
+    assert "/#/login" in payload["body"]
 
 
 # ---------------------------------------------------------------- P1 (core)

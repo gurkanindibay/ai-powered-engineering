@@ -219,6 +219,34 @@ pub fn configured_sender() -> Result<Box<dyn NotificationSender>, SendError> {
     configured_sender_for(&crate::state::AppSettings::from_env())
 }
 
+/// A one-off credential alert to a manager's own mobile number.
+///
+/// The body carries a temporary password, so it does not go through the
+/// notification log: that table is a delivery history, not a secret store. A
+/// missing number is reported, never invented, and the caller decides whether
+/// the issuing operation still succeeds.
+pub fn send_credential_sms(
+    settings: &crate::state::AppSettings,
+    to: &Recipient,
+    subject: &str,
+    body: &str,
+) -> Result<(), SendError> {
+    if to
+        .phone
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or_default()
+        .is_empty()
+    {
+        return Err(SendError(
+            "The manager has no mobile number for the credential alert".into(),
+        ));
+    }
+    configured_sender_for(settings)?
+        .send(DeliveryChannel::Sms, to, subject, body)
+        .map(|_| ())
+}
+
 /// What to send.
 #[derive(Debug, Clone)]
 pub struct Message {

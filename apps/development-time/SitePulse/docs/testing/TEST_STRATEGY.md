@@ -356,7 +356,7 @@ Three systemic gaps sit behind these:
 | SC-13-01-10, SC-13-01-15 | edge | backend | Needs F3 fixture (#271) |
 | SC-13-05-10, SC-13-08-06, SC-13-08-07, SC-13-10-08 | edge | gui | Excel import, lost-response, stale-action and late-response isolation journeys |
 | SC-05-02-01 Concurrent balance modification | none | backend | No test runs two concurrent payments on one unit |
-| SC-03-04-03, SC-06-05-02, SC-10-06-03, SC-10-06-04 | none | gui/flutter | SMS provider absent; Google IdP stub; capital card detail; banner text not implemented |
+| SC-06-05-02, SC-10-06-03, SC-10-06-04 | none | gui/flutter | Google IdP stub; capital card detail; banner text not implemented |
 
 Six pending scenarios are blocked by product gaps, not by missing tests. They belong on the product backlog with the scenario as the acceptance test. Beyond the catalogue, `GUI_COVERAGE_GAPS.md` lists about 20 UI features with no browser scenario. EPIC-11 (payments phase 3) has no GUI scenarios at all.
 
@@ -398,7 +398,7 @@ Ongoing: close pending scenarios (smoke first) · product-gap backlog · flake q
 2. **Make the evidence honest (weeks 2–4).** Evidence-based traceability check (suggestion 1). Test-quality lint with today's counts as the baseline. Coverage instrumentation, report-only (implemented in #373 via `cargo-llvm-cov`, `flutter test --coverage`, `coverage.py`, `diff-cover`, and `scripts/ci_coverage_report.py`). Precise error assertions in auth and validation tests. Runtime regression tests for security findings S3, S4 and S7. Injectable clock and config; no env mutation in tests. **Gate G1:** the check fails on a non-running or file-level link; line and branch coverage published per layer; zero `is_err()`-only checks in auth tests.
 3. **Make it fast (weeks 4–8).** Build E2E artifacts once. Role `storage_state` and API seeding. Remove fixed waits. `cargo nextest` with one integration crate. PostgreSQL template databases. PR / merge / nightly lanes. CI durations feeding shard balance. Debug-profile backend for E2E, checkpointed journeys, evidence gates once per commit (time-analysis steps F, N, M). **Gate G2:** PR critical path down 30% from the measured baseline; shard spread under 30 s; zero `wait_for_timeout`.
 4. **Add depth (weeks 8–12).** Shared liability decision table. Property tests on 6 money rules. Model-based occupancy. Calendar matrix. Ledger-oracle fixture. Concurrency and fault-injection DB tests. Mutation tier 1 on PRs. Nightly performance against the SLOs, axe accessibility, Firefox and WebKit smoke, OpenAPI tenant fuzz. The eight catalogue candidates from `mutation-coverage-improvement.md`. **Gate G3:** changed-lines coverage gate at 80% enforced; mutation catalogue at 66 or more mutants with at least 95% killed; SC-05-02-01 and SC-13-03-14 automated.
-5. **Ongoing.** Close pending scenarios, smoke first, then the about 20 UI features with no scenario and the missing EPIC-11 GUI scenarios from the old gaps document. Track the 7 product-gap scenarios as product work, with the scenario as the acceptance test. Run flake quarantine with expiry dates. Repeat this review each quarter with the scanner below.
+5. **Ongoing.** Close pending scenarios, smoke first, then the about 20 UI features with no scenario and the missing EPIC-11 GUI scenarios from the old gaps document. Track the product-gap scenarios as product work, with the scenario as the acceptance test. Run flake quarantine with expiry dates. Repeat this review each quarter with the scanner below.
 
 ### KPIs
 
