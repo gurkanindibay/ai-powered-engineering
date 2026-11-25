@@ -23,6 +23,8 @@ import 'sp_dialog_pages.dart';
 import '../design_system/sp_metric.dart';
 import '../design_system/sp_tone.dart';
 import '../design_system/sp_guidance_card.dart';
+import '../design_system/sp_status_badge.dart';
+
 class DuesManagementView extends StatefulWidget {
   final DashboardController controller;
   final int initialSegment;
@@ -49,6 +51,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     _activeSegment = widget.initialSegment;
     widget.controller.fetchReconciliationQueue();
     widget.controller.fetchBankAccount();
+    widget.controller.fetchDuesPeriods();
   }
 
   @override
@@ -756,7 +759,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
             testId(
               'btn_open_accrual_dialog',
               ElevatedButton.icon(
-                onPressed: widget.controller.flatsList.isEmpty ? null : _showAccrueDuesDialog,
+                onPressed: widget.controller.flatsList.isEmpty ||
+                        !widget.controller.canAccrueSelectedDuesPeriod
+                    ? null
+                    : _showAccrueDuesDialog,
                 icon: const Icon(Icons.event_repeat, size: 14),
                 label: const Text('Toplu Aidat Tahakkuku', style: TextStyle(fontSize: 12)),
                 style: ElevatedButton.styleFrom(
@@ -849,6 +855,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
+        if (widget.controller.duesPeriods.isNotEmpty) ...[
+          _buildPeriodStatusMatrix(context),
+          const SizedBox(height: 12),
+        ],
         if (widget.controller.userSession.siteName.isEmpty && widget.controller.currentManagedSite == null) ...[
           Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -1283,6 +1293,185 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ...flats.map((flat) => _buildFlatStatusCard(flat)),
       ],
     );
+  }
+
+  Widget _buildPeriodStatusMatrix(BuildContext context) {
+    String stateLabel(DuesPeriodStatus status) => switch (status) {
+      DuesPeriodStatus.draft => 'TASLAK',
+      DuesPeriodStatus.active => 'AÇIK',
+      DuesPeriodStatus.closed => 'KAPALI',
+    };
+
+    SpTone stateTone(DuesPeriodStatus status) => switch (status) {
+      DuesPeriodStatus.draft => SpTone.warning,
+      DuesPeriodStatus.active => SpTone.success,
+      DuesPeriodStatus.closed => SpTone.neutral,
+    };
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Aidat dönemi durumları',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            ...widget.controller.duesPeriods.map((period) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+              child: Row(
+                children: [
+                  Expanded(child: Text(period.periodName)),
+                  testId(
+                    'period_status_${period.id}',
+                    SpStatusBadge(
+                      label: stateLabel(period.periodStatus),
+                      tone: stateTone(period.periodStatus),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        _buildPeriodActionButton(
+                          id: 'period_action_accrue_${period.id}',
+                          label: 'Tahakkuk et',
+                          enabled: period.periodStatus != DuesPeriodStatus.closed,
+                          onPressed: () {
+                            widget.controller.setSelectedDuesMonth(period.periodName);
+                            _showAccrueDuesDialog();
+                          },
+                        ),
+                        _buildPeriodActionButton(
+                          id: 'period_action_close_${period.id}',
+                          label: 'Dönemi kapat',
+                          enabled: period.periodStatus == DuesPeriodStatus.active,
+                          onPressed: () => _closeBillingPeriod(context, period),
+                        ),
+                        _buildPeriodActionButton(
+                          id: 'period_action_reopen_${period.id}',
+                          label: 'Yeniden açma iste',
+                          enabled: period.periodStatus == DuesPeriodStatus.closed,
+                          onPressed: () => _requestBillingPeriodReopen(context, period),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPeriodActionButton({
+    required String id,
+    required String label,
+    required bool enabled,
+    required VoidCallback onPressed,
+  }) {
+    return testId(
+      id,
+      OutlinedButton(
+        key: Key(id),
+        onPressed: enabled ? onPressed : null,
+        child: Text(label),
+      ),
+      label: label,
+      enabled: enabled,
+      button: true,
+      onTap: enabled ? onPressed : null,
+    );
+  }
+
+  Future<void> _closeBillingPeriod(
+    BuildContext context,
+    DuesPeriodItem period,
+  ) async {
+    final confirmed = await showSpConfirmDialog(
+      context,
+      title: 'Aidat dönemini kapat',
+      message: '${period.periodName} dönemi kapatılsın mı? Kapanış anlık finansal özeti sabitler.',
+      confirmLabel: 'Dönemi kapat',
+      confirmKey: 'period_close_confirm_${period.id}',
+    );
+    if (!confirmed || !context.mounted) return;
+    final succeeded = await widget.controller.closeDuesPeriod(period.id);
+    if (!context.mounted) return;
+    if (succeeded) {
+      SpToast.success(context, '${period.periodName} dönemi kapatıldı.');
+    } else {
+      SpToast.error(context, 'Aidat dönemi kapatılamadı. Lütfen yeniden deneyin.');
+    }
+  }
+
+  Future<void> _requestBillingPeriodReopen(
+    BuildContext context,
+    DuesPeriodItem period,
+  ) async {
+    final reasonController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final reason = await showSpPage<String>(
+      context: context,
+      builder: (dialogContext) => SpAlertPage(
+        title: const Text('Dönemi yeniden açma isteği'),
+        content: Form(
+          key: formKey,
+          child: testId(
+            'period_reopen_reason_${period.id}',
+            TextFormField(
+              key: Key('period_reopen_reason_${period.id}'),
+              controller: reasonController,
+              autofocus: true,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'İstek nedeni',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Lütfen bir neden yazın.'
+                  : null,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Vazgeç'),
+          ),
+          testId(
+            'period_reopen_submit_${period.id}',
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.of(dialogContext).pop(reasonController.text.trim());
+                }
+              },
+              child: const Text('İstek gönder'),
+            ),
+          ),
+        ],
+      ),
+    );
+    reasonController.dispose();
+    if (reason == null || !context.mounted) return;
+    final succeeded = await widget.controller.requestDuesPeriodReopen(
+      period.id,
+      reason,
+    );
+    if (!context.mounted) return;
+    if (succeeded) {
+      SpToast.success(context, 'Yeniden açma isteği ikinci yöneticiye gönderildi.');
+    } else {
+      SpToast.error(context, 'Yeniden açma isteği gönderilemedi. Lütfen yeniden deneyin.');
+    }
   }
 
   Widget _buildZeroDataGuidanceCard(BuildContext context, String selectedMonth) {

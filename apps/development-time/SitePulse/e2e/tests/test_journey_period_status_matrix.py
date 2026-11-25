@@ -24,6 +24,8 @@ from support.journey_snapshots import (
     open_items,
     second_manager,
 )
+from support.flutter import by_id, text_of
+from support.journey_gui import journey_site as gui_journey_site, open_dues_segment, sign_in_manager
 
 D = Decimal
 PERIOD, DUE = "Ekim 2026", "2026-10-10"
@@ -109,6 +111,36 @@ def test_each_period_status_allows_only_its_own_commands(request, api, actors, s
             assert _status(stack, site) == status
             assert financial_snapshot(stack, site) == before
             assert audit_event_count(stack, site) == audit_before, new_audit_rows(stack, site, audit_before_id)
+
+
+@pytest.mark.covers("SC-13-11-05")
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-13-16")
+def test_period_rows_show_status_and_only_the_matching_action(request, api, actors, stack, page, login_page):
+    with gui_journey_site(request, api, actors, stack, "F2") as fixture:
+        manager = fixture.manager
+        for name, due in (("Eylül 2026", "2026-09-10"), ("Ekim 2026", "2026-10-10"), ("Kasım 2026", "2026-11-10")):
+            api.create_period(manager, name, due)
+        api.accrue_period(manager, "Eylül 2026", None, "2026-09-10")
+        closed_id = next(row["id"] for row in api.list_periods(manager) if row["period_name"] == "Eylül 2026")
+        api.close_period(manager, closed_id)
+        api.accrue_period(manager, "Ekim 2026", None, "2026-10-10")
+
+        sign_in_manager(page, login_page, fixture)
+        open_dues_segment(page, 0)
+        periods = {row["id"]: row["period_name"] for row in api.list_periods(manager)}
+        expected = {
+            "Eylül 2026": ("KAPALI", (False, False, True)),
+            "Ekim 2026": ("AÇIK", (True, True, False)),
+            "Kasım 2026": ("TASLAK", (True, False, False)),
+        }
+        for name, (status, actions) in expected.items():
+            period_id = next(key for key, value in periods.items() if value == name)
+            assert text_of(by_id(page, f"period_status_{period_id}")) == status
+            for action, is_enabled in zip(("accrue", "close", "reopen"), actions):
+                assert by_id(page, f"period_action_{action}_{period_id}").is_enabled() is is_enabled
+
 
 
 @pytest.mark.covers("SC-13-11-02")

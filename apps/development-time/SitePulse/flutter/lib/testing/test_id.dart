@@ -29,11 +29,21 @@ void enableE2ESemantics() {
 /// [label] exposes a value the widget itself does not put in the semantics
 /// tree (e.g. `SelectableText`, which renders as an empty text area), so a
 /// test can read it from the node's `aria-label`.
-Widget testId(String id, Widget child, {String? label}) {
+Widget testId(
+  String id,
+  Widget child, {
+  String? label,
+  bool? enabled,
+  bool? button,
+  VoidCallback? onTap,
+}) {
   if (!kE2E) return child;
   return Semantics(
     identifier: id,
     label: label,
+    enabled: enabled,
+    button: button,
+    onTap: onTap,
     container: true,
     explicitChildNodes: true,
     child: child,
