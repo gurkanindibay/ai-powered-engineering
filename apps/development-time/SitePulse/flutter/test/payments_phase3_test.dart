@@ -70,6 +70,7 @@ Map<String, dynamic> _statementSectionsFixture() {
     'penalty_outstanding': '4.80',
     'total_outstanding': '80.00',
     'advance_balance': '0.00',
+    'held_advance_balance': '425.75',
     'open_items': [formerItem],
     'jointly_liable_total': '0.00',
     'jointly_liable_open_items': [],
@@ -376,6 +377,15 @@ void main() {
     expect(find.text('Meral Kaya · Önceki kiracı'), findsOneWidget);
     expect(find.text('Eylül 2026'), findsOneWidget);
     expect(find.text(formatTry(d('80.00'))), findsNWidgets(3));
+  });
+
+  testWidgets('statement labels a former owner held advance with its source unit', (
+    tester,
+  ) async {
+    // covers: SC-13-03-22
+    await _pumpStatementSections(tester);
+    expect(find.textContaining('Bu bölümde tutulan avans · A Blok D:14'), findsOneWidget);
+    expect(find.text(formatTry(d('425.75'))), findsOneWidget);
   });
 
   testWidgets(

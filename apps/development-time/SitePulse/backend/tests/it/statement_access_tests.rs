@@ -681,6 +681,78 @@ async fn current_owner_does_not_see_the_former_owner_section() {
 }
 
 #[tokio::test]
+// covers: SC-13-03-22 (Issue #489: seller can read only their held advance)
+async fn former_owner_reads_their_held_advance_without_open_debt() {
+    let state = state_after_sale().await;
+    {
+        let mut inner = state.inner.write().await;
+        inner
+            .dues
+            .retain(|due| !sitepulse_backend::auth::same_id(&due.unit_id, UNIT));
+        inner.finance.corrections.clear();
+        inner.hold_advance(UNIT, "102", "OWNER", d("425.75"));
+    }
+
+    let ben = support::token(&state, "person-102", Role::HomeOwner, SITE, None).await;
+    let (status, body) = call(
+        build_router(state.clone()),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&ben),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "held advance statement: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let debtors = statement["debtors"].as_array().expect("debtors");
+    assert_eq!(debtors.len(), 1, "only the former owner's section: {body}");
+    assert_eq!(debtors[0]["name"], "Ben Kaya", "seller identity: {body}");
+    assert_eq!(debtors[0]["is_former"], true, "former role: {body}");
+    assert_eq!(
+        debtors[0]["advance_balance"], "0",
+        "role advance stays empty: {body}"
+    );
+    assert_eq!(
+        debtors[0]["held_advance_balance"], "425.75",
+        "held balance: {body}"
+    );
+    assert_eq!(
+        statement["unit_label"], "A Blok D:14",
+        "source unit: {body}"
+    );
+
+    let gul = support::token(&state, "person-300", Role::HomeOwner, SITE, None).await;
+    let (status, body) = call(
+        build_router(state),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&gul),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "current owner statement: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let debtors = statement["debtors"].as_array().expect("debtors");
+    assert_eq!(debtors.len(), 1, "only the buyer's section: {body}");
+    assert_eq!(
+        debtors[0]["advance_balance"], "0",
+        "buyer's own advance: {body}"
+    );
+    assert_eq!(
+        debtors[0]["held_advance_balance"], "0",
+        "no seller hold: {body}"
+    );
+    assert!(
+        !body.contains("Ben Kaya"),
+        "seller stays hidden from buyer: {body}"
+    );
+    assert!(
+        !body.contains("425.75"),
+        "seller's balance stays private: {body}"
+    );
+}
+
+#[tokio::test]
 // covers: SC-13-10-07 (Issue #295: staff still read every correction after a sale)
 async fn site_staff_read_every_correction_after_a_sale() {
     let state = state_after_sale().await;

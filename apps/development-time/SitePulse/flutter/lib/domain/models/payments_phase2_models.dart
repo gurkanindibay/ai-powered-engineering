@@ -72,6 +72,7 @@ class StatementDebtor {
   final Decimal penaltyOutstanding;
   final Decimal totalOutstanding;
   final Decimal advanceBalance;
+  final Decimal heldAdvanceBalance;
   final List<StatementOpenItem> openItems;
   final Decimal jointlyLiableTotal;
   final List<StatementOpenItem> jointlyLiableOpenItems;
@@ -90,6 +91,7 @@ class StatementDebtor {
     required this.penaltyOutstanding,
     required this.totalOutstanding,
     required this.advanceBalance,
+    required this.heldAdvanceBalance,
     required this.openItems,
     required this.jointlyLiableTotal,
     required this.jointlyLiableOpenItems,
@@ -109,6 +111,7 @@ class StatementDebtor {
     penaltyOutstanding: _dec(j['penalty_outstanding']),
     totalOutstanding: _dec(j['total_outstanding']),
     advanceBalance: _dec(j['advance_balance']),
+    heldAdvanceBalance: _dec(j['held_advance_balance']),
     openItems: _list(j['open_items']).map(StatementOpenItem.fromJson).toList(),
     jointlyLiableTotal: _dec(j['jointly_liable_total']),
     jointlyLiableOpenItems: _list(j['jointly_liable_open_items'])

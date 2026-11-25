@@ -91,6 +91,17 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then the advance stays with "Ahmet Yılmaz" until paid out or transferred with a second approver
     And "Gül Tanrıverdi" starts with debt and advance of 0.00 for unit "A-4"
 
+  @SC-13-03-22 @layer:backend @core @role_resident @linked
+  Scenario: A former owner can see their held advance after sale
+    Given "Ahmet Yılmaz" sold unit "A-4" to "Gül Tanrıverdi" and has no open debt
+    And 425.75 remains held for Ahmet on unit "A-4"
+    When Ahmet opens the resident statement for "A-4"
+    Then he sees his held advance of 425.75 and the source unit "A-4"
+    And the statement contains no current owner's section
+    When Gül opens the resident statement for "A-4"
+    Then she sees her own advance of 0.00 and no held advance
+    And she cannot see Ahmet's name or held balance
+
   # Pending: effective dates after the real server date are refused and the accrual splits by role, so a same-day tenant handover on 2026-12-12 cannot be built.
   @SC-13-03-07 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @pending
   Scenario: Handover on the same day splits the month with no gap and no overlap

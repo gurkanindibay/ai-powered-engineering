@@ -78,7 +78,10 @@ fn owed_roles(inner: &AppStateInner, unit: &IndependentUnit, person_id: i64) -> 
                 && due.status.is_collectable()
                 && due.liable_person_id == Some(person_id)
                 && due.debtor_type == role
-        })
+        }) || inner
+            .held_advances_for(&unit.id, Some(person_id), None)
+            .iter()
+            .any(|(_, held_role, _)| held_role == role.as_str())
     };
     // A joint owner owes alongside the charge's own debtor, and their share is
     // reported under the owner section, so joint liability always names `OWNER`.
@@ -200,6 +203,7 @@ fn create_statement_debtor(
         penalty_outstanding: Decimal::ZERO,
         total_outstanding: Decimal::ZERO,
         advance_balance,
+        held_advance_balance: Decimal::ZERO,
         open_items: Vec::new(),
         jointly_liable_total: jointly_liable_open_items
             .iter()
@@ -433,6 +437,14 @@ pub fn build_statement_for_access(
             }
         }
 
+        // A held advance keeps a former person's statement section reachable
+        // after the role bucket has been cleared during a sale or move-out.
+        for (pid, _, _) in inner.held_advances_for(&unit.id, None, Some(debtor)) {
+            if Some(pid) != current_person_id {
+                items_by_person.entry(Some(pid)).or_default();
+            }
+        }
+
         // Items for current role holder: unattributed items (None) and items stamped with current_person_id.
         let mut current_items = Vec::new();
         if let Some(items) = items_by_person.remove(&None) {
@@ -489,7 +501,8 @@ pub fn build_statement_for_access(
             } else {
                 Vec::new()
             };
-            if former_items.is_empty() && former_joint.is_empty() {
+            let held_advance = inner.held_advance_of(&unit.id, &pid.to_string(), debtor);
+            if former_items.is_empty() && former_joint.is_empty() && held_advance.is_zero() {
                 continue;
             }
             let earliest_date = former_items
@@ -508,6 +521,8 @@ pub fn build_statement_for_access(
                 former_items,
                 former_joint,
             );
+            let mut row = row;
+            row.held_advance_balance = held_advance;
             former_entries.push((earliest_date, row));
         }
         former_entries.sort_by_key(|(date, _)| *date);
