@@ -314,7 +314,7 @@
       "description": "Generate monotonic sequentially numbered official payment receipts (#TAH-YYYY-XXXXXX) with verification hash.",
       "gates": [],
       "acceptance_tests": [
-        "rust:integration_tests::when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_marks_rent_offset_eligible",
+        "rust:integration_tests::when_tenant_payment_is_explicitly_designated_for_capital_dues_then_rent_offset_is_eligible",
         "system:concurrent_receipts_unique",
         "system:idempotent_payment_retry"
       ],
