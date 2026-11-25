@@ -25,6 +25,7 @@ import '../residents/resident_household_member_page.dart';
 import '../residents/unit_directory_row.dart';
 import '../theme/app_theme.dart';
 import '../design_system/sp_skeleton.dart';
+import '../design_system/sp_error_state.dart';
 import 'dashboard_controller.dart';
 
 import '../design_system/money_formatter.dart';
@@ -697,6 +698,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildHomeOwnersManagementView() {
     final homeOwners = widget.controller.homeOwners;
     final isLoading = widget.controller.isLoadingHomeOwners;
+
+    if (isLoading) {
+      return testId('unit_directory_loading', const SpSkeletonList());
+    }
+    if (widget.controller.homeOwnersError != null) {
+      return testId('unit_directory_error', SpErrorState(
+        error: widget.controller.homeOwnersError,
+        title: 'Daire dizini yüklenemedi',
+        message: 'Daire bilgileri alınamadı. Site verileriniz değişmedi.',
+        onRetry: () => widget.controller.fetchHomeOwners(),
+      ));
+    }
 
     final availableBlocks = distinctBlocks(widget.controller.blocks);
     final stats = ResidentOccupancyStats.from(homeOwners);

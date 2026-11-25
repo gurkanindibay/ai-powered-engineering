@@ -826,13 +826,16 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   }
                 },
                 itemBuilder: (ctx) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'manual_cash',
                     child: Row(
                       children: [
-                        Icon(Icons.payments_outlined, size: 16, color: AppColors.accentGreen),
-                        SizedBox(width: 8),
-                        Text('Nakit / Manuel Tahsilat', style: TextStyle(fontSize: 12)),
+                        const Icon(Icons.payments_outlined, size: 16, color: AppColors.accentGreen),
+                        const SizedBox(width: 8),
+                        testId(
+                          'menu_item_manual_cash',
+                          const Text('Nakit / Manuel Tahsilat', style: TextStyle(fontSize: 12)),
+                        ),
                       ],
                     ),
                   ),

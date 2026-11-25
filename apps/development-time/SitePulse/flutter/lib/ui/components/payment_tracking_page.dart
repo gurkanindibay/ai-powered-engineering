@@ -6,6 +6,7 @@ import '../../domain/models/dues_models.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 import '../design_system/sp_skeleton.dart';
+import '../design_system/sp_error_state.dart';
 import 'app_fullscreen_page.dart';
 import 'bank_statement_reconciliation_page.dart';
 
@@ -125,16 +126,22 @@ class PaymentTrackingPage extends StatefulWidget {
     required DashboardController controller,
     String? initialUnitId,
     VoidCallback? onSaved,
-  }) {
+  }) async {
+    await controller.fetchHomeOwners(siteId: controller.currentManagedSite?.id);
+    if (!context.mounted) return;
+    final units = controller.homeOwners;
+    if (units.isEmpty) return;
     final amountCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final descCtrl = TextEditingController();
-    String unitId = initialUnitId ?? 'd-14';
+    String unitId = units.any((unit) => unit.unitId == initialUnitId)
+        ? initialUnitId!
+        : units.first.unitId;
     String role = 'TENANT';
     String channel = 'MANUAL_CASH';
     bool settlesOwnerCapitalDues = false;
 
-    return AppFullscreenPage.push(
+    await AppFullscreenPage.push(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
@@ -184,21 +191,23 @@ class PaymentTrackingPage extends StatefulWidget {
                 children: [
                   const Text('Daire Seçimi', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
+                  testId('payment_manual_unit', DropdownButtonFormField<String>(
+                    key: const Key('payment_manual_unit'),
                     value: unitId,
                     decoration: const InputDecoration(border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'd-14', child: Text('A Blok D:14 (Ahmet / Kerem Yılmaz)')),
-                      DropdownMenuItem(value: 'd-1', child: Text('A Blok D:1')),
-                      DropdownMenuItem(value: 'd-2', child: Text('A Blok D:2')),
-                      DropdownMenuItem(value: 'd-5', child: Text('A Blok D:5')),
-                    ],
-                    onChanged: (v) => setDialogState(() => unitId = v ?? 'd-14'),
-                  ),
+                    items: units.map((unit) => DropdownMenuItem(
+                      value: unit.unitId,
+                      child: testId(
+                        'payment_manual_unit_option_${unit.unitNo}',
+                        Text('${unit.block}${unit.block.toUpperCase().contains('BLOK') ? '' : ' Blok'} D:${unit.unitNo}'),
+                      ),
+                    )).toList(),
+                    onChanged: (value) => setDialogState(() => unitId = value ?? unitId),
+                  )),
                   const SizedBox(height: 16),
                   const Text('Tahsil Edilen Tutar (₺)', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  SpMoneyFormField(
+                  testId('payment_manual_amount', SpMoneyFormField(
                     controller: amountCtrl,
                     autovalidateMode: AutovalidateMode.onUserInteraction,
                     restrictInput: true,
@@ -207,17 +216,17 @@ class PaymentTrackingPage extends StatefulWidget {
                       hintText: '1400,00',
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 16),
                   const Text('Ödeyen Kişi Adı', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  TextField(
+                  testId('payment_manual_payer_name', TextField(
                     controller: nameCtrl,
                     decoration: const InputDecoration(
                       hintText: 'Örn: Kerem Yılmaz',
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -227,15 +236,22 @@ class PaymentTrackingPage extends StatefulWidget {
                           children: [
                             const Text('Ödeyen Rolü', style: TextStyle(fontWeight: FontWeight.bold)),
                             const SizedBox(height: 6),
-                            DropdownButtonFormField<String>(
+                            testId('payment_manual_role', DropdownButtonFormField<String>(
+                              key: const Key('payment_manual_role'),
                               value: role,
                               decoration: const InputDecoration(border: OutlineInputBorder()),
-                              items: const [
-                                DropdownMenuItem(value: 'TENANT', child: Text('Kiracı')),
-                                DropdownMenuItem(value: 'OWNER', child: Text('Kat Maliki')),
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'TENANT',
+                                  child: testId('payment_manual_role_option_tenant', const Text('Kiracı')),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'OWNER',
+                                  child: testId('payment_manual_role_option_owner', const Text('Kat Maliki')),
+                                ),
                               ],
                               onChanged: (v) => setDialogState(() => role = v ?? 'TENANT'),
-                            ),
+                            )),
                           ],
                         ),
                       ),
@@ -1183,10 +1199,18 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
 
   Widget _buildEntriesList(PaymentStreamResponseDto? stream) {
     if (widget.controller.isPaymentStreamLoading) {
-      return const SpSkeletonList();
+      return testId('payment_stream_loading', const SpSkeletonList());
+    }
+    if (widget.controller.paymentStreamError != null) {
+      return testId('payment_stream_error', SpErrorState(
+        error: widget.controller.paymentStreamError,
+        title: 'Tahsilat akışı yüklenemedi',
+        message: 'Tahsilat kayıtları alınamadı. Site verileriniz değişmedi.',
+        onRetry: _loadData,
+      ));
     }
     if (stream == null || stream.entries.isEmpty) {
-      return _buildEmptyState('Bu filtrelere uygun tahsilat kaydı bulunamadı.');
+      return testId('payment_stream_empty', _buildEmptyState('Bu filtrelere uygun tahsilat kaydı bulunamadı.'));
     }
     return ListView.separated(
       shrinkWrap: widget.isEmbedded,
@@ -1452,6 +1476,17 @@ class DebtAgingWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (controller.isDebtAgingLoading) {
+      return testId('debt_aging_loading', const SpSkeletonList());
+    }
+    if (controller.debtAgingError != null) {
+      return testId('debt_aging_error', SpErrorState(
+        error: controller.debtAgingError,
+        title: 'Borç yaşlandırma raporu yüklenemedi',
+        message: 'Borç bilgileri alınamadı. Site verileriniz değişmedi.',
+        onRetry: () => controller.fetchDebtAgingReport(),
+      ));
+    }
     final report = controller.debtAgingReport;
 
     if (report == null) {
