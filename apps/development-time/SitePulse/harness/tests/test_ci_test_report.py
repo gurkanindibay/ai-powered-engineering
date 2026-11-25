@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -77,6 +78,118 @@ class CiTestReportTest(unittest.TestCase):
         self.assertIn(r"missing \| \`case\`", cse.render_markdown(report))
         self.assertEqual({item["scenario_id"] for item in report["unresolved_links"]},
                          {"SC-01-01-04", "SC-01-01-06"})
+
+    def test_long_case_names_match_while_published_outputs_stay_sanitized(self):
+        test_name = ("when_a_tenant_pays_owner_capital_dues_then_the_receipt_cites_the_statute_and_a_rent_"
+                     "certificate_is_issued")
+        native_id = f"sitepulse-backend::it::long_name_tests::{test_name}"
+        parameterized = "tests.test_private.test_private_value[resident@example.com]"
+        self.assertGreater(len(test_name), 100)
+        links = {"SC-06-06-01": [{"file": "backend/tests/long_name_tests.rs", "line": 1, "test": test_name}],
+                 "SC-06-06-02": [{"file": "harness/tests/test_private.py", "line": 1,
+                                  "test": "test_private_value"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            producer = tmp / "artifacts" / "sitepulse-suite-rust-attempt-1"
+            (producer / "gates").mkdir(parents=True)
+            (producer / "producer.json").write_text(json.dumps(
+                {"job": "rust", "run_id": "42", "attempt": "1", "commit": "abc", "job_result": "success"}))
+            (producer / "gates" / "rust-test.json").write_text(json.dumps({
+                "gate": "rust-test", "passed": True, "exit_code": 0, "cases": [
+                    {"runner": "cargo-test", "suite": "rust-test", "native_id": name, "status": "passed"}
+                    for name in (native_id, parameterized)]}))
+            out = tmp / "out"
+            with mock.patch.object(ctr.scenario_evidence, "named_links", return_value=links):
+                ctr.build(tmp / "artifacts", out, None, tmp / "history", run_id="42", attempt="1",
+                          suite_artifacts=tmp / "artifacts", commit_override="abc")
+
+            report = json.loads((out / "scenario-evidence.json").read_text(encoding="utf-8"))
+            for scenario_id in links:
+                self.assertEqual(report["scenarios"][scenario_id]["evidence"], "passing", scenario_id)
+            published = [case["native_id"] for row in report["scenarios"].values() for case in row["cases"]]
+            # Over the 120-character label limit a name is replaced; a parameter suffix is cut.
+            self.assertEqual(sorted(published), ["test case", "tests.test_private.test_private_value"])
+            for name in ("scenario-evidence.json", "scenario-evidence.md", "feature-report.html",
+                         "public-report.json"):
+                text = (out / name).read_text(encoding="utf-8")
+                self.assertNotIn(native_id, text, name)
+                self.assertNotIn(native_id[:101], text, name)
+                self.assertNotIn("resident@example.com", text, name)
+
+    def test_interpolated_titles_and_api_check_ids_match_only_their_own_cases(self):
+        title = "Owner details cannot change occupancy for $status"
+        prefix = "flutter/test/owners_test.dart::Owners Owner details cannot change occupancy for "
+        scenarios = {sid: {"state": "no_result"} for sid in ("SC-01-01-01", "SC-01-01-02", "SC-01-01-03")}
+        links = {
+            "SC-01-01-01": [{"file": "flutter/test/owners_test.dart", "line": 1, "test": title}],
+            "SC-01-01-02": [{"file": "scripts/api_system_check.py", "line": 2, "test": "check_desk",
+                             "case_id": "desk_over_http"}],
+            # A template with almost no literal text cannot identify a case.
+            "SC-01-01-03": [{"file": "flutter/test/owners_test.dart", "line": 3, "test": "for $status"}],
+        }
+        cases = [{"producer": "flutter", "suite": "flutter-test", "native_id": prefix + value, "status": "passed"}
+                 for value in ("OWNER_OCCUPIED", "VACANT", "VACANT units after a sale")]
+        cases += [{"producer": "rust", "suite": suite, "native_id": "desk_over_http", "status": "passed"}
+                  for suite in ("api-system", "rust-test")]
+
+        report = cse.build_evidence(scenarios, cases, links)
+
+        matched = {sid: row["cases"] for sid, row in report["scenarios"].items()}
+        self.assertEqual(len(matched["SC-01-01-01"]), 2)
+        self.assertEqual([case["suite"] for case in matched["SC-01-01-02"]], ["api-system"])
+        self.assertEqual(report["scenarios"]["SC-01-01-03"]["evidence"], "unresolved")
+
+    def test_pending_scenario_stays_planned_unless_a_linked_case_fails(self):
+        scenarios = {sid: {"state": "planned"} for sid in ("SC-01-01-01", "SC-01-01-02")}
+        links = {sid: [{"file": "backend/tests/example.rs", "line": 1, "test": test}]
+                 for sid, test in (("SC-01-01-01", "works"), ("SC-01-01-02", "fails"))}
+        cases = [{"producer": "rust", "suite": "rust-test", "native_id": f"example::{name}", "status": status}
+                 for name, status in (("works", "passed"), ("fails", "failed"))]
+
+        report = cse.build_evidence(scenarios, cases, links)
+
+        self.assertEqual(report["evidence_counts"], {"failing": 1, "planned": 1})
+        self.assertEqual(len(report["scenarios"]["SC-01-01-01"]["cases"]), 1)
+
+    def test_named_links_completes_multiline_dart_and_api_check_declarations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "apps" / "development-time" / "SitePulse"
+            (root / "flutter" / "test").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "flutter" / "test" / "pager_test.dart").write_text(
+                "void main() {\n"
+                "  // covers: SC-01-01-01\n"
+                "  testWidgets(\n"
+                "    'pager shows the next range',\n"
+                "    (tester) async {\n"
+                "      // covers: SC-01-01-02\n"
+                "      expect(1, 1);\n"
+                "    },\n"
+                "  );\n"
+                "  test('an unrelated later test', () => expect(2, 2));\n"
+                "}\n", encoding="utf-8")
+            (root / "scripts" / "api_system_check.py").write_text(
+                "# covers: SC-01-01-03\n"
+                "def check_desk(ctx):\n"
+                "    return ctx.status == 200, ''\n\n\n"
+                "CHECK_FUNCS: dict = {'desk_over_http': check_desk}\n", encoding="utf-8")
+
+            links = cse.named_links(cse.ft.load_catalogue(root))
+
+        self.assertEqual([links[f"SC-01-01-0{n}"][0]["test"] for n in (1, 2, 3)],
+                         ["pager shows the next range", "pager shows the next range", "check_desk"])
+        self.assertEqual(links["SC-01-01-03"][0]["case_id"], "desk_over_http")
+
+    def test_public_inventory_keeps_every_dict_case_in_order_for_evidence_matching(self):
+        # `_evidence_cases` appends the legacy cases by position, so a filter added here must fail a test.
+        collected = [{"native_id": "first", "shard": "1"}, "not a case", {}, None, {"native_id": None, "shard": "3"},
+                     {"native_id": "x" * 200, "shard": "4"}]
+        public = ctr._public_inventory([], [], collected)["cases"]
+        legacy = {"native_id": "legacy", "shard": "5"}
+
+        self.assertEqual([case["shard"] for case in public], ["1", "unknown", "3", "4"])
+        self.assertEqual(ctr._evidence_cases(collected, public + [legacy]),
+                         [case for case in collected if isinstance(case, dict)] + [legacy])
 
     def test_incomplete_suite_count_includes_mixed_and_reused_evidence(self):
         suites = [

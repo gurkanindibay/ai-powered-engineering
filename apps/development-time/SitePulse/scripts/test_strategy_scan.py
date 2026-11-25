@@ -281,6 +281,7 @@ def inventory(repo: Path, sitepulse: Path | None = None) -> dict:
                 run, note = "silent-pass", suite + " (returns early on missing env/tool: reported PASS)"
             tests.append(dict(
                 lang="python", file=rel(path), line=node.lineno, name=node.name, in_src=False,
+                case_id=registered_checks.get(node.name),
                 markers=marks, run=run, run_note=note,
                 n_assert=len(asserts) + len(calls) + len(withs) + len(compares), n_unwrap=0, weak=weak,
                 sleep=bool(SLEEP.search(src)), swallow=swallow, should_panic_unchecked=False,
