@@ -132,7 +132,7 @@ def test_period_rows_show_status_and_only_the_matching_action(request, api, acto
         periods = {row["id"]: row["period_name"] for row in api.list_periods(manager)}
         expected = {
             "Eylül 2026": ("KAPALI", "Yeniden açma iste"),
-            "Ekim 2026": ("AÇIK", "Dönemi kapat"),
+            "Ekim 2026": ("AÇIK", "Tahakkuk tekrar (zaten yapıldı) · Dönemi kapat"),
             "Kasım 2026": ("TASLAK", "Tahakkuk et"),
         }
         for name, (status, action) in expected.items():

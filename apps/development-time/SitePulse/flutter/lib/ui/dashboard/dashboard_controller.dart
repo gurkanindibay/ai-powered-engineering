@@ -343,15 +343,6 @@ class DashboardController extends ChangeNotifier {
   List<DuesPeriodItem> get duesPeriods => _duesPeriods;
   List<DuesPeriodItem> _duesPeriods = [];
 
-  bool get canAccrueSelectedDuesPeriod {
-    for (final period in _duesPeriods) {
-      if (period.periodName == _selectedDuesMonth) {
-        return period.periodStatus == DuesPeriodStatus.draft;
-      }
-    }
-    return true;
-  }
-
   Future<void> fetchDuesPeriods() async {
     final siteId = _currentManagedSite?.id;
     if (siteId == null || siteId.isEmpty || isTestMode) return;

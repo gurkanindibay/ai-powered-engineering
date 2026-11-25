@@ -759,10 +759,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
             testId(
               'btn_open_accrual_dialog',
               ElevatedButton.icon(
-                onPressed: widget.controller.flatsList.isEmpty ||
-                        !widget.controller.canAccrueSelectedDuesPeriod
-                    ? null
-                    : _showAccrueDuesDialog,
+                onPressed: widget.controller.flatsList.isEmpty ? null : _showAccrueDuesDialog,
                 icon: const Icon(Icons.event_repeat, size: 14),
                 label: const Text('Toplu Aidat Tahakkuku', style: TextStyle(fontSize: 12)),
                 style: ElevatedButton.styleFrom(
@@ -1310,7 +1307,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
     String allowedActions(DuesPeriodStatus status) => switch (status) {
       DuesPeriodStatus.draft => 'Tahakkuk et',
-      DuesPeriodStatus.active => 'Dönemi kapat',
+      DuesPeriodStatus.active => 'Tahakkuk tekrar (zaten yapıldı) · Dönemi kapat',
       DuesPeriodStatus.closed => 'Yeniden açma iste',
     };
 
