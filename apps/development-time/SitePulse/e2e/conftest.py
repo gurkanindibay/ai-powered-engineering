@@ -27,7 +27,7 @@ from support import stack as st  # noqa: E402
 from support.api import Api, Builders  # noqa: E402
 from support.journey_attempts import reclaim_stale_attempts  # noqa: E402
 from support.flutter import by_id, wait_for_app  # noqa: E402
-from support.page_errors import CAPTURE_SCRIPT, describe_page_error, uncaught_details  # noqa: E402
+from support.page_errors import describe_page_error  # noqa: E402
 from pages import LoginPage  # noqa: E402
 
 ARTIFACTS = E2E / ".artifacts"
@@ -95,6 +95,22 @@ def fresh_data(stack):
     )
 
 
+# WebKit's web process rasterises with Skia on the GPU. On GPU-less hosts (GitHub runners,
+# containers) its software EGL lacks fence sync, libepoxy aborts with "No provider of
+# eglDestroySync found" and the page crashes, about one load in five, which surfaced as
+# hung clicks and selector timeouts right after Flutter's first frame (issue #422).
+# CPU rasterisation removes that code path; it changes no rendered result the tests read.
+WEBKIT_LAUNCH_ENV = {"WEBKIT_SKIA_ENABLE_CPU_RENDERING": "1"}
+
+
+@pytest.fixture(scope="session")
+def browser_type_launch_args(browser_type_launch_args, browser_name):
+    if browser_name != "webkit":
+        return browser_type_launch_args
+    env = {**os.environ, **browser_type_launch_args.get("env", {}), **WEBKIT_LAUNCH_ENV}
+    return {**browser_type_launch_args, "env": env}
+
+
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args, browser_name):
     mobile_width = os.environ.get("SITEPULSE_E2E_VIEWPORT_WIDTH")
@@ -149,12 +165,7 @@ def page_guard(request, page):
         errors, page_errors = [], []
     if "allow_password_gate" not in request.keywords:
         errors += gate_errors
-    if page_errors:
-        details = uncaught_details(page)
-        errors = page_errors + errors
-        if details:
-            errors.append("uncaught events seen by the page:")
-            errors += [f"    {line}" for line in details]
+    errors = page_errors + errors
     if errors:
         pytest.fail("page/server errors during test:\n" + "\n".join(errors), pytrace=False)
 
