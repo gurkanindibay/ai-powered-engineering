@@ -1220,12 +1220,12 @@ pub async fn fetch_site_payments_from_db(
             r#"
         SELECT
             pe.id::text,
-            pe.receipt_number,
+            pr.receipt_number,
             pe.payment_date,
             pe.amount,
             pe.payer_name,
             pe.description,
-            pe.channel,
+            pe.payment_channel,
             pe.settlement_status,
             pe.unit_id::text,
             u.unit_number,
@@ -1235,6 +1235,7 @@ pub async fn fetch_site_payments_from_db(
         FROM payment_entries pe
         JOIN units u ON pe.unit_id = u.id
         JOIN blocks b ON u.block_id = b.id
+        LEFT JOIN payment_receipts pr ON pe.receipt_id = pr.id
         WHERE pe.site_id = $1 AND pe.entry_type != 'REVERSAL'
         ORDER BY pe.payment_date DESC
         "#,
