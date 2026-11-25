@@ -456,7 +456,10 @@ def test_f5_multiple_periods_add_up_per_unit_and_per_site(request, api, actors, 
         UnitWorkspace(page).open(unit).action(unit, "statement")
         page.wait_for_load_state("networkidle")
         page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
-        assert any("1.250,00" in line for line in page_lines(page)), "A-6 advance balance 1250.00 not shown"
+        # The statement body can paint a frame or a fetch after the page settles, which WebKit
+        # exposes: wait for the amount instead of reading one snapshot.
+        lines = page_lines_until(page, re.compile(r"1\.250,00"))
+        assert any("1.250,00" in line for line in lines), "A-6 advance balance 1250.00 not shown"
 
 
 @pytest.mark.edge
