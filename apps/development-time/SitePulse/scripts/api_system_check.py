@@ -531,6 +531,17 @@ def check_tenant_surplus_virman(ctx: Context) -> Tuple[bool, str]:
     receipt = json.loads(body)
     surplus = receipt["allocated_advance"]
     tenant_before = ctx.psql.run(db, f"SELECT balance FROM advance_balances WHERE unit_id = {ctx.unit_id} AND debtor_type = 'TENANT';")
+    # A virman pays the owner's oldest open due first. Clear any older one through the payment API,
+    # so the result does not depend on which checks ran before (`--only` runs a subset).
+    open_owner = ctx.psql.run(db, (
+        "SELECT COALESCE(sum(principal_amount - paid_principal), 0) FROM dues_liabilities"
+        f" WHERE unit_id = {ctx.unit_id} AND debtor_type = 'OWNER' AND status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE');"))
+    if open_owner.strip("0."):
+        status, body = http("POST", b + "/api/v1/payments/record-manual", token=ctx.manager, body={
+            "unit_id": ctx.unit_id, "amount": open_owner, "payer_name": "Owner Payer", "payer_role": "OWNER",
+            "payment_channel": "MANUAL_CASH"})
+        if status != 201:
+            return False, f"clearing older owner dues failed: {status} {body[:200]}"
     period = f"SYS-CAP-{time.time_ns()}"
     ctx.psql.run(db, f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type)"
                      f" VALUES ({ctx.unit_id}, '{period}', 6.00, CURRENT_DATE + 10, 'PENDING', 'OWNER', 'CAPITAL_DUES');")
