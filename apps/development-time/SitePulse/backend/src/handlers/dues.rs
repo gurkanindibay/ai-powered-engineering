@@ -165,7 +165,7 @@ pub async fn accrue_monthly_dues(
     let (
         units_in_site,
         planned,
-        skipped,
+        mut skipped,
         budget_id,
         proration_enabled,
         accrued_on,
@@ -315,10 +315,18 @@ pub async fn accrue_monthly_dues(
                     crate::error::sanitized("Database unavailable", &e),
                 )
             })?;
-    let planned: Vec<_> = planned
+    let (planned, dropped_from_canonical): (Vec<_>, Vec<_>) = planned
         .into_iter()
-        .filter(|(unit, ..)| canonical.as_ref().is_none_or(|ids| ids.contains(&unit.id)))
-        .collect();
+        .partition(|(unit, ..)| canonical.as_ref().is_none_or(|ids| ids.contains(&unit.id)));
+
+    for (unit, ..) in dropped_from_canonical {
+        tracing::warn!(
+            site_id = %payload.site_id,
+            unit_id = %unit.id,
+            "Unit is outside the canonical database inventory; skipping from accrual"
+        );
+        skipped.push(format!("{}: outside canonical inventory", unit.id));
+    }
 
     let period_already_exists = {
         let inner = state.inner.read().await;
