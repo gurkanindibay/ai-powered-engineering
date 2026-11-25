@@ -147,9 +147,10 @@ def page_guard(request, page, browser_name):
 
     def on_page_error(exc):
         described = describe_page_error(exc)
-        # WebKit raises an occasional empty pageerror from inside its own Flutter rasteriser
-        # (no name, message or application frame); it is unactionable and failed the whole
-        # nightly lane (#474). Keep it as evidence, but still fail on every named error.
+        # WebKit occasionally raises a page error with an empty name and message (usually a
+        # non-Error value thrown or rejected) whose stack holds only compiled main.dart.js
+        # frames. That cannot distinguish a browser/rasteriser fault from application code, so
+        # the lane keeps it as evidence instead of failing (#474). Named errors still fail.
         if browser_name == "webkit" and described.startswith("pageerror: <empty message:"):
             ignored_page_errors.append(described)
             return

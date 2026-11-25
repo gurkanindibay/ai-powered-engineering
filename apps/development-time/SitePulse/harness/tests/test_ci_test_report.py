@@ -24,6 +24,23 @@ def _record(scenario: str, status: str) -> dict:
 
 
 class CiTestReportTest(unittest.TestCase):
+    def test_counts_tests_with_ignored_webkit_page_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            counted = Path(tmp) / "counted.xml"
+            counted.write_text(
+                '<?xml version="1.0"?><testsuite tests="1"><testcase name="one"><properties>'
+                '<property name="ignored_page_errors" value="pageerror: &lt;empty message: x&gt;" />'
+                '</properties></testcase></testsuite>', encoding="utf-8")
+            blank = Path(tmp) / "blank.xml"
+            blank.write_text(
+                '<?xml version="1.0"?><testsuite tests="1"><testcase name="two"><properties>'
+                '<property name="ignored_page_errors" value="" /></properties></testcase></testsuite>',
+                encoding="utf-8")
+            broken = Path(tmp) / "broken.xml"
+            broken.write_text("<not-xml", encoding="utf-8")
+
+            self.assertEqual(ctr.junit_ignored_page_errors([counted, blank, broken]), 1)
+
     def test_scenario_evidence_distinguishes_ci_outcomes_scheduled_and_unresolved(self):
         scenarios = {sid: {"state": "no_result"} for sid in
                      ("SC-01-01-01", "SC-01-01-02", "SC-01-01-03", "SC-01-01-04",
