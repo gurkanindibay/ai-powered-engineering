@@ -25,6 +25,8 @@ The user tells agents apart by name, not by session id. Each model family has it
 
 `python3 scripts/agent_names.py list` shows who holds each name, with model, harness, session and issues. Reservations are local and never committed (`.agents/local/` in the main checkout, shared by all worktrees).
 
+`claim` requires `--model` (or `$AGENT_MODEL`) and refuses an unlisted model, so the first session on a new model family must add it to the roster before it can claim. Both claim tools need Linux or macOS (`agent_names.py` locks with POSIX `fcntl`).
+
 ## Claiming
 
 1. Check the issue is free: `python3 scripts/issue_claim.py status <issue> --json` (`in_progress` must be false).
