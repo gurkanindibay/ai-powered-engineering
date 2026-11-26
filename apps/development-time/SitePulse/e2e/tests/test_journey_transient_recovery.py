@@ -291,6 +291,11 @@ def test_stale_move_in_refreshes_to_the_first_managers_occupancy(
         ManagerCockpit(page).wait()
         second_context = page.context.browser.new_context(locale="tr-TR")
         second_page = second_context.new_page()
+        # The second tab lives in its own window, so Chrome may treat it as backgrounded
+        # and throttle animation frames. Flutter publishes no semantics nodes for an app
+        # that boots in that state, which is why only this context's cockpit wait ever
+        # times out (#502). Focusing the tab before it loads keeps rendering live.
+        second_page.bring_to_front()
         second_page.clock.install(time=browser_time)
         second_login = LoginPage(second_page, login_page.base_url).open()
         second_login.login("manager", actors["homeowner"]["email"], actors["homeowner"]["password"])
@@ -357,6 +362,9 @@ def test_stale_move_in_refreshes_to_the_first_managers_occupancy(
         response = stale_response.value
         assert response.status == 409, f"stale move-in must be refused, got {response.status}"
 
+        # Reload the same client: the same backgrounded-tab rule applies, and the reload
+        # boots the app from scratch, so focus the tab first (#502).
+        second_page.bring_to_front()
         second_page.reload()
         LoginPage(second_page, login_page.base_url).open().login(
             "manager", actors["homeowner"]["email"], actors["homeowner"]["password"]
