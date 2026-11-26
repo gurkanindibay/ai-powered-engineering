@@ -25,12 +25,20 @@ CONNECTED_ATTR = "data-e2e-text-connected"
 TEXT_CONNECTION_JS = """(() => {
     if (window.__e2eTextConnections) return;
     window.__e2eTextConnections = true;
-    for (const [method, connected] of [['addEventListener', true], ['removeEventListener', false]]) {
+    // A field stays connected while any `input` listener is left on it. A Set mirrors the
+    // DOM, which ignores a repeated add and a removal of a listener it does not have.
+    const attached = new WeakMap();
+    for (const [method, adds] of [['addEventListener', true], ['removeEventListener', false]]) {
         const original = EventTarget.prototype[method];
-        EventTarget.prototype[method] = function (type, ...rest) {
-            const result = original.call(this, type, ...rest);
-            if (type === 'input' && (this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement)) {
-                this.toggleAttribute('%s', connected);
+        EventTarget.prototype[method] = function (type, listener, ...rest) {
+            const result = original.call(this, type, listener, ...rest);
+            if (type === 'input' && listener
+                    && (this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement)) {
+                const listeners = attached.get(this) || new Set();
+                attached.set(this, listeners);
+                if (adds) listeners.add(listener);
+                else listeners.delete(listener);
+                this.toggleAttribute('%s', listeners.size > 0);
             }
             return result;
         };

@@ -10,9 +10,11 @@ body through teardown; setup is excluded because the first one builds the whole 
 from __future__ import annotations
 
 import faulthandler
+import json
 import os
 import sys
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -38,7 +40,19 @@ def test_limit(item: pytest.Item) -> float:
 test_limit.__test__ = False  # not a test, whatever its name suggests
 
 
-def _abort(fd: int, nodeid: str, deadline: float) -> None:
+def _record(marker: Path, fd: int, nodeid: str, deadline: float) -> None:
+    """Name the hung test where it outlives the run, which never writes its junit.xml."""
+    # A GitHub Actions workflow command: shown as an error annotation on the job.
+    os.write(fd, f"\n::error title=Hung E2E test::{nodeid} exceeded {deadline:.0f} s\n".encode())
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"test": nodeid, "deadline_s": deadline}) + "\n", encoding="utf-8")
+    except OSError as exc:
+        os.write(fd, f"hang guard: could not write {marker}: {exc}\n".encode())
+
+
+def _abort(fd: int, marker: Path, nodeid: str, deadline: float) -> None:
+    _record(marker, fd, nodeid, deadline)
     os.write(fd, (f"\nhang guard: {nodeid} was still running after {deadline:.0f} s; "
                   "dumping every thread and ending the run\n").encode())
     faulthandler.dump_traceback(file=fd, all_threads=True)
@@ -71,7 +85,8 @@ def pytest_runtest_call(item: pytest.Item) -> None:
     if limit <= 0:
         return
     deadline = limit + GRACE_S
-    timer = threading.Timer(deadline, _abort, (item.config.stash[_stderr], item.nodeid, deadline))
+    marker = item.config.rootpath / ".artifacts" / "hang-guard.json"
+    timer = threading.Timer(deadline, _abort, (item.config.stash[_stderr], marker, item.nodeid, deadline))
     timer.daemon = True
     item.config.stash[_timer] = timer
     timer.start()

@@ -117,7 +117,7 @@ class FillTest(unittest.TestCase):
             self.fill([None])
 
     def test_the_tracker_marks_the_attribute_the_wait_reads(self) -> None:
-        self.assertIn(f"toggleAttribute('{flutter.CONNECTED_ATTR}', connected)", flutter.TEXT_CONNECTION_JS)
+        self.assertIn(f"toggleAttribute('{flutter.CONNECTED_ATTR}', listeners.size > 0)", flutter.TEXT_CONNECTION_JS)
 
 
 if __name__ == "__main__":
