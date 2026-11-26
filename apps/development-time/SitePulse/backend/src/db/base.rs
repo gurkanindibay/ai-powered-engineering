@@ -345,10 +345,72 @@ pub async fn wipe_all_db_data(pool: &Pool) -> Result<(), Box<dyn std::error::Err
 ///
 /// # Errors
 /// Rejects privileged/owner roles and failed privilege inspection.
-pub async fn validate_runtime_role(pool: &Pool) -> DbResult<()> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeRoleStatus {
+    pub superuser: bool,
+    pub bypass_rls: bool,
+    pub create_role: bool,
+    pub create_database: bool,
+    pub owns_public_tables: bool,
+}
+
+impl RuntimeRoleStatus {
+    pub fn is_safe(self) -> bool {
+        !self.superuser
+            && !self.bypass_rls
+            && !self.create_role
+            && !self.create_database
+            && !self.owns_public_tables
+    }
+}
+
+/// Probe tenant policy and role readiness when PostgreSQL is configured.
+pub async fn tenant_rls_readiness(
+    pool: Option<&Pool>,
+) -> DbResult<Option<(bool, RuntimeRoleStatus)>> {
+    match pool {
+        Some(pool) => Ok(Some((
+            crate::db::rls_guard_installed(pool).await?,
+            runtime_role_status(pool).await?,
+        ))),
+        None => Ok(None),
+    }
+}
+
+/// Inspect role attributes that can bypass tenant policies or mutate the schema.
+pub async fn runtime_role_status(pool: &Pool) -> DbResult<RuntimeRoleStatus> {
     let client = pool.get().await?;
-    let row=client.query_one("SELECT r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND pg_has_role(r.oid,c.relowner,'MEMBER')) FROM pg_roles r WHERE r.rolname=current_user",&[]).await?;
-    if row.get::<_, bool>(0) {
+    let row = client
+        .query_one(
+            "SELECT r.rolsuper, r.rolbypassrls, r.rolcreaterole, r.rolcreatedb,
+         EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='public' AND c.relkind='r'
+                  AND pg_has_role(r.oid,c.relowner,'MEMBER'))
+         FROM pg_roles r WHERE r.rolname=current_user",
+            &[],
+        )
+        .await?;
+    Ok(RuntimeRoleStatus {
+        superuser: row.get(0),
+        bypass_rls: row.get(1),
+        create_role: row.get(2),
+        create_database: row.get(3),
+        owns_public_tables: row.get(4),
+    })
+}
+
+/// Verify that the configured production role cannot bypass tenant row policies.
+pub async fn validate_runtime_role(pool: &Pool) -> DbResult<()> {
+    let role = runtime_role_status(pool).await?;
+    if !role.is_safe() {
+        tracing::error!(
+            runtime_role_superuser = role.superuser,
+            runtime_role_bypassrls = role.bypass_rls,
+            runtime_role_createrole = role.create_role,
+            runtime_role_createdb = role.create_database,
+            runtime_role_owns_public_tables = role.owns_public_tables,
+            "Production runtime role fails tenant RLS safety requirements"
+        );
         return Err("Production requires a non-owner runtime role without SUPERUSER or BYPASSRLS; run migrations separately".into());
     }
     Ok(())
