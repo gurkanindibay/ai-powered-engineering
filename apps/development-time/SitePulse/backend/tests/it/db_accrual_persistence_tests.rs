@@ -17,6 +17,7 @@ use sitepulse_backend::{
 struct TestDb {
     name: String,
     admin: Pool,
+    owner: Pool,
     pool: Pool,
     site: i64,
     other_site: i64,
@@ -27,8 +28,13 @@ struct TestDb {
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
-        let client = pool.get().await.expect("test connection");
+        let crate::test_db::TestDatabase {
+            name,
+            admin,
+            owner,
+            pool,
+        } = crate::test_db::create(tag).await;
+        let client = owner.get().await.expect("test connection");
         let row = client
             .query_one(
                 "SELECT s.id, u.id
@@ -68,6 +74,7 @@ impl TestDb {
         Self {
             name,
             admin,
+            owner,
             pool,
             site,
             other_site,
@@ -108,7 +115,7 @@ async fn begin_tenant_tx<'a>(
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn v38_corrections_and_v41_reevaluation_adjustments_round_trip_with_rls() {
     let db = TestDb::create("correction").await;
-    let mut client = db.pool.get().await.expect("test connection");
+    let mut client = db.owner.get().await.expect("test connection");
     let tx = begin_tenant_tx(&mut client, db.site).await;
     let correction: i64 = tx.query_one(
         "INSERT INTO accrual_corrections
@@ -126,7 +133,7 @@ async fn v38_corrections_and_v41_reevaluation_adjustments_round_trip_with_rls() 
     ).await.expect("V41 adjustment constraint accepts new kind and source").get(0);
     tx.commit().await.expect("commit accrual rows");
 
-    let mut client = db.pool.get().await.expect("second-site connection");
+    let mut client = db.owner.get().await.expect("second-site connection");
     let tx = begin_tenant_tx(&mut client, db.other_site).await;
     let rows: i64 = tx
         .query_one(
@@ -151,7 +158,7 @@ async fn v38_corrections_and_v41_reevaluation_adjustments_round_trip_with_rls() 
     );
     tx.commit().await.expect("finish second-site read");
 
-    let mut client = db.pool.get().await.expect("reload connection");
+    let mut client = db.owner.get().await.expect("reload connection");
     let tx = begin_tenant_tx(&mut client, db.site).await;
     let correction_status: String = tx
         .query_one(
@@ -198,7 +205,7 @@ async fn v38_corrections_and_v41_reevaluation_adjustments_round_trip_with_rls() 
 async fn v40_late_fee_rows_and_v42_schedule_survive_database_reload() {
     let db = TestDb::create("schedule").await;
     let date = NaiveDate::from_ymd_opt(2026, 11, 19).expect("valid fixture date");
-    let mut client = db.pool.get().await.expect("test connection");
+    let mut client = db.owner.get().await.expect("test connection");
     let tx = begin_tenant_tx(&mut client, db.site).await;
     tx.execute(
         "UPDATE sites SET accrual_day=5,due_day=20,grace_days=7,catch_up_limit_months=9,go_live_date=$2 WHERE id=$1",
@@ -239,7 +246,7 @@ async fn v40_late_fee_rows_and_v42_schedule_survive_database_reload() {
             .iter()
             .any(|row| row.id == late_fee));
     }
-    let mut client = db.pool.get().await.expect("readback connection");
+    let mut client = db.owner.get().await.expect("readback connection");
     let tx = begin_tenant_tx(&mut client, db.site).await;
     let row = tx.query_one(
         "SELECT s.accrual_day,s.due_day,s.grace_days,s.catch_up_limit_months,s.go_live_date,d.grace_days,l.cumulative_fee
@@ -256,7 +263,7 @@ async fn v40_late_fee_rows_and_v42_schedule_survive_database_reload() {
     assert_eq!(row.get::<_, Decimal>(6), Decimal::ONE);
     tx.commit().await.expect("finish tenant readback");
 
-    let mut client = db.pool.get().await.expect("second-site connection");
+    let mut client = db.owner.get().await.expect("second-site connection");
     let tx = begin_tenant_tx(&mut client, db.other_site).await;
     let hidden: i64 = tx
         .query_one(
@@ -319,7 +326,7 @@ async fn v43_period_close_snapshot_and_four_eyes_reopen_round_trip_with_rls() {
         .await
         .expect("approve reopen");
 
-    let mut client = db.pool.get().await.expect("site read connection");
+    let mut client = db.owner.get().await.expect("site read connection");
     let tx = begin_tenant_tx(&mut client, db.site).await;
     let status: String = tx
         .query_one("SELECT status FROM dues_periods WHERE id=$1", &[&db.period])
@@ -346,7 +353,7 @@ async fn v43_period_close_snapshot_and_four_eyes_reopen_round_trip_with_rls() {
     assert_eq!(snapshot_count, 1);
     assert_eq!(reopen_status, "APPROVED");
     tx.commit().await.expect("finish site read");
-    let mut client = db.pool.get().await.expect("other-site connection");
+    let mut client = db.owner.get().await.expect("other-site connection");
     let tx = begin_tenant_tx(&mut client, db.other_site).await;
     let hidden: i64 = tx
         .query_one(

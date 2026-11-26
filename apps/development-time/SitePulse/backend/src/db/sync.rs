@@ -22,7 +22,10 @@ fn upsert_by_id<T>(items: &mut Vec<T>, item: T, id: impl Fn(&T) -> &String) {
 }
 
 pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResult<()> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — startup load of all sites and tenant tables.
+    let mut conn = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_read(&mut conn).await?;
+    let client = &tx;
 
     // 1. Load Sites
     {
@@ -1063,6 +1066,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             state.reconciliation_queue.len()
         );
     }
+
+    tx.commit().await?;
+    drop(conn);
 
     // SPEC-007: operating budgets, revaluation rates, liabilities' legal basis, card payment intents.
     {

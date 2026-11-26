@@ -34,10 +34,7 @@ pub async fn units_with_offsettable_advance(
     pool: &Pool,
     site_id: Option<i64>,
 ) -> DbResult<Vec<OffsetCandidate>> {
-    let client = pool.get().await?;
-    let rows = client
-        .query(
-            "SELECT u.site_id, u.id, ab.debtor_type,
+    const QUERY: &str = "SELECT u.site_id, u.id, ab.debtor_type,
                     (ab.balance - COALESCE((SELECT SUM(s.amount) FROM advance_exit_settlements s
                                              WHERE s.unit_id = ab.unit_id
                                                AND s.source_debtor = ab.debtor_type
@@ -53,10 +50,20 @@ pub async fn units_with_offsettable_advance(
                              WHERE d.unit_id = ab.unit_id
                                AND d.debtor_type = ab.debtor_type
                                AND d.status NOT IN ('PAID', 'CANCELLED'))
-              ORDER BY u.site_id, u.id, ab.debtor_type",
-            &[&site_id],
-        )
-        .await?;
+              ORDER BY u.site_id, u.id, ab.debtor_type";
+    let mut client = pool.get().await?;
+    let rows = if let Some(site) = site_id {
+        let tx = super::tenant_guard::begin_tenant_read(&mut client, site).await?;
+        let rows = tx.query(QUERY, &[&site_id]).await?;
+        tx.commit().await?;
+        rows
+    } else {
+        // tenant-guard: platform — scheduler sweep across all sites.
+        let tx = super::tenant_guard::begin_platform_read(&mut client).await?;
+        let rows = tx.query(QUERY, &[&site_id]).await?;
+        tx.commit().await?;
+        rows
+    };
     Ok(rows
         .iter()
         .map(|r| OffsetCandidate {

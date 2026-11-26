@@ -402,6 +402,7 @@ pub(crate) async fn purge_site_rows(
     ];
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
+    crate::db::tx_bind_tenant(&tx, site_id).await?;
     tx.batch_execute("SET LOCAL sitepulse.allow_ledger_purge = 'on'")
         .await?;
     for target in UNIT_SCOPED {
@@ -562,7 +563,7 @@ pub async fn provision_site_units(
                     );
                 }
             };
-            let client = match pool.get().await {
+            let mut conn = match pool.get().await {
                 Ok(c) => c,
                 Err(e) => {
                     return (
@@ -574,8 +575,22 @@ pub async fn provision_site_units(
                     );
                 }
             };
+            let client = match crate::db::begin_tenant_read(&mut conn, id_num).await {
+                Ok(tx) => tx,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "status": "ERROR",
+                            "message": crate::error::sanitized("Database error", &e)
+                        })),
+                    );
+                }
+            };
             let row = match client.query_opt("SELECT id, name, slug, address, status, plan_type, license_end_date FROM sites WHERE id = $1", &[&id_num]).await {
-                Ok(r) => r,
+                Ok(r) => {
+                    r
+                }
                 Err(e) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -642,7 +657,8 @@ pub async fn provision_site_units(
         if let Some(id) = in_mem {
             id
         } else if let Some(ref pool) = state.pool {
-            let client = match pool.get().await {
+            // tenant-guard: platform — test helper lookup by slug/name before site_id is known.
+            let mut conn = match pool.get().await {
                 Ok(c) => c,
                 Err(e) => {
                     return (
@@ -654,8 +670,22 @@ pub async fn provision_site_units(
                     );
                 }
             };
+            let client = match crate::db::begin_platform_read(&mut conn).await {
+                Ok(tx) => tx,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "status": "ERROR",
+                            "message": crate::error::sanitized("Database error", &e)
+                        })),
+                    );
+                }
+            };
             let row = match client.query_opt("SELECT id, name, slug, address, status, plan_type, license_end_date FROM sites WHERE slug = $1 OR LOWER(name) = LOWER($2)", &[&slug, &s_name]).await {
-                Ok(r) => r,
+                Ok(r) => {
+                    r
+                }
                 Err(e) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -694,7 +724,21 @@ pub async fn provision_site_units(
                 id_str
             } else {
                 let license_end = new_site_license_end();
-                let ins_row = match client
+                drop(client);
+                // tenant-guard: platform — the read above is finished; the insert is its own transaction.
+                let wtx = match crate::db::begin_platform_tx(&mut conn).await {
+                    Ok(tx) => tx,
+                    Err(e) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(serde_json::json!({
+                                "status": "ERROR",
+                                "message": crate::error::sanitized("Failed to create site", &e)
+                            })),
+                        );
+                    }
+                };
+                let ins_row = match wtx
                     .query_one(
                         r#"
                         INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
@@ -717,6 +761,15 @@ pub async fn provision_site_units(
                         );
                     }
                 };
+                if let Err(e) = wtx.commit().await {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "status": "ERROR",
+                            "message": crate::error::sanitized("Failed to create site", &e)
+                        })),
+                    );
+                }
                 let new_id: i64 = ins_row.get(0);
                 let id_str = new_id.to_string();
                 let mut inner = state.inner.write().await;

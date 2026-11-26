@@ -141,8 +141,13 @@ class Psql:
     def __init__(self, container: str):
         if not os.environ.get("DB_PASS"):
             load_env_file(BACKEND / ".env")
-        self.user = os.environ.get("DB_USER", "sitepulse_user")
-        self.password = os.environ.get("DB_PASS", "")
+        # Provisioning identity: this side creates databases, applies migrations and
+        # asserts stored rows, so it runs as the schema owner when CI separates it
+        # from the runtime role the backend under test connects with.
+        self.user = os.environ.get("DB_ADMIN_USER") or os.environ.get("DB_USER", "sitepulse_user")
+        self.password = os.environ.get("DB_ADMIN_PASS") or os.environ.get("DB_PASS", "")
+        self.runtime_user = os.environ.get("DB_USER", "sitepulse_user")
+        self.split_identity = bool(os.environ.get("DB_ADMIN_USER"))
         self.host = os.environ.get("DB_HOST", "127.0.0.1")
         self.port = os.environ.get("DB_PORT", "5432")
         self.container = container
@@ -218,9 +223,8 @@ class Backend:
             raise SetupError("cargo build failed:\n" + build.stderr[-3000:])
         return path
 
-    def start(self) -> None:
-        self.boots += 1
-        env = {
+    def env(self) -> Dict[str, str]:
+        return {
             **os.environ,
             "DB_NAME": self.db_name,
             "SITEPULSE_BIND_ADDR": f"127.0.0.1:{self.port}",
@@ -234,6 +238,10 @@ class Backend:
             "RUST_LOG": "warn",
             **self.extra_env,
         }
+
+    def start(self) -> None:
+        self.boots += 1
+        env = self.env()
         log = open(self.log_dir / f"{self.log_prefix}_boot{self.boots}.log", "w")
         self.proc = subprocess.Popen([str(self.binary())], cwd=BACKEND, env=env, stdout=log, stderr=subprocess.STDOUT)
         deadline = time.time() + 90
@@ -1530,6 +1538,29 @@ def seed(ctx: Context) -> None:
     """)
 
 
+def prepare_schema(backend: Backend, psql: Psql) -> None:
+    """Create the schema as the owner when the backend runs as a separate runtime role.
+
+    CI connects the backend as a non-superuser runtime role so row-level security
+    applies exactly as in production; that role cannot run DDL. The owner applies
+    the migrations once, then the runtime role receives the tenant role V25 uses.
+    """
+    if not psql.split_identity:
+        return
+    env = {
+        **backend.env(),
+        "DB_USER": psql.user,
+        "DB_PASS": psql.password,
+        "SITEPULSE_MIGRATIONS_ONLY": "true",
+    }
+    proc = subprocess.run([str(backend.binary())], cwd=BACKEND, env=env, capture_output=True,
+                          text=True, timeout=600)
+    if proc.returncode != 0:
+        raise SetupError("owner migrations failed: " + (proc.stderr or proc.stdout)[-2000:])
+    if psql.run(backend.db_name, "SELECT 1 FROM pg_roles WHERE rolname='sitepulse_tenant'"):
+        psql.run(backend.db_name, f"GRANT sitepulse_tenant TO {psql.runtime_user};")
+
+
 def run(selected: List[str], container: str, keep: bool, log_dir: Path) -> Dict[str, object]:
     psql = Psql(container)
     db_name = f"sitepulse_syscheck_{os.getpid()}"
@@ -1539,6 +1570,7 @@ def run(selected: List[str], container: str, keep: bool, log_dir: Path) -> Dict[
     ctx = Context(backend, psql)
     results: List[Dict[str, object]] = []
     try:
+        prepare_schema(backend, psql)
         backend.start()            # applies migrations
         seed(ctx)
         backend.restart()          # load the seeded data

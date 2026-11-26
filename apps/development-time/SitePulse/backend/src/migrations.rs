@@ -85,6 +85,8 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(51, "V51__unit_monthly_tariff_override.sql"),
     migration!(52, "V52__person_advance_holds.sql"),
     migration!(53, "V53__child_table_tenant_rls.sql"),
+    migration!(54, "V54__tenant_rls_fail_closed.sql"),
+    migration!(55, "V55__system_reference_tables.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.
@@ -102,16 +104,27 @@ pub fn latest_version() -> i32 {
 /// Applies pending migrations. Returns the versions applied by this call.
 pub async fn run(pool: &Pool) -> crate::db::DbResult<Vec<i32>> {
     let mut client = pool.get().await?;
-    client
-        .batch_execute(
-            "CREATE TABLE IF NOT EXISTS schema_migrations (
+    // Only touch DDL when the registry is missing: a runtime identity cannot create
+    // tables, and a migrated schema must let it start (it verifies instead).
+    let registry: bool = client
+        .query_one(
+            "SELECT to_regclass('public.schema_migrations') IS NOT NULL",
+            &[],
+        )
+        .await?
+        .get(0);
+    if !registry {
+        client
+            .batch_execute(
+                "CREATE TABLE IF NOT EXISTS schema_migrations (
                  version    INT PRIMARY KEY,
                  name       TEXT NOT NULL,
                  checksum   TEXT NOT NULL,
                  applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
              )",
-        )
-        .await?;
+            )
+            .await?;
+    }
     client
         .execute("SELECT pg_advisory_lock($1)", &[&MIGRATION_LOCK_KEY])
         .await?;
@@ -142,6 +155,7 @@ async fn apply_pending(client: &mut deadpool_postgres::Object) -> crate::db::DbR
             }
             continue;
         }
+        // tenant-guard: platform — DDL migration runner.
         let tx = client.transaction().await?;
         tx.batch_execute(m.sql).await.map_err(|e| {
             let detail = e

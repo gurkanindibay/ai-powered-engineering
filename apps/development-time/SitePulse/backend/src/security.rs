@@ -97,11 +97,16 @@ async fn site_active(state: &AppState, user: &User) -> Result<(), SecurityError>
     if user.role == Role::SaasAdmin {
         return Ok(());
     }
-    if let Some(client) = crate::db::security_connection(state).await? {
-        if !crate::db::site_is_active_from_client(&client, &user.site_id)
+    if let Some(mut conn) = crate::db::security_connection(state).await? {
+        let site = crate::db::require_id("site", &user.site_id)
+            .map_err(|_| SecurityError::Unauthenticated)?;
+        let client = crate::db::begin_tenant_read(&mut conn, site)
             .await
-            .map_err(|_| SecurityError::Unavailable)?
-        {
+            .map_err(|_| SecurityError::Unavailable)?;
+        let active = crate::db::site_is_active_from_client(&*client, &user.site_id)
+            .await
+            .map_err(|_| SecurityError::Unavailable)?;
+        if !active {
             return Err(SecurityError::Unauthenticated);
         }
     } else if !state.inner.read().await.sites.iter().any(|s| {
@@ -151,10 +156,6 @@ pub async fn create(
     crate::audit::identify(&user.id, user.role.as_str(), &session.id, &user.site_id);
     let digest = auth::token_digest(&result.refresh_token);
     if let Some(mut client) = crate::db::security_connection(state).await? {
-        let tx = client
-            .transaction()
-            .await
-            .map_err(|_| SecurityError::Unavailable)?;
         let user_id =
             crate::db::require_id("user", &user.id).map_err(|_| SecurityError::Unauthenticated)?;
         let site = if user.role == Role::SaasAdmin {
@@ -165,6 +166,20 @@ pub async fn create(
                     .map_err(|_| SecurityError::Unauthenticated)?,
             )
         };
+        let tx = client
+            .transaction()
+            .await
+            .map_err(|_| SecurityError::Unavailable)?;
+        if let Some(site_id) = site {
+            crate::db::tx_bind_tenant(&tx, site_id)
+                .await
+                .map_err(|_| SecurityError::Unavailable)?;
+        } else {
+            // tenant-guard: platform — SaaS admin session has no site_id.
+            crate::db::tx_bind_platform(&tx)
+                .await
+                .map_err(|_| SecurityError::Unavailable)?;
+        }
         let inserted=tx.execute("INSERT INTO auth_sessions(id,user_id,auth_version,site_id,expires_at) SELECT $1,id,$3,$4,$5 FROM users WHERE id=$2 AND auth_version=$3 AND password_hash IS NOT DISTINCT FROM $6 AND role=$7 AND is_active AND site_id IS NOT DISTINCT FROM $4 AND google_sub IS NOT DISTINCT FROM $8",
             &[&session.id,&user_id,&session.version,&site,&session.expires_at,&user.password_hash,&user.role.as_str(),&user.google_sub]).await.map_err(|_|SecurityError::Unavailable)?;
         if inserted != 1 {
@@ -250,8 +265,12 @@ pub async fn refresh(
     }
     let digest = auth::token_digest(&input.refresh_token);
     if let Some(mut client) = crate::db::security_connection(&state).await? {
+        // tenant-guard: platform — refresh token lookup before user/site is known.
         let tx = client
             .transaction()
+            .await
+            .map_err(|_| SecurityError::Unavailable)?;
+        crate::db::tx_bind_platform(&tx)
             .await
             .map_err(|_| SecurityError::Unavailable)?;
         let row=tx.query_opt("SELECT s.id,s.user_id,s.auth_version,s.expires_at,s.revoked_at,t.consumed_at,u.auth_version,u.is_active FROM auth_refresh_tokens t JOIN auth_sessions s ON s.id=t.session_id JOIN users u ON u.id=s.user_id WHERE t.digest=$1 AND t.expires_at>now() FOR UPDATE OF s,t",&[&digest]).await.map_err(|_|SecurityError::Unavailable)?.ok_or(SecurityError::Unauthenticated)?;

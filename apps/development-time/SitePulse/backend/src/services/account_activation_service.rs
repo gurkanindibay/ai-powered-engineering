@@ -426,6 +426,7 @@ impl AccountActivationService {
                 // tenant-guard: platform — identity flow keyed by a one-time token; the
                 // site is unknown until it is consumed and only users/activations change.
                 let tx = client.transaction().await.map_err(storage)?;
+                crate::db::tx_bind_platform(&tx).await.map_err(storage)?;
                 let (user_id, _) = Self::consume(&tx, &digest, ActivationPurpose::Activate).await?;
                 let updated = tx
                     .execute(
@@ -505,6 +506,7 @@ impl AccountActivationService {
         let mut client = pool.get().await.map_err(storage)?;
         // tenant-guard: platform — identity flow keyed by a one-time token (users only).
         let tx = client.transaction().await.map_err(storage)?;
+        crate::db::tx_bind_platform(&tx).await.map_err(storage)?;
         let (user_id, new_email) =
             Self::consume(&tx, digest, ActivationPurpose::EmailChange).await?;
         let new_email = new_email.ok_or(ActivationError::InvalidToken)?;

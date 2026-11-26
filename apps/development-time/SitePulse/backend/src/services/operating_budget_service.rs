@@ -415,7 +415,7 @@ impl OperatingBudgetService {
             b.id.clone()
         };
         if let Some(ref pool) = self.state.pool {
-            crate::db::delete_draft_budget(pool, &id)
+            crate::db::delete_draft_budget(pool, site_id, &id)
                 .await
                 .map_err(storage)?;
         }
@@ -657,7 +657,7 @@ impl OperatingBudgetService {
             .max()
             .and_then(|d| d.checked_add_days(chrono::Days::new(OBJECTION_WINDOW_DAYS)));
         if let Some(ref pool) = self.state.pool {
-            record.id = crate::db::upsert_budget_service(pool, &budget.id, &record)
+            record.id = crate::db::upsert_budget_service(pool, site_id, &budget.id, &record)
                 .await
                 .map_err(storage)?
                 .to_string();
@@ -732,7 +732,7 @@ impl OperatingBudgetService {
             resolution_note: None,
         };
         if let Some(ref pool) = self.state.pool {
-            objection.id = crate::db::save_budget_objection(pool, &budget.id, &objection)
+            objection.id = crate::db::save_budget_objection(pool, site_id, &budget.id, &objection)
                 .await
                 .map_err(storage)?
                 .to_string();
@@ -780,7 +780,7 @@ impl OperatingBudgetService {
         objection.resolution_note = req.resolution_note.clone().filter(|n| !n.trim().is_empty());
         let saved = objection.clone();
         if let Some(ref pool) = self.state.pool {
-            crate::db::save_budget_objection(pool, &budget.id, &saved)
+            crate::db::save_budget_objection(pool, site_id, &budget.id, &saved)
                 .await
                 .map_err(storage)?;
         }

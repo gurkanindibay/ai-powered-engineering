@@ -134,7 +134,7 @@ pub async fn insert_platform_person(
 
 /// Imports a legacy identity using its historical ID when it is not present.
 pub async fn ensure_legacy_person(
-    client: &deadpool_postgres::Client,
+    client: &impl tokio_postgres::GenericClient,
     id: i64,
     full_name: &str,
     phone: Option<&str>,

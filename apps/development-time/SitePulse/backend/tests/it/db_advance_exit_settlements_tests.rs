@@ -25,14 +25,24 @@ fn site_today() -> chrono::NaiveDate {
 struct TestDb {
     name: String,
     admin: Pool,
+    owner: Pool,
     pool: Pool,
 }
 
 impl TestDb {
     async fn create() -> Self {
-        let crate::test_db::TestDatabase { name, admin, pool } =
-            crate::test_db::create("advance_exit").await;
-        Self { name, admin, pool }
+        let crate::test_db::TestDatabase {
+            name,
+            admin,
+            owner,
+            pool,
+        } = crate::test_db::create("advance_exit").await;
+        Self {
+            name,
+            admin,
+            owner,
+            pool,
+        }
     }
 
     async fn drop_db(self) {
@@ -48,7 +58,7 @@ impl TestDb {
     }
 
     async fn seed_advance(&self, unit_id: i64, debtor: &str, amount: Decimal) {
-        let client = self.pool.get().await.expect("test connection");
+        let client = self.owner.get().await.expect("test connection");
         client
             .batch_execute("SET sitepulse.allow_ledger_purge = 'on'")
             .await
@@ -84,7 +94,7 @@ impl TestDb {
     /// person-scoped hold, with the same ledger entries a title transfer writes.
     async fn seed_hold(&self, unit_id: i64, person_id: i64, debtor: &str, amount: Decimal) {
         self.seed_advance(unit_id, debtor, amount).await;
-        let client = self.pool.get().await.expect("test connection");
+        let client = self.owner.get().await.expect("test connection");
         client
             .batch_execute("SET sitepulse.allow_ledger_purge = 'on'")
             .await
@@ -136,7 +146,7 @@ impl TestDb {
 
     async fn unit(&self) -> (i64, String) {
         let row = self
-            .pool
+            .owner
             .get()
             .await
             .expect("test connection")
@@ -152,7 +162,7 @@ impl TestDb {
     }
 
     async fn departing_tenant(&self, unit_id: i64, site_id: &str, debt: Decimal) -> i64 {
-        let client = self.pool.get().await.expect("test connection");
+        let client = self.owner.get().await.expect("test connection");
         let site_id = site_id.parse::<i64>().expect("numeric site id");
         let person_id: i64 = client
             .query_one(
@@ -245,7 +255,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
     let checker = caller(&site_id, "checker");
 
     let owner_id: i64 = db
-        .pool
+        .owner
         .get()
         .await
         .expect("test connection")
@@ -269,7 +279,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .await
         .expect("load the frozen exit debt for the normal collection service");
     let liability_id: String = db
-        .pool
+        .owner
         .get()
         .await
         .expect("test connection")
@@ -312,7 +322,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .expect("allow settlement after the frozen debt is paid");
     assert_eq!(unblocked.status, "PENDING");
     let tenant_balance: Decimal = db
-        .pool
+        .owner
         .get()
         .await
         .expect("test connection")
@@ -437,7 +447,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .expect("approve payout");
     assert_eq!(paid.status, "APPROVED");
     assert_eq!(paid.beneficiary_name, "Departing Resident");
-    let client = db.pool.get().await.expect("test connection");
+    let client = db.owner.get().await.expect("test connection");
     let disbursement_count: i64 = client
         .query_one(
             "SELECT COUNT(*) FROM advance_exit_disbursements WHERE settlement_id = $1",
@@ -498,7 +508,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         )
         .await
         .expect("approve transfer");
-    let client = db.pool.get().await.expect("test connection");
+    let client = db.owner.get().await.expect("test connection");
     let tenant_balance: Decimal = client
         .query_one(
             "SELECT balance FROM advance_balances WHERE unit_id = $1 AND debtor_type = 'TENANT'",
@@ -550,7 +560,7 @@ async fn exit_settlement_payout_transfer_and_stale_balance_are_atomic() {
         .create(&requester, &unit.to_string(), stale_request)
         .await
         .expect("create request before external balance change");
-    let client = db.pool.get().await.expect("test connection");
+    let client = db.owner.get().await.expect("test connection");
     client
         .execute(
             "UPDATE advance_balances SET balance = $2 WHERE unit_id = $1 AND debtor_type = 'TENANT'",
@@ -600,7 +610,7 @@ async fn seller_advance_held_after_a_title_transfer_is_paid_only_to_the_seller()
     let db = TestDb::create().await;
     let (unit, site_id) = db.unit().await;
     let seller: i64 = db
-        .pool
+        .owner
         .get()
         .await
         .expect("test connection")
@@ -650,7 +660,7 @@ async fn seller_advance_held_after_a_title_transfer_is_paid_only_to_the_seller()
         .expect("approve the seller payout");
     assert_eq!(approved.status, "APPROVED");
 
-    let client = db.pool.get().await.expect("test connection");
+    let client = db.owner.get().await.expect("test connection");
     let held: Decimal = client
         .query_one(
             "SELECT COALESCE((SELECT balance FROM person_advance_holds
@@ -721,7 +731,7 @@ async fn pending_requests_of_one_holder_cannot_count_the_same_hold_twice() {
     let db = TestDb::create().await;
     let (unit, site_id) = db.unit().await;
     let owner: i64 = db
-        .pool
+        .owner
         .get()
         .await
         .expect("test connection")
@@ -748,7 +758,7 @@ async fn pending_requests_of_one_holder_cannot_count_the_same_hold_twice() {
 
     // The hold shrinks outside this service and the buyer's own advance arrives:
     // 100.00 of the 200.00 is gone, and 100.00 sits in the unit's owner bucket.
-    let client = db.pool.get().await.expect("test connection");
+    let client = db.owner.get().await.expect("test connection");
     client
         .batch_execute("SET sitepulse.allow_ledger_purge = 'on'")
         .await

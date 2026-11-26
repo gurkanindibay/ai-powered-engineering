@@ -170,12 +170,14 @@ pub async fn get_resident_dashboard(
     let unit_opt = if let Some(u) = cached_unit {
         Some(u)
     } else if let Some(ref pool) = state.pool {
-        if let Ok(client) = pool.get().await {
+        // tenant-guard: platform — unit lookup by unit_id (middleware already scoped access).
+        if let Ok(mut conn) = pool.get().await {
             let num_id = crate::db::parse_id_to_i64(&unit_id).unwrap_or(0);
-            if let Ok(Some(row)) = client.query_opt(
-                "SELECT u.id, u.site_id, COALESCE(b.block_name, 'A Blok'), u.unit_number, u.floor, u.land_share, u.owner_person_id, u.tenant_person_id, u.virtual_iban, u.house_type, u.monthly_tariff_override FROM units u LEFT JOIN blocks b ON u.block_id = b.id WHERE u.id = $1 OR u.id::text = $2",
-                &[&num_id, &unit_id],
-            ).await {
+            if let Ok(client) = crate::db::begin_platform_read(&mut conn).await {
+                if let Ok(Some(row)) = client.query_opt(
+                    "SELECT u.id, u.site_id, COALESCE(b.block_name, 'A Blok'), u.unit_number, u.floor, u.land_share, u.owner_person_id, u.tenant_person_id, u.virtual_iban, u.house_type, u.monthly_tariff_override FROM units u LEFT JOIN blocks b ON u.block_id = b.id WHERE u.id = $1 OR u.id::text = $2",
+                    &[&num_id, &unit_id],
+                ).await {
                 let u_id: i64 = row.get(0);
                 let s_id: Option<i64> = row.get(1);
                 let b_name: String = row.get(2);
@@ -201,6 +203,9 @@ pub async fn get_resident_dashboard(
                     monthly_tariff_override: m_override,
                     created_on: None,
                 })
+            } else {
+                None
+            }
             } else {
                 None
             }

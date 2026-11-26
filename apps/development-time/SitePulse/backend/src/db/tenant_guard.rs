@@ -1,17 +1,16 @@
-//! Database-level tenant guardrail (defense in depth, migration V21).
+//! Database-level tenant guardrail (defense in depth, migrations V25 and V54).
 //!
 //! Tenant-bound transactions call [`tx_bind_tenant`] first. It
 //!
 //! 1. sets `app.tenant_site_id` for the transaction only (`set_config(.., true)`),
 //!    so a pooled connection never carries a tenant into the next checkout, and
 //! 2. drops to the `sitepulse_tenant` role (`SET LOCAL ROLE`) when it exists.
-//!    That role has no `BYPASSRLS`, so the row-level security policies of V21
-//!    apply even when the service connects as a superuser or as the table owner.
+//!    That role has no `BYPASSRLS`, so the row-level security policies apply
+//!    even when the service connects as a superuser or as the table owner.
 //!
-//! Inside such a transaction a query that forgets its `site_id` predicate still
-//! cannot read or write another tenant's rows: PostgreSQL filters them out.
-//! Connections that never bind a tenant (start-up load, platform scheduler,
-//! SaaS administration) are unaffected.
+//! Platform-wide transactions (start-up load, scheduler, SaaS administration)
+//! must opt in explicitly via [`tx_bind_platform`] (setting `app.platform = 'on'`).
+//! Unbound queries fail closed (V54).
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -58,7 +57,7 @@ pub async fn tx_bind_tenant(tx: &deadpool_postgres::Transaction<'_>, site_id: i6
     }
     let use_role = tenant_role_usable(tx).await?;
     tx.execute(
-        "SELECT set_config('app.tenant_site_id', $1, true)",
+        "SELECT set_config('app.tenant_site_id', $1, true), set_config('app.platform', '', true)",
         &[&site_id.to_string()],
     )
     .await?;
@@ -66,6 +65,38 @@ pub async fn tx_bind_tenant(tx: &deadpool_postgres::Transaction<'_>, site_id: i6
         tx.batch_execute(&format!("SET LOCAL ROLE {}", TENANT_ROLE))
             .await?;
     }
+    Ok(())
+}
+
+/// Marks the transaction as an explicit platform-wide operation (`app.platform = 'on'`).
+/// Used by start-up loads, schedulers, and SaaS administration so unbound
+/// tenant-table queries fail closed (V54).
+pub async fn tx_bind_platform(tx: &deadpool_postgres::Transaction<'_>) -> DbResult<()> {
+    tx.execute(
+        "SELECT set_config('app.platform', 'on', true), set_config('app.tenant_site_id', '', true)",
+        &[],
+    )
+    .await?;
+    Ok(())
+}
+
+/// Grants the runtime identity membership in [`TENANT_ROLE`] (V25), as database
+/// provisioning does in production.
+///
+/// Test fixtures run with split identities: the owner creates and migrates the
+/// throwaway database, the runtime role serves the application. This call gives
+/// that runtime role the tenant role it needs for `SET LOCAL ROLE` binding.
+pub async fn provision_runtime_role(admin: &Pool, runtime_role: &str) -> DbResult<()> {
+    if runtime_role.is_empty()
+        || !runtime_role
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return Err(format!("refusing to grant a role name '{}'", runtime_role).into());
+    }
+    let client = admin.get().await?;
+    let statement = format!("GRANT {} TO {}", TENANT_ROLE, runtime_role);
+    client.batch_execute(&statement).await?;
     Ok(())
 }
 
@@ -80,21 +111,42 @@ pub async fn tx_bound_tenant(tx: &deadpool_postgres::Transaction<'_>) -> DbResul
     Ok(row.get(0))
 }
 
-/// Runs a read-only, tenant-bound transaction and returns its client so the
-/// caller can issue queries through `tx`. Usage:
-///
-/// ```ignore
-/// let mut client = pool.get().await?;
-/// let tx = begin_tenant_read(&mut client, site_id).await?;
-/// let rows = tx.query("SELECT ... FROM payment_entries", &[]).await?;
-/// tx.commit().await?;
-/// ```
+/// Runs a read-only, tenant-bound transaction and returns it so the caller can
+/// issue queries through `tx`.
 pub async fn begin_tenant_read(
     client: &mut deadpool_postgres::Object,
     site_id: i64,
 ) -> DbResult<deadpool_postgres::Transaction<'_>> {
     let tx = client.build_transaction().read_only(true).start().await?;
     tx_bind_tenant(&tx, site_id).await?;
+    Ok(tx)
+}
+
+/// Starts a read-write, tenant-bound transaction.
+pub async fn begin_tenant_tx(
+    client: &mut deadpool_postgres::Object,
+    site_id: i64,
+) -> DbResult<deadpool_postgres::Transaction<'_>> {
+    let tx = client.transaction().await?;
+    tx_bind_tenant(&tx, site_id).await?;
+    Ok(tx)
+}
+
+/// Starts a read-only, platform-wide transaction (`app.platform = 'on'`).
+pub async fn begin_platform_read(
+    client: &mut deadpool_postgres::Object,
+) -> DbResult<deadpool_postgres::Transaction<'_>> {
+    let tx = client.build_transaction().read_only(true).start().await?;
+    tx_bind_platform(&tx).await?;
+    Ok(tx)
+}
+
+/// Starts a read-write, platform-wide transaction (`app.platform = 'on'`).
+pub async fn begin_platform_tx(
+    client: &mut deadpool_postgres::Object,
+) -> DbResult<deadpool_postgres::Transaction<'_>> {
+    let tx = client.transaction().await?;
+    tx_bind_platform(&tx).await?;
     Ok(tx)
 }
 

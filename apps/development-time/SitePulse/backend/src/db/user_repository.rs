@@ -17,6 +17,12 @@ pub async fn save_user(
     } else {
         Some(require_id("site", &user.site_id)?)
     };
+    if let Some(site) = site_id_num {
+        super::tx_bind_tenant(&client, site).await?;
+    } else {
+        // tenant-guard: platform — platform/SaaS user has no site_id.
+        super::tx_bind_platform(&client).await?;
+    }
 
     // Resolve, link, and synchronize person_id
     let person_id: Option<i64> = if let Some(pid) = user.person_id {
@@ -141,13 +147,15 @@ pub async fn save_invitation_token(
     pool: &Pool,
     invite: &UnitInviteLinkResponse,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — invitation token persistence keyed by token/unit_id.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
     let unit_id_num = if invite.unit_id.is_empty() {
         None
     } else {
         parse_id_to_i64(&invite.unit_id)
     };
-    client
+    tx
         .execute(
             r#"
             INSERT INTO invitation_tokens (token, token_type, unit_id, building, unit_number, relationship, invite_url, security_notice, expires_at)
@@ -167,6 +175,7 @@ pub async fn save_invitation_token(
             ],
         )
         .await?;
+    tx.commit().await?;
     info!("Saved unit invitation to PostgreSQL");
     Ok(())
 }
@@ -255,13 +264,15 @@ pub async fn delete_invitation_token(
     pool: &Pool,
     token_digest: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-    client
-        .execute(
-            "DELETE FROM invitation_tokens WHERE token = $1",
-            &[&token_digest],
-        )
-        .await?;
+    // tenant-guard: platform — invitation token deletion keyed by token digest.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+    tx.execute(
+        "DELETE FROM invitation_tokens WHERE token = $1",
+        &[&token_digest],
+    )
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 

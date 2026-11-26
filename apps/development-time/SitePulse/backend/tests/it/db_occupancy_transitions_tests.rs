@@ -24,14 +24,20 @@ const MANAGER_PASSWORD: &str = "Occupancy-Manager-123";
 struct TestDb {
     name: String,
     admin: Pool,
+    owner: Pool,
     pool: Pool,
 }
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
+        let crate::test_db::TestDatabase {
+            name,
+            admin,
+            owner,
+            pool,
+        } = crate::test_db::create(tag).await;
         let hash = auth::hash_password(MANAGER_PASSWORD).expect("hash");
-        pool.get()
+        owner.get()
             .await
             .expect("connection")
             .execute(
@@ -45,7 +51,12 @@ impl TestDb {
             )
             .await
             .expect("seed manager");
-        Self { name, admin, pool }
+        Self {
+            name,
+            admin,
+            owner,
+            pool,
+        }
     }
 
     async fn drop_db(self) {
@@ -61,17 +72,17 @@ impl TestDb {
     }
 
     async fn text(&self, sql: &str) -> String {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn int(&self, sql: &str) -> i64 {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn exec(&self, sql: &str) {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.batch_execute(sql).await.expect(sql);
     }
 
@@ -744,7 +755,7 @@ async fn when_status_or_sessions_are_written_by_hand_then_the_model_holds() {
     );
 
     // An OWNER session for someone who is not an owner is refused at commit.
-    let client = t.pool.get().await.expect("connection");
+    let client = t.owner.get().await.expect("connection");
     let refused = client
         .batch_execute(&format!(
             "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type) VALUES ({unit}, {stranger}, 'OWNER')"
@@ -760,7 +771,7 @@ async fn when_status_or_sessions_are_written_by_hand_then_the_model_holds() {
          SELECT site_id, id, 'MOVE_OUT', 'OWNED', 'TENANT_OCCUPIED', 'OWNED', 'VACANT', CURRENT_DATE FROM units WHERE id = {unit}"
     ))
     .await;
-    let client = t.pool.get().await.expect("connection");
+    let client = t.owner.get().await.expect("connection");
     assert!(client
         .batch_execute("DELETE FROM occupancy_transitions")
         .await

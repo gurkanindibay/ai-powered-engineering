@@ -389,8 +389,11 @@ impl PersonImportService {
     ) -> Result<SiteFacts, PersonImportError> {
         match &self.store {
             Storage::Postgres(pool) => {
-                let site = crate::db::parse_id_to_i64(site_id).unwrap_or_default();
-                let client = pool.get().await.map_err(storage)?;
+                let site = crate::db::require_id("site", site_id).map_err(storage)?;
+                let mut conn = pool.get().await.map_err(storage)?;
+                let client = crate::db::begin_tenant_read(&mut conn, site)
+                    .await
+                    .map_err(storage)?;
                 let units = client
                     .query(
                         "SELECT b.block_name, u.unit_number FROM units u JOIN blocks b ON b.id = u.block_id \
@@ -423,6 +426,7 @@ impl PersonImportService {
                     .iter()
                     .map(|r| (r.get::<_, String>(0), PersonKeys::of(r.get(0), r.get(1), r.get(2), None)))
                     .collect();
+                client.commit().await.map_err(storage)?;
                 Ok(SiteFacts {
                     units,
                     login_emails,

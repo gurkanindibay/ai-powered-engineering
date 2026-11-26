@@ -16,8 +16,9 @@ fn designation_json(d: &Option<PaymentDesignation>) -> Option<String> {
 pub async fn insert_payment_intent(pool: &Pool, i: &PaymentIntent) -> DbResult<i64> {
     let site = require_id("site", &i.site_id)?;
     let unit = require_id("unit", &i.unit_id)?;
-    let client = pool.get().await?;
-    let row = client
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site).await?;
+    let row = tx
         .query_one(
             r#"
             INSERT INTO payment_intents (site_id, unit_id, debtor_type, pays_tenant_liability, payer_name, amount, currency, provider, provider_ref,
@@ -43,13 +44,17 @@ pub async fn insert_payment_intent(pool: &Pool, i: &PaymentIntent) -> DbResult<i
             ],
         )
         .await?;
-    Ok(row.get(0))
+    let id: i64 = row.get(0);
+    tx.commit().await?;
+    Ok(id)
 }
 
 pub async fn update_payment_intent(pool: &Pool, i: &PaymentIntent) -> DbResult<()> {
+    let site = require_id("site", &i.site_id)?;
     let id = require_id("payment intent", &i.id)?;
-    let client = pool.get().await?;
-    let n = client
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site).await?;
+    let n = tx
         .execute(
             r#"
             UPDATE payment_intents SET status = $2, three_ds_status = $3, fee_amount = $4, failure_reason = $5,
@@ -62,17 +67,21 @@ pub async fn update_payment_intent(pool: &Pool, i: &PaymentIntent) -> DbResult<(
     if n != 1 {
         return Err(format!("payment intent {} not found", i.id).into());
     }
+    tx.commit().await?;
     Ok(())
 }
 
 pub async fn load_payment_intents(pool: &Pool) -> DbResult<Vec<PaymentIntent>> {
-    let client = pool.get().await?;
-    let rows = client
+    // tenant-guard: platform — startup load of all payment intents.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_read(&mut client).await?;
+    let rows = tx
         .query(
             &format!("SELECT {} FROM payment_intents ORDER BY id", INTENT_COLUMNS),
             &[],
         )
         .await?;
+    tx.commit().await?;
     Ok(rows
         .iter()
         .map(|r| PaymentIntent {

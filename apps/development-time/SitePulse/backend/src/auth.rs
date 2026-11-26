@@ -795,8 +795,13 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
         let Some(pool) = &state.pool else {
             return SecurityError::Unavailable.into_response();
         };
-        let client = match pool.get().await {
+        // tenant-guard: platform — support_grants lookup by grant_id before site_id is resolved.
+        let mut conn = match pool.get().await {
             Ok(c) => c,
+            Err(_) => return SecurityError::Unavailable.into_response(),
+        };
+        let client = match crate::db::begin_platform_read(&mut conn).await {
+            Ok(tx) => tx,
             Err(_) => return SecurityError::Unavailable.into_response(),
         };
         let user = match crate::db::require_id("user", &claims.sub) {

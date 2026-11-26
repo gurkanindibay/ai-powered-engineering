@@ -187,7 +187,11 @@ impl PersonDirectoryService {
         site: i64,
         f: &Filters,
     ) -> Result<DirectoryPage, PersonDirectoryError> {
-        let client = pool.get().await.map_err(storage)?;
+        let mut conn = pool.get().await.map_err(storage)?;
+        // `v_person_roles` resolves ownership through `units`, a tenant table.
+        let client = crate::db::begin_tenant_read(&mut conn, site)
+            .await
+            .map_err(storage)?;
         let filter = "WHERE p.site_id = $1 \
              AND ($2 = '' OR strpos(lower(p.full_name), $2) > 0 OR strpos(lower(COALESCE(p.email, '')), $2) > 0 \
                   OR strpos(regexp_replace(COALESCE(p.phone, ''), '\\D', '', 'g'), regexp_replace($2, '\\D', '', 'g')) > 0 AND regexp_replace($2, '\\D', '', 'g') <> '') \
@@ -300,7 +304,10 @@ impl PersonDirectoryService {
         let Storage::Postgres(pool) = &self.store else {
             return Err(PersonDirectoryError::NotFound);
         };
-        let client = pool.get().await.map_err(storage)?;
+        let mut conn = pool.get().await.map_err(storage)?;
+        let client = crate::db::begin_tenant_read(&mut conn, site)
+            .await
+            .map_err(storage)?;
         // A merged ID resolves to the card that absorbed it (V34 tombstone).
         let person_id: i64 = client
             .query_one(
@@ -342,6 +349,7 @@ impl PersonDirectoryService {
             )
             .await
             .map_err(storage)?;
+        client.commit().await.map_err(storage)?;
         let units = rows
             .iter()
             .map(|r| PersonUnit {
@@ -354,7 +362,7 @@ impl PersonDirectoryService {
                 active: r.get(6),
             })
             .collect();
-        drop(client);
+        drop(conn);
         let record =
             crate::services::person_record_service::PersonRecordService::new(self.state.clone())
                 .record(site, person_id)

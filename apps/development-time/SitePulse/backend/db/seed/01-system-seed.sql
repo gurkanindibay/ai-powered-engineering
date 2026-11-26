@@ -5,14 +5,7 @@
 -- ============================================================================
 
 -- 1. Supported Banks Reference Table & Lookups
-CREATE TABLE IF NOT EXISTS system_supported_banks (
-    bank_code VARCHAR(50) PRIMARY KEY,
-    bank_name VARCHAR(120) NOT NULL,
-    default_statement_format VARCHAR(30) NOT NULL, -- 'EXCEL', 'CSV', 'MT940'
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
+-- (Tables are created by migrations V55; this seed only writes rows.)
 INSERT INTO system_supported_banks (bank_code, bank_name, default_statement_format, is_active)
 VALUES
     ('KUVEYT_TURK', 'Kuveyt Türk Katılım Bankası', 'EXCEL', TRUE),
@@ -27,13 +20,6 @@ SET bank_name = EXCLUDED.bank_name,
     is_active = EXCLUDED.is_active;
 
 -- 2. System Default Configuration Settings (Late Penalty, Currency, Grace Periods)
-CREATE TABLE IF NOT EXISTS system_configurations (
-    config_key VARCHAR(80) PRIMARY KEY,
-    config_value VARCHAR(255) NOT NULL,
-    description TEXT,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
 INSERT INTO system_configurations (config_key, config_value, description)
 VALUES
     ('DEFAULT_MONTHLY_PENALTY_RATE', '0.05', 'Legal default monthly penalty interest rate (5%) under Turkish Property Law No. 634 Art. 20'),

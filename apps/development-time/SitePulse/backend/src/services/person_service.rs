@@ -227,7 +227,11 @@ impl PersonService {
         let offset = page.saturating_sub(1).saturating_mul(limit);
         let term = query.q.as_deref().unwrap_or_default().trim().to_lowercase();
         let digits: String = term.chars().filter(char::is_ascii_digit).collect();
-        let client = self.pool()?.get().await.map_err(storage)?;
+        let mut conn = self.pool()?.get().await.map_err(storage)?;
+        // `v_person_card` and `v_person_unit_relations` read tenant tables.
+        let client = crate::db::begin_tenant_read(&mut conn, site)
+            .await
+            .map_err(storage)?;
         let filter = " WHERE site_id = $1 AND ($2 = '' OR strpos(lower(full_name), $2) > 0 \
              OR strpos(lower(COALESCE(email, '')), $2) > 0 \
              OR ($3 <> '' AND strpos(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), $3) > 0))";
@@ -248,7 +252,7 @@ impl PersonService {
             )
             .await
             .map_err(storage)?;
-        let relations = self.unit_relations(&client, site, query).await?;
+        let relations = self.unit_relations(&*client, site, query).await?;
         let items = rows
             .iter()
             .map(card_of)
@@ -268,9 +272,9 @@ impl PersonService {
         })
     }
 
-    async fn unit_relations(
+    async fn unit_relations<C: tokio_postgres::GenericClient + Sync>(
         &self,
-        client: &deadpool_postgres::Client,
+        client: &C,
         site: i64,
         query: &PersonSearchQuery,
     ) -> Result<HashMap<i64, Vec<String>>, PersonApiError> {
@@ -336,7 +340,10 @@ impl PersonService {
     }
 
     async fn load_card(&self, site: i64, person_id: i64) -> Result<PersonCard, PersonApiError> {
-        let client = self.pool()?.get().await.map_err(storage)?;
+        let mut conn = self.pool()?.get().await.map_err(storage)?;
+        let client = crate::db::begin_tenant_read(&mut conn, site)
+            .await
+            .map_err(storage)?;
         client
             .query_opt(
                 &format!("{CARD_SELECT} WHERE site_id = $1 AND person_id = $2"),
@@ -358,7 +365,10 @@ impl PersonService {
         person_id: i64,
     ) -> Result<PersonCardResponse, PersonApiError> {
         let card = self.load_card(site, person_id).await?;
-        let client = self.pool()?.get().await.map_err(storage)?;
+        let mut conn = self.pool()?.get().await.map_err(storage)?;
+        let client = crate::db::begin_tenant_read(&mut conn, site)
+            .await
+            .map_err(storage)?;
         let rows = client
             .query(
                 "SELECT unit_id, unit_label, relation, start_date, end_date, active \
