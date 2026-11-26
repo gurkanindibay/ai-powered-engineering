@@ -86,7 +86,7 @@ EXPECTED_TOTALS: dict[str, dict[str, Any]] = {
     },
     "F6": {
         "blocks": 1, "units": 7, "people": 10, "accounts": 7,
-        "periods": 3, "liabilities": 21, "receipts": 0,
+        "periods": 3, "liabilities": 23, "receipts": 0,
         "overdue": Decimal("9750.00"), "advance": Decimal("0.00"),
         "total_overdue": "9750.00", "total_advance": "0.00",
     },
@@ -108,7 +108,7 @@ EXPECTED_TOTALS: dict[str, dict[str, Any]] = {
     },
     "F9": {
         "blocks": 1, "units": 7, "people": 11, "accounts": 7,
-        "periods": 3, "liabilities": 21, "receipts": 0,
+        "periods": 3, "liabilities": 23, "receipts": 0,
         "overdue": Decimal("9750.00"), "advance": Decimal("0.00"),
         "total_overdue": "9750.00", "total_advance": "0.00",
         "virtual_ibans_assigned": 7,

@@ -434,6 +434,127 @@ async fn skipped_units_are_recorded_where_the_manager_can_read_them() {
     env.drop_db().await;
 }
 
+// covers: SC-13-03-09
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn a_tenant_inside_the_month_stores_rows_that_sum_to_the_tariff() {
+    let _ = IGNORE;
+    let env = Env::new("mid_month_tenant").await;
+    let unit: i64 = env
+        .int(&format!(
+            "SELECT min(id) FROM units WHERE site_id = {} AND owner_person_id IS NOT NULL AND deleted_at IS NULL",
+            env.site
+        ))
+        .await;
+    let tenant: i64 = env
+        .int(&format!(
+            "INSERT INTO persons (full_name, site_id, person_type) VALUES ('Aylin Kaya', {}, 'HOME_RESIDENT') RETURNING id",
+            env.site
+        ))
+        .await;
+    let unit_id = unit.to_string();
+    // Days 6-15 belong to the tenant, so the owner holds days 1-5 and 16-30: one debt for
+    // the owner, not two rows the period's unique index would collapse to one.
+    let history = [sitepulse_backend::models::OccupancyHistoryItem {
+        id: 1,
+        unit_id: unit,
+        person_id: tenant,
+        person_name: "Aylin Kaya".to_string(),
+        person_phone: None,
+        person_email: None,
+        role: DebtorType::Tenant,
+        start_date: "2031-01-06".to_string(),
+        end_date: Some("2031-01-16".to_string()),
+        is_active: false,
+        exit_balance: Decimal::ZERO,
+        notes: None,
+        created_at: NaiveDate::from_ymd_opt(2026, 1, 1)
+            .and_then(|date| date.and_hms_opt(0, 0, 0))
+            .expect("fixed timestamp")
+            .and_utc(),
+    }];
+    let tariff = Decimal::from_str_exact("1500.00").expect("tariff");
+    let period =
+        sitepulse_backend::domain::billing_period::BillingPeriod::parse("2031-01").expect("period");
+    let shares = sitepulse_backend::services::occupancy_service::accrual_shares(
+        tariff,
+        period,
+        Some(NaiveDate::from_ymd_opt(2026, 1, 1).expect("past date")),
+        &history,
+        true,
+        NaiveDate::from_ymd_opt(2031, 1, 15).expect("accrual date"),
+    );
+    assert_eq!(
+        shares.len(),
+        2,
+        "one owner share and one tenant share: {shares:?}"
+    );
+    let due_date = NaiveDate::from_ymd_opt(2031, 1, 10).expect("due date");
+    let dues: Vec<(DuesLiability, Option<String>)> = shares
+        .iter()
+        .map(|(debtor_type, amount, liable_person)| {
+            (
+                DuesLiability {
+                    id: String::new(),
+                    unit_id: unit_id.clone(),
+                    period: "Ocak 2031".to_string(),
+                    delay_penalty: Decimal::ZERO,
+                    total_amount: *amount,
+                    principal_amount: *amount,
+                    due_date,
+                    status: DebtStatus::Pending,
+                    paid_principal: Decimal::ZERO,
+                    paid_penalty: Decimal::ZERO,
+                    debtor_type: *debtor_type,
+                    expense_type: ExpenseType::OperationalDues,
+                    penalty_accrued_through: None,
+                    grace_days: 0,
+                    effective_due_date: Some(due_date),
+                    liable_person_id: *liable_person,
+                },
+                None,
+            )
+        })
+        .collect();
+    db::commit_accrual_batch(
+        &env.pool,
+        &db::AccrualBatch {
+            site_id: &env.site.to_string(),
+            period_key: "2031-01",
+            period_label: "Ocak 2031",
+            due_date,
+            source: "MANUAL",
+            dues: &dues,
+            skipped: &[],
+        },
+    )
+    .await
+    .expect("store the period's liabilities");
+
+    let client = env.pool.get().await.expect("connection");
+    let row = client
+        .query_one(
+            "SELECT count(*), COALESCE(SUM(principal_amount), 0)
+               FROM dues_liabilities
+              WHERE unit_id = $1 AND period = 'Ocak 2031' AND status <> 'CANCELLED'",
+            &[&unit],
+        )
+        .await
+        .expect("stored rows");
+    assert_eq!(
+        row.get::<_, i64>(0),
+        2,
+        "a silently dropped row would hide the loss"
+    );
+    assert_eq!(
+        row.get::<_, Decimal>(1),
+        tariff,
+        "the period stores the whole tariff"
+    );
+    drop(client);
+    env.drop_db().await;
+}
+
 // covers: SC-07-08-04
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]

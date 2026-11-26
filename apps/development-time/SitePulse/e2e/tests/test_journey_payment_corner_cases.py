@@ -316,7 +316,12 @@ def test_transfer_on_unit_with_several_debtors_is_held_for_the_manager(request, 
         tenant_before = _debtor_items(api, j, a2, "TENANT")
         # Owner Ahmet Yılmaz, tenant Selin Demir (Ekim share) and tenant Mert Kılıç (Kasım share) all owe.
         assert [(p, pr) for p, pr, _ in owner_before] == [("Eylül 2026", D("1500.00")), ("Ekim 2026", D("483.87"))]
-        assert [(p, pr) for p, pr, _ in tenant_before] == [("Ekim 2026", D("1016.13")), ("Kasım 2026", D("1500.00"))]
+        # Kasım is split by the handover on 2026-11-15: each tenant owes the days they held.
+        assert sorted((p, pr) for p, pr, _ in tenant_before) == [
+            ("Ekim 2026", D("1016.13")),
+            ("Kasım 2026", D("700.00")),
+            ("Kasım 2026", D("800.00")),
+        ]
         before = financial_snapshot(stack, j.site_id)
 
         item = _hold_transfer(api, stack, j, a2)

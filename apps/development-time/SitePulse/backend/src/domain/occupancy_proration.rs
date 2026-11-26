@@ -1,8 +1,10 @@
-//! Splits monthly operational dues between the owner and tenant by calendar days.
+//! Splits monthly operational dues between the people responsible for its days.
 //!
-//! A tenant session's end date is exclusive, matching `unit_occupancies`. Days
-//! with no active tenant belong to the owner. The final role receives the
-//! remainder so rounding cannot change the total.
+//! A session's end date is exclusive, matching `unit_occupancies`. Days with no
+//! active session belong to the owner. All days of the same responsible person
+//! form one share, even when they are not contiguous, so successive occupants of
+//! a unit get their own debt and one person never owes two rows of a period; the
+//! final share receives the remainder so rounding cannot change the total.
 
 use chrono::{Datelike, Days, NaiveDate};
 use rust_decimal::{Decimal, RoundingStrategy};
@@ -17,6 +19,8 @@ pub enum ResponsibleParty {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OccupancySpan {
     pub party: ResponsibleParty,
+    /// The person this session makes liable; `None` when the session has no person.
+    pub person_id: Option<i64>,
     pub starts_on: NaiveDate,
     /// Exclusive. `None` represents an open session.
     pub ends_before: Option<NaiveDate>,
@@ -25,6 +29,8 @@ pub struct OccupancySpan {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProratedShare {
     pub party: ResponsibleParty,
+    /// The person the span named; `None` for days no session covers (the owner's).
+    pub person_id: Option<i64>,
     pub amount: Decimal,
 }
 
@@ -96,82 +102,57 @@ pub fn split_monthly_dues(
             .unwrap_or(ResponsibleParty::Owner);
         return Ok(vec![ProratedShare {
             party,
+            person_id: spans
+                .iter()
+                .find(|span| contains(span, accrued_on))
+                .and_then(|span| span.person_id),
             amount: monthly_amount,
         }]);
     }
 
     let chargeable_days = period_end.signed_duration_since(charge_start).num_days() + 1;
-    let mut role_days = [
-        (ResponsibleParty::Owner, 0_i64),
-        (ResponsibleParty::Tenant, 0_i64),
-    ];
-    let mut first_party = None;
+    // One share per responsible person for the whole month, in day order: a person whose
+    // days are not contiguous (a tenant returning after a stay) keeps a single debt, which
+    // is what `uq_unit_period_expense` can store.
+    let mut segments: Vec<((ResponsibleParty, Option<i64>), i64)> = Vec::new();
     for offset in 0..chargeable_days {
         let Some(date) = charge_start.checked_add_days(Days::new(offset as u64)) else {
             continue;
         };
-        let party = spans
+        let key = spans
             .iter()
             .find(|span| contains(span, date))
-            .map(|span| span.party)
-            .unwrap_or(ResponsibleParty::Owner);
-        first_party.get_or_insert(party);
-        let index = match party {
-            ResponsibleParty::Owner => 0,
-            ResponsibleParty::Tenant => 1,
-        };
-        role_days[index].1 += 1;
+            .map(|span| (span.party, span.person_id))
+            .unwrap_or((ResponsibleParty::Owner, None));
+        match segments.iter_mut().find(|(seen, _)| *seen == key) {
+            Some((_, days)) => *days += 1,
+            None => segments.push((key, 1)),
+        }
     }
 
     let active_amount = (monthly_amount * Decimal::from(chargeable_days)
         / Decimal::from(days_in_month))
     .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
-    let parties = [ResponsibleParty::Owner, ResponsibleParty::Tenant];
-    let active_parties: Vec<(ResponsibleParty, i64)> = parties
-        .into_iter()
-        .zip(role_days.into_iter().map(|(_, days)| days))
-        .filter(|(_, days)| *days > 0)
-        .collect();
-    if active_parties.len() == 1 {
-        return Ok(vec![ProratedShare {
-            party: active_parties[0].0,
-            amount: active_amount,
-        }]);
+    let last_index = segments.len().saturating_sub(1);
+    let mut allocated = Decimal::ZERO;
+    let mut shares = Vec::with_capacity(segments.len());
+    for (index, ((party, person_id), days)) in segments.into_iter().enumerate() {
+        let amount = if index == last_index {
+            active_amount - allocated
+        } else {
+            (monthly_amount * Decimal::from(days) / Decimal::from(days_in_month))
+                .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+        };
+        if amount > Decimal::ZERO {
+            allocated += amount;
+            shares.push(ProratedShare {
+                party,
+                person_id,
+                amount,
+            });
+        }
     }
-
-    let Some(first_party) = first_party else {
-        return Ok(Vec::new());
-    };
-    let first_days = active_parties
-        .iter()
-        .find(|(party, _)| *party == first_party)
-        .map(|(_, days)| *days)
-        .unwrap_or(0);
-    let first_amount = (monthly_amount * Decimal::from(first_days) / Decimal::from(days_in_month))
-        .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
-    let second_party = active_parties
-        .iter()
-        .find(|(party, _)| *party != first_party)
-        .map(|(party, _)| *party);
-    let Some(second_party) = second_party else {
-        return Ok(vec![ProratedShare {
-            party: first_party,
-            amount: active_amount,
-        }]);
-    };
-    Ok(vec![
-        ProratedShare {
-            party: first_party,
-            amount: first_amount,
-        },
-        ProratedShare {
-            party: second_party,
-            amount: active_amount - first_amount,
-        },
-    ]
-    .into_iter()
-    .filter(|share| share.amount > Decimal::ZERO)
-    .collect())
+    Ok(shares)
 }
 
 /// The amount owed for the days of `period_start`'s month that nobody was billed for,
@@ -235,6 +216,7 @@ mod tests {
     fn mid_month_move_in_splits_by_actual_october_days() {
         let spans = [OccupancySpan {
             party: ResponsibleParty::Tenant,
+            person_id: None,
             starts_on: date("2026-10-11"),
             ends_before: None,
         }];
@@ -251,6 +233,7 @@ mod tests {
             shares[0],
             ProratedShare {
                 party: ResponsibleParty::Owner,
+                person_id: None,
                 amount: money("451.61")
             }
         );
@@ -258,6 +241,7 @@ mod tests {
             shares[1],
             ProratedShare {
                 party: ResponsibleParty::Tenant,
+                person_id: None,
                 amount: money("948.39")
             }
         );
@@ -282,6 +266,7 @@ mod tests {
             shares,
             vec![ProratedShare {
                 party: ResponsibleParty::Owner,
+                person_id: None,
                 amount: money("900.00")
             }]
         );
@@ -392,6 +377,7 @@ mod tests {
     fn move_out_end_date_is_exclusive_and_first_share_rounds_half_away() {
         let spans = [OccupancySpan {
             party: ResponsibleParty::Tenant,
+            person_id: None,
             starts_on: date("2026-10-01"),
             ends_before: Some(date("2026-10-21")),
         }];
@@ -408,6 +394,7 @@ mod tests {
             shares[0],
             ProratedShare {
                 party: ResponsibleParty::Tenant,
+                person_id: None,
                 amount: money("903.23")
             }
         );
@@ -415,6 +402,7 @@ mod tests {
             shares[1],
             ProratedShare {
                 party: ResponsibleParty::Owner,
+                person_id: None,
                 amount: money("496.77")
             }
         );
@@ -424,6 +412,7 @@ mod tests {
     fn disabled_proration_keeps_the_current_full_month_rule() {
         let spans = [OccupancySpan {
             party: ResponsibleParty::Tenant,
+            person_id: None,
             starts_on: date("2026-10-11"),
             ends_before: None,
         }];
@@ -440,6 +429,7 @@ mod tests {
             shares,
             vec![ProratedShare {
                 party: ResponsibleParty::Tenant,
+                person_id: None,
                 amount: money("1400.00")
             }]
         );
@@ -498,6 +488,7 @@ mod tests {
         let owner_then_tenant = |split: &str| {
             [OccupancySpan {
                 party: ResponsibleParty::Tenant,
+                person_id: None,
                 starts_on: date(split),
                 ends_before: None,
             }]
@@ -526,9 +517,182 @@ mod tests {
     }
 
     #[test]
+    fn successive_tenants_own_their_segment_and_the_last_share_carries_the_remainder() {
+        let spans = [
+            OccupancySpan {
+                party: ResponsibleParty::Owner,
+                person_id: Some(1),
+                starts_on: date("2026-11-01"),
+                ends_before: Some(date("2026-11-11")),
+            },
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                person_id: Some(2),
+                starts_on: date("2026-11-11"),
+                ends_before: Some(date("2026-11-21")),
+            },
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                person_id: Some(3),
+                starts_on: date("2026-11-21"),
+                ends_before: None,
+            },
+        ];
+        let shares = split_monthly_dues(
+            money("1000.00"),
+            date("2026-11-01"),
+            None,
+            &spans,
+            true,
+            date("2026-11-21"),
+        )
+        .expect("valid amount");
+        assert_eq!(
+            shares,
+            vec![
+                ProratedShare {
+                    party: ResponsibleParty::Owner,
+                    person_id: Some(1),
+                    amount: money("333.33")
+                },
+                ProratedShare {
+                    party: ResponsibleParty::Tenant,
+                    person_id: Some(2),
+                    amount: money("333.33")
+                },
+                ProratedShare {
+                    party: ResponsibleParty::Tenant,
+                    person_id: Some(3),
+                    amount: money("333.34")
+                },
+            ]
+        );
+        assert_eq!(
+            shares.iter().map(|share| share.amount).sum::<Decimal>(),
+            money("1000.00")
+        );
+    }
+
+    #[test]
+    fn a_tenant_inside_the_month_leaves_one_owner_share() {
+        // Owner days 1-5 and 16-30 are the same debt: one share, not two rows the
+        // unique index would collapse.
+        let spans = [OccupancySpan {
+            party: ResponsibleParty::Tenant,
+            person_id: Some(7),
+            starts_on: date("2026-11-06"),
+            ends_before: Some(date("2026-11-16")),
+        }];
+        let shares = split_monthly_dues(
+            money("1500.00"),
+            date("2026-11-01"),
+            None,
+            &spans,
+            true,
+            date("2026-11-30"),
+        )
+        .expect("valid amount");
+        assert_eq!(
+            shares,
+            vec![
+                ProratedShare {
+                    party: ResponsibleParty::Owner,
+                    person_id: None,
+                    amount: money("1000.00")
+                },
+                ProratedShare {
+                    party: ResponsibleParty::Tenant,
+                    person_id: Some(7),
+                    amount: money("500.00")
+                },
+            ]
+        );
+        assert_eq!(
+            shares.iter().map(|share| share.amount).sum::<Decimal>(),
+            money("1500.00")
+        );
+    }
+
+    #[test]
+    fn a_person_who_returns_in_the_same_month_keeps_one_share() {
+        let spans = [
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                person_id: Some(2),
+                starts_on: date("2026-11-01"),
+                ends_before: Some(date("2026-11-06")),
+            },
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                person_id: Some(3),
+                starts_on: date("2026-11-06"),
+                ends_before: Some(date("2026-11-16")),
+            },
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                person_id: Some(2),
+                starts_on: date("2026-11-16"),
+                ends_before: None,
+            },
+        ];
+        let shares = split_monthly_dues(
+            money("1500.00"),
+            date("2026-11-01"),
+            None,
+            &spans,
+            true,
+            date("2026-11-30"),
+        )
+        .expect("valid amount");
+        assert_eq!(shares.len(), 2, "{shares:?}");
+        assert_eq!(shares[0].person_id, Some(2));
+        assert_eq!(shares[1].person_id, Some(3));
+        assert_eq!(
+            shares.iter().map(|share| share.amount).sum::<Decimal>(),
+            money("1500.00")
+        );
+    }
+
+    #[test]
+    fn a_tariff_that_does_not_divide_evenly_keeps_every_kurus() {
+        let spans = [
+            OccupancySpan {
+                party: ResponsibleParty::Owner,
+                person_id: Some(1),
+                starts_on: date("2026-11-01"),
+                ends_before: Some(date("2026-11-16")),
+            },
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                person_id: Some(2),
+                starts_on: date("2026-11-16"),
+                ends_before: None,
+            },
+        ];
+        let shares = split_monthly_dues(
+            money("1500.01"),
+            date("2026-11-01"),
+            None,
+            &spans,
+            true,
+            date("2026-11-16"),
+        )
+        .expect("valid amount");
+        assert_eq!(
+            shares.iter().map(|share| share.amount).collect::<Vec<_>>(),
+            vec![money("750.01"), money("750.00")]
+        );
+        assert_eq!(
+            shares.iter().map(|share| share.amount).sum::<Decimal>(),
+            money("1500.01")
+        );
+    }
+
+    #[test]
     fn without_proration_an_unoccupied_day_is_billed_to_the_owner() {
         let spans = [OccupancySpan {
             party: ResponsibleParty::Tenant,
+            person_id: None,
             starts_on: date("2026-10-11"),
             ends_before: None,
         }];
@@ -545,6 +709,7 @@ mod tests {
             shares,
             vec![ProratedShare {
                 party: ResponsibleParty::Owner,
+                person_id: None,
                 amount: money("1400.00")
             }]
         );

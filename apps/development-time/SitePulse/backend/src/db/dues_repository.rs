@@ -677,7 +677,10 @@ pub async fn commit_accrual_batch(
                     let person_id: i64 = owner.get(0);
                     let liable_from: NaiveDate = owner.get(1);
                     let liable_through: NaiveDate = owner.get(2);
-                    let tenant_person_id: Option<i64> = owner.get(3);
+                    // The liable tenant of this row, not the unit's current one: a period split
+                    // between successive tenants links each share to the tenant who owes it.
+                    let tenant_person_id: Option<i64> =
+                        created_liable_pid.or(owner.get::<_, Option<i64>>(3));
                     tx.execute(
                         r#"
                         INSERT INTO dues_liability_joint_owners

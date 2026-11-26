@@ -285,9 +285,19 @@ pub async fn run_accrual_with_report(
                             local,
                         )
                     } else {
-                        vec![(debtor, amount)]
+                        vec![(debtor, amount, None)]
                     };
-                    for (share_debtor, share_amount) in shares {
+                    // Days no session covers are the titled owner's; the database insert names
+                    // the same person, so the value only matters for the in-memory path.
+                    let owner_person_id = unit.owner_user_id.as_deref().and_then(|id| {
+                        inner
+                            .users
+                            .iter()
+                            .find(|u| u.id == id)
+                            .and_then(|u| u.person_id)
+                            .or_else(|| id.strip_prefix("person-").and_then(|s| s.parse().ok()))
+                    });
+                    for (share_debtor, share_amount, share_person) in shares {
                         batch.dues.push((
                             DuesLiability {
                                 id: String::new(),
@@ -307,34 +317,13 @@ pub async fn run_accrual_with_report(
                                 effective_due_date: Some(DuesLiability::effective_due_date_for(
                                     due_date, local,
                                 )),
-                                liable_person_id: match share_debtor {
-                                    DebtorType::Tenant => {
-                                        unit.tenant_user_id.as_deref().and_then(|id| {
-                                            inner
-                                                .users
-                                                .iter()
-                                                .find(|u| u.id == id)
-                                                .and_then(|u| u.person_id)
-                                                .or_else(|| {
-                                                    id.strip_prefix("person-")
-                                                        .and_then(|s| s.parse::<i64>().ok())
-                                                })
-                                        })
+                                liable_person_id: share_person.or_else(|| {
+                                    if share_debtor == DebtorType::Owner {
+                                        owner_person_id
+                                    } else {
+                                        None
                                     }
-                                    DebtorType::Owner => {
-                                        unit.owner_user_id.as_deref().and_then(|id| {
-                                            inner
-                                                .users
-                                                .iter()
-                                                .find(|u| u.id == id)
-                                                .and_then(|u| u.person_id)
-                                                .or_else(|| {
-                                                    id.strip_prefix("person-")
-                                                        .and_then(|s| s.parse::<i64>().ok())
-                                                })
-                                        })
-                                    }
-                                },
+                                }),
                             },
                             basis.operating_budget_id.clone(),
                         ));

@@ -162,15 +162,7 @@ pub async fn accrue_monthly_dues(
         .map_or(0, |s| s.grace_days);
 
     // 1. Decide every unit's amount and basis under a read lock.
-    let (
-        units_in_site,
-        planned,
-        mut skipped,
-        budget_id,
-        proration_enabled,
-        accrued_on,
-        user_person_ids,
-    ) = {
+    let (units_in_site, planned, mut skipped, budget_id, proration_enabled, accrued_on) = {
         let inner = state.inner.read().await;
         crate::services::billing_period_service::ensure_open_for_accrual(
             &inner,
@@ -266,11 +258,6 @@ pub async fn accrue_monthly_dues(
             in_force.map(|(id, _)| id),
             proration_enabled,
             accrued_on,
-            inner
-                .users
-                .iter()
-                .map(|u| (u.id.clone(), u.person_id))
-                .collect::<std::collections::HashMap<_, _>>(),
         )
     };
     let total_units_in_site = units_in_site.len();
@@ -418,22 +405,13 @@ pub async fn accrue_monthly_dues(
                     DebtorType::Owner
                 },
                 amount,
+                None,
             )]
         };
         if existing_units.contains(&unit.id) {
             continue;
         }
-        for (debtor_type, share_amount) in shares {
-            let uid = match debtor_type {
-                DebtorType::Tenant => unit.tenant_user_id.as_deref(),
-                DebtorType::Owner => unit.owner_user_id.as_deref(),
-            };
-            let liable_person_id = uid.and_then(|id| {
-                user_person_ids.get(id).copied().flatten().or_else(|| {
-                    id.strip_prefix("person-")
-                        .and_then(|s| s.parse::<i64>().ok())
-                })
-            });
+        for (debtor_type, share_amount, share_person) in shares {
             let history_pid = if debtor_type == DebtorType::Tenant {
                 history
                     .iter()
@@ -443,7 +421,16 @@ pub async fn accrue_monthly_dues(
             } else {
                 None
             };
-            let liable_person_id = liable_person_id.or(history_pid);
+            // Days no session covers are the titled owner's; the insert names the same
+            // person, so this only matters for the in-memory path.
+            let owner_pid = if debtor_type == DebtorType::Owner {
+                unit.owner_user_id
+                    .as_deref()
+                    .and_then(|id| id.strip_prefix("person-").unwrap_or(id).parse::<i64>().ok())
+            } else {
+                None
+            };
+            let liable_person_id = share_person.or(history_pid).or(owner_pid);
             accrued.push((
                 DuesLiability {
                     id: String::new(),

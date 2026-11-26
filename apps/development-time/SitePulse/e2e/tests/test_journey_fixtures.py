@@ -27,7 +27,7 @@ EXPECTED = {
     "F3": {"blocks": 1, "units": 7, "people": 0, "accounts": 0, "periods": 1, "liabilities": 0, "receipts": 0, "overdue": Decimal("0.00"), "advance": Decimal("0.00")},
     "F4": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 1, "liabilities": 6, "receipts": 1, "overdue": Decimal("8800.00"), "advance": Decimal("0.00")},
     "F5": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 3, "liabilities": 18, "receipts": 9, "overdue": Decimal("4567.50"), "advance": Decimal("1250.00")},
-    "F6": {"blocks": 1, "units": 7, "people": 10, "accounts": 7, "periods": 3, "liabilities": 21, "receipts": 0, "overdue": Decimal("9750.00"), "advance": Decimal("0.00")},
+    "F6": {"blocks": 1, "units": 7, "people": 10, "accounts": 7, "periods": 3, "liabilities": 23, "receipts": 0, "overdue": Decimal("9750.00"), "advance": Decimal("0.00")},
     "F7": {"blocks": 1, "units": 7, "people": 7, "accounts": 7, "periods": 3, "liabilities": 18, "receipts": 9, "overdue": Decimal("4567.50"), "advance": Decimal("1250.00")},
 }
 
