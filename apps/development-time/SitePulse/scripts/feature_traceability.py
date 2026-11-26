@@ -276,7 +276,8 @@ class Catalogue:
     links: dict[str, list[dict]]
     problems: list[str]
     root: Path = ROOT
-    # Derived data, cached because the resolver reads every test file once.
+    # Derived data, cached because the resolver reads every test file once. The catalogue is
+    # built and then read: change `scenarios` or `links` before the first resolve, not after.
     _evidence: tuple | None = field(default=None, repr=False, compare=False)
     _resolved_links: dict[str, list[dict]] | None = field(default=None, repr=False, compare=False)
 
@@ -288,7 +289,10 @@ class Catalogue:
         """Each link with the test name the evidence resolver attaches to it.
 
         A report must not show a link as unnamed when the resolver the gate uses can name
-        it; only a declaration with no test attached stays without a name.
+        it; only a declaration with no test attached stays without a name. The resolver is
+        authoritative: the five-line scan's name is used only for a link the resolver did
+        not return, because that scan gives a marker inside a helper body the next test's
+        name, which is the misattribution this method removes.
         """
         if self._resolved_links is None:
             resolved, _, _ = scenario_evidence(self)
