@@ -33,10 +33,15 @@ rule encodes a leak class that was found in the codebase and fixed:
                               opt out with a `// tenant-guard: platform` comment.
   rls-coverage                A table with a tenant key column (`site_id`,
                               `unit_id`, `payment_entry_id`, `project_id`,
-                              `budget_id`) is never passed to
+                              `budget_id`, or a parent key that resolves the
+                              tenant through another table) is never passed to
                               `sp_enable_tenant_rls`, so PostgreSQL would not
                               isolate it. Identity tables that span tenants are
                               listed in RLS_EXEMPT.
+  rls-parent-predicate        A table that reaches its tenant through a parent
+                              key has a policy whose predicate does not mention
+                              that parent, so a copy-paste policy could point at
+                              the wrong table and pass unnoticed.
 
 Usage:
     python3 scripts/tenant_isolation_lint.py            # human-readable
@@ -87,6 +92,17 @@ TX_BIND_WINDOW = 30
 PLATFORM_MARKER = "tenant-guard: platform"
 DELEGATED_MARKER = "tenant-scope: checked in"
 TENANT_KEYS = ("site_id", "unit_id", "payment_entry_id", "project_id", "budget_id")
+# Child tables reach their tenant through a parent whose own policy resolves the
+# site (V53). A table with one of these keys and no direct tenant key still has
+# to be passed to `sp_enable_tenant_rls`, with the parent-subselect predicate.
+PARENT_TENANT_KEYS = {
+    "meeting_id": "assembly_meetings",
+    "mandate_id": "autopay_mandates",
+    "case_id": "collection_cases",
+    "entry_id": "manual_journal_entries",
+    "plan_id": "payment_plans",
+    "occupancy_id": "unit_occupancies",
+}
 # Tables whose rows legitimately span tenants (identity, platform settings) or
 # that are tenant roots handled explicitly.
 RLS_EXEMPT = {
@@ -98,6 +114,7 @@ RLS_EXEMPT = {
     "financial_access_log",      # append-only access audit, nullable site (platform reads)
     "management_company_sites",  # one management company spans several sites
     "schema_migrations",
+    "dues_period_migration_issues",  # V37 migration audit log, written and read by the platform before a tenant is known
 }
 
 
@@ -278,30 +295,52 @@ def lint_transactions(backend: Path, findings: list[Finding]) -> None:
                 f"first (or mark a platform-wide transaction with `// {PLATFORM_MARKER}`)"))
 
 
-def tenant_keyed_tables(migrations: Path) -> dict[str, str]:
-    """Table -> migration file that gave it a tenant key column."""
-    tables: dict[str, str] = {}
+def tenant_keyed_tables(migrations: Path) -> dict[str, tuple[str, str | None]]:
+    """Table -> (migration, parent table it reaches its tenant through, if any)."""
+    tables: dict[str, tuple[str, str | None]] = {}
     keys = "|".join(TENANT_KEYS)
+    parent_keys = "|".join(PARENT_TENANT_KEYS)
     for f in sorted(migrations.glob("V*.sql"), key=lambda p: int(re.match(r"V(\d+)", p.name).group(1))):
         sql = re.sub(r"--[^\n]*", "", f.read_text(encoding="utf-8"))
         for m in re.finditer(r"CREATE TABLE (?:IF NOT EXISTS )?(\w+)\s*\((.*?)\n\s*\)\s*;", sql, re.S | re.I):
-            if re.search(rf"^\s*({keys})\s", m.group(2), re.M | re.I):
-                tables.setdefault(m.group(1).lower(), f.name)
-        for m in re.finditer(rf"ALTER TABLE (?:IF EXISTS )?(\w+)\s+ADD COLUMN (?:IF NOT EXISTS )?({keys})\b", sql, re.I):
-            tables.setdefault(m.group(1).lower(), f.name)
+            body = m.group(2)
+            if re.search(rf"^\s*({keys})\s", body, re.M | re.I):
+                tables.setdefault(m.group(1).lower(), (f.name, None))
+                continue
+            # A table that reaches its tenant only through a parent still needs a
+            # policy, and that policy must resolve through the parent.
+            parent = re.search(rf"^\s*({parent_keys})\s", body, re.M | re.I)
+            if parent:
+                tables.setdefault(
+                    m.group(1).lower(), (f.name, PARENT_TENANT_KEYS[parent.group(1).lower()])
+                )
+        for m in re.finditer(
+            rf"ALTER TABLE (?:IF EXISTS )?(\w+)\s+ADD COLUMN (?:IF NOT EXISTS )?({keys}|{parent_keys})\b",
+            sql,
+            re.I,
+        ):
+            column = m.group(2).lower()
+            tables.setdefault(
+                m.group(1).lower(), (f.name, PARENT_TENANT_KEYS.get(column))
+            )
     return tables
 
 
-def rls_enabled_tables(migrations: Path) -> set[str]:
-    enabled: set[str] = set()
+def rls_policies(migrations: Path) -> dict[str, str]:
+    """Table -> the predicate it was isolated with."""
+    policies: dict[str, str] = {}
     for f in migrations.glob("V*.sql"):
         sql = f.read_text(encoding="utf-8")
-        for m in re.finditer(r"sp_enable_tenant_rls\(\s*'(\w+)'", sql):
-            enabled.add(m.group(1).lower())
+        for m in re.finditer(r"sp_enable_tenant_rls\(\s*'(\w+)'\s*,\s*'((?:[^']|'')*)'", sql, re.S):
+            policies[m.group(1).lower()] = m.group(2)
         # SELECT sp_enable_tenant_rls(t, ...) FROM unnest(ARRAY['a', 'b']) AS t;
         for m in re.finditer(r"sp_enable_tenant_rls\(\s*t\b.*?unnest\(\s*ARRAY\[(.*?)\]", sql, re.S):
-            enabled.update(x.lower() for x in re.findall(r"'(\w+)'", m.group(1)))
-    return enabled
+            predicate = re.search(
+                r"sp_enable_tenant_rls\(\s*t\s*,\s*'((?:[^']|'')*)'", sql[m.start():], re.S
+            )
+            for table in re.findall(r"'(\w+)'", m.group(1)):
+                policies[table.lower()] = predicate.group(1) if predicate else ""
+    return policies
 
 
 def lint_rls(backend: Path, findings: list[Finding]) -> None:
@@ -309,14 +348,22 @@ def lint_rls(backend: Path, findings: list[Finding]) -> None:
     if not migrations.is_dir():
         return
     keyed = tenant_keyed_tables(migrations)
-    enabled = rls_enabled_tables(migrations)
-    for table, origin in sorted(keyed.items()):
-        if table in enabled or table in RLS_EXEMPT:
+    policies = rls_policies(migrations)
+    for table, (origin, parent) in sorted(keyed.items()):
+        if table in RLS_EXEMPT:
             continue
-        findings.append(Finding(
-            "rls-coverage", f"migrations/{origin}", 1,
-            f"table `{table}` has a tenant key but no row-level security policy: add it to "
-            "`sp_enable_tenant_rls` in a new migration (or to RLS_EXEMPT with a reason)"))
+        through = f" through `{parent}`" if parent else ""
+        if table not in policies:
+            findings.append(Finding(
+                "rls-coverage", f"migrations/{origin}", 1,
+                f"table `{table}` has a tenant key{through} but no row-level security policy: "
+                "add it to `sp_enable_tenant_rls` in a new migration "
+                "(or to RLS_EXEMPT with a reason)"))
+        elif parent and parent not in policies[table]:
+            findings.append(Finding(
+                "rls-parent-predicate", f"migrations/{origin}", 1,
+                f"table `{table}` reaches its tenant through `{parent}`, but its policy does not "
+                f"mention that table: {policies[table]!r}"))
 
 
 def lint(backend: Path) -> dict:
