@@ -50,6 +50,9 @@ class E2ETimeoutConfigTest(unittest.TestCase):
         setup = float(re.search(r"^SETUP_S = ([0-9.]+)$", guard, re.MULTILINE).group(1))
         self.assertGreaterEqual(setup, 60, "the first setup of a lane builds the whole stack")
         self.assertLessEqual(setup, 900)
+        collect = float(re.search(r"^COLLECT_S = ([0-9.]+)$", guard, re.MULTILINE).group(1))
+        self.assertGreaterEqual(collect, 60, "collection imports the suite before any test exists")
+        self.assertLessEqual(collect, 900)
         self.assertIn("os._exit(1)", guard)
         self.assertNotRegex(guard, r"faulthandler\.dump_traceback_later\(")
         # Armed for the whole protocol: a hang in setup or teardown left the job at its limit

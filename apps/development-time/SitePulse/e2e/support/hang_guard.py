@@ -7,8 +7,9 @@ answering then blocks the process until the job limit (#520: a WebKit journey hi
 body covers and the job died at 90 minutes). So this guard is armed for the whole
 runtest protocol — setup, call and teardown — with the flow allowance the first test of
 a lane needs to build the whole stack, and again for the session-scoped finalizers that
-run after the last test. At the deadline it dumps every thread's stack (the main
-thread's too) and exits the process.
+run after the last test. Collection, which runs before any test exists to name, has its
+own budget. At the deadline it dumps every thread's stack (the main thread's too) and
+exits the process.
 """
 from __future__ import annotations
 
@@ -27,6 +28,8 @@ GRACE_S = 180.0
 SETUP_S = 300.0
 # Session-scoped fixtures tear down after the last test, where no test deadline is left.
 TEARDOWN_S = 300.0
+# Collecting the suite (conftest imports, shard deselection) runs before any test exists to name.
+COLLECT_S = 300.0
 
 _stderr = pytest.StashKey()
 _timer = pytest.StashKey()
@@ -85,6 +88,8 @@ def _arm(config: pytest.Config, nodeid: str, deadline: float) -> None:
 def pytest_configure(config: pytest.Config) -> None:
     # Output capture replaces fd 2 while tests run; keep the real one for the dump.
     config.stash[_stderr] = os.dup(sys.__stderr__.fileno())
+    # Collection happens before the first test, so no test's own deadline covers it.
+    _arm(config, "collecting the suite", COLLECT_S)
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
