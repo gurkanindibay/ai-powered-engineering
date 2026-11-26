@@ -253,6 +253,7 @@ pub async fn reset_db_to_seed_data(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     info!("Resetting PostgreSQL database to clean initial state (clean debts and payments)...");
+    // tenant-guard: platform (development/test reset of every tenant)
     client
         .batch_execute(
             r#"

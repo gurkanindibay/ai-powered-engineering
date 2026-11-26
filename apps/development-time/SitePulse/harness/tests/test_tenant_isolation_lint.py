@@ -22,14 +22,14 @@ lock_lint = _load("lock_scope_lint")
 MODELS = "pub struct SiteQ {\n    pub site_id: Option<String>,\n}\npub struct Plain {\n    pub name: String,\n}\n"
 
 
-def _run(module, files: dict[str, str]) -> list[str]:
+def _run(module, files: dict[str, str], **kwargs) -> list[str]:
     with tempfile.TemporaryDirectory() as tmp:
         backend = Path(tmp) / "backend"
         for rel, source in files.items():
             path = backend / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(source, encoding="utf-8")
-        return sorted(f["rule"] for f in module.lint(backend)["findings"])
+        return sorted(f["rule"] for f in module.lint(backend, **kwargs)["findings"])
 
 
 class TenantIsolationLintTests(unittest.TestCase):
@@ -170,6 +170,65 @@ class TenantIsolationLintTests(unittest.TestCase):
             ),
         })
         self.assertEqual(rules, ["rls-parent-predicate"])
+
+
+POOL_MIGRATION = {
+    "migrations/V1__init.sql": "CREATE TABLE units (\n    id BIGINT,\n    site_id BIGINT\n);\n",
+    "migrations/V2__rls.sql": "SELECT sp_enable_tenant_rls('units', 'site_id = sp_tenant_site()');\n",
+}
+POOL_READ = (
+    "async fn f(pool: &Pool) {\n let client = pool.get().await?;\n"
+    ' client.query("SELECT id FROM units", &[]).await?;\n}\n'
+)
+
+
+class UnboundDbAccessTests(unittest.TestCase):
+    def test_pool_query_on_a_tenant_table_is_flagged(self):
+        rules = _run(tenant_lint, {**POOL_MIGRATION, "src/db/units.rs": POOL_READ})
+        self.assertEqual(rules, ["unbound-pool-query"])
+
+    def test_handlers_are_covered_too(self):
+        rules = _run(tenant_lint, {**POOL_MIGRATION, "src/handlers/x.rs": POOL_READ})
+        self.assertEqual(rules, ["unbound-pool-query"])
+
+    def test_non_tenant_tables_and_bound_transactions_pass(self):
+        rules = _run(tenant_lint, {
+            **POOL_MIGRATION,
+            "src/db/a.rs": POOL_READ.replace("units", "users"),
+            "src/db/b.rs": (
+                "async fn f(pool: &Pool) {\n let mut client = pool.get().await?;\n"
+                " let tx = begin_tenant_read(&mut client, 1).await?;\n"
+                ' tx.query("SELECT id FROM units", &[]).await?;\n}\n'
+            ),
+        })
+        self.assertEqual(rules, [])
+
+    def test_platform_marker_opts_a_call_or_a_file_out(self):
+        marked = POOL_READ.replace(" client.query", " // tenant-guard: platform (start-up)\n client.query")
+        rules = _run(tenant_lint, {
+            **POOL_MIGRATION,
+            "src/db/a.rs": marked,
+            "src/db/b.rs": "// tenant-guard: platform-file: start-up load\n" + POOL_READ,
+        })
+        self.assertEqual(rules, [])
+
+    def test_unbound_transaction_in_a_repository_is_flagged(self):
+        rules = _run(tenant_lint, {
+            "src/db/a.rs": "async fn a() { let tx = client.transaction().await?; tx.execute(q).await?; }\n",
+            "src/db/tenant_guard.rs": "async fn g() { let tx = client.transaction().await?; }\n",
+        })
+        self.assertEqual(rules, ["unbound-tenant-transaction"])
+
+    def test_baseline_accepts_existing_debt_but_not_growth_or_stale_entries(self):
+        files = {**POOL_MIGRATION, "src/db/units.rs": POOL_READ}
+        accepted = {"unbound-pool-query": {"src/db/units.rs": 1}}
+        self.assertEqual(_run(tenant_lint, files, baseline=accepted), [])
+        self.assertEqual(
+            _run(tenant_lint, files, baseline={"unbound-pool-query": {"src/db/units.rs": 0}}),
+            ["unbound-pool-query"],
+        )
+        stale = _run(tenant_lint, files, baseline={"unbound-pool-query": {"src/db/units.rs": 2}})
+        self.assertEqual(stale, ["stale-tenant-guard-baseline"])
 
 
 class LockScopeLintTests(unittest.TestCase):

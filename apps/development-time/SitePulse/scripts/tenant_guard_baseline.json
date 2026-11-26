@@ -1,0 +1,27 @@
+{
+  "unbound-pool-query": {
+    "src/db/advance_offset_repository.rs": 1,
+    "src/db/bank_account_repository.rs": 3,
+    "src/db/budget_repository.rs": 13,
+    "src/db/correction_repository.rs": 1,
+    "src/db/dues_repository.rs": 11,
+    "src/db/payment_intent_repository.rs": 3,
+    "src/db/payment_repository.rs": 17,
+    "src/db/reconciliation_repository.rs": 6,
+    "src/db/registration_repository.rs": 2,
+    "src/db/responsible_contact_repository.rs": 1,
+    "src/db/site_repository.rs": 15,
+    "src/db/unit_repository.rs": 13,
+    "src/db/user_repository.rs": 2,
+    "src/handlers/system.rs": 3
+  },
+  "unbound-tenant-transaction": {
+    "src/db/budget_repository.rs": 2,
+    "src/db/finance_store.rs": 1,
+    "src/db/payment_repository.rs": 1,
+    "src/db/site_repository.rs": 3,
+    "src/db/unit_repository.rs": 3,
+    "src/db/user_repository.rs": 1,
+    "src/handlers/system.rs": 1
+  }
+}

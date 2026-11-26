@@ -27,7 +27,8 @@ rule encodes a leak class that was found in the codebase and fixed:
                               is unknown, attributing data to some other site.
                               `src/state.rs` (dev fixtures) and `#[cfg(test)]`
                               modules are exempt.
-  unbound-tenant-transaction  A transaction opened in `src/services/` is not
+  unbound-tenant-transaction  A transaction opened in `src/services/`, `src/db/`
+                              or `src/handlers/` is not
                               bound to its tenant with `tx_bind_tenant` (row-
                               level security, V21). Platform-wide transactions
                               opt out with a `// tenant-guard: platform` comment.
@@ -38,6 +39,14 @@ rule encodes a leak class that was found in the codebase and fixed:
                               `sp_enable_tenant_rls`, so PostgreSQL would not
                               isolate it. Identity tables that span tenants are
                               listed in `scripts/tenant_rls_config.json` exemptions.
+  unbound-pool-query          A query on a tenant table runs on a pooled client
+                              in `src/db/` or `src/handlers/`, so it is never
+                              bound to a tenant. Opt out per call with a
+                              `// tenant-guard: platform` comment, or per file
+                              with `// tenant-guard: platform-file <reason>`.
+                              Existing debt sits in
+                              `scripts/tenant_guard_baseline.json` and may only
+                              shrink.
   rls-parent-predicate        A table that reaches its tenant through a parent
                               key has a policy whose predicate does not mention
                               that parent, so a copy-paste policy could point at
@@ -90,6 +99,19 @@ ROUTE_TABLE_RE = re.compile(r'\b(?:get|post|put|patch|delete)\s+"([^"]+)"\s*=>\s
 TX_OPEN_RE = re.compile(r"\.transaction\(\)|\.build_transaction\(\)")
 TX_BIND_WINDOW = 30
 PLATFORM_MARKER = "tenant-guard: platform"
+# Directories whose transactions must bind a tenant, and whose pooled-client
+# queries on tenant tables must be bound or marked platform-wide.
+TX_LINT_DIRS = ("services", "db", "handlers")
+POOL_LINT_DIRS = ("db", "handlers")
+# The guard itself opens the tenant transaction.
+TX_LINT_SKIP = {"src/db/tenant_guard.rs"}
+# A whole file that only runs in a platform context (start-up load) opts out
+# with this marker and a reason.
+PLATFORM_FILE_MARKER = "tenant-guard: platform-file"
+# Findings that existed when the rules covered src/db and src/handlers. They
+# may only shrink: a new finding fails, and so does a stale baseline entry.
+BASELINE_RULES = ("unbound-pool-query", "unbound-tenant-transaction")
+BASELINE_PATH = ROOT / "scripts/tenant_guard_baseline.json"
 DELEGATED_MARKER = "tenant-scope: checked in"
 TENANT_RLS_CONFIG = json.loads((ROOT / "scripts/tenant_rls_config.json").read_text())
 TENANT_KEYS = tuple(TENANT_RLS_CONFIG["tenant_keys"])
@@ -260,23 +282,83 @@ def lint_guessed_tenants(backend: Path, findings: list[Finding]) -> None:
 
 
 def lint_transactions(backend: Path, findings: list[Finding]) -> None:
-    services = backend / "src" / "services"
-    if not services.is_dir():
+    for sub in TX_LINT_DIRS:
+        root = backend / "src" / sub
+        if not root.is_dir():
+            continue
+        for f in sorted(root.rglob("*.rs")):
+            rel = f.relative_to(backend).as_posix()
+            if rel in TX_LINT_SKIP:
+                continue
+            code = _strip_test_modules(f.read_text(encoding="utf-8"))
+            if PLATFORM_FILE_MARKER in code:
+                continue
+            lines = code.splitlines()
+            for i, line in enumerate(lines):
+                if not TX_OPEN_RE.search(line):
+                    continue
+                window = "\n".join(lines[max(0, i - 3) : i + TX_BIND_WINDOW])
+                if "tx_bind_tenant" in window or PLATFORM_MARKER in window:
+                    continue
+                findings.append(Finding(
+                    "unbound-tenant-transaction", rel, i + 1,
+                    "transaction is not bound to its tenant: call `crate::db::tx_bind_tenant(&tx, site)` "
+                    f"first (or mark a platform-wide transaction with `// {PLATFORM_MARKER}`)"))
+
+
+def tenant_table_names(backend: Path) -> set[str]:
+    """Tables with a tenant policy (or a tenant key) that a pool query must not read unbound."""
+    migrations = backend / "migrations"
+    if not migrations.is_dir():
+        return set()
+    names = set(tenant_keyed_tables(migrations)) | set(rls_policies(migrations))
+    return {n for n in names if n not in RLS_EXEMPT}
+
+
+def lint_pool_queries(backend: Path, findings: list[Finding]) -> None:
+    """Flags queries on a tenant table issued straight on a pooled client.
+
+    A pooled client is never bound to a tenant, so while RLS is permissive for
+    unbound sessions the query sees every tenant. Run it through
+    `begin_tenant_read`/`tx_bind_tenant`, or mark a platform-wide query with
+    `// tenant-guard: platform`.
+    """
+    tables = tenant_table_names(backend)
+    if not tables:
         return
-    for f in sorted(services.rglob("*.rs")):
-        rel = f.relative_to(backend).as_posix()
-        code = _strip_test_modules(f.read_text(encoding="utf-8"))
-        lines = code.splitlines()
-        for i, line in enumerate(lines):
-            if not TX_OPEN_RE.search(line):
+    table_re = re.compile(r"\b(?:FROM|JOIN|UPDATE|INTO)\s+(" + "|".join(sorted(tables)) + r")\b", re.I)
+    for sub in POOL_LINT_DIRS:
+        root = backend / "src" / sub
+        if not root.is_dir():
+            continue
+        for f in sorted(root.rglob("*.rs")):
+            rel = f.relative_to(backend).as_posix()
+            if rel in TX_LINT_SKIP:
                 continue
-            window = "\n".join(lines[max(0, i - 3) : i + TX_BIND_WINDOW])
-            if "tx_bind_tenant" in window or PLATFORM_MARKER in window:
+            code = _strip_test_modules(f.read_text(encoding="utf-8"))
+            if PLATFORM_FILE_MARKER in code:
                 continue
-            findings.append(Finding(
-                "unbound-tenant-transaction", rel, i + 1,
-                "transaction is not bound to its tenant: call `crate::db::tx_bind_tenant(&tx, site)` "
-                f"first (or mark a platform-wide transaction with `// {PLATFORM_MARKER}`)"))
+            clients = set(re.findall(r"let\s+(?:mut\s+)?(\w+)\s*=\s*\w*pool\w*(?:\.as_ref\(\))?\.get\(\)", code))
+            if not clients:
+                continue
+            call_re = re.compile(
+                r"\b(" + "|".join(map(re.escape, sorted(clients))) + r")\s*\.\s*(?:query|query_one|query_opt|execute|batch_execute)\s*\("
+            )
+            lines = code.splitlines()
+            for m in call_re.finditer(code):
+                args = _signature(code, m.end() - 1)
+                hit = table_re.search(args)
+                if not hit:
+                    continue
+                line_no = _line_of(code, m.start())
+                window = "\n".join(lines[max(0, line_no - 6) : line_no + args.count("\n")])
+                if PLATFORM_MARKER in window:
+                    continue
+                findings.append(Finding(
+                    "unbound-pool-query", rel, line_no,
+                    f"`{m.group(1)}` is an unbound pooled client but the query reads `{hit.group(1).lower()}`, "
+                    "a tenant table: use `begin_tenant_read`/`tx_bind_tenant`, or mark a platform-wide "
+                    f"query with `// {PLATFORM_MARKER}`"))
 
 
 def tenant_keyed_tables(migrations: Path) -> dict[str, tuple[str, str | None]]:
@@ -350,13 +432,42 @@ def lint_rls(backend: Path, findings: list[Finding]) -> None:
                 f"mention that table: {policies[table]!r}"))
 
 
-def lint(backend: Path) -> dict:
+def apply_baseline(findings: list[Finding], baseline: dict) -> list[Finding]:
+    """Drops the accepted findings of a baselined file; flags growth and stale entries."""
+    kept: list[Finding] = []
+    seen: dict[tuple[str, str], int] = {}
+    for f in findings:
+        if f.rule in BASELINE_RULES:
+            seen[(f.rule, f.file)] = seen.get((f.rule, f.file), 0) + 1
+    for f in findings:
+        allowed = baseline.get(f.rule, {}).get(f.file, 0) if f.rule in BASELINE_RULES else 0
+        if f.rule in BASELINE_RULES and seen[(f.rule, f.file)] <= allowed:
+            continue
+        kept.append(f)
+    for rule in BASELINE_RULES:
+        for file, allowed in sorted(baseline.get(rule, {}).items()):
+            actual = seen.get((rule, file), 0)
+            if actual < allowed:
+                kept.append(Finding(
+                    "stale-tenant-guard-baseline", file, 1,
+                    f"`{rule}` baseline allows {allowed} but only {actual} remain: lower the entry "
+                    f"in scripts/tenant_guard_baseline.json to {actual}"))
+    return kept
+
+
+def load_baseline(path: Path = BASELINE_PATH) -> dict:
+    return json.loads(path.read_text()) if path.is_file() else {}
+
+
+def lint(backend: Path, baseline: dict | None = None) -> dict:
     findings: list[Finding] = []
     lint_handlers(backend, findings)
     lint_object_paths(backend, findings)
     lint_guessed_tenants(backend, findings)
     lint_transactions(backend, findings)
+    lint_pool_queries(backend, findings)
     lint_rls(backend, findings)
+    findings = apply_baseline(findings, baseline or {})
     return {
         "passed": not findings,
         "findings": [asdict(f) for f in findings],
@@ -369,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Print a JSON report")
     parser.add_argument("--backend", type=Path, default=DEFAULT_BACKEND, help="Backend crate directory")
     args = parser.parse_args(argv)
-    report = lint(args.backend)
+    report = lint(args.backend, load_baseline())
     if args.json:
         print(json.dumps(report, indent=2))
     else:

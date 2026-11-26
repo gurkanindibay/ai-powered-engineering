@@ -1,3 +1,5 @@
+// tenant-guard: platform-file: start-up and reload loading of the in-memory read model and
+// site provisioning run in a platform context, before or outside any tenant request.
 use chrono::{DateTime, NaiveDate, Utc};
 use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
