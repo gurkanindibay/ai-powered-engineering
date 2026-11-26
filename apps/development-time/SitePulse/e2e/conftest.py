@@ -26,7 +26,7 @@ sys.path.insert(0, str(E2E))
 from support import stack as st  # noqa: E402
 from support.api import Api, Builders  # noqa: E402
 from support.journey_attempts import reclaim_stale_attempts  # noqa: E402
-from support.flutter import by_id, wait_for_app  # noqa: E402
+from support.flutter import by_id, track_text_connections, wait_for_app  # noqa: E402
 from support.page_errors import describe_page_error  # noqa: E402
 from pages import LoginPage  # noqa: E402
 
@@ -34,6 +34,7 @@ ARTIFACTS = E2E / ".artifacts"
 
 pytest_plugins = [
     "support.executions",
+    "support.hang_guard",
     "steps.capital_steps",
     "steps.epic01_steps",
     "steps.epic02_steps",
@@ -119,6 +120,13 @@ def browser_context_args(browser_context_args, browser_name):
     if browser_name == "chromium":
         args["permissions"] = ["clipboard-read", "clipboard-write"]
     return args
+
+
+@pytest.fixture
+def context(context):
+    """Let `fill()` see when Flutter is listening to a text field (see support/flutter.py)."""
+    track_text_connections(context)
+    return context
 
 
 @pytest.fixture(autouse=True)

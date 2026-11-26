@@ -7,12 +7,51 @@ semantics tree and renders every `testId(...)` widget as a DOM node carrying
 from __future__ import annotations
 
 from time import monotonic
+from typing import Callable
 
-from playwright.sync_api import Locator, Page
+from playwright.sync_api import BrowserContext, Locator, Page
 
 ID_ATTR = "flt-semantics-identifier"
 # How long a typed value must survive before the widget is trusted with it.
 SETTLE_MS = 300
+# How long Flutter may take to connect a focused text field before it is focused again.
+CONNECT_MS = 3_000
+# Set on an <input>/<textarea> while the app is listening to what is typed into it.
+CONNECTED_ATTR = "data-e2e-text-connected"
+
+# Flutter web adds the field's `input` listener only once the framework has processed the
+# focus, and removes it when the field is disconnected. Nothing in the DOM says so, hence
+# this wrapper around the listener registration. Text typed without that listener stays in
+# the DOM input and never reaches the app, so reading the value back cannot detect it.
+TEXT_CONNECTION_JS = """(() => {
+    if (window.__e2eTextConnections) return;
+    window.__e2eTextConnections = true;
+    // A field stays connected while any `input` listener is left on it. A Set mirrors the
+    // DOM, which identifies a listener by function and capture flag, and ignores a repeated
+    // add and a removal of a listener it does not have.
+    const attached = new WeakMap();
+    for (const [method, adds] of [['addEventListener', true], ['removeEventListener', false]]) {
+        const original = EventTarget.prototype[method];
+        EventTarget.prototype[method] = function (type, listener, options, ...rest) {
+            const result = original.call(this, type, listener, options, ...rest);
+            if (type === 'input' && listener
+                    && (this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement)) {
+                const capture = typeof options === 'boolean' ? options : !!(options && options.capture);
+                const phases = attached.get(this) || [new Set(), new Set()];
+                attached.set(this, phases);
+                if (adds) phases[+capture].add(listener);
+                else phases[+capture].delete(listener);
+                this.toggleAttribute('%s', phases.some(listeners => listeners.size > 0));
+            }
+            return result;
+        };
+    }
+})();""" % CONNECTED_ATTR
+
+
+def track_text_connections(context: BrowserContext) -> None:
+    """Mark connected text fields in every page of `context`; call before the app loads."""
+    context.add_init_script(TEXT_CONNECTION_JS)
 
 
 def by_id(page: Page, test_id: str) -> Locator:
@@ -34,16 +73,39 @@ def fill(page: Page, test_id: str, value: str) -> None:
     """Replace the text of a TextField tagged with test_id."""
     field = by_id(page, test_id)
     field.first.wait_for(state="attached")
-    # Flutter web creates the DOM <input> only while the field has focus, and syncs its editing
-    # state asynchronously; a select-all issued too early can miss prefilled text. So focus first,
-    # use the input once it exists, and verify the value instead of trusting one attempt.
+    _set_value(page, value, repr(test_id), lambda: _field_input(page, field))
+
+
+def fill_input(page: Page, field: Locator, value: str, label: str) -> None:
+    """Replace the text of an <input> that carries no test id (the date picker's, e.g.)."""
+    _set_value(page, value, label, lambda: (field.first.click(), field.first)[1])
+
+
+def _field_input(page: Page, field: Locator) -> Locator:
+    """Click the field so Flutter creates its DOM <input>, and return that input."""
+    field.first.click()
+    target = field.locator("input, textarea").first
+    try:
+        target.wait_for(state="attached", timeout=3_000)
+    except Exception:
+        target = page.locator("input:focus, textarea:focus").first
+    return target
+
+
+def _set_value(page: Page, value: str, label: str, focus: Callable[[], Locator]) -> None:
+    """Type `value` into the input `focus` returns, retrying the whole entry until it sticks.
+
+    Flutter web creates the DOM <input> only while the field has focus, and syncs its editing
+    state asynchronously; a select-all issued too early can miss prefilled text. So focus first,
+    use the input once it exists, and verify the value instead of trusting one attempt. A focus
+    the app missed leaves the field disconnected: only blurring and clicking it again reaches it,
+    so the retry starts over from `focus`.
+    """
     for _ in range(3):
-        field.first.click()
-        target = field.locator("input, textarea").first
-        try:
-            target.wait_for(state="attached", timeout=3_000)
-        except Exception:
-            target = page.locator("input:focus, textarea:focus").first
+        target = focus()
+        if not wait_text_connected(page, target):
+            target.evaluate("e => e.blur()")  # so the next click focuses it again
+            continue
         target.press("Control+a")
         target.press("Delete")
         if (target.evaluate("e => e.value ?? ''") or "") != "":
@@ -51,7 +113,23 @@ def fill(page: Page, test_id: str, value: str) -> None:
         target.type(value)
         if target.evaluate("e => e.value ?? ''") == value and _survives(page, target, value):
             return
-    raise AssertionError(f"could not set {test_id!r} to {value!r}")
+    raise AssertionError(f"could not set {label} to {value!r}")
+
+
+def wait_text_connected(page: Page, target: Locator) -> bool:
+    """True once the app receives what is typed into `target`.
+
+    Pages of a context without `track_text_connections` cannot tell and are trusted.
+    """
+    deadline = monotonic() + CONNECT_MS / 1000
+    while True:
+        if target.evaluate(
+            "(e, attr) => !window.__e2eTextConnections || e.hasAttribute(attr)", CONNECTED_ATTR
+        ):
+            return True
+        if monotonic() >= deadline:
+            return False
+        page.wait_for_timeout(50)
 
 
 def _survives(page: Page, target: Locator, value: str) -> bool:
