@@ -98,16 +98,48 @@ pub async fn begin_tenant_read(
     Ok(tx)
 }
 
-/// Probes whether the RLS guardrail is installed (used by health/diagnostics).
+/// Probes whether every tenant-keyed public table has forced tenant isolation.
 pub async fn rls_guard_installed(pool: &Pool) -> DbResult<bool> {
     let client = pool.get().await?;
+    #[derive(serde::Deserialize)]
+    struct TenantRlsConfig {
+        tenant_keys: Vec<String>,
+        parent_tenant_keys: std::collections::HashMap<String, String>,
+        root_tables: Vec<String>,
+        exemptions: std::collections::HashMap<String, String>,
+    }
+    let config: TenantRlsConfig =
+        serde_json::from_str(include_str!("../../../scripts/tenant_rls_config.json"))?;
+    let mut tenant_keys = config.tenant_keys;
+    tenant_keys.extend(config.parent_tenant_keys.into_keys());
+    let exemptions: Vec<String> = config.exemptions.into_keys().collect();
     let row = client
         .query_one(
-            "SELECT COUNT(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = 'public' AND c.relname = 'payment_entries'
-                AND c.relrowsecurity AND c.relforcerowsecurity",
-            &[],
+            "WITH expected AS (
+                 SELECT c.oid, c.relrowsecurity, c.relforcerowsecurity
+                 FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'public'
+                   AND c.relkind IN ('r', 'p')
+                   AND c.relname <> ALL($1::text[])
+                   AND (
+                       c.relname = ANY($3::text[])
+                       OR EXISTS (
+                           SELECT 1 FROM pg_attribute a
+                           WHERE a.attrelid = c.oid
+                             AND a.attnum > 0
+                             AND NOT a.attisdropped
+                             AND a.attname = ANY($2::text[])
+                       )
+                   )
+             )
+             SELECT COUNT(*) > 0
+                AND COUNT(*) FILTER (WHERE e.relrowsecurity AND e.relforcerowsecurity
+                    AND EXISTS (SELECT 1 FROM pg_policy p
+                                WHERE p.polrelid = e.oid AND p.polname = 'tenant_isolation')) = COUNT(*)
+             FROM expected e",
+            &[&exemptions, &tenant_keys, &config.root_tables],
         )
         .await?;
-    Ok(row.get::<_, i64>(0) == 1)
+    Ok(row.get(0))
 }

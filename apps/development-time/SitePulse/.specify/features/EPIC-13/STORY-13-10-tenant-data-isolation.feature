@@ -101,3 +101,11 @@ Feature: Tenant data isolation across sites and resident accounts
     And the first resident's held response is released
     Then the app shows the second resident's ledger only
     And back navigation and reload do not expose the first resident's balance or receipt
+
+  @SC-13-10-09 @layer:backend @core @linked
+  Scenario: Startup and health readiness require tenant policies and a safe runtime role
+    Given a database has completed its schema migrations
+    When the service starts or its readiness endpoint checks the database
+    Then missing forced tenant row security or a superuser or BYPASSRLS runtime role is reported as not ready
+    And production refuses to serve with that database configuration
+    And the readiness response exposes only the coarse tenant RLS readiness status

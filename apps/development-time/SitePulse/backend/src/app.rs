@@ -70,6 +70,8 @@ routes! {
     post "/api/v1/site-admin/roles" => authorization::assign_role, Require(RoleGrant);
     get "/health" => handlers::health_check, Public;
     get "/api/v1/health" => handlers::health_check, Public;
+    get "/ready" => handlers::readiness_check, Public;
+    get "/api/v1/ready" => handlers::readiness_check, Public;
     get "/api-docs/openapi.json" => handlers::openapi_spec, Public;
     get "/api/v1/openapi.json" => handlers::openapi_spec, Public;
     get "/openapi.json" => handlers::openapi_spec, Public;

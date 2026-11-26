@@ -128,6 +128,49 @@ class TenantIsolationLintTests(unittest.TestCase):
         })
         self.assertEqual(rules, ["rls-coverage"])  # notes; users is exempt
 
+    def test_parent_scoped_child_tables_need_a_policy(self):
+        rules = _run(tenant_lint, {
+            "migrations/V1__init.sql": (
+                "CREATE TABLE assembly_meetings (\n    id BIGINT,\n    site_id BIGINT\n);\n"
+                "CREATE TABLE assembly_agenda_items (\n    id BIGINT,\n    meeting_id BIGINT\n);\n"
+            ),
+            "migrations/V2__rls.sql": "SELECT sp_enable_tenant_rls('assembly_meetings', 'x');\n",
+        })
+        self.assertEqual(rules, ["rls-coverage"])
+
+    def test_parent_scoped_child_tables_pass_with_their_policy(self):
+        rules = _run(tenant_lint, {
+            "migrations/V1__init.sql": (
+                "CREATE TABLE assembly_meetings (\n    id BIGINT,\n    site_id BIGINT\n);\n"
+                "CREATE TABLE assembly_agenda_items (\n    id BIGINT,\n    meeting_id BIGINT\n);\n"
+                "CREATE TABLE payment_plans (\n    id BIGINT,\n    site_id BIGINT\n);\n"
+                "CREATE TABLE payment_plan_installments (\n    id BIGINT,\n    plan_id BIGINT\n);\n"
+            ),
+            "migrations/V2__rls.sql": (
+                "SELECT sp_enable_tenant_rls('assembly_meetings', 'site_id = sp_tenant_site()');\n"
+                "SELECT sp_enable_tenant_rls('assembly_agenda_items', "
+                "'meeting_id IN (SELECT m.id FROM assembly_meetings m WHERE m.site_id = sp_tenant_site())');\n"
+                "SELECT sp_enable_tenant_rls('payment_plans', 'site_id = sp_tenant_site()');\n"
+                "SELECT sp_enable_tenant_rls('payment_plan_installments', "
+                "'plan_id IN (SELECT p.id FROM payment_plans p WHERE p.site_id = sp_tenant_site())');\n"
+            ),
+        })
+        self.assertEqual(rules, [])
+
+    def test_a_parent_scoped_policy_must_name_its_parent(self):
+        rules = _run(tenant_lint, {
+            "migrations/V1__init.sql": (
+                "CREATE TABLE manual_journal_entries (\n    id BIGINT,\n    site_id BIGINT\n);\n"
+                "CREATE TABLE manual_journal_lines (\n    id BIGINT,\n    entry_id BIGINT\n);\n"
+            ),
+            "migrations/V2__rls.sql": (
+                "SELECT sp_enable_tenant_rls('manual_journal_entries', 'site_id = sp_tenant_site()');\n"
+                "SELECT sp_enable_tenant_rls('manual_journal_lines', "
+                "'entry_id IN (SELECT e.id FROM payment_plans e WHERE e.site_id = sp_tenant_site())');\n"
+            ),
+        })
+        self.assertEqual(rules, ["rls-parent-predicate"])
+
 
 class LockScopeLintTests(unittest.TestCase):
     def test_write_guard_held_across_database_io(self):

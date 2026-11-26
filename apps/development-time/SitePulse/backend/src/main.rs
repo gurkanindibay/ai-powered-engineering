@@ -35,6 +35,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         // Loaded outside the global lock and swapped in (lock-lint).
         state.reload_from_db().await?;
+        if !migrations_only {
+            let policies_installed = db::rls_guard_installed(p).await?;
+            let role = db::runtime_role_status(p).await?;
+            if !policies_installed || !role.is_safe() {
+                let reason = format!(
+                    "Tenant RLS readiness failed (policies_installed={}, runtime_role_safe={})",
+                    policies_installed,
+                    role.is_safe()
+                );
+                tracing::error!(
+                    policies_installed,
+                    runtime_role_superuser = role.superuser,
+                    runtime_role_bypassrls = role.bypass_rls,
+                    runtime_role_createrole = role.create_role,
+                    runtime_role_createdb = role.create_database,
+                    runtime_role_owns_public_tables = role.owns_public_tables,
+                    "{}",
+                    reason
+                );
+                if state::AppStateInner::is_production() {
+                    return Err(reason.into());
+                }
+            }
+        }
     }
 
     if migrations_only {

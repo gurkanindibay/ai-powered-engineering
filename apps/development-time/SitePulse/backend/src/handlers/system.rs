@@ -2,15 +2,47 @@
 
 use super::*;
 
-// 7. Health Check
+// 7. Liveness Check
 pub async fn health_check() -> impl IntoResponse {
     (
         StatusCode::OK,
         Json(json!({
             "status": "UP",
+            "readiness": "LIVE",
             "service": "SitePulse Rust Backend",
             "version": "1.0.0",
             "engine": "Axum / Tokio",
+        })),
+    )
+}
+
+/// Readiness probe for tenant RLS and runtime database role configuration.
+pub async fn readiness_check(State(state): State<AppState>) -> impl IntoResponse {
+    let mut tenant_rls_status = "not_configured";
+    let mut ready = true;
+    match crate::db::tenant_rls_readiness(state.db_pool()).await {
+        Ok(Some((policies_installed, role))) => {
+            ready = policies_installed && role.is_safe();
+            tenant_rls_status = if ready { "ready" } else { "misconfigured" };
+        }
+        Ok(None) => {}
+        Err(error) => {
+            ready = false;
+            crate::error::sanitized("Tenant RLS readiness probe failed", &error);
+            tenant_rls_status = "probe_failed";
+        }
+    }
+    let status = if ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (
+        status,
+        Json(json!({
+            "status": if ready { "UP" } else { "DEGRADED" },
+            "readiness": if ready { "READY" } else { "NOT_READY" },
+            "tenant_rls": { "status": tenant_rls_status },
         })),
     )
 }

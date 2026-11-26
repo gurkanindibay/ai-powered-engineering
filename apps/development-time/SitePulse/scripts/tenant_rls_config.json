@@ -1,0 +1,31 @@
+{
+  "tenant_keys": [
+    "site_id",
+    "unit_id",
+    "payment_entry_id",
+    "project_id",
+    "budget_id"
+  ],
+  "parent_tenant_keys": {
+    "meeting_id": "assembly_meetings",
+    "mandate_id": "autopay_mandates",
+    "case_id": "collection_cases",
+    "entry_id": "manual_journal_entries",
+    "plan_id": "payment_plans",
+    "occupancy_id": "unit_occupancies"
+  },
+  "root_tables": [
+    "sites"
+  ],
+  "exemptions": {
+    "users": "Login identity: resolved before the tenant is known.",
+    "user_site_roles": "Cross site role membership for SaaS administration.",
+    "persons": "A person can own units in multiple sites.",
+    "auth_sessions": "Sessions are resolved before the tenant is known.",
+    "audit_events": "Append only audit trail written in platform contexts.",
+    "financial_access_log": "Append only access audit written in platform contexts.",
+    "management_company_sites": "A management company spans multiple sites.",
+    "schema_migrations": "Global schema migration history.",
+    "dues_period_migration_issues": "Global migration issue diagnostics read before tenant resolution."
+  }
+}
