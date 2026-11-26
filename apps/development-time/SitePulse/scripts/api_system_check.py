@@ -88,7 +88,7 @@ PAYMENT_WEBHOOK_SECRET = "api-system-check-payment-secret"
 
 # Must mirror auth::route_access: routes reachable without a bearer token.
 PUBLIC_ROUTES = {
-    "/health", "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/register", "/api/v1/auth/refresh",
+    "/health", "/api/v1/health", "/ready", "/api/v1/ready", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/register", "/api/v1/auth/refresh",
     "/api/v1/auth/activate", "/api/v1/auth/confirm-email",
     "/api/v1/home-residents/register", "/api/v1/bank/webhook/incoming-transfer", "/api/v1/site-admin/banks",
     "/api/v1/registration/submit/{slug}",

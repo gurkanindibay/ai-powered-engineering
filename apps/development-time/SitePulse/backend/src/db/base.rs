@@ -401,7 +401,16 @@ pub async fn runtime_role_status(pool: &Pool) -> DbResult<RuntimeRoleStatus> {
 
 /// Verify that the configured production role cannot bypass tenant row policies.
 pub async fn validate_runtime_role(pool: &Pool) -> DbResult<()> {
-    if !runtime_role_status(pool).await?.is_safe() {
+    let role = runtime_role_status(pool).await?;
+    if !role.is_safe() {
+        tracing::error!(
+            runtime_role_superuser = role.superuser,
+            runtime_role_bypassrls = role.bypass_rls,
+            runtime_role_createrole = role.create_role,
+            runtime_role_createdb = role.create_database,
+            runtime_role_owns_public_tables = role.owns_public_tables,
+            "Production runtime role fails tenant RLS safety requirements"
+        );
         return Err("Production requires a non-owner runtime role without SUPERUSER or BYPASSRLS; run migrations separately".into());
     }
     Ok(())

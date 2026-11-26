@@ -1338,7 +1338,6 @@ async fn statement_access_grants_former_debtors_in_postgresql() {
     t.drop_db().await;
 }
 
-
 // covers: SC-13-10-09
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
@@ -1346,9 +1345,41 @@ async fn readiness_reports_tenant_rls_policy_and_runtime_role_safety() {
     let t = TestDb::create("rls_health").await;
     let policy_installed = db::rls_guard_installed(&t.pool).await.unwrap();
     let runtime_role = db::runtime_role_status(&t.pool).await.unwrap();
+    assert!(
+        policy_installed,
+        "all tenant-keyed tables must be protected"
+    );
+    let client = t.pool.get().await.unwrap();
+    client
+        .batch_execute("ALTER TABLE public.autopay_attempts NO FORCE ROW LEVEL SECURITY")
+        .await
+        .unwrap();
+    assert!(!db::rls_guard_installed(&t.pool).await.unwrap());
+    client
+        .batch_execute("ALTER TABLE public.autopay_attempts FORCE ROW LEVEL SECURITY")
+        .await
+        .unwrap();
+    drop(client);
+    assert!(db::rls_guard_installed(&t.pool).await.unwrap());
     let mut state = AppState::with_pool(Some(t.pool.clone()));
     state.settings.production = true;
-    let response = build_router(state)
+    let app = build_router(state);
+    let health_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(health_response.status(), StatusCode::OK);
+    let health_body = to_bytes(health_response.into_body(), 4096).await.unwrap();
+    let liveness: serde_json::Value = serde_json::from_slice(&health_body).unwrap();
+    assert!(liveness.get("tenant_rls").is_none());
+
+    let response = app
         .oneshot(
             Request::builder()
                 .uri("/ready")
@@ -1361,16 +1392,27 @@ async fn readiness_reports_tenant_rls_policy_and_runtime_role_safety() {
     let body = to_bytes(response.into_body(), 4096).await.unwrap();
     let health: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let expected_ready = policy_installed && runtime_role.is_safe();
-    assert_eq!(health["readiness"], if expected_ready { "READY" } else { "NOT_READY" });
+    assert_eq!(
+        health["readiness"],
+        if expected_ready { "READY" } else { "NOT_READY" }
+    );
     assert_eq!(
         health["tenant_rls"]["status"],
-        if expected_ready { "ready" } else { "misconfigured" }
+        if expected_ready {
+            "ready"
+        } else {
+            "misconfigured"
+        }
     );
     assert!(health["tenant_rls"]["runtime_role_superuser"].is_null());
     assert!(health["tenant_rls"]["runtime_role_bypassrls"].is_null());
     assert_eq!(
         status,
-        if expected_ready { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE }
+        if expected_ready {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        }
     );
     t.drop_db().await;
 }

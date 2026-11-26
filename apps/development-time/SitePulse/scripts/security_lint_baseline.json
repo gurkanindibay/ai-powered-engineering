@@ -29,6 +29,8 @@
     "GET /api/v1/payment-provider/sandbox/checkout/{reference}",
     "POST /api/v1/payment-provider/sandbox/checkout/:reference/complete",
     "POST /api/v1/payment-provider/sandbox/checkout/{reference}/complete",
-    "GET /api/v1/public/collection-cases/pack"
+    "GET /api/v1/public/collection-cases/pack",
+    "GET /ready",
+    "GET /api/v1/ready"
   ]
 }

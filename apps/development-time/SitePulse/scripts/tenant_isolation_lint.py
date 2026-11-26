@@ -37,7 +37,7 @@ rule encodes a leak class that was found in the codebase and fixed:
                               tenant through another table) is never passed to
                               `sp_enable_tenant_rls`, so PostgreSQL would not
                               isolate it. Identity tables that span tenants are
-                              listed in RLS_EXEMPT.
+                              listed in `scripts/tenant_rls_config.json` exemptions.
   rls-parent-predicate        A table that reaches its tenant through a parent
                               key has a policy whose predicate does not mention
                               that parent, so a copy-paste policy could point at
@@ -91,31 +91,15 @@ TX_OPEN_RE = re.compile(r"\.transaction\(\)|\.build_transaction\(\)")
 TX_BIND_WINDOW = 30
 PLATFORM_MARKER = "tenant-guard: platform"
 DELEGATED_MARKER = "tenant-scope: checked in"
-TENANT_KEYS = ("site_id", "unit_id", "payment_entry_id", "project_id", "budget_id")
+TENANT_RLS_CONFIG = json.loads((ROOT / "scripts/tenant_rls_config.json").read_text())
+TENANT_KEYS = tuple(TENANT_RLS_CONFIG["tenant_keys"])
 # Child tables reach their tenant through a parent whose own policy resolves the
 # site (V53). A table with one of these keys and no direct tenant key still has
 # to be passed to `sp_enable_tenant_rls`, with the parent-subselect predicate.
-PARENT_TENANT_KEYS = {
-    "meeting_id": "assembly_meetings",
-    "mandate_id": "autopay_mandates",
-    "case_id": "collection_cases",
-    "entry_id": "manual_journal_entries",
-    "plan_id": "payment_plans",
-    "occupancy_id": "unit_occupancies",
-}
+PARENT_TENANT_KEYS = TENANT_RLS_CONFIG["parent_tenant_keys"]
 # Tables whose rows legitimately span tenants (identity, platform settings) or
 # that are tenant roots handled explicitly.
-RLS_EXEMPT = {
-    "users",            # login identity: looked up by email before the tenant is known
-    "user_site_roles",  # role membership across sites (SaaS administration)
-    "persons",          # natural persons can own units in several sites
-    "auth_sessions",    # identity: sessions are resolved before a tenant is known
-    "audit_events",     # append-only audit trail, nullable site, written from platform contexts
-    "financial_access_log",      # append-only access audit, nullable site (platform reads)
-    "management_company_sites",  # one management company spans several sites
-    "schema_migrations",
-    "dues_period_migration_issues",  # V37 migration audit log, written and read by the platform before a tenant is known
-}
+RLS_EXEMPT = set(TENANT_RLS_CONFIG["exemptions"])
 
 
 @dataclass

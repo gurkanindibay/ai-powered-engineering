@@ -105,7 +105,7 @@ Feature: Tenant data isolation across sites and resident accounts
   @SC-13-10-09 @layer:backend @core @linked
   Scenario: Startup and health readiness require tenant policies and a safe runtime role
     Given a database has completed its schema migrations
-    When the service starts or its health endpoint checks database readiness
+    When the service starts or its readiness endpoint checks the database
     Then missing forced tenant row security or a superuser or BYPASSRLS runtime role is reported as not ready
     And production refuses to serve with that database configuration
-    And the health response exposes policy installation and runtime role safety
+    And the readiness response exposes only the coarse tenant RLS readiness status
