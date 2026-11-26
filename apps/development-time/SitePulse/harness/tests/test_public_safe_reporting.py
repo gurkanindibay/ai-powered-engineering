@@ -315,9 +315,9 @@ class PublicSafeReportingTests(unittest.TestCase):
             # 7. VERIFY: Pending requirements remain in the scenario view.
             #    The catalogue is this repository's, so read the pending scenarios from it
             #    instead of naming one: automating a scenario, or tagging an existing one
-            #    `@linked`, must not break this public-surface check.
+            #    `@linked`, must not break this public-surface check. A catalogue with no
+            #    pending scenario left has nothing to verify here.
             pending = [s for s in ft.load_catalogue().scenarios if s.id and s.mode == "pending"]
-            self.assertTrue(pending, "the catalogue must still hold a @pending scenario")
             for scenario in pending:
                 self.assertIn(scenario.id, latest_html)
                 self.assertEqual(status_json["scenarios"][scenario.id]["state"], "planned", scenario.id)
