@@ -1,0 +1,31 @@
+{
+  "_comment": "Agent name roster. A model family always gets the same leader (first matching pattern wins, matched against the lower-cased model id with spaces and dots turned into '-'). Models matching no pattern take a free name from the pool. Who currently holds which name is local state in .agents/local/agent-names.json (never committed). Pattern order matters.",
+  "models": [
+    {"pattern": "fable", "name": "Fatih Sultan Mehmet", "model": "Claude Fable", "rank": 1, "why": "conquered the unconquerable: the strongest Claude model"},
+    {"pattern": "opus", "name": "Yavuz Sultan Selim", "model": "Claude Opus", "rank": 2, "why": "decisive and formidable: planning and architecture"},
+    {"pattern": "sonnet", "name": "Alparslan", "model": "Claude Sonnet", "rank": 3, "why": "the field commander who wins the main battle: development"},
+    {"pattern": "haiku", "name": "Ulubatlı Hasan", "model": "Claude Haiku", "rank": 4, "why": "one swift soldier with one clear mission: chores"},
+    {"pattern": "gpt.*astra", "name": "Metehan", "model": "GPT Astra", "rank": 2, "why": "grand strategist and empire builder: design-heavy work"},
+    {"pattern": "gpt-?6-2.*sol", "name": "Melikşah", "model": "GPT-6.2 Sol", "rank": 3, "why": "ruled the empire at full strength: routine implementation"},
+    {"pattern": "gpt.*sol", "name": "Tuğrul Bey", "model": "GPT Sol (earlier versions)", "rank": 3, "why": "the founding predecessor of Melikşah"},
+    {"pattern": "gemini.*pro", "name": "Baybars", "model": "Gemini Pro", "rank": 2, "why": "undefeated strategist: heavy Gemini work"},
+    {"pattern": "gemini.*flash", "name": "Kuşçubaşı Eşref", "model": "Gemini Flash", "rank": 4, "why": "fast, agile special operations: routine edits and test runs"},
+    {"pattern": "deepseek", "name": "Piri Reis", "model": "DeepSeek", "rank": 4, "why": "explorer of the deep seas"}
+  ],
+  "pool": [
+    "Nizamülmülk",
+    "Bilge Kağan",
+    "Kılıç Arslan",
+    "Osman Gazi",
+    "Barbaros Hayreddin",
+    "Turgut Reis",
+    "Kürşad",
+    "Tomris Hatun",
+    "Nene Hatun",
+    "Seyit Onbaşı",
+    "Mimar Sinan",
+    "Sokollu Mehmet",
+    "Gazi Osman Paşa",
+    "Fahrettin Paşa"
+  ]
+}

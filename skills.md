@@ -425,15 +425,28 @@ python3 -m unittest discover -s tests/token_guard
 ## 5c-3. Issue Claim Labels (`issue_claim.py`)
 
 - **Executable Script:** [scripts/issue_claim.py](file:///scripts/issue_claim.py)
-- **Purpose:** Lets different agent harnesses identify each other. A claim is two labels: `in progress` and one owner label `claim:<harness>/<session-id>` (harness: codex, claude, antigravity), so harness and session can't drift apart. Concurrent claims are settled by GitHub's labeled-event order: the first claim wins and the loser removes only its own label. `claim` refuses an issue owned by another session (or a legacy bare `in progress`), `release` only removes the caller's own claim, `status` reports the owner. Session id: `--session`, else `$AGENT_SESSION_ID`, else `$<HARNESS>_SESSION_ID`, else generated and printed.
+- **Purpose:** Lets different agent harnesses identify each other. A claim is `in progress`, an `agent:<name>` label (see 5c-3a; `claim` needs `--model` or `$AGENT_MODEL`) and one owner label `claim:<harness>/<session-id>` (harness: codex, claude, antigravity), so harness and session can't drift apart. Concurrent claims are settled by GitHub's labeled-event order: the first claim wins and the loser removes only its own label. `claim` refuses an issue owned by another session (or a legacy bare `in progress`), `release` only removes the caller's own claim, `status` reports the owner. Session id: `--session`, else `$AGENT_SESSION_ID`, else `$<HARNESS>_SESSION_ID`, else generated and printed.
 
 ```bash
-python3 scripts/issue_claim.py claim 123 --harness claude --session <id>
+python3 scripts/issue_claim.py claim 123 --harness claude --session <id> --model claude-sonnet-5-5
 python3 scripts/issue_claim.py sync 123 --pr 130   # copy the issue labels to its PR
-python3 scripts/issue_claim.py claim 123 --harness claude --session <id> --pr 130   # claim + label PR
+python3 scripts/issue_claim.py claim 123 --harness claude --session <id> --model opus --pr 130   # claim + label PR
 python3 scripts/issue_claim.py status 123 --json
 python3 scripts/issue_claim.py release 123 --harness claude --session <id> --pr 130   # clears issue and PR
 python3 -m unittest discover -s tests/issue_claim
+```
+
+## 5c-3a. Agent Names (`agent_names.py`)
+
+- **Executable Script:** [scripts/agent_names.py](file:///scripts/agent_names.py), roster [config/agent-names.json](file:///config/agent-names.json)
+- **Purpose:** Gives each working agent a readable name so the user can tell agents apart. A model family always gets the same leader (Fable = Fatih Sultan Mehmet, Opus = Yavuz Sultan Selim, Sonnet = Alparslan, Haiku = Ulubatlı Hasan, GPT Astra = Metehan, GPT-6.2 Sol = Melikşah; `roster` lists all); concurrent agents on one model are numbered; unlisted models take a pool name. `issue_claim.py claim` calls it and adds the `agent:<name>` label, skipping names used by other sessions on open in-progress issues. Reservations live in the main checkout at `.agents/local/agent-names.json` (self-ignored, shared by worktrees); they expire after 3 idle days without an issue, 14 days with one.
+
+```bash
+python3 scripts/agent_names.py list --json     # who is who, on which issue
+python3 scripts/agent_names.py roster
+python3 scripts/agent_names.py reserve --harness claude --session <id> --model claude-sonnet-5-5
+python3 scripts/agent_names.py release --harness claude --session <id>
+python3 scripts/agent_names.py release --name "Alparslan 2"
 ```
 
 ## 5c-3b. PR Review Queue (`pr_review_queue.py`)
