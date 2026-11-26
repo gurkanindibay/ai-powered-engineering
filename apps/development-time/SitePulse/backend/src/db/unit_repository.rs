@@ -76,6 +76,7 @@ pub async fn save_unit(
         if exists {
             Some(oid)
         } else {
+            // person-scope: platform — startup sync mirrors the loaded unit's person cards
             let user_row = client.query_opt("SELECT COALESCE(p.full_name, ''), COALESCE(p.phone, ''), u.email FROM users u LEFT JOIN persons p ON u.person_id = p.id WHERE u.id = $1", &[&oid]).await?;
             if let Some(ur) = user_row {
                 let name: String = ur.get(0);
@@ -104,6 +105,7 @@ pub async fn save_unit(
     let effective_tenant_id = if let Some(tid) = tenant_id_num {
         let exists = client
             .query_opt(
+                // person-scope: platform — startup sync mirrors the loaded unit's person cards
                 "SELECT id FROM persons WHERE id = $1 AND deleted_at IS NULL",
                 &[&tid],
             )
@@ -112,6 +114,7 @@ pub async fn save_unit(
         if exists {
             Some(tid)
         } else {
+            // person-scope: platform — startup sync mirrors the loaded unit's person cards
             let user_row = client.query_opt("SELECT COALESCE(p.full_name, ''), COALESCE(p.phone, ''), u.email FROM users u LEFT JOIN persons p ON u.person_id = p.id WHERE u.id = $1", &[&tid]).await?;
             if let Some(ur) = user_row {
                 let name: String = ur.get(0);
@@ -683,6 +686,7 @@ pub async fn fetch_units_summary_from_db(pool: &Pool) -> DbResult<Vec<UnitSummar
     let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
     let rows = client
         .query(
+            // person-scope: platform — system summary across all sites
             r#"
             SELECT
                 u.id::text,

@@ -109,6 +109,7 @@ pub async fn insert_site_person<'a>(
     let person_type: Option<&str> = person_type.into();
     let row = client
         .query_one(
+            // person-scope: site — inserts the person row for the site in $5
             "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
             &[&full_name, &phone, &email, &person_type, &site_id],
         )

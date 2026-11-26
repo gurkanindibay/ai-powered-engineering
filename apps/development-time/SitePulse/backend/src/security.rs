@@ -298,6 +298,7 @@ pub async fn refresh(
         // Use the same connection while holding the session lock; no second pool checkout.
         let user_row = tx
             .query_one(
+                // person-scope: identity — refresh token validation by session user id
                 "SELECT email,role,site_id FROM users WHERE id=$1",
                 &[&row.get::<_, i64>(1)],
             )

@@ -524,6 +524,7 @@ impl AccountActivationService {
         }
         let row = tx
             .query_opt(
+                // person-scope: identity — the activation names its user; no site is known yet
                 "UPDATE users SET email = $1 WHERE id = $2 AND is_active RETURNING person_id",
                 &[&new_email, &user_id],
             )
@@ -533,6 +534,7 @@ impl AccountActivationService {
         let person_id: Option<i64> = row.get(0);
         if let Some(person_id) = person_id {
             tx.execute(
+                // person-scope: identity — the person id comes from the activated user
                 "UPDATE persons SET email = $1 WHERE id = $2",
                 &[&new_email, &person_id],
             )

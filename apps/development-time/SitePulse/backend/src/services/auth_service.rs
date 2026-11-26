@@ -361,6 +361,7 @@ impl AuthService {
             if let Ok(client) = pool.get().await {
                 if let Ok(Some(row)) = client
                     .query_opt(
+                        // person-scope: identity — sign-in by globally unique email
                         "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                         &[&crate::domain::email::NormalizedEmail::normalize(
                             &user.email,
@@ -595,6 +596,7 @@ impl AuthService {
         )
         .await
         .map_err(|_| "This identity cannot be registered; ask your site manager for assistance")?;
+        // person-scope: site — registers the invited user for the invitation's site
         let id:i64=tx.query_one("INSERT INTO users(site_id,person_id,email,password_hash,role,must_change_password,auth_provider,google_sub,avatar_url) VALUES ($1,$2,$3,$4,'HOME_RESIDENT',$5,$6,$7,$8) RETURNING id",&[&site,&person,&user.email,&user.password_hash,&user.must_change_password,&user.auth_provider,&user.google_sub,&user.avatar_url]).await.map_err(|_|"This identity cannot be registered")?.get(0);
         let occupancy=tx.query_opt("SELECT id FROM unit_occupancies WHERE unit_id=$1 AND is_active AND end_date IS NULL ORDER BY start_date DESC,id DESC LIMIT 1 FOR UPDATE",&[&unit]).await.map_err(|_|"Household storage unavailable")?;
         // Invariant 6 (EPIC-08 §3.4): joining a household never opens a session.
@@ -603,6 +605,7 @@ impl AuthService {
             .ok_or("The unit has no active household; contact your site manager")?;
         tx.execute("INSERT INTO occupancy_members(occupancy_id,person_id,resident_user_id,full_name,email,phone,relationship) VALUES ($1,$2,$3,$4,$5,$6,$7)",&[&occupancy,&person,&id,&user.full_name,&user.email,&user.phone,&crate::domain::household_relationship::HouseholdRelationship::from_input(relationship.as_deref().unwrap_or("")).unwrap_or(crate::domain::household_relationship::HouseholdRelationship::Other).as_str()]).await.map_err(|_|"Household storage unavailable")?;
         tx.execute(
+            // person-scope: site — role row for the invitation's site
             "INSERT INTO user_site_roles(user_id,site_id,role) VALUES ($1,$2,'HOME_RESIDENT')",
             &[&id, &site],
         )

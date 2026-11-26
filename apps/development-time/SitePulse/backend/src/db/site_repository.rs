@@ -265,6 +265,7 @@ pub async fn create_site_with_manager_and_blocks(
 
     let user_row = tx
         .query_one(
+            // person-scope: platform — SaaS admin creates a site before its id exists
             r#"
             INSERT INTO users (site_id, email, password_hash, role, must_change_password, person_id)
             VALUES ($1, $2, $3, 'SITE_MANAGER', true, $4)

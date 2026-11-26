@@ -128,6 +128,7 @@ fn filters(query: &DirectoryQuery) -> Result<Filters, PersonDirectoryError> {
     })
 }
 
+// person-scope: site — the shared filter binds p.site_id = $1
 pub(crate) const SUMMARY_SELECT: &str = "SELECT p.id, p.full_name, COALESCE(p.email, ''), COALESCE(p.phone, ''), \
      COALESCE(r.derived_role, ''), r.owned_units, r.occupied_units + r.member_units, \
      CASE WHEN usr.id IS NULL THEN 'NONE' \
@@ -201,6 +202,7 @@ impl PersonDirectoryService {
         let total: i64 = client
             .query_one(
                 &format!(
+                    // person-scope: site — the shared filter binds p.site_id = $1
                     "SELECT count(*) FROM persons p JOIN v_person_roles r ON r.person_id = p.id \
                      LEFT JOIN users usr ON usr.person_id = p.id AND usr.is_active {filter}"
                 ),
