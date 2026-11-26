@@ -1,4 +1,5 @@
 import io
+import itertools
 import json
 import re
 import sys
@@ -80,11 +81,14 @@ class FakeRepo:
 
 
 STATE_DIR = tempfile.TemporaryDirectory()
+STATE_NUMBERS = itertools.count()
 
 
 def run_cli(fake, *argv, model="claude-sonnet-5-5", state=None):
     if state is None:  # one throwaway reservation file per fake GitHub
-        state = Path(STATE_DIR.name) / f"{id(fake)}.json"
+        if not hasattr(fake, "state_path"):  # not id(fake): ids are reused after GC
+            fake.state_path = Path(STATE_DIR.name) / f"{next(STATE_NUMBERS)}.json"
+        state = fake.state_path
     env = {"AGENT_NAMES_STATE": str(state), **({"AGENT_MODEL": model} if model else {})}
     out = io.StringIO()
     with redirect_stdout(out), redirect_stderr(io.StringIO()):
