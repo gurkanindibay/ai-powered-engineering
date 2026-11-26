@@ -84,6 +84,32 @@ class SuiteCollectionTests(unittest.TestCase):
         self.assertEqual(gate["status"], "incomplete")
         self.assertEqual(suite["status"], "incomplete")
 
+    def test_adapter_gate_names_are_counted_under_product_suite_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sitepulse-suite-rust-attempt-1"
+            gates = source / "gates"
+            gates.mkdir(parents=True)
+            (source / "producer.json").write_text(json.dumps({"job": "rust", "run_id": "42", "attempt": "1",
+                "commit": "abc", "job_result": "success"}))
+            (gates / "rust-test-1.json").write_text(json.dumps({"gate": "rust-test", "passed": True,
+                "native_runner": "cargo", "native_runner_totals": {"passed": 1, "failed": 0, "skipped": 0},
+                "native_case_count": 1, "cases": [
+                    {"runner": "cargo", "suite": "rust-test", "native_id": "lib::works", "status": "passed"}]}))
+            report = collection.collect(root, root / "missing-e2e", "42", "1", "abc", {"rust": "success"})
+        suite = next(row for row in report["suites"] if row["suite"] == "rust")
+        self.assertEqual((suite["case_count"], suite["status"]), (1, "collected"))
+
+    def test_suite_artifact_without_matching_commit_is_not_selected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "sitepulse-suite-rust-attempt-1"
+            source.mkdir(parents=True)
+            (source / "producer.json").write_text(json.dumps({"job": "rust", "run_id": "42", "attempt": "1",
+                "job_result": "success"}))
+            report = collection.collect(root, root / "missing-e2e", "42", "1", "abc", {"rust": "success"})
+        self.assertNotIn("rust", report["producers"])
+
     def test_scenario_linking_does_not_fall_back_to_basename(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

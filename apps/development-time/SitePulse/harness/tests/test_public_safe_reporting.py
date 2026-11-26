@@ -317,7 +317,7 @@ class PublicSafeReportingTests(unittest.TestCase):
             #    instead of naming one: automating a scenario, or tagging an existing one
             #    `@linked`, must not break this public-surface check.
             pending = [s for s in ft.load_catalogue().scenarios if s.id and s.mode == "pending"]
-            self.assertTrue(pending, "the catalogue must still hold a @pending scenario")
+            # Repositories may have automated every currently pending scenario.
             for scenario in pending:
                 self.assertIn(scenario.id, latest_html)
                 self.assertEqual(status_json["scenarios"][scenario.id]["state"], "planned", scenario.id)

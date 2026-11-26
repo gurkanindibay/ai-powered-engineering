@@ -79,6 +79,28 @@ class CiTestReportTest(unittest.TestCase):
         self.assertEqual({item["scenario_id"] for item in report["unresolved_links"]},
                          {"SC-01-01-04", "SC-01-01-06"})
 
+    def test_incomplete_suite_cannot_verify_a_matched_case(self):
+        scenarios = {"SC-01-02-01": {"state": "no_result"}}
+        cases = ctr._with_suite_provenance(
+            [{"producer": "rust", "runner": "cargo", "suite": "rust-test", "native_id": "example::works",
+              "status": "passed"}],
+            [{"suite": "rust", "gate": "rust-test", "runner": "cargo", "status": "reused"}])
+        links = {"SC-01-02-01": [{"file": "backend/tests/example.rs", "test": "works"}]}
+        report = cse.build_evidence(scenarios, cases, links)
+        self.assertEqual(report["scenarios"]["SC-01-02-01"]["evidence"], "incomplete")
+
+    def test_coarse_links_and_linked_failures_are_distinguished(self):
+        scenarios = {"SC-01-02-01": {"state": "no_result"}, "SC-01-02-02": {"state": "no_result"}}
+        cases = [{"producer": "rust", "suite": "rust-test", "native_id": "example::works",
+                  "status": "passed"},
+                 {"producer": "rust", "suite": "rust-test", "native_id": "example::works",
+                  "status": "failed"}]
+        links = {"SC-01-02-01": [{"file": "backend/tests/example.rs", "test": "works"}],
+                 "SC-01-02-02": [{"file": "backend/tests/mod.rs", "evidence_kind": "wrapper"}]}
+        report = cse.build_evidence(scenarios, cases, links)
+        self.assertEqual(report["scenarios"]["SC-01-02-01"]["evidence"], "failing")
+        self.assertEqual(report["scenarios"]["SC-01-02-02"]["evidence"], "coarse")
+
     def test_long_case_names_match_while_published_outputs_stay_sanitized(self):
         test_name = ("when_a_tenant_pays_owner_capital_dues_then_the_receipt_cites_the_statute_and_a_rent_"
                      "certificate_is_issued")
@@ -346,7 +368,9 @@ class CiTestReportTest(unittest.TestCase):
                               "suite-collection.json", "suite-report.md", "summary.json", "test-report.md"])
             status = json.loads((out / "product-status.json").read_text(encoding="utf-8"))
             self.assertEqual((status["status"], status["scenarios"]["SC-06-06-01"]["state"],
-                              status["scenarios"]["SC-06-06-02"]["state"]), ("FAIL", "passing", "failing"))
+                              status["scenarios"]["SC-06-06-02"]["state"]), ("FAIL", "no_result", "no_result"))
+            self.assertEqual((status["scenarios"]["SC-06-06-01"]["browser_state"],
+                              status["scenarios"]["SC-06-06-02"]["browser_state"]), ("passing", "failing"))
             report = (out / "test-report.md").read_text(encoding="utf-8")
             self.assertIn("**Task:** demo task", report)
             self.assertIn("SC-06-06-02", report)

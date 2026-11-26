@@ -86,14 +86,17 @@ def epic_health(row: dict) -> str:
 
 def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: dict | None = None,
                    history: dict | None = None, now: datetime | None = None,
-                   inventory: dict | None = None) -> dict:
+                   inventory: dict | None = None, evidence: dict | None = None) -> dict:
     """The product status of one run. `run_records` are the execution records of that run only."""
     summary = summary or {}
     now = now or datetime.now(timezone.utc)
     statuses: dict[str, list[str]] = defaultdict(list)
+    browser_history: dict[str, list[str]] = defaultdict(list)
     for record in run_records:
         if record.get("scenario"):
             statuses[record["scenario"]].append(record.get("status", ""))
+            browser_history[record["scenario"]].append(record.get("status", ""))
+    resolved = evidence.get("scenarios", {}) if isinstance(evidence, dict) else {}
     by_story = catalogue.by_story()
     scenarios: dict[str, dict] = {}
     epics = []
@@ -103,11 +106,19 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
         row = {"id": epic, "title": catalogue.epics[epic], "stories": len(story_ids),
                "stories_with_scenarios": 0, "stories_passing": 0, "scenarios": 0, "automated": 0,
                **{state: 0 for state in STATES}}
+        epic_evidence = defaultdict(int)
         for story in story_ids:
             states = []
             for scenario in by_story.get(story, []):
-                state = scenario_state(scenario.mode, statuses.get(scenario.id, []))
-                scenarios[scenario.id] = {"state": state, "name": scenario.name, "epic": epic, "story": story}
+                browser_state = scenario_state(scenario.mode, statuses.get(scenario.id, []))
+                evidence_state = _canonical_evidence(resolved.get(scenario.id, {}).get("evidence"))
+                state = _dashboard_state(evidence_state) if evidence_state else browser_state
+                if evidence_state:
+                    epic_evidence[evidence_state] += 1
+                scenarios[scenario.id] = {"state": state, "name": scenario.name, "epic": epic, "story": story,
+                                           "browser_state": browser_state,
+                                           "browser_step_history": statuses.get(scenario.id, []),
+                                           **({"evidence": evidence_state} if evidence_state else {})}
                 states.append(state)
             if states:
                 row["stories_with_scenarios"] += 1
@@ -116,6 +127,8 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
                 row[state] += 1
             row["scenarios"] += len(states)
         row["automated"] = row["scenarios"] - row["planned"]
+        if evidence:
+            row["evidence_counts"] = dict(sorted(epic_evidence.items()))
         row["health"] = epic_health(row)
         epics.append(row)
     keys = ("stories", "stories_with_scenarios", "stories_passing", "scenarios", "automated", *STATES)
@@ -123,6 +136,12 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
     totals["epics"] = len(epics)
     totals["epics_verified"] = sum(row["health"] == "verified" for row in epics)
     totals["epics_failing"] = sum(row["health"] == "failing" for row in epics)
+    if evidence:
+        counts = defaultdict(int)
+        for row in scenarios.values():
+            counts[row.get("evidence", "unresolved")] += 1
+        totals["evidence_counts"] = dict(sorted(counts.items()))
+        totals["measurement"] = "named-ci-evidence-v1"
     history = history or {"points": [], "changes": []}
 
     inventory = inventory or {}
@@ -171,6 +190,18 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
             "junit": summary.get("junit", {}), "totals": totals, "epics": epics, "scenarios": scenarios,
             "catalogue_history": history["points"], "recent_changes": history["changes"],
             "inventory": inv_data}
+
+
+def _dashboard_state(evidence: object) -> str:
+    """Map detailed named evidence onto the legacy chart states."""
+    if evidence == "pending":
+        return "planned"
+    return evidence if evidence in ("passing", "failing", "planned") else "no_result"
+
+
+def _canonical_evidence(evidence: object) -> object:
+    """Keep the detailed dashboard vocabulary stable while older artifacts say planned."""
+    return "pending" if evidence == "planned" else evidence
 
 
 def snapshot_from_summary(summary: dict) -> dict | None:
@@ -312,13 +343,16 @@ def trend_series(snapshots: list[dict]) -> dict:
         t = snap["totals"]
         points.setdefault(_day(snap), {"date": _day(snap), "epics": t["epics"]}).update(
             stories=t["stories"], stories_with_scenarios=t["stories_with_scenarios"], scenarios=t["scenarios"],
-            automated=t["automated"], passing=t["passing"], failing=t["failing"])
+            automated=t["automated"], passing=t["passing"], failing=t["failing"],
+            measurement=t.get("measurement", "browser-step-history"))
     days = [points[d] for d in sorted(points)]
     runs = [{"at": s["generated_at"], "status": s.get("status", ""), "href": s.get("href", ""),
              "task": s.get("task", ""), "commit": s.get("commit", "")[:7],
              "passed": int(s.get("junit", {}).get("passed", 0)),
              "failed": int(s.get("junit", {}).get("failures", 0)) + int(s.get("junit", {}).get("errors", 0)),
-             "skipped": int(s.get("junit", {}).get("skipped", 0))} for s in snapshots[-MAX_RUNS_SHOWN:]]
+             "skipped": int(s.get("junit", {}).get("skipped", 0)),
+             "measurement": s.get("totals", {}).get("measurement", "browser-step-history")}
+            for s in snapshots[-MAX_RUNS_SHOWN:]]
     return {"days": days, "runs": runs}
 
 
@@ -443,10 +477,12 @@ def _trend_table(days: list[dict]) -> str:
         f'<tr><td>{_esc(d["date"])}</td><td class="num">{d.get("stories", "")}</td>'
         f'<td class="num">{d.get("stories_with_scenarios", "")}</td><td class="num">{d.get("scenarios", "")}</td>'
         f'<td class="num">{d.get("automated", "")}</td>'
-        f'<td class="num">{"" if d.get("passing") is None else d["passing"]}</td></tr>' for d in days[::-1])
+        f'<td class="num">{"" if d.get("passing") is None else d["passing"]}</td>'
+        f'<td>{_esc(d.get("measurement", "catalogue-only"))}</td></tr>' for d in days[::-1])
     return ('<details class="table-view"><summary>Show trend data as a table</summary><div class="scroll"><table>'
             '<thead><tr><th>Date</th><th class="num">Stories</th><th class="num">Stories with scenarios</th>'
-            '<th class="num">Scenarios</th><th class="num">Automated</th><th class="num">Passing in CI</th></tr>'
+            '<th class="num">Scenarios</th><th class="num">Automated</th><th class="num">Passing in CI</th>'
+            '<th>Measurement</th></tr>'
             f'</thead><tbody>{rows}</tbody></table></div></details>')
 
 
@@ -554,6 +590,13 @@ def render_html(snapshots: list[dict], links: dict | None = None) -> str:
               f'{t["passing"]} of {t["scenarios"]} scenarios', run_delta("passing")),
         _tile("Failing", str(t["failing"]), "scenarios in the latest run", run_delta("failing", False)),
     ])
+    evidence_counts = t.get("evidence_counts", {})
+    if evidence_counts:
+        evidence_summary = " · ".join(
+            f'{evidence_counts.get(state, 0)} {state}'
+            for state in ("passing", "failing", "skipped", "scheduled", "pending", "coarse", "incomplete", "unresolved")
+            if evidence_counts.get(state, 0))
+        tiles += _tile("Named scenario evidence", str(sum(evidence_counts.values())), evidence_summary)
     legend = "".join(f'<span class="key"><i class="seg {state}"></i>{_esc(STATE_LABELS[state])}</span>'
                      for state in STATES)
     total_row = {**t, "id": "", "title": ""}
@@ -592,7 +635,7 @@ report on, such as Rust or Flutter unit tests, or were skipped. They count as au
 
 <section><h2>Trends</h2>
 <div class="charts">
-<figure><figcaption><b>Acceptance scenarios</b><span>Specified, automated and passing in CI, per day</span></figcaption>
+<figure><figcaption><b>Acceptance scenarios</b><span>Specified, automated and passing in CI, per day. The trend marks the switch to linked named CI evidence.</span></figcaption>
 <div class="legend" id="legend-scenarios"></div><div class="chart" id="chart-scenarios"></div></figure>
 <figure><figcaption><b>User stories</b><span>Defined in the requirements and covered by scenarios, per day</span></figcaption>
 <div class="legend" id="legend-stories"></div><div class="chart" id="chart-stories"></div></figure>

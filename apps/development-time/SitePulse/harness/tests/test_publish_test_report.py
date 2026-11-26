@@ -51,7 +51,10 @@ class PublishTestReportTests(unittest.TestCase):
             for run_id, stamp in (("100", "20261114T090000Z-aaaaaaa"), ("200", "20261115T090000Z-bbbbbbb")):
                 summary = {"run_id": stamp, "task": "master", "status": "PASS", "junit": junit}
                 (report / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
-                snapshot = publisher.ps.build_snapshot(publisher.ps.ft.load_catalogue(), [], summary)
+                catalogue = publisher.ps.ft.load_catalogue()
+                scenario_id = next(s.id for s in catalogue.scenarios if s.id)
+                snapshot = publisher.ps.build_snapshot(catalogue, [], summary,
+                                                       evidence={"scenarios": {scenario_id: {"evidence": "passing"}}})
                 snapshot["generated_at"] = publisher.ps.snapshot_from_summary(summary)["generated_at"]
                 (report / "product-status.json").write_text(json.dumps(snapshot), encoding="utf-8")
                 result = publisher.build(report, site, run_id, "1")
@@ -60,6 +63,8 @@ class PublishTestReportTests(unittest.TestCase):
             index = (site / "index.html").read_text(encoding="utf-8")
             self.assertIn("SitePulse product status", index)
             self.assertIn("2 published runs", index)
+            self.assertIn("Named scenario evidence", index)
+            self.assertIn("named-ci-evidence-v1", index)
             self.assertIn('href="latest.html"', index)
             self.assertIn("reports/100-1/", index)
             self.assertIn('href="index.html">Product status', (site / "latest.html").read_text(encoding="utf-8"))
