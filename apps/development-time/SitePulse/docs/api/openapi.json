@@ -12813,6 +12813,49 @@
         ]
       }
     },
+    "/api/v1/ready": {
+      "get": {
+        "description": "GET ready\n\n**Authorization Policy**: Public endpoint (no credentials required).",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [],
+        "summary": "GET ready",
+        "tags": [
+          "System & Diagnostics"
+        ]
+      }
+    },
     "/api/v1/registration/approve/{id}": {
       "post": {
         "description": "POST registration approve {id}\n\n**Authorization Policy**: Requires explicit permission `ResidentApprove`.",
@@ -21116,6 +21159,49 @@
         },
         "security": [],
         "summary": "GET  openapi.json",
+        "tags": [
+          "System & Diagnostics"
+        ]
+      }
+    },
+    "/ready": {
+      "get": {
+        "description": "GET  ready\n\n**Authorization Policy**: Public endpoint (no credentials required).",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful request."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid input, syntax, or validation error."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server or database error."
+          }
+        },
+        "security": [],
+        "summary": "GET  ready",
         "tags": [
           "System & Diagnostics"
         ]
