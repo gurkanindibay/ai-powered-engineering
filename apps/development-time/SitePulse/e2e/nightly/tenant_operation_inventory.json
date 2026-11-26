@@ -906,6 +906,22 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/ready",
+      "applicability": "outside_scope",
+      "reason": "Public service readiness metadata.",
+      "evidence": "backend/src/app.rs: handlers::readiness_check (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
+      "path": "/ready",
+      "applicability": "outside_scope",
+      "reason": "Public service readiness metadata.",
+      "evidence": "backend/src/app.rs: handlers::readiness_check (Public)",
+      "runtime_tests": []
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/heat-share/periods",
       "applicability": "implicit_tenant_scope",
       "reason": "The operation derives its site or account scope from the authenticated caller.",

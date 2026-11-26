@@ -166,3 +166,15 @@ fn when_spec_is_generated_then_all_registered_routes_are_covered() {
         );
     }
 }
+
+#[test]
+fn when_the_document_is_committed_then_it_matches_the_generated_spec() {
+    // The nightly tenant inventory validates docs/api/openapi.json, not the served document, so a
+    // route added without regenerating the file breaks that lane hours later (#526: /ready).
+    let committed = include_str!("../../../docs/api/openapi.json");
+    assert_eq!(
+        sitepulse_backend::openapi::get_openapi_spec_json(),
+        committed,
+        "docs/api/openapi.json is stale; regenerate it with `cargo run --bin generate-openapi`"
+    );
+}
