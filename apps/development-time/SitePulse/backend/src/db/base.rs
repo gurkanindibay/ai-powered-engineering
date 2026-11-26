@@ -207,17 +207,17 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
             crate::migrations::latest_version()
         );
     }
-    let client = pool.get().await?;
+    // tenant-guard: platform — startup system seed and sequence sync.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
 
     // Seed system reference data (banks, configs, root SaaS admin).
-    client
-        .batch_execute(include_str!("../../db/seed/01-system-seed.sql"))
+    tx.batch_execute(include_str!("../../db/seed/01-system-seed.sql"))
         .await?;
 
     // 2. Synchronize sequences
-    client
-        .batch_execute(
-            r#"
+    tx.batch_execute(
+        r#"
             DO $$
             DECLARE r record;
             BEGIN
@@ -229,8 +229,9 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
                 END LOOP;
             END $$;
             "#,
-        )
-        .await?;
+    )
+    .await?;
+    tx.commit().await?;
 
     info!("PostgreSQL schema verified and ready with auto-increment BIGINT identity (zero test mock data auto-added).");
     Ok(())
@@ -239,11 +240,13 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
 /// Seeds development/testing site fixtures (Begonya Sitesi, Kardelen Rezidans, test units, persons, and bank account).
 /// Separated from startup/init_db so restarts maintain clean database state without auto-adding mock data.
 pub async fn seed_test_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — dev/test fixture seeding.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
     info!("Seeding development test fixtures into PostgreSQL...");
-    client
-        .batch_execute(include_str!("../../db/seed/02-test-seed.sql"))
+    tx.batch_execute(include_str!("../../db/seed/02-test-seed.sql"))
         .await?;
+    tx.commit().await?;
     info!("Development test fixtures seeded successfully into PostgreSQL.");
     Ok(())
 }
@@ -251,11 +254,12 @@ pub async fn seed_test_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error
 pub async fn reset_db_to_seed_data(
     pool: &Pool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — dev/test database reset.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
     info!("Resetting PostgreSQL database to clean initial state (clean debts and payments)...");
-    client
-        .batch_execute(
-            r#"
+    tx.batch_execute(
+        r#"
             TRUNCATE TABLE payment_entries RESTART IDENTITY CASCADE;
             TRUNCATE TABLE payment_intents RESTART IDENTITY CASCADE;
             TRUNCATE TABLE dues_liabilities RESTART IDENTITY CASCADE;
@@ -292,8 +296,9 @@ pub async fn reset_db_to_seed_data(
                 END LOOP;
             END $$;
             "#,
-        )
-        .await?;
+    )
+    .await?;
+    tx.commit().await?;
     info!("PostgreSQL database reset to clean initial seed fixtures successfully.");
     Ok(())
 }
@@ -321,6 +326,7 @@ pub async fn recreate_db_schema_and_seed(
 }
 
 pub async fn wipe_all_db_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // tenant-guard: platform — full schema wipe.
     let client = pool.get().await?;
     info!(
         "Dropping all database tables to purge all sites, units, and residents for fresh start..."

@@ -238,6 +238,58 @@ async fn rls_hides_other_tenants_inside_a_bound_transaction() {
     t.drop_db().await;
 }
 
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn rls_fails_closed_when_unbound_and_allows_explicit_platform() {
+    let t = TestDb::create("rls_fail_closed").await;
+    let a = t.site_id("site-begonya").await;
+    let mut client = t.pool.get().await.unwrap();
+
+    // Unbound non-bypass role sees zero rows and cannot insert.
+    let tx = client.transaction().await.unwrap();
+    tx.batch_execute(&format!("SET LOCAL ROLE {}", db::TENANT_ROLE))
+        .await
+        .unwrap();
+    let visible_sites: i64 = tx
+        .query_one("SELECT count(*) FROM sites", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(visible_sites, 0, "unbound tenant query must fail closed");
+    let visible_units: i64 = tx
+        .query_one("SELECT count(*) FROM units", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(visible_units, 0, "unbound unit query must fail closed");
+    let err = tx
+        .execute(
+            "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, 'Unbound', 1)",
+            &[&a],
+        )
+        .await
+        .expect_err("unbound insert must fail");
+    let message = err
+        .as_db_error()
+        .map(|e| e.message().to_string())
+        .unwrap_or_default();
+    assert!(message.contains("row-level security"), "{:?}", err);
+    tx.rollback().await.unwrap();
+
+    // Explicit platform binding allows reading across all sites even under FORCE RLS.
+    let tx = db::begin_platform_read(&mut client).await.unwrap();
+    let platform_sites: i64 = tx
+        .query_one("SELECT count(*) FROM sites", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert!(platform_sites >= 2);
+    tx.commit().await.unwrap();
+
+    drop(client);
+    t.drop_db().await;
+}
+
 /// The parent rows a child table in
 /// [`child_tables_scoped_through_a_parent_stay_in_their_site`] needs.
 struct ChildParents {

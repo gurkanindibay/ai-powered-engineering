@@ -11,9 +11,10 @@ pub async fn save_unit(
     pool: &Pool,
     unit: &IndependentUnit,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let id_num = parse_id_to_i64(&unit.id).unwrap_or(unit.unit_number as i64);
     let site_id_num = require_id("entity", &unit.site_id)?;
+    let client = super::tenant_guard::begin_tenant_tx(&mut conn, site_id_num).await?;
 
     // Ensure site exists in PostgreSQL before inserting unit
     let site_exists = client
@@ -81,7 +82,7 @@ pub async fn save_unit(
                 let email: String = ur.get(2);
                 let ph = phone.unwrap_or_default();
                 super::person_repository::ensure_legacy_person(
-                    &client,
+                    &*client,
                     oid,
                     &name,
                     Some(&ph),
@@ -117,7 +118,7 @@ pub async fn save_unit(
                 let email: String = ur.get(2);
                 let ph = phone.unwrap_or_default();
                 super::person_repository::ensure_legacy_person(
-                    &client,
+                    &*client,
                     tid,
                     &name,
                     Some(&ph),
@@ -162,6 +163,7 @@ pub async fn save_unit(
             ],
         )
         .await?;
+    client.commit().await?;
     info!(
         "Saved unit {} (numeric ID: {}, D:{}) to PostgreSQL units",
         unit.id, id_num, unit.unit_number
@@ -182,12 +184,18 @@ pub async fn save_unit_member(
 ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
     let mut connection = pool.get().await?;
     let client = connection.transaction().await?;
+    // tenant-guard: platform — resolves site_id from units(id), then binds tenant below.
+    super::tx_bind_platform(&client).await?;
     let u_num = require_id("unit", unit_id)?;
     // Serialize occupancy selection and membership creation on the actual unit.
     let unit = client.query_opt(
         "SELECT owner_person_id,tenant_person_id,site_id FROM units WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",
         &[&u_num],
     ).await?.ok_or_else(|| format!("Unit {unit_id} not found"))?;
+    let site_id: Option<i64> = unit.get(2);
+    if let Some(site) = site_id {
+        super::tx_bind_tenant(&client, site).await?;
+    }
     let existing = client.query_opt(
         "SELECT id FROM unit_occupancies WHERE unit_id=$1 AND is_active AND end_date IS NULL ORDER BY id DESC LIMIT 1",
         &[&u_num],
@@ -199,7 +207,6 @@ pub async fn save_unit_member(
         .ok_or_else(|| NO_CURRENT_OCCUPANT.to_string())?;
     let normalized_email = crate::domain::email::NormalizedEmail::normalize(email);
     // S1: a household member is the unit's site's person; an address is matched only in that site.
-    let site_id: Option<i64> = unit.get(2);
     let existing_person = if normalized_email.is_empty() {
         None
     } else {
@@ -269,6 +276,8 @@ pub async fn save_unit_member_ref(
 ) -> Result<SavedMember, Box<dyn std::error::Error + Send + Sync>> {
     let mut connection = pool.get().await?;
     let tx = connection.transaction().await?;
+    // tenant-guard: platform — resolves site_id from units(id), then binds tenant below.
+    super::tx_bind_platform(&tx).await?;
     let u_num = require_id("unit", unit_id)?;
     let unit = tx
         .query_opt(
@@ -278,6 +287,7 @@ pub async fn save_unit_member_ref(
         .await?
         .ok_or_else(|| format!("Unit {unit_id} not found"))?;
     let site: i64 = unit.get(0);
+    super::tx_bind_tenant(&tx, site).await?;
     let occupancy_id: i64 = tx
         .query_opt(
             "SELECT id FROM unit_occupancies WHERE unit_id=$1 AND is_active AND end_date IS NULL ORDER BY id DESC LIMIT 1",
@@ -318,20 +328,22 @@ pub async fn save_remembered_sender_iban(
     label: Option<&str>,
     bank_name: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — resolves site_id from units(id) in INSERT.
+    let mut conn = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut conn).await?;
     let unit_id_num = require_id("entity", unit_id)?;
-    client
-        .execute(
-            r#"
+    tx.execute(
+        r#"
             INSERT INTO unit_sender_ibans (sender_iban, unit_id, site_id, label, bank_name, created_at)
             VALUES ($1, $2, (SELECT site_id FROM units WHERE id = $2), $3, $4, CURRENT_TIMESTAMP)
             ON CONFLICT (unit_id, sender_iban) DO UPDATE SET
                 label = EXCLUDED.label,
                 bank_name = EXCLUDED.bank_name
             "#,
-            &[&iban, &unit_id_num, &label, &bank_name],
-        )
-        .await?;
+        &[&iban, &unit_id_num, &label, &bank_name],
+    )
+    .await?;
+    tx.commit().await?;
     info!(
         "Saved remembered sender IBAN {} for unit {} to PostgreSQL",
         iban, unit_id
@@ -343,13 +355,15 @@ pub async fn delete_remembered_sender_iban(
     pool: &Pool,
     iban: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-    client
-        .execute(
-            "DELETE FROM unit_sender_ibans WHERE sender_iban = $1",
-            &[&iban],
-        )
-        .await?;
+    // tenant-guard: platform — keyed by sender_iban.
+    let mut conn = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut conn).await?;
+    tx.execute(
+        "DELETE FROM unit_sender_ibans WHERE sender_iban = $1",
+        &[&iban],
+    )
+    .await?;
+    tx.commit().await?;
     info!("Deleted remembered sender IBAN {} from PostgreSQL", iban);
     Ok(())
 }
@@ -359,22 +373,24 @@ pub async fn save_unit_payer_names(
     unit_id: &str,
     names: &[String],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — keyed by unit_id.
+    let mut conn = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut conn).await?;
     let unit_id_num = require_id("entity", unit_id)?;
-    client
-        .execute(
-            "DELETE FROM unit_payer_names WHERE unit_id = $1",
-            &[&unit_id_num],
-        )
-        .await?;
+    tx.execute(
+        "DELETE FROM unit_payer_names WHERE unit_id = $1",
+        &[&unit_id_num],
+    )
+    .await?;
     for name in names {
-        client
-            .execute(
-                "INSERT INTO unit_payer_names (unit_id, payer_name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                &[&unit_id_num, &name],
-            )
-            .await.map_err(|e| e.to_string())?;
+        tx.execute(
+            "INSERT INTO unit_payer_names (unit_id, payer_name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            &[&unit_id_num, &name],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
     }
+    tx.commit().await?;
     info!(
         "Saved {} payer names for unit {} to PostgreSQL",
         names.len(),
@@ -659,7 +675,9 @@ pub struct UnitSummaryDto {
 }
 
 pub async fn fetch_units_summary_from_db(pool: &Pool) -> DbResult<Vec<UnitSummaryDto>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — system summary across all sites.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
     let rows = client
         .query(
             r#"
@@ -696,6 +714,7 @@ pub async fn fetch_units_summary_from_db(pool: &Pool) -> DbResult<Vec<UnitSummar
             &[],
         )
         .await?;
+    client.commit().await?;
 
     let mut list = Vec::new();
     for row in rows {
@@ -738,7 +757,8 @@ pub async fn get_units_for_site_from_db(
         Err(_) => return Ok(Vec::new()),
     };
 
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_tenant_read(&mut conn, site_numeric).await?;
     let query = r#"
         SELECT u.id, u.site_id, u.block_id, b.block_name, u.unit_number, u.floor,
                u.occupancy_status, u.virtual_iban,
@@ -749,6 +769,7 @@ pub async fn get_units_for_site_from_db(
         ORDER BY b.block_name ASC, u.unit_number ASC
     "#;
     let rows = client.query(query, &[&site_numeric]).await?;
+    client.commit().await?;
     let mut list = Vec::new();
     for row in rows {
         let id: i64 = row.get(0);
@@ -860,6 +881,7 @@ pub async fn create_units_in_db(
 
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site_numeric).await?;
 
     let existing_block_opt = tx
         .query_opt(

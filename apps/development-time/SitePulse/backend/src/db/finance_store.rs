@@ -62,8 +62,11 @@ impl FinanceStore {
     pub async fn insert<T: Record>(&self, mut record: T, collection: Collection<T>) -> DbResult<T> {
         match self.pool() {
             Some(pool) => {
-                let client = pool.get().await?;
-                let id = rec::insert(&**client, &record).await?;
+                // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
+                let mut client = pool.get().await?;
+                let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+                let id = rec::insert(&*tx, &record).await?;
+                tx.commit().await?;
                 record.set_id(id);
                 let mut inner = self.state.inner.write().await;
                 collection(&mut inner.finance).push(record.clone());
@@ -90,8 +93,10 @@ impl FinanceStore {
     ) -> DbResult<(P, Vec<C>)> {
         match self.pool() {
             Some(pool) => {
+                // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
                 let mut client = pool.get().await?;
                 let tx = client.transaction().await?;
+                super::tenant_guard::tx_bind_platform(&tx).await?;
                 let id = rec::insert(&*tx, &parent).await?;
                 parent.set_id(id);
                 for child in children.iter_mut() {
@@ -224,8 +229,12 @@ impl FinanceStore {
     ) -> DbResult<Vec<String>> {
         match self.pool() {
             Some(pool) => {
-                let client = pool.get().await?;
-                rec::units_by_national_id(&**client, site_id, national_id).await
+                let site = super::require_id("site", site_id)?;
+                let mut client = pool.get().await?;
+                let tx = super::tenant_guard::begin_tenant_read(&mut client, site).await?;
+                let units = rec::units_by_national_id(&*tx, site_id, national_id).await?;
+                tx.commit().await?;
+                Ok(units)
             }
             None => Ok(Vec::new()),
         }
@@ -395,8 +404,10 @@ impl FinanceStore {
 
 /// Loads every SPEC-009 table at boot.
 pub async fn load_finance_book(pool: &Pool) -> DbResult<FinanceBook> {
-    let client = pool.get().await?;
-    let c = &**client;
+    // tenant-guard: platform — startup load of all SPEC-009 tables.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_read(&mut client).await?;
+    let c = &*tx;
     let mut book = FinanceBook {
         privacy_notices: rec::load_all(c).await?,
         privacy_acknowledgements: rec::load_all(c).await?,
@@ -459,5 +470,6 @@ pub async fn load_finance_book(pool: &Pool) -> DbResult<FinanceBook> {
         .iter()
         .map(|r| (r.get::<_, i64>(0).to_string(), r.get::<_, i64>(1)))
         .collect();
+    tx.commit().await?;
     Ok(book)
 }

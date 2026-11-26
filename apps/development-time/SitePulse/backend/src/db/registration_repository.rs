@@ -7,9 +7,10 @@ pub async fn save_pending_registration(
     pool: &Pool,
     req: &PendingRegistrationResponse,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut client = pool.get().await?;
     let site_id_num = require_id("entity", &req.site_id)?;
-    client
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site_id_num).await?;
+    tx
         .execute(
             r#"
             INSERT INTO pending_registrations (request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at)
@@ -35,6 +36,7 @@ pub async fn save_pending_registration(
             ],
         )
         .await?;
+    tx.commit().await?;
     info!(
         "Saved pending registration {} ({}) to PostgreSQL",
         req.request_id, req.email
@@ -47,13 +49,15 @@ pub async fn update_pending_registration_status(
     request_id: &str,
     status: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-    client
-        .execute(
-            "UPDATE pending_registrations SET status = $2 WHERE request_id = $1",
-            &[&request_id, &status],
-        )
-        .await?;
+    // tenant-guard: platform — registration status update keyed by request_id.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+    tx.execute(
+        "UPDATE pending_registrations SET status = $2 WHERE request_id = $1",
+        &[&request_id, &status],
+    )
+    .await?;
+    tx.commit().await?;
     info!(
         "Updated pending registration {} status to {} in PostgreSQL",
         request_id, status

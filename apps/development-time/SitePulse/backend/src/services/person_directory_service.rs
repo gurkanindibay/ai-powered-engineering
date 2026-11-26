@@ -300,7 +300,10 @@ impl PersonDirectoryService {
         let Storage::Postgres(pool) = &self.store else {
             return Err(PersonDirectoryError::NotFound);
         };
-        let client = pool.get().await.map_err(storage)?;
+        let mut conn = pool.get().await.map_err(storage)?;
+        let client = crate::db::begin_tenant_read(&mut conn, site)
+            .await
+            .map_err(storage)?;
         // A merged ID resolves to the card that absorbed it (V34 tombstone).
         let person_id: i64 = client
             .query_one(
@@ -342,6 +345,7 @@ impl PersonDirectoryService {
             )
             .await
             .map_err(storage)?;
+        client.commit().await.map_err(storage)?;
         let units = rows
             .iter()
             .map(|r| PersonUnit {
@@ -354,7 +358,7 @@ impl PersonDirectoryService {
                 active: r.get(6),
             })
             .collect();
-        drop(client);
+        drop(conn);
         let record =
             crate::services::person_record_service::PersonRecordService::new(self.state.clone())
                 .record(site, person_id)

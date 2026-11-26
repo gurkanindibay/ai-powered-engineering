@@ -9,13 +9,13 @@ pub async fn save_site(
     pool: &Pool,
     site: &Site,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut client = pool.get().await?;
     let maybe_id = parse_id_to_i64(&site.id);
     let id_num = match maybe_id {
         Some(id) if id > 0 => {
-            client
-                .execute(
-                    r#"
+            let tx = super::tenant_guard::begin_tenant_tx(&mut client, id).await?;
+            tx.execute(
+                r#"
                     INSERT INTO sites (id, name, address, slug, status, plan_type, license_end_date, tax_id, tax_office, proration_enabled)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                     ON CONFLICT (id) DO UPDATE SET
@@ -29,24 +29,27 @@ pub async fn save_site(
                         tax_office = EXCLUDED.tax_office,
                         proration_enabled = EXCLUDED.proration_enabled
                     "#,
-                    &[
-                        &id,
-                        &site.name,
-                        &site.address,
-                        &site.slug,
-                        &site.status,
-                        &site.plan_type,
-                        &site.license_end_date,
-                        &site.tax_id,
-                        &site.tax_office,
-                        &site.proration_enabled,
-                    ],
-                )
-                .await?;
+                &[
+                    &id,
+                    &site.name,
+                    &site.address,
+                    &site.slug,
+                    &site.status,
+                    &site.plan_type,
+                    &site.license_end_date,
+                    &site.tax_id,
+                    &site.tax_office,
+                    &site.proration_enabled,
+                ],
+            )
+            .await?;
+            tx.commit().await?;
             id
         }
         _ => {
-            let row = client
+            // tenant-guard: platform — new site creation before id is assigned.
+            let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+            let row = tx
                 .query_one(
                     r#"
                     INSERT INTO sites (name, address, slug, status, plan_type, license_end_date, tax_id, tax_office, proration_enabled)
@@ -75,7 +78,9 @@ pub async fn save_site(
                     ],
                 )
                 .await?;
-            row.get(0)
+            let new_id: i64 = row.get(0);
+            tx.commit().await?;
+            new_id
         }
     };
     info!(
@@ -88,8 +93,9 @@ pub async fn save_site(
 /// Persists whether a site has explicitly enabled occupancy-aware dues proration.
 pub async fn set_proration_policy(pool: &Pool, site_id: &str, enabled: bool) -> DbResult<()> {
     let site = require_id("site", site_id)?;
-    let client = pool.get().await?;
-    let rows = client
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site).await?;
+    let rows = tx
         .execute(
             "UPDATE sites SET proration_enabled = $2 WHERE id = $1 AND deleted_at IS NULL",
             &[&site, &enabled],
@@ -98,6 +104,7 @@ pub async fn set_proration_policy(pool: &Pool, site_id: &str, enabled: bool) -> 
     if rows != 1 {
         return Err(format!("site {} not found", site_id).into());
     }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -106,6 +113,7 @@ pub async fn soft_delete_site(pool: &Pool, site_id: &str) -> DbResult<()> {
     let id = require_id("site", site_id)?;
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, id).await?;
     let deleted = tx
         .query_opt(
             "UPDATE sites SET status = 'DELETED', deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL RETURNING id",
@@ -141,8 +149,20 @@ pub async fn soft_delete_site(pool: &Pool, site_id: &str) -> DbResult<()> {
 
 /// Whether a site may be used (exists, not deleted, not suspended).
 pub async fn site_is_active(pool: &Pool, site_id: &str) -> DbResult<bool> {
-    let client = pool.get().await?;
-    site_is_active_from_client(&client, site_id).await
+    let Some(id) = parse_id_to_i64(site_id) else {
+        return Ok(false);
+    };
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_read(&mut client, id).await?;
+    let active = tx
+        .query_opt(
+            "SELECT 1 FROM sites WHERE id=$1 AND deleted_at IS NULL AND status IN ('ACTIVE','TRIAL')",
+            &[&id],
+        )
+        .await?
+        .is_some();
+    tx.commit().await?;
+    Ok(active)
 }
 
 /// Check site availability on an existing attributed connection.
@@ -167,11 +187,12 @@ pub async fn delete_site(
     pool: &Pool,
     site_id: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut client = pool.get().await?;
     let id_num = require_id("entity", site_id)?;
-    client
-        .execute("DELETE FROM sites WHERE id = $1", &[&id_num])
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, id_num).await?;
+    tx.execute("DELETE FROM sites WHERE id = $1", &[&id_num])
         .await?;
+    tx.commit().await?;
     info!(
         "Deleted site {} (numeric ID: {}) from PostgreSQL sites",
         site_id, id_num
@@ -201,8 +222,10 @@ pub async fn create_site_with_manager_and_blocks(
     password_hash: &str,
     block_names: &[String],
 ) -> DbResult<CreatedSiteRegistration> {
+    // tenant-guard: platform — SaaS admin creates a new site before its id exists.
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
+    super::tx_bind_platform(&tx).await?;
     let normalized_email = crate::domain::email::NormalizedEmail::normalize(admin_email);
     if tx
         .query_opt(
@@ -279,7 +302,9 @@ pub async fn create_site_with_manager_and_blocks(
 }
 
 pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSiteSummaryDto>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — SaaS admin site summary list.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
     let rows = client
         .query(
             "SELECT s.id, s.name, s.slug, s.address, s.status, s.plan_type, s.license_end_date, s.timezone FROM sites s WHERE s.deleted_at IS NULL ORDER BY s.id ASC",
@@ -382,6 +407,7 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
         });
     }
 
+    client.commit().await?;
     Ok(result)
 }
 
@@ -395,6 +421,7 @@ pub async fn replace_site_blocks(pool: &Pool, site_id: &str, blocks: &[String]) 
     let numeric_site = require_id("site", site_id)?;
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, numeric_site).await?;
     let existing: Vec<String> = tx
         .query(
             "SELECT block_name FROM blocks WHERE site_id = $1",
@@ -440,8 +467,9 @@ pub async fn reset_site_admin_password_by_site(
     site_id: &str,
     password_hash: &str,
 ) -> DbResult<Option<ResetPasswordResult>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let numeric_site = require_id("site", site_id)?;
+    let client = super::tenant_guard::begin_tenant_tx(&mut conn, numeric_site).await?;
     let site_row_opt = client
         .query_opt(
             "SELECT id, name FROM sites WHERE id = $1 OR id::text = $2",
@@ -474,6 +502,7 @@ pub async fn reset_site_admin_password_by_site(
                     &[&password_hash, &u_id],
                 )
                 .await?;
+            client.commit().await?;
 
             return Ok(Some(ResetPasswordResult {
                 site_id: s_id,
@@ -484,6 +513,7 @@ pub async fn reset_site_admin_password_by_site(
             }));
         }
     }
+    client.commit().await?;
     Ok(None)
 }
 
@@ -491,14 +521,16 @@ pub async fn get_blocks_for_site_from_db(
     pool: &Pool,
     site_id: &str,
 ) -> Result<Vec<BlockDto>, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let site_id_num = require_id("entity", site_id)?;
+    let client = super::tenant_guard::begin_tenant_read(&mut conn, site_id_num).await?;
     let rows = client
         .query(
             "SELECT id, site_id, block_name, total_floors FROM blocks WHERE site_id = $1 ORDER BY id ASC",
             &[&site_id_num],
         )
         .await?;
+    client.commit().await?;
 
     let mut list = Vec::new();
     for row in rows {
@@ -518,7 +550,9 @@ pub async fn get_blocks_for_site_from_db(
 }
 
 pub async fn fetch_saas_global_stats(pool: &Pool) -> DbResult<SaasGlobalStatsDto> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — SaaS admin global statistics.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
     let sites_row = client
         .query_one(
             "SELECT COUNT(*)::bigint, COUNT(*) FILTER (WHERE status = 'ACTIVE')::bigint FROM sites WHERE deleted_at IS NULL",
@@ -540,6 +574,7 @@ pub async fn fetch_saas_global_stats(pool: &Pool) -> DbResult<SaasGlobalStatsDto
         )
         .await?;
     let monthly_collection_volume: Decimal = dues_row.get(0);
+    client.commit().await?;
 
     Ok(SaasGlobalStatsDto {
         total_sites: total_sites as usize,
@@ -556,7 +591,8 @@ pub async fn save_site_accrual_schedule(
     schedule: &crate::domain::accrual_schedule::AccrualSchedule,
 ) -> DbResult<()> {
     let id = require_id("site", site_id)?;
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_tenant_tx(&mut conn, id).await?;
     let small = |v: u32| i16::try_from(v).unwrap_or(0);
     let updated = client
         .execute(
@@ -575,5 +611,6 @@ pub async fn save_site_accrual_schedule(
     if updated == 0 {
         return Err(format!("Site {} not found", site_id).into());
     }
+    client.commit().await?;
     Ok(())
 }

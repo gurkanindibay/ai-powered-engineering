@@ -171,6 +171,48 @@ class TenantIsolationLintTests(unittest.TestCase):
         })
         self.assertEqual(rules, ["rls-parent-predicate"])
 
+    def test_db_transactions_must_bind_tenant_or_platform(self):
+        rules = _run(tenant_lint, {
+            "src/db/a.rs": "async fn a() { let tx = client.transaction().await?; tx.execute(q).await?; }\n",
+            "src/db/b.rs": "async fn b() {\n let tx = client.transaction().await?;\n super::tx_bind_tenant(&tx, site).await?;\n}\n",
+            "src/db/c.rs": "async fn c() {\n let tx = client.transaction().await?;\n super::tx_bind_platform(&tx).await?;\n}\n",
+            "src/db/d.rs": "async fn d() {\n // tenant-guard: platform\n let tx = client.transaction().await?;\n}\n",
+        })
+        self.assertEqual(rules, ["unbound-tenant-transaction"])
+
+    def test_db_direct_pool_queries_on_tenant_tables_are_flagged(self):
+        rules = _run(tenant_lint, {
+            "migrations/V1__init.sql": (
+                "CREATE TABLE units (\n    id BIGINT,\n    site_id BIGINT\n);\n"
+                "CREATE TABLE users (\n    id BIGINT,\n    site_id BIGINT\n);\n"
+            ),
+            "migrations/V2__rls.sql": "SELECT sp_enable_tenant_rls('units', 'site_id = sp_tenant_site()');\n",
+            "src/db/a.rs": (
+                "async fn leak(pool: &Pool) {\n"
+                "    let client = pool.get().await?;\n"
+                "    client.query(\"SELECT id FROM units\", &[]).await?;\n"
+                "}\n"
+            ),
+            "src/db/b.rs": (
+                "async fn ok_bound(pool: &Pool, site: i64) {\n"
+                "    let mut conn = pool.get().await?;\n"
+                "    let tx = super::tenant_guard::begin_tenant_read(&mut conn, site).await?;\n"
+                "    tx.query(\"SELECT id FROM units\", &[]).await?;\n"
+                "}\n"
+                "async fn ok_platform(pool: &Pool) {\n"
+                "    // tenant-guard: platform\n"
+                "    let mut conn = pool.get().await?;\n"
+                "    let tx = super::tenant_guard::begin_platform_read(&mut conn).await?;\n"
+                "    tx.query(\"SELECT id FROM units\", &[]).await?;\n"
+                "}\n"
+                "async fn ok_exempt(pool: &Pool) {\n"
+                "    let client = pool.get().await?;\n"
+                "    client.query(\"SELECT id FROM users WHERE email = $1\", &[&e]).await?;\n"
+                "}\n"
+            ),
+        })
+        self.assertEqual(rules, ["unbound-pool-query"])
+
 
 class LockScopeLintTests(unittest.TestCase):
     def test_write_guard_held_across_database_io(self):

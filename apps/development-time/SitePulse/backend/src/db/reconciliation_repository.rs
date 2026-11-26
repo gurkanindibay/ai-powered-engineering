@@ -11,7 +11,7 @@ pub async fn save_reconciliation_match_for_site(
     site_id: &str,
     bank_account_id: Option<i64>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let status_str = m.status.db_code();
     let confidence_i32 = m.confidence_score as i32;
     let matched_unit_num = m.matched_unit_id.as_deref().and_then(parse_id_to_i64);
@@ -19,6 +19,7 @@ pub async fn save_reconciliation_match_for_site(
     let assigned_unit_num = m.assigned_unit_id.as_deref().and_then(parse_id_to_i64);
     let assigned_debtor = m.assigned_debtor_role.map(|role| role.as_str());
     let site_id_num = require_id("entity", site_id)?;
+    let client = super::tenant_guard::begin_tenant_tx(&mut conn, site_id_num).await?;
     client
         .execute(
             r#"
@@ -61,6 +62,7 @@ pub async fn save_reconciliation_match_for_site(
             ],
         )
         .await?;
+    client.commit().await?;
     info!("Saved reconciliation match {} to PostgreSQL", m.match_id);
     Ok(())
 }
@@ -75,9 +77,10 @@ pub async fn save_reconciliation_assignment(
     unit_id: &str,
     debtor_role: DebtorType,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let site_id_num = require_id("entity", site_id)?;
     let unit_id_num = require_id("unit", unit_id)?;
+    let client = super::tenant_guard::begin_tenant_tx(&mut conn, site_id_num).await?;
     let updated = client
         .execute(
             "UPDATE reconciliation_queue \
@@ -88,6 +91,7 @@ pub async fn save_reconciliation_assignment(
             &[&match_id, &site_id_num, &unit_id_num, &debtor_role.as_str()],
         )
         .await?;
+    client.commit().await?;
     if updated > 0 {
         info!(
             "Saved reconciliation assignment for match {} to unit {} ({})",
@@ -109,13 +113,16 @@ pub async fn save_reconciliation_match(
         .as_deref()
         .ok_or("reconciliation match has no unit; use save_reconciliation_match_for_site")?;
     let unit_id = require_id("unit", unit)?;
-    let client = pool.get().await?;
+    // tenant-guard: platform — resolves site_id from unit_id before binding tenant.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
     let site: i64 = client
         .query_opt("SELECT site_id FROM units WHERE id = $1", &[&unit_id])
         .await?
         .and_then(|r| r.get::<_, Option<i64>>(0))
         .ok_or_else(|| format!("unit {} has no site", unit_id))?;
-    drop(client);
+    client.commit().await?;
+    drop(conn);
     save_reconciliation_match_for_site(pool, m, &site.to_string(), None).await
 }
 
@@ -125,7 +132,9 @@ pub async fn update_reconciliation_status(
     status: crate::models::ReconciliationStatus,
     notes: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — status update keyed by match_id.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_tx(&mut conn).await?;
     let code = status.db_code();
     client
         .execute(
@@ -133,6 +142,7 @@ pub async fn update_reconciliation_status(
             &[&match_id, &code, &notes],
         )
         .await?;
+    client.commit().await?;
     info!(
         "Updated reconciliation match {} status to {} in PostgreSQL",
         match_id, code
@@ -144,10 +154,14 @@ pub async fn fetch_reconciliation_queue_from_db(
     pool: &Pool,
     site_id: Option<&str>,
 ) -> DbResult<Vec<ReconciliationMatch>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let rows = if let Some(sid) = site_id {
         let site_num = parse_id_to_i64(sid).unwrap_or(0);
-        client
+        if site_num <= 0 {
+            return Ok(Vec::new());
+        }
+        let client = super::tenant_guard::begin_tenant_read(&mut conn, site_num).await?;
+        let rows = client
             .query(
                 "SELECT match_id, transaction_id, txn_date, amount, currency, description, \
                  sender_name, sender_iban, reference_no, matched_unit_id, matched_block, \
@@ -157,9 +171,13 @@ pub async fn fetch_reconciliation_queue_from_db(
                  FROM reconciliation_queue WHERE site_id = $1 ORDER BY txn_date ASC",
                 &[&site_num],
             )
-            .await?
+            .await?;
+        client.commit().await?;
+        rows
     } else {
-        client
+        // tenant-guard: platform — startup/admin load when site_id is None.
+        let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
+        let rows = client
             .query(
                 "SELECT match_id, transaction_id, txn_date, amount, currency, description, \
                  sender_name, sender_iban, reference_no, matched_unit_id, matched_block, \
@@ -169,7 +187,9 @@ pub async fn fetch_reconciliation_queue_from_db(
                  FROM reconciliation_queue ORDER BY txn_date ASC",
                 &[],
             )
-            .await?
+            .await?;
+        client.commit().await?;
+        rows
     };
 
     let mut list = Vec::new();

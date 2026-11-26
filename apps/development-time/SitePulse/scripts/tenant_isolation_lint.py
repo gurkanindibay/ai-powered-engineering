@@ -260,23 +260,84 @@ def lint_guessed_tenants(backend: Path, findings: list[Finding]) -> None:
 
 
 def lint_transactions(backend: Path, findings: list[Finding]) -> None:
-    services = backend / "src" / "services"
-    if not services.is_dir():
+    for subdir in ("services", "db"):
+        root = backend / "src" / subdir
+        if not root.is_dir():
+            continue
+        for f in sorted(root.rglob("*.rs")):
+            rel = f.relative_to(backend).as_posix()
+            if rel == "src/db/tenant_guard.rs":
+                continue
+            code = _strip_test_modules(f.read_text(encoding="utf-8"))
+            lines = code.splitlines()
+            for i, line in enumerate(lines):
+                if not TX_OPEN_RE.search(line):
+                    continue
+                window = "\n".join(lines[max(0, i - 3) : i + TX_BIND_WINDOW])
+                if (
+                    "tx_bind_tenant" in window
+                    or "tx_bind_platform" in window
+                    or PLATFORM_MARKER in window
+                ):
+                    continue
+                findings.append(Finding(
+                    "unbound-tenant-transaction", rel, i + 1,
+                    "transaction is not bound to its tenant: call `crate::db::tx_bind_tenant(&tx, site)` "
+                    f"or `tx_bind_platform(&tx)` first (or mark with `// {PLATFORM_MARKER}`)"))
+
+
+def _tenant_table_names(backend: Path) -> set[str]:
+    migrations = backend / "migrations"
+    if not migrations.is_dir():
+        return set()
+    tables = (
+        set(rls_policies(migrations).keys())
+        | set(tenant_keyed_tables(migrations).keys())
+        | set(TENANT_RLS_CONFIG["root_tables"])
+    )
+    return tables - RLS_EXEMPT
+
+
+def lint_pool_queries(backend: Path, findings: list[Finding]) -> None:
+    db_dir = backend / "src" / "db"
+    if not db_dir.is_dir():
         return
-    for f in sorted(services.rglob("*.rs")):
+    tenant_tables = _tenant_table_names(backend)
+    if not tenant_tables:
+        return
+    table_re = re.compile(r"\b(?:" + "|".join(sorted(tenant_tables)) + r")\b")
+    tx_helper_re = re.compile(
+        r"\b(?:begin_tenant_read|begin_tenant_tx|begin_platform_read|begin_platform_tx)\b"
+    )
+    for f in sorted(db_dir.rglob("*.rs")):
         rel = f.relative_to(backend).as_posix()
+        if rel == "src/db/tenant_guard.rs":
+            continue
         code = _strip_test_modules(f.read_text(encoding="utf-8"))
-        lines = code.splitlines()
-        for i, line in enumerate(lines):
-            if not TX_OPEN_RE.search(line):
+        fn_starts = [
+            m.start()
+            for m in re.finditer(r"(?m)^[ \t]*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+\w+", code)
+        ]
+        for m in re.finditer(r"\bpool\.get\(", code):
+            pos = m.start()
+            # Scope to the enclosing function body.
+            fn_start = max((s for s in fn_starts if s <= pos), default=0)
+            fn_end = next((s for s in fn_starts if s > pos), len(code))
+            fn_slice = code[fn_start:fn_end]
+            if PLATFORM_MARKER in fn_slice:
                 continue
-            window = "\n".join(lines[max(0, i - 3) : i + TX_BIND_WINDOW])
-            if "tx_bind_tenant" in window or PLATFORM_MARKER in window:
+            after_get = code[pos:fn_end]
+            if TX_OPEN_RE.search(after_get) or tx_helper_re.search(after_get):
                 continue
-            findings.append(Finding(
-                "unbound-tenant-transaction", rel, i + 1,
-                "transaction is not bound to its tenant: call `crate::db::tx_bind_tenant(&tx, site)` "
-                f"first (or mark a platform-wide transaction with `// {PLATFORM_MARKER}`)"))
+            sql_surface = _strip_comments(after_get)
+            hit = table_re.search(sql_surface)
+            if hit or "rec::" in sql_surface:
+                target = hit.group(0) if hit else "finance record"
+                findings.append(Finding(
+                    "unbound-pool-query", rel, _line_of(code, pos),
+                    f"direct `pool.get()` query touches tenant table `{target}` without a bound "
+                    "transaction: use `begin_tenant_read`/`begin_tenant_tx` (or "
+                    f"`begin_platform_read`/`begin_platform_tx` with `// {PLATFORM_MARKER}`)"))
 
 
 def tenant_keyed_tables(migrations: Path) -> dict[str, tuple[str, str | None]]:
@@ -356,6 +417,7 @@ def lint(backend: Path) -> dict:
     lint_object_paths(backend, findings)
     lint_guessed_tenants(backend, findings)
     lint_transactions(backend, findings)
+    lint_pool_queries(backend, findings)
     lint_rls(backend, findings)
     return {
         "passed": not findings,
