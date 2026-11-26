@@ -20,11 +20,6 @@ use sitepulse_backend::models::*;
 use sitepulse_backend::services::accounting_service::AccountingService;
 use sitepulse_backend::services::assembly_service::AssemblyService;
 use sitepulse_backend::services::autopay_service::AutopayService;
-
-/// Today in the site's time zone, the date every service works with.
-fn site_today() -> chrono::NaiveDate {
-    crate::support::site_today()
-}
 use sitepulse_backend::services::bank_matching_service::BankMatchingService;
 use sitepulse_backend::services::collections_service::CollectionsService;
 use sitepulse_backend::services::dunning_service::DunningService;
@@ -36,6 +31,11 @@ use sitepulse_backend::services::plan_service::PlanService;
 use sitepulse_backend::services::portfolio_service::PortfolioService;
 use sitepulse_backend::services::resident_request_service::ResidentRequestService;
 use sitepulse_backend::state::AppState;
+
+/// Today in the site's time zone, the date every service works with.
+fn site_today() -> chrono::NaiveDate {
+    crate::support::site_today()
+}
 
 fn d(s: &str) -> Decimal {
     Decimal::from_str_exact(s).unwrap()
