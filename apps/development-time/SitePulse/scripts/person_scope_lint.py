@@ -5,9 +5,10 @@
 protected by tenant row-level security (a session looks its own user up before a
 site is known). That means a query against them has to state its scope itself:
 
-  site      a `WHERE`, `HAVING` or `ON` predicate binds a site key to a parameter,
-            a literal or `sp_tenant_site()`, so the statement is filtered by site;
-            or an `INSERT` writes the site the caller serves.
+  site      a `WHERE`, `HAVING` or `ON` predicate compares a site key with a
+            parameter or `sp_tenant_site()` (either order, `IS [NOT] DISTINCT
+            FROM`, or `IN (SELECT`), so the statement is filtered by one site; or
+            an `INSERT` writes the site the caller serves.
   person    the statement keys on a person or user id that the caller resolved
             inside the site it is serving.
   identity  a global identity lookup (email, google_sub, session user id) where
@@ -66,13 +67,19 @@ CLAUSE_RE = re.compile(
     re.I,
 )
 FILTER_CLAUSES = ("WHERE", "HAVING", "ON")
-# A site key and a value it is compared with. Both must appear in the predicate:
-# `site_id` in a SELECT list is not a filter, and `ON a.site_id = b.site_id` binds
-# no value, so neither scopes the statement.
-SITE_KEY_RE = re.compile(
-    r"\b(?:site_id|sites?|units?|unit_occupancies|unit_ownerships|v_person_roles)\b", re.I
+# A site key compared with a bound value. Naming the key anywhere in the clause is
+# not enough: `site_id` in a SELECT list, a SET clause or a conflict target is not a
+# filter, `site_id IS NOT NULL` binds nothing, and `ON a.site_id = b.site_id` binds
+# no value, so none of them scopes the statement.
+SITE_BIND = r"(?:\$\d+|sp_tenant_site\(\))"
+SITE_KEY = r"(?:[A-Za-z_][\w]*\.)?site_id(?:::text)?"
+SITE_PREDICATE_RE = re.compile(
+    rf"(?:{SITE_KEY}\s*(?:=|<>|!=|<=|>=|<|>)\s*{SITE_BIND}"
+    rf"|{SITE_BIND}\s*(?:=|<>|!=|<=|>=|<|>)\s*{SITE_KEY}"
+    rf"|{SITE_KEY}\s+IS\s+(?:NOT\s+)?DISTINCT\s+FROM\s+{SITE_BIND}"
+    rf"|{SITE_KEY}\s+IN\s*\(\s*SELECT)",
+    re.I | re.S,
 )
-SITE_BIND_RE = re.compile(r"\$\d+|sp_tenant_site\(\)", re.I)
 # Quoted SQL values are data, not identifiers: `'persons'` in an audit row is not
 # a query against the persons table, and a hard-coded tenant id is not a scope.
 SQL_VALUE_RE = re.compile(r"'(?:[^']|'')*'")
@@ -132,7 +139,7 @@ def site_scoped_sql(sql: str) -> bool:
             continue
         end = clauses[index + 1].start() if index + 1 < len(clauses) else len(sql)
         predicate = sql[clause.end() : end]
-        if SITE_KEY_RE.search(predicate) and SITE_BIND_RE.search(predicate):
+        if SITE_PREDICATE_RE.search(predicate):
             return True
     return False
 

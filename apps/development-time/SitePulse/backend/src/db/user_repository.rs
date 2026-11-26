@@ -240,6 +240,7 @@ pub async fn ensure_bootstrap_admin(
     // Platform people have no site; persons are unique per site, so look up before inserting.
     let existing = client
         .query_opt(
+            // person-scope: platform — the SaaS admin person has no site
             "SELECT id FROM persons WHERE site_id IS NULL AND lower(email) = $1 AND deleted_at IS NULL",
             &[&email],
         )

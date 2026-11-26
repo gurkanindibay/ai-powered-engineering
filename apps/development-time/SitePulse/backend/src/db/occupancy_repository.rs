@@ -182,6 +182,7 @@ async fn read_snapshot(
 ) -> Result<UnitSnapshot, OccupancyError> {
     let owners = tx
         .query(
+            // person-scope: person — the unit id is resolved within the site before the snapshot
             r#"
             SELECT o.person_id, p.full_name, COALESCE(w.share_percentage, 100.00), COALESCE(w.start_date, u.created_at::date, $2::date)
             FROM sp_unit_owner_ids($1) o

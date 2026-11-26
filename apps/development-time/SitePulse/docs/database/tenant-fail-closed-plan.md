@@ -59,15 +59,16 @@ every query against them must state one of four scopes:
 
 | Scope | Meaning | Example |
 |---|---|---|
-| site | a `WHERE`/`HAVING`/`ON` predicate binds a site key to a parameter, a literal or `sp_tenant_site()`, or an `INSERT` writes the site the caller serves | `SELECT id FROM persons WHERE site_id = $1 AND lower(email) = lower($2)` |
+| site | a `WHERE`/`HAVING`/`ON` predicate compares a site key with a parameter or `sp_tenant_site()` (either order, `IS [NOT] DISTINCT FROM`, `IN (SELECT`), or an `INSERT` writes the site the caller serves | `SELECT id FROM persons WHERE site_id = $1 AND lower(email) = lower($2)` |
 | person | the statement keys on a person or user id the caller resolved inside the site it serves | `UPDATE persons SET phone = $1 WHERE id = $2` in `update_home_owner`, where the id comes from the unit row selected with `site_id = $2` |
 | identity | a global identity lookup (email, `google_sub`, session user id) where no site applies yet: sign-in, session validation, uniqueness checks, account activation | `SELECT id FROM users WHERE LOWER(email) = $1 AND is_active` |
 | platform | start-up load and sync, migration, SaaS administration, provisioning, development seed and reset | `save_unit` in `src/db/unit_repository.rs`, called only by the startup sync |
 
 Naming a site key is not filtering by one: a `site_id` in the `SELECT` list, a
 `SET` clause, an `INSERT` column list or a conflict target does not scope a
-statement. Only a predicate that also binds a value does (and `ON a.site_id =
-b.site_id` binds nothing). SQL assembled from several literals (`format!`,
+statement. The key and a bound value must be compared with each other, so
+`site_id IS NOT NULL` binds nothing and `ON a.site_id = b.site_id` binds nothing
+either. SQL assembled from several literals (`format!`,
 `concat!`) is judged literal by literal, so a shared filter such as
 `person_directory_service`'s is annotated where it is appended.
 

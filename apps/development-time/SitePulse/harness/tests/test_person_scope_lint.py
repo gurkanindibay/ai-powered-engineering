@@ -68,6 +68,30 @@ class PersonScopeLintTests(unittest.TestCase):
             [],
         )
 
+    def test_site_id_is_not_null_does_not_scope_the_statement(self):
+        # The key and a bound value must be compared with each other: a null check
+        # binds nothing, so a name search across every site would still pass.
+        self.assertEqual(
+            _one("SELECT p.id FROM persons p WHERE p.full_name ILIKE $1 AND p.site_id IS NOT NULL"),
+            ["src/db/person_repository.rs"],
+        )
+
+    def test_a_key_and_a_bind_in_different_comparisons_do_not_scope(self):
+        self.assertEqual(
+            _one("SELECT p.id FROM persons p WHERE p.full_name ILIKE $1 AND p.site_id <> $2"),
+            [],
+        )
+        self.assertEqual(
+            _one("SELECT p.id FROM persons p JOIN units u ON u.id = p.id WHERE p.full_name ILIKE $1 AND u.floor = $2"),
+            ["src/db/person_repository.rs"],
+        )
+
+    def test_is_distinct_from_a_bind_scopes_the_statement(self):
+        self.assertEqual(
+            _one("SELECT p.id FROM persons p WHERE p.site_id IS NOT DISTINCT FROM $2"),
+            [],
+        )
+
     def test_a_join_condition_that_binds_the_site_scopes_the_statement(self):
         self.assertEqual(
             _one(
