@@ -5,9 +5,9 @@ lists, or a group that no CI job runs, would silently never run in CI.
 """
 import importlib.util
 import io
-import os
 import re
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -60,11 +60,13 @@ class GateGroupTests(unittest.TestCase):
             executed.append(name)
             return run_tests.GateResult(name, True)
 
-        # DB_PASS set: main must not read backend/.env, and SUMMARY is restored after the call.
-        isolated = mock.patch.dict(os.environ, {"DB_PASS": "test"})
-        with isolated, mock.patch.object(run_tests, "SUMMARY", False), \
-                mock.patch.object(run_tests, "run_gate", passing), redirect_stdout(io.StringIO()):
-            self.assertEqual(run_tests.main([]), 0, "exit code 0 when every gate passes")
+        # A root with no backend/.env: main must not load local database settings,
+        # and SUMMARY is restored after the call.
+        with tempfile.TemporaryDirectory() as bare_root:
+            with mock.patch.object(run_tests, "ROOT", Path(bare_root)), \
+                    mock.patch.object(run_tests, "SUMMARY", False), \
+                    mock.patch.object(run_tests, "run_gate", passing), redirect_stdout(io.StringIO()):
+                self.assertEqual(run_tests.main([]), 0, "exit code 0 when every gate passes")
         self.assertEqual(executed, run_tests.ORDER, "the single command runs every gate in order")
         for lane in ("harness-selftest", "feature-traceability", "rust-test", "flutter-test"):
             self.assertIn(lane, executed, f"the {lane} lane executes")
@@ -77,9 +79,11 @@ class GateGroupTests(unittest.TestCase):
         def rust_fails(name, root):
             return run_tests.GateResult(name, name != "rust-test")
 
-        with isolated, mock.patch.object(run_tests, "SUMMARY", False), \
-                mock.patch.object(run_tests, "run_gate", rust_fails), redirect_stdout(io.StringIO()):
-            self.assertEqual(run_tests.main([]), 1, "a failing gate makes the exit code non-zero")
+        with tempfile.TemporaryDirectory() as bare_root:
+            with mock.patch.object(run_tests, "ROOT", Path(bare_root)), \
+                    mock.patch.object(run_tests, "SUMMARY", False), \
+                    mock.patch.object(run_tests, "run_gate", rust_fails), redirect_stdout(io.StringIO()):
+                self.assertEqual(run_tests.main([]), 1, "a failing gate makes the exit code non-zero")
 
     def test_unknown_group_is_rejected(self):
         self.assertEqual(run_tests.main(["--group", "nope"]), 2)
