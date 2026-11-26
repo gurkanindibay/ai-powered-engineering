@@ -848,6 +848,8 @@ def test_multi_site_journey_accruals_and_designated_payments(request, api, actor
             else:
                 return "Unpaid"
 
+        # SC-13-13-02: four periods were accrued, mixed receipts were posted, and the final
+        # matrix distinguishes paid, partial and unpaid for all five detailed units.
         periods = ("Ocak 2027", "Şubat 2027", "Mart 2027", "Nisan 2027")
         assert [get_period_status(j.unit_a("A-03"), p) for p in periods] == ["Paid", "Unpaid", "Unpaid", "Paid"]
         assert [get_period_status(j.unit_b("B2-01"), p) for p in periods] == ["Paid", "Unpaid", "Unpaid", "Paid"]
@@ -1543,8 +1545,9 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         # SC-13-25-07: the manager statements show exactly the eleven open rows and the model's site totals.
         # Each row's debtor is the name on its own statement section, including a former holder's (#295);
         # test_unit_statement_attributes_open_items_to_former_debtors pins that attribution.
-        # The same reconciliation pins each owner's joint exposure (SC-13-14-10) and the site totals
-        # that count every receivable once (SC-13-25-03).
+        # The same reconciliation pins each owner's joint exposure (SC-13-14-10), the site totals
+        # that count every receivable once (SC-13-25-03), and the open rows matched by site, unit,
+        # primary debtor and period (SC-13-25-02).
         detailed = {("A", label): j.unit_a(label) for label in ("A-01", "A-02", "A-03")}
         detailed |= {("B", label): j.unit_b(label) for label in ("B1-01", "B2-01")}
         assert_statements_match_model(api, {"A": j.manager_a, "B": j.manager_b}, detailed)
@@ -1557,10 +1560,11 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
         j.invariants_a("April final")
         j.invariants_b("April final")
 
-        # Manager browser evidence (SC-13-13-05): each manager sees only their own site, the
-        # four-period journey's unit statement renders the ledger's payer identity, open period
-        # history and exact totals, and the cash view lists posted receipts whose stream total
-        # reconciles to the ledger's posted site cash.
+        # Manager browser evidence (SC-13-13-05, SC-13-26-02): each manager sees only their own
+        # site, the four-period journey's unit statement renders the ledger's payer identity, open
+        # period history and exact totals, and the cash view lists posted receipts whose stream
+        # total reconciles to the ledger's posted site cash. Every unit and site id here came from
+        # onboarding, so both sites stay identifiable from onboarding through final reconciliation.
         login_page.login("manager", j.manager_a.user["email"], j.manager_a_password)
         ResidentsTab(page).open()
         units_a = set(ResidentsTab(page).unit_card_ids())

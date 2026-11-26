@@ -50,7 +50,7 @@ breaks), **partly proves** (some of the claimed scenarios have no assertion of t
 | `db_occupancy_transitions_tests.rs::when_tenant_is_replaced_then_outgoing_tenant_is_settled` | SC-08-08-01 … SC-08-08-03, SC-08-10-04 | Future effective date → 400; a failed second step keeps the session; replacement closes with `exit_balance` 1500.00 and opens the next session on the same date; `OWNER_TAKES_BACK` reopens the owner | `rust-db-test` | Proves |
 | `db_advance_exit_settlements_tests.rs::exit_settlement_payout_transfer_and_stale_balance_are_atomic` | SC-09-05-03 … SC-09-05-06 | A frozen exit debt blocks the payout (`Conflict`); payout and transfer need the second approval; a retried request returns the original id; the stale balance is recomputed | `rust-db-test` | Proves |
 | `e2e/tests/test_epic01_resident_dues.py::test_overdue_balance_matches_backend_total` | SC-01-01-01, SC-01-02-01, SC-01-03-01, SC-01-04-01 | Asserts the hero balance equals the backend total (and is above 1400.00) for one overdue fixture | `gui-e2e` | Proves SC-01-03-01/SC-01-04-01; **did not prove** SC-01-01-01 (kurus precision) or SC-01-02-01 (penalty exactly 23.33) — corrected in this change |
-| `e2e/tests/test_journey_accruals_payments.py::test_multi_site_journey_accruals_and_mixed_payments` | SC-13-13-02, SC-13-13-05, SC-13-14-10, SC-13-26-02, SC-13-25-02, SC-13-25-03, SC-13-25-04, SC-13-25-06, SC-13-25-07 | Inline annotations and assertions for SC-13-25-06, SC-13-25-07, SC-13-14-10, SC-13-25-03, SC-13-25-04, SC-13-13-05; SC-13-13-02, SC-13-26-02 and SC-13-25-02 ride on the same totals without an assertion of their own | `gui-e2e` | Partly proves — follow-up |
+| `e2e/tests/test_journey_accruals_payments.py::test_multi_site_journey_accruals_and_mixed_payments` | SC-13-13-02, SC-13-13-05, SC-13-14-10, SC-13-26-02, SC-13-25-02, SC-13-25-03, SC-13-25-04, SC-13-25-06, SC-13-25-07 | Inline annotations on the assertion of each rule: the four-period matrix (SC-13-13-02), the statement/model reconciliation including the open rows by site, unit, debtor and period (SC-13-25-02), the cash stream total against the ledger (SC-13-25-06), the joint exposure and site totals (SC-13-14-10, SC-13-25-03), and the browser statements and cash view for both onboarding sites (SC-13-13-05, SC-13-26-02) | `gui-e2e` | Proves every claim (annotations added in #512) |
 | `flutter/test/sp_directory_scaffold_test.dart` (5 declarations) | SC-12-02-01, -02, -03, -04, -08 | Each `// covers:` sits in its own `testWidgets` with `expect` on page range, density and restored state | `flutter-test` | Proves |
 | `flutter/test/payments_phase3_test.dart` (5 declarations) | SC-13-03-22, SC-11-02-04, SC-11-05-03 (×2), SC-11-05-04, SC-11-05-05 | Each test asserts widget state: disabled/enabled pay action, a shared due counted once, designated items | `flutter-test` | Proves |
 
@@ -88,7 +88,7 @@ All eight prove their rule. No correction was needed.
 
 ## Follow-ups
 
-- #512 — SC-13-13-02, SC-13-26-02, SC-13-25-02: the multi-site journey test needs an assertion
-  for each, or the scenarios need their own tests.
+- #512 — resolved: the multi-site journey test already asserted all three rules; each
+  assertion now carries its scenario id, so the next audit can attribute it.
 - #513 — fixed in this change: the HTML report now takes link names from
   `test_strategy_scan.resolve_links()`, so the 41 previously blank rows name their test.
