@@ -13,7 +13,7 @@ from playwright.sync_api import Route
 
 from pages import DuesManagement, ManagerCockpit, PersonPicker, ResidentsTab, Shell, UnitWorkspace
 from pages.login import LoginPage
-from support.flutter import by_id, by_id_prefix, fill
+from support.flutter import by_id, by_id_prefix, fill, track_text_connections
 from support.journey_attempts import JourneyManifest, site_in_state, teardown_with_evidence
 from support.journey_gui import amount_of, page_text, sign_in_manager
 
@@ -306,6 +306,7 @@ def test_stale_move_in_refreshes_to_the_first_managers_occupancy(
         sign_in_manager(page, login_page, fixture)
         ManagerCockpit(page).wait()
         second_context = page.context.browser.new_context(locale="tr-TR")
+        track_text_connections(second_context)
         second_page = second_context.new_page()
         # The second tab lives in its own window, so Chrome may treat it as backgrounded
         # and throttle animation frames. Flutter publishes no semantics nodes for an app

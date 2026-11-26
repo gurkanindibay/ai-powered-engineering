@@ -145,6 +145,10 @@ Every test starts from a named, versioned state, not from data it invents. The j
 
 **Isolation.** Each scenario attempt gets its own site (`e2e-<run>-<shard>-<attempt>`, journey plan §5). Each PostgreSQL test gets its own database, created from a migrated template. Teardown must work from a half-built state (`test_teardown_works_after_half_built_state` already proves this).
 
+**Typing into Flutter web.** E2E text entry goes through `fill()` (`e2e/support/flutter.py`), which types only once Flutter has attached its `input` listener to the field. Text typed earlier stays in the DOM input and reads back correctly while the app holds nothing (#520), so a DOM value is not proof of entry. Contexts a test creates itself call `track_text_connections` before loading the app.
+
+**Hang bound.** `pytest-timeout` limits each test body. Because its signal cannot free a browser call or teardown that never returns, `e2e/support/hang_guard.py` ends the pytest process 180 s after a test's limit and prints every thread's stack. The rest of that lane does not run; the job fails and keeps its artifacts.
+
 **Environments.** Local runs use `run_tests.py`. CI uses the GitHub service PostgreSQL. Each browser shard downloads the debug backend and `web-e2e` bundle produced by the workflow's `build-e2e` job. Real Google OIDC, the SMS provider and the live bank are replaced by in-repo fakes with recorded contracts, so their scenarios can run instead of staying skipped or pending.
 
 ## Execution lanes and CI

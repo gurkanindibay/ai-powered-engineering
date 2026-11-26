@@ -8,11 +8,39 @@ from __future__ import annotations
 
 from time import monotonic
 
-from playwright.sync_api import Locator, Page
+from playwright.sync_api import BrowserContext, Locator, Page
 
 ID_ATTR = "flt-semantics-identifier"
 # How long a typed value must survive before the widget is trusted with it.
 SETTLE_MS = 300
+# How long Flutter may take to connect a focused text field before it is focused again.
+CONNECT_MS = 3_000
+# Set on an <input>/<textarea> while the app is listening to what is typed into it.
+CONNECTED_ATTR = "data-e2e-text-connected"
+
+# Flutter web adds the field's `input` listener only once the framework has processed the
+# focus, and removes it when the field is disconnected. Nothing in the DOM says so, hence
+# this wrapper around the listener registration. Text typed without that listener stays in
+# the DOM input and never reaches the app, so reading the value back cannot detect it.
+TEXT_CONNECTION_JS = """(() => {
+    if (window.__e2eTextConnections) return;
+    window.__e2eTextConnections = true;
+    for (const [method, connected] of [['addEventListener', true], ['removeEventListener', false]]) {
+        const original = EventTarget.prototype[method];
+        EventTarget.prototype[method] = function (type, ...rest) {
+            const result = original.call(this, type, ...rest);
+            if (type === 'input' && (this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement)) {
+                this.toggleAttribute('%s', connected);
+            }
+            return result;
+        };
+    }
+})();""" % CONNECTED_ATTR
+
+
+def track_text_connections(context: BrowserContext) -> None:
+    """Mark connected text fields in every page of `context`; call before the app loads."""
+    context.add_init_script(TEXT_CONNECTION_JS)
 
 
 def by_id(page: Page, test_id: str) -> Locator:
@@ -44,6 +72,9 @@ def fill(page: Page, test_id: str, value: str) -> None:
             target.wait_for(state="attached", timeout=3_000)
         except Exception:
             target = page.locator("input:focus, textarea:focus").first
+        if not wait_text_connected(page, target):
+            target.evaluate("e => e.blur()")  # so the next click focuses it again
+            continue
         target.press("Control+a")
         target.press("Delete")
         if (target.evaluate("e => e.value ?? ''") or "") != "":
@@ -52,6 +83,22 @@ def fill(page: Page, test_id: str, value: str) -> None:
         if target.evaluate("e => e.value ?? ''") == value and _survives(page, target, value):
             return
     raise AssertionError(f"could not set {test_id!r} to {value!r}")
+
+
+def wait_text_connected(page: Page, target: Locator) -> bool:
+    """True once the app receives what is typed into `target`.
+
+    Pages of a context without `track_text_connections` cannot tell and are trusted.
+    """
+    deadline = monotonic() + CONNECT_MS / 1000
+    while True:
+        if target.evaluate(
+            "(e, attr) => !window.__e2eTextConnections || e.hasAttribute(attr)", CONNECTED_ATTR
+        ):
+            return True
+        if monotonic() >= deadline:
+            return False
+        page.wait_for_timeout(50)
 
 
 def _survives(page: Page, target: Locator, value: str) -> bool:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import configparser
+import re
 import unittest
 from pathlib import Path
 
@@ -38,6 +39,16 @@ class E2ETimeoutConfigTest(unittest.TestCase):
             any(item.startswith("pytest-timeout") for item in required),
             "pytest.ini must list pytest-timeout under required_plugins",
         )
+
+    def test_hang_guard_ends_a_wedged_run_before_the_job_limit(self) -> None:
+        # The signal limit covers only the test body; a wedged browser or teardown has none (#520).
+        self.assertIn('"support.hang_guard"', (E2E / "conftest.py").read_text())
+        guard = (E2E / "support" / "hang_guard.py").read_text()
+        grace = float(re.search(r"^GRACE_S = ([0-9.]+)$", guard, re.MULTILINE).group(1))
+        self.assertGreaterEqual(grace, 60, "pytest-timeout and teardown need time to finish first")
+        self.assertLessEqual(grace, 600)
+        self.assertIn("os._exit(1)", guard)
+        self.assertNotRegex(guard, r"faulthandler\.dump_traceback_later\(")
 
     def test_plugin_is_pinned_with_the_other_test_dependencies(self) -> None:
         lines = (E2E / "requirements.txt").read_text().splitlines()
