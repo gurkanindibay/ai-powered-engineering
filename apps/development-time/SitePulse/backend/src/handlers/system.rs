@@ -3,14 +3,39 @@
 use super::*;
 
 // 7. Health Check
-pub async fn health_check() -> impl IntoResponse {
+pub async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
+    let mut tenant_rls = json!({ "status": "not_configured" });
+    let mut ready = true;
+    match crate::db::tenant_rls_readiness(state.db_pool()).await {
+        Ok(Some((policies_installed, role))) => {
+            ready = policies_installed && role.is_safe();
+            tenant_rls = json!({
+                "status": if ready { "ready" } else { "misconfigured" },
+                "policies_installed": policies_installed,
+                "runtime_role_superuser": role.superuser,
+                "runtime_role_bypassrls": role.bypass_rls,
+                "runtime_role_safe": role.is_safe(),
+            });
+        }
+        Ok(None) => {}
+        Err(error) => {
+            ready = false;
+            tenant_rls = json!({ "status": "probe_failed", "error": crate::error::sanitized("Tenant RLS readiness probe failed", &error) });
+        }
+    }
+    let status = if ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
     (
-        StatusCode::OK,
+        status,
         Json(json!({
-            "status": "UP",
+            "status": if ready { "UP" } else { "DEGRADED" },
             "service": "SitePulse Rust Backend",
             "version": "1.0.0",
             "engine": "Axum / Tokio",
+            "tenant_rls": tenant_rls,
         })),
     )
 }
