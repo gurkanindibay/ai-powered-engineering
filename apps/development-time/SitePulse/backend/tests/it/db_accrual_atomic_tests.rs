@@ -468,7 +468,10 @@ async fn a_tenant_inside_the_month_stores_rows_that_sum_to_the_tariff() {
         is_active: false,
         exit_balance: Decimal::ZERO,
         notes: None,
-        created_at: chrono::Utc::now(),
+        created_at: NaiveDate::from_ymd_opt(2026, 1, 1)
+            .and_then(|date| date.and_hms_opt(0, 0, 0))
+            .expect("fixed timestamp")
+            .and_utc(),
     }];
     let tariff = Decimal::from_str_exact("1500.00").expect("tariff");
     let period =
