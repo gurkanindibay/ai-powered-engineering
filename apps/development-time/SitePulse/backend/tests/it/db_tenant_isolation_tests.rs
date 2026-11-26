@@ -347,6 +347,58 @@ async fn rls_fails_closed_when_unbound_and_allows_explicit_platform() {
     t.drop_db().await;
 }
 
+/// The startup readiness probe must reject a policy that a later migration created
+/// by hand without the fail-closed shape, not only one that is missing entirely.
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn rls_guard_rejects_a_tenant_blind_policy() {
+    let t = TestDb::create("rls_guard_shape").await;
+    assert!(
+        db::rls_guard_installed(&t.pool).await.unwrap(),
+        "the migrated schema passes the guard"
+    );
+
+    let owner = t.owner.get().await.unwrap();
+    owner
+        .batch_execute(
+            "DROP POLICY tenant_isolation ON blocks;
+             CREATE POLICY tenant_isolation ON blocks
+                 USING (TRUE) WITH CHECK (TRUE);",
+        )
+        .await
+        .unwrap();
+    assert!(
+        !db::rls_guard_installed(&t.pool).await.unwrap(),
+        "a policy without the platform switch fails readiness"
+    );
+
+    owner
+        .batch_execute(
+            "DROP POLICY tenant_isolation ON blocks;
+             CREATE POLICY tenant_isolation ON blocks
+                 USING (sp_platform() OR (TRUE))
+                 WITH CHECK (sp_platform() OR (TRUE));",
+        )
+        .await
+        .unwrap();
+    assert!(
+        !db::rls_guard_installed(&t.pool).await.unwrap(),
+        "a policy without the unbound guard fails readiness"
+    );
+
+    owner
+        .batch_execute("DROP POLICY tenant_isolation ON blocks;")
+        .await
+        .unwrap();
+    assert!(
+        !db::rls_guard_installed(&t.pool).await.unwrap(),
+        "a table without the policy must fail readiness"
+    );
+
+    drop(owner);
+    t.drop_db().await;
+}
+
 /// The parent rows a child table in
 /// [`child_tables_scoped_through_a_parent_stay_in_their_site`] needs.
 struct ChildParents {

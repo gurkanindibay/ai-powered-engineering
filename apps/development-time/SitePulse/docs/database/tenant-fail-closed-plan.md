@@ -41,7 +41,14 @@ projects, budgets, plans, cases and occupancies).
 
 The explicit `sp_tenant_site() IS NOT NULL` guard makes the policy fail closed
 even if a future predicate forgets to reference the tenant, and V56 aborts the
-migration if any `tenant_isolation` policy keeps an older form.
+migration if any `tenant_isolation` policy keeps an older form. The startup
+probe (`db::rls_guard_installed`) requires the same shape, so a policy added by a
+later migration without `sp_enable_tenant_rls` fails readiness instead of running.
+
+The guard covers the **unbound** case only: a session that *is* bound to a tenant
+but uses a tenant-blind predicate (say `TRUE`) still sees every site's rows. The
+lint's `rls-parent-predicate` rule and the DB isolation tests are the defence
+there, so a new policy must always state its own tenant predicate.
 
 ## Platform paths
 

@@ -97,10 +97,10 @@ SELECT sp_enable_tenant_rls('occupancy_members',
     'occupancy_id IN (SELECT o.id FROM unit_occupancies o WHERE o.unit_id IN
      (SELECT u.id FROM units u WHERE u.site_id = sp_tenant_site()))');
 
--- Every tenant policy must now carry the platform switch and the unbound guard. A
--- table that was added between migrations and is missing from the lists above keeps
--- an older policy, so fail the migration instead of leaving a permissive policy in
--- place until runtime finds it.
+-- Every tenant policy must now carry the platform switch and the unbound guard on
+-- both the read and the write side. A table that was added between migrations and
+-- is missing from the lists above keeps an older policy, so fail the migration
+-- instead of leaving a permissive policy in place until runtime finds it.
 DO $$
 DECLARE
     stale TEXT;
@@ -112,6 +112,8 @@ BEGIN
       AND (
           coalesce(pg_get_expr(p.polqual, p.polrelid), '') NOT LIKE '%sp_platform()%'
           OR coalesce(pg_get_expr(p.polqual, p.polrelid), '') NOT LIKE '%sp_tenant_site() IS NOT NULL%'
+          OR coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') NOT LIKE '%sp_platform()%'
+          OR coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') NOT LIKE '%sp_tenant_site() IS NOT NULL%'
       );
     IF stale IS NOT NULL THEN
         RAISE EXCEPTION 'V56: tenant_isolation policies not re-created with the fail-closed form: %', stale;

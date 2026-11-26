@@ -153,7 +153,11 @@ pub async fn begin_platform_tx(
     Ok(tx)
 }
 
-/// Probes whether every tenant-keyed public table has forced tenant isolation.
+/// Probes whether every tenant-keyed public table has forced tenant isolation with
+/// the fail-closed policy shape (V56): `sp_platform()` or a bound tenant, on both
+/// the read (`polqual`) and the write (`polwithcheck`) side. A migration that adds
+/// a policy by hand without `sp_enable_tenant_rls` fails readiness instead of
+/// leaving a permissive policy in a running deployment.
 pub async fn rls_guard_installed(pool: &Pool) -> DbResult<bool> {
     let client = pool.get().await?;
     #[derive(serde::Deserialize)]
@@ -191,7 +195,15 @@ pub async fn rls_guard_installed(pool: &Pool) -> DbResult<bool> {
              SELECT COUNT(*) > 0
                 AND COUNT(*) FILTER (WHERE e.relrowsecurity AND e.relforcerowsecurity
                     AND EXISTS (SELECT 1 FROM pg_policy p
-                                WHERE p.polrelid = e.oid AND p.polname = 'tenant_isolation')) = COUNT(*)
+                                WHERE p.polrelid = e.oid AND p.polname = 'tenant_isolation'
+                                  AND coalesce(pg_get_expr(p.polqual, p.polrelid), '')
+                                      LIKE '%sp_platform()%'
+                                  AND coalesce(pg_get_expr(p.polqual, p.polrelid), '')
+                                      LIKE '%sp_tenant_site() IS NOT NULL%'
+                                  AND coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')
+                                      LIKE '%sp_platform()%'
+                                  AND coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')
+                                      LIKE '%sp_tenant_site() IS NOT NULL%')) = COUNT(*)
              FROM expected e",
             &[&exemptions, &tenant_keys, &config.root_tables],
         )
