@@ -178,7 +178,6 @@ pub async fn get_resident_dashboard(
                     "SELECT u.id, u.site_id, COALESCE(b.block_name, 'A Blok'), u.unit_number, u.floor, u.land_share, u.owner_person_id, u.tenant_person_id, u.virtual_iban, u.house_type, u.monthly_tariff_override FROM units u LEFT JOIN blocks b ON u.block_id = b.id WHERE u.id = $1 OR u.id::text = $2",
                     &[&num_id, &unit_id],
                 ).await {
-                    let _ = client.commit().await;
                 let u_id: i64 = row.get(0);
                 let s_id: Option<i64> = row.get(1);
                 let b_name: String = row.get(2);

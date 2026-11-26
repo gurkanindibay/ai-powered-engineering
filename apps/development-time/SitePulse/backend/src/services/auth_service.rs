@@ -72,7 +72,6 @@ impl AuthService {
             // A former resident whose charge is still open keeps the unit, so the
             // statement they must settle stays reachable; a current tie wins the pick.
             let row=client.query_opt("SELECT u.id FROM units u WHERE u.site_id=$1 AND u.deleted_at IS NULL AND (u.owner_person_id=$2 OR u.tenant_person_id=$2 OR EXISTS(SELECT 1 FROM occupancy_members m JOIN unit_occupancies o ON o.id=m.occupancy_id WHERE o.unit_id=u.id AND o.is_active AND o.end_date IS NULL AND m.person_id=$2) OR EXISTS(SELECT 1 FROM dues_liabilities d WHERE d.unit_id=u.id AND d.liable_person_id=$2 AND d.status NOT IN ('PAID','CANCELLED'))) ORDER BY (CASE WHEN u.owner_person_id=$2 OR u.tenant_person_id=$2 THEN 0 ELSE 1 END), u.id LIMIT 1",&[&site,&user.person_id]).await.map_err(|_|"Identity storage unavailable".to_string())?;
-            let _ = client.commit().await;
             return Ok(row.map(|r| r.get::<_, i64>(0).to_string()));
         }
         let inner = self.state.inner.read().await;

@@ -95,7 +95,7 @@ impl CapitalProjectService {
                     match row_res {
                         Ok(row) => {
                             let id_num: i64 = row.get("id");
-                            let _ = client.commit().await;
+                            client.commit().await.map_err(|e| e.to_string())?;
                             project_id_str = id_num.to_string();
                         }
                         Err(e) => {
@@ -199,7 +199,7 @@ impl CapitalProjectService {
                                 .await;
                             if let Ok(row) = row_res {
                                 let id_val: i64 = row.get("id");
-                                let _ = client.commit().await;
+                                client.commit().await.map_err(|e| e.to_string())?;
                                 inst_id = id_val.to_string();
                             }
                         }
@@ -319,7 +319,6 @@ impl CapitalProjectService {
                             &[&site_opt],
                         )
                         .await;
-                    let _ = client.commit().await;
 
                     if let Ok(rows) = rows_res {
                         for r in rows {
@@ -428,7 +427,6 @@ impl CapitalProjectService {
                             &[&p_id],
                         )
                         .await;
-                    let _ = client.commit().await;
 
                     if let Ok(rows) = rows_res {
                         for r in rows {
@@ -955,7 +953,6 @@ impl CapitalProjectService {
                             &[&p_id],
                         )
                         .await;
-                    let _ = client.commit().await;
 
                     if let Ok(rows) = rows_res {
                         for r in rows {

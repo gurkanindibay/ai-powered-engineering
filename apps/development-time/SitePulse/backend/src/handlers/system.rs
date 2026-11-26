@@ -589,7 +589,6 @@ pub async fn provision_site_units(
             };
             let row = match client.query_opt("SELECT id, name, slug, address, status, plan_type, license_end_date FROM sites WHERE id = $1", &[&id_num]).await {
                 Ok(r) => {
-                    let _ = client.commit().await;
                     r
                 }
                 Err(e) => {
@@ -685,7 +684,6 @@ pub async fn provision_site_units(
             };
             let row = match client.query_opt("SELECT id, name, slug, address, status, plan_type, license_end_date FROM sites WHERE slug = $1 OR LOWER(name) = LOWER($2)", &[&slug, &s_name]).await {
                 Ok(r) => {
-                    let _ = client.commit().await;
                     r
                 }
                 Err(e) => {
@@ -726,7 +724,8 @@ pub async fn provision_site_units(
                 id_str
             } else {
                 let license_end = new_site_license_end();
-                // tenant-guard: platform — the read transaction above is already committed.
+                drop(client);
+                // tenant-guard: platform — the read above is finished; the insert is its own transaction.
                 let wtx = match crate::db::begin_platform_tx(&mut conn).await {
                     Ok(tx) => tx,
                     Err(e) => {

@@ -809,7 +809,6 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
             Err(_) => return SecurityError::Unauthenticated.into_response(),
         };
         let row=match client.query_opt("SELECT g.site_id,g.permissions FROM support_grants g JOIN users approver ON approver.id=g.approved_by JOIN sites site ON site.id=g.site_id WHERE g.id=$1 AND g.operator_user_id=$2 AND g.approved_by<>g.operator_user_id AND approver.role='SAAS_ADMIN' AND approver.is_active AND g.revoked_at IS NULL AND g.expires_at>now() AND site.status IN ('ACTIVE','TRIAL') AND site.deleted_at IS NULL",&[&grant,&user]).await{Ok(Some(row))=>row,Ok(None)=>return SecurityError::Forbidden.into_response(),Err(_)=>return SecurityError::Unavailable.into_response()};
-        let _ = client.commit().await;
         claims.site_id = row.get::<_, i64>(0).to_string();
         audit.support_grant_id = Some(grant.to_string());
         permissions = row

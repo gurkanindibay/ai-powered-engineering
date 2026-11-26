@@ -106,7 +106,6 @@ async fn site_active(state: &AppState, user: &User) -> Result<(), SecurityError>
         let active = crate::db::site_is_active_from_client(&*client, &user.site_id)
             .await
             .map_err(|_| SecurityError::Unavailable)?;
-        let _ = client.commit().await;
         if !active {
             return Err(SecurityError::Unauthenticated);
         }

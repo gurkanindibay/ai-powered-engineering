@@ -130,7 +130,6 @@ impl RegistrationApprovalService {
                             &[&site_num],
                         )
                         .await;
-                    let _ = client.commit().await;
                     if let Some(rows) = crate::db::logged(rows_res, "registration_approval_service")
                     {
                         return rows

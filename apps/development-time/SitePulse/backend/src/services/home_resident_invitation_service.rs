@@ -289,7 +289,6 @@ impl HomeResidentInvitationService {
                             &[&crate::db::parse_id_to_i64(unit_id).unwrap_or(0)],
                         )
                         .await;
-                    let _ = client.commit().await;
                     if let Some(rows) =
                         crate::db::logged(rows_res, "home_resident_invitation_service")
                     {

@@ -1393,7 +1393,6 @@ impl SiteAdminService {
                 }
 
                     let rows_res = client.query(query, &[&site_numeric]).await;
-                    let _ = client.commit().await;
                     if let Some(rows) = crate::db::logged(rows_res, "site_admin_service") {
                         if !rows.is_empty() {
                             let mut db_result = Vec::new();

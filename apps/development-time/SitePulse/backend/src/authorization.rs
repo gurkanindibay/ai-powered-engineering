@@ -228,7 +228,6 @@ pub async fn statement_unit(
             )
             .await
             .map_err(|_| SecurityError::Unavailable)?;
-        let _ = client.commit().await;
         return row
             .map(|_| StatementAccess::Historical)
             .ok_or(SecurityError::NotFound);
@@ -285,7 +284,6 @@ async fn unit_relationship(
             .await
             .map_err(|_| SecurityError::Unavailable)?;
         let row=client.query_opt("SELECT u.site_id FROM units u JOIN users actor ON actor.id=$3 WHERE u.id=$1 AND u.site_id=$2 AND u.deleted_at IS NULL AND (NOT $5 OR u.owner_person_id=actor.person_id) AND (actor.role='SITE_MANAGER' OR $4 OR u.owner_person_id=actor.person_id OR u.tenant_person_id=actor.person_id OR EXISTS (SELECT 1 FROM occupancy_members m JOIN unit_occupancies o ON o.id=m.occupancy_id WHERE o.unit_id=u.id AND o.end_date IS NULL AND m.person_id=actor.person_id))",&[&unit.0,&site.0,&user,&claims.is_saas_admin(),&owner_only]).await.map_err(|_|SecurityError::Unavailable)?;
-        let _ = client.commit().await;
         return row.map(|_| ()).ok_or(SecurityError::NotFound);
     }
     let inner = state.inner.read().await;
@@ -355,7 +353,7 @@ pub async fn resource(
                     .ok_or(SecurityError::Unauthenticated)?;
                 let actor_role: String = actor_row.get(0);
                 let actor_person_id: i64 = actor_row.get(1);
-                let _ = client.commit().await;
+                drop(client);
                 drop(conn);
                 unit(state, claims, &unit_id.to_string()).await?;
                 if actor_role != "SITE_MANAGER" && !claims.is_saas_admin() {
