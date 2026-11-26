@@ -358,7 +358,9 @@ def main(argv: list[str] | None = None, run: Runner = gh, env: dict[str, str] | 
             if not model:
                 raise ClaimError("--model (or $AGENT_MODEL) is required for claim: it picks your agent name")
             state = agent_names.default_state_path(env)
-            agent_names.read_state(state)  # fail before touching GitHub if the file is broken
+            # Fail before touching GitHub on a broken state file or an unlisted model.
+            agent_names.read_state(state)
+            agent_names.require_family(agent_names.load_roster(), model)
             previous = claims_in(read_labels(run, repo, args.number)) if args.force else []
             ok, message = claim(run, repo, args.number, harness, session, args.force)
             if ok:

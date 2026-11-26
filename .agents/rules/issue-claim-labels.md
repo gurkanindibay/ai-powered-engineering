@@ -9,7 +9,7 @@ Operationalizes AGENTS.md rule 10. Applies the moment you pick an issue, before 
 
 ## Your agent name
 
-The user tells agents apart by name, not by session id. Each model has one fixed name (`python3 scripts/agent_names.py roster`; roster in `config/agent-names.json`); a second agent on the same model is numbered (`Alparslan 2`). **Never choose or type a name yourself**: the tools assign it.
+The user tells agents apart by name, not by session id. Each model family has its own five or more names, and no name is shared between families, so a name always identifies the model (`python3 scripts/agent_names.py roster`; roster in `config/agent-names.json`). An agent takes its family's first free name; a number is added only when all are busy (`Alparslan 2`). A model with no family is refused: pass the exact model id, or add the family with five names. **Never choose or type a name yourself**: the tools assign it.
 
 - **Working on an issue**: `claim` (step 2) reserves the name, adds the `agent:<name>` label and prints the session title.
 - **Any other task** (review, investigation, work with no issue): reserve one before you start:

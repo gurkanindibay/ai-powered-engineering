@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Give every working agent a readable name, so people can tell agents apart.
 
-The roster (config/agent-names.json, committed) binds each model family to one
-historical leader: the same model always gets the same name. A second agent on
-the same model gets a number ("Alparslan 2"). Unknown models take a free name
-from the pool.
+The roster (config/agent-names.json, committed) gives each model family its own
+five or more historical names; no name is shared between families, so a name
+always identifies the model. An agent takes its family's first free name (a
+number is added only when all are busy, e.g. "Alparslan 2"). A model with no
+family is refused.
 
 Who holds which name right now is local state, shared by all worktrees of this
 clone: <main checkout>/.agents/local/agent-names.json. That directory ignores
@@ -75,27 +76,31 @@ def normalize_model(model: str) -> str:
     return re.sub(r"[\s._/]+", "-", model.strip().lower())
 
 
-def bound_name(roster: dict, model: str) -> str | None:
+def family_of(roster: dict, model: str) -> dict | None:
     wanted = normalize_model(model)
-    return next((m["name"] for m in roster["models"] if re.search(m["pattern"], wanted)), None)
+    return next((m for m in roster["models"] if re.search(m["pattern"], wanted)), None)
+
+
+def require_family(roster: dict, model: str) -> dict:
+    family = family_of(roster, model)
+    if family is None:
+        raise RosterError(f"no agent names for model '{model}': pass the exact model id, "
+                          f"or add a family with five names to {ROSTER_PATH.name}")
+    return family
 
 
 def same_identity(roster: dict, left: str, right: str) -> bool:
-    """Two spellings of one bound model ("sonnet", "claude-sonnet-5-5") share a
-    name; unlisted models must match exactly."""
-    bound = bound_name(roster, left)
-    if bound:
-        return bound == bound_name(roster, right)
-    return normalize_model(left) == normalize_model(right)
+    """Two spellings of one model ("sonnet", "claude-sonnet-5-5") share a name."""
+    family = family_of(roster, left)
+    return family is not None and family == family_of(roster, right)
 
 
 def pick_name(roster: dict, model: str, taken: set[str]) -> str:
-    """Model-bound name (numbered if busy), else the first free pool name."""
-    base = bound_name(roster, model)
-    candidates = [base] if base else list(roster["pool"])
+    """The model family's first free name; numbered only once all are busy."""
+    names = require_family(roster, model)["names"]
     number = 1
     while True:
-        for candidate in candidates:
+        for candidate in names:
             name = candidate if number == 1 else f"{candidate} {number}"
             if name not in taken:
                 return name
@@ -159,6 +164,7 @@ def reserve(path: Path, harness: str, session: str, model: str, issue: int | Non
     on other machines do not share the local file).
     """
     roster = roster or load_roster()
+    require_family(roster, model)
     now = now or now_utc()
     with locked(path):
         entries = [e for e in read_state(path) if alive(e, now)]
@@ -239,8 +245,7 @@ def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> in
     try:
         if args.action == "roster":
             roster = load_roster()
-            lines = [f"{m['model']:<28} {m['name']}" for m in roster["models"]]
-            lines.append(f"{'other models':<28} {', '.join(roster['pool'])}")
+            lines = [f"{m['model']:<26} {', '.join(m['names'])}" for m in roster["models"]]
             print(json.dumps(roster, ensure_ascii=False) if args.json else "\n".join(lines))
             return 0
         path = default_state_path(env)

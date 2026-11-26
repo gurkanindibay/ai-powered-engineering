@@ -262,7 +262,10 @@ class AgentNameTests(unittest.TestCase):
     def reserve(self, session, model="claude-sonnet-5-5", **kwargs):
         return agent_names.reserve(self.state, "claude", session, model, **kwargs)["name"]
 
-    def test_each_model_has_its_bound_name(self):
+    def first_name(self, model):
+        return agent_names.family_of(self.roster, model)["names"][0]
+
+    def test_each_model_has_its_bound_names(self):
         expected = {
             "claude-fable-5-2": "Fatih Sultan Mehmet", "claude-opus-5-5[1m]": "Yavuz Sultan Selim",
             "Sonnet 5.5": "Alparslan", "claude-haiku-5-5": "Ulubatlı Hasan",
@@ -270,10 +273,10 @@ class AgentNameTests(unittest.TestCase):
             "gemini-3.1-pro": "Baybars", "Gemini 3.8 Flash": "Kuşçubaşı Eşref",
             "deepseek/deepseek-chat": "Piri Reis",
         }
-        self.assertEqual({m: agent_names.bound_name(self.roster, m) for m in expected}, expected)
+        self.assertEqual({m: self.first_name(m) for m in expected}, expected)
 
-    def test_later_gpt_version_does_not_inherit_the_6_2_name(self):
-        self.assertEqual(agent_names.bound_name(self.roster, "gpt-6.20-sol"), "Tuğrul Bey")
+    def test_later_gpt_version_does_not_inherit_the_6_2_names(self):
+        self.assertEqual(self.first_name("gpt-6.20-sol"), "Tuğrul Bey")
 
     def test_model_spellings_share_one_name(self):
         self.assertEqual([self.reserve("a", "sonnet"), self.reserve("a")], ["Alparslan", "Alparslan"])
@@ -293,18 +296,27 @@ class AgentNameTests(unittest.TestCase):
                 self.reserve("a")
         self.assertEqual(self.reserve("a"), "Alparslan")
 
-    def test_names_are_unique_and_labels_fit_github(self):
-        names = [m["name"] for m in self.roster["models"]] + self.roster["pool"]
+    def test_every_model_has_five_names_that_no_other_model_uses(self):
+        self.assertNotIn("pool", self.roster)
+        self.assertTrue(all(len(m["names"]) >= 5 for m in self.roster["models"]))
+        names = [n for m in self.roster["models"] for n in m["names"]]
         self.assertEqual(len(names), len(set(names)))
         self.assertTrue(all(len(agent_names.label_for(f"{n} 99")) <= ic.MAX_LABEL for n in names))
 
-    def test_same_model_twice_is_numbered_and_session_keeps_its_name(self):
-        self.assertEqual([self.reserve("a"), self.reserve("b"), self.reserve("a")],
-                         ["Alparslan", "Alparslan 2", "Alparslan"])
+    def test_concurrent_agents_use_all_family_names_before_numbering(self):
+        got = [self.reserve(str(i)) for i in range(6)]
+        self.assertEqual(got, [*agent_names.family_of(self.roster, "sonnet")["names"], "Alparslan 2"])
+        self.assertEqual(self.reserve("0"), "Alparslan")
 
-    def test_unknown_model_takes_pool_name_and_skips_names_used_elsewhere(self):
-        self.assertEqual(self.reserve("a", "mystery-1"), self.roster["pool"][0])
-        self.assertEqual(self.reserve("b", taken_elsewhere={"Alparslan"}), "Alparslan 2")
+    def test_unlisted_model_is_refused_before_github_is_touched(self):
+        fake = FakeGh()
+        with redirect_stderr(io.StringIO()), redirect_stdout(io.StringIO()):
+            code = ic.main(["claim", "7", "--harness", "claude", "--session", "a", "--model", "mystery-1"],
+                           run=fake, env={"AGENT_NAMES_STATE": str(self.state)})
+        self.assertEqual((code, fake.labels, agent_names.read_state(self.state)), (2, [], []))
+
+    def test_name_used_elsewhere_is_skipped(self):
+        self.assertEqual(self.reserve("b", taken_elsewhere={"Alparslan"}), "Kılıç Arslan")
 
     def test_release_frees_name_only_after_last_issue(self):
         self.reserve("a", issue=1)
@@ -340,8 +352,8 @@ class AgentNameTests(unittest.TestCase):
         fake.other_open = [["in progress", "claim:claude/other-machine", "agent:Alparslan"]]
         code, out = run_cli(fake, "claim", "7", "--harness", "claude", "--session", "a", state=self.state)
         self.assertEqual((code, out["agent"], out["session_title"]),
-                         (0, "Alparslan 2", f"[Alparslan 2] #7 {TITLE}"))
-        self.assertIn("agent:Alparslan 2", fake.labels)
+                         (0, "Kılıç Arslan", f"[Kılıç Arslan] #7 {TITLE}"))
+        self.assertIn("agent:Kılıç Arslan", fake.labels)
         run_cli(fake, "release", "7", "--harness", "claude", "--session", "a", state=self.state)
         self.assertEqual((fake.labels, agent_names.read_state(self.state)), ([], []))
 
