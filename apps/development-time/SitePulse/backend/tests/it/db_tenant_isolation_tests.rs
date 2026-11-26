@@ -274,6 +274,23 @@ async fn rls_fails_closed_when_unbound_and_allows_explicit_platform() {
         .unwrap()
         .get(0);
     assert_eq!(visible_units, 0, "unbound unit query must fail closed");
+
+    // UPDATE and DELETE address no rows when the transaction is unbound, so a
+    // tenant's data cannot be changed or removed either (V56).
+    let updated = tx
+        .execute(
+            "UPDATE blocks SET block_name = 'Hijacked' WHERE site_id = $1",
+            &[&a],
+        )
+        .await
+        .expect("an unbound update runs but matches no rows");
+    assert_eq!(updated, 0, "unbound update must not touch tenant rows");
+    let deleted = tx
+        .execute("DELETE FROM blocks WHERE site_id = $1", &[&a])
+        .await
+        .expect("an unbound delete runs but matches no rows");
+    assert_eq!(deleted, 0, "unbound delete must not touch tenant rows");
+
     let err = tx
         .execute(
             "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, 'Unbound', 1)",
@@ -288,6 +305,34 @@ async fn rls_fails_closed_when_unbound_and_allows_explicit_platform() {
     assert!(message.contains("row-level security"), "{:?}", err);
     tx.rollback().await.unwrap();
 
+    // The V54 predicate is gone: every tenant policy uses sp_platform() and
+    // guards the tenant lookup; no function with the old name remains.
+    let stale_policies: i64 = client
+        .query_one(
+            "SELECT count(*) FROM pg_policy p
+             WHERE p.polname = 'tenant_isolation'
+               AND (coalesce(pg_get_expr(p.polqual, p.polrelid), '') NOT LIKE '%sp_platform()%'
+                    OR coalesce(pg_get_expr(p.polqual, p.polrelid), '')
+                       NOT LIKE '%sp_tenant_site() IS NOT NULL%')",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(stale_policies, 0, "every tenant policy must be fail-closed");
+    let old_function: i64 = client
+        .query_one(
+            "SELECT count(*) FROM pg_proc WHERE proname = 'sp_is_platform'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        old_function, 0,
+        "sp_is_platform() was replaced by sp_platform()"
+    );
+
     // Explicit platform binding allows reading across all sites even under FORCE RLS.
     let tx = db::begin_platform_read(&mut client).await.unwrap();
     let platform_sites: i64 = tx
@@ -299,6 +344,58 @@ async fn rls_fails_closed_when_unbound_and_allows_explicit_platform() {
     tx.commit().await.unwrap();
 
     drop(client);
+    t.drop_db().await;
+}
+
+/// The startup readiness probe must reject a policy that a later migration created
+/// by hand without the fail-closed shape, not only one that is missing entirely.
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn rls_guard_rejects_a_tenant_blind_policy() {
+    let t = TestDb::create("rls_guard_shape").await;
+    assert!(
+        db::rls_guard_installed(&t.pool).await.unwrap(),
+        "the migrated schema passes the guard"
+    );
+
+    let owner = t.owner.get().await.unwrap();
+    owner
+        .batch_execute(
+            "DROP POLICY tenant_isolation ON blocks;
+             CREATE POLICY tenant_isolation ON blocks
+                 USING (TRUE) WITH CHECK (TRUE);",
+        )
+        .await
+        .unwrap();
+    assert!(
+        !db::rls_guard_installed(&t.pool).await.unwrap(),
+        "a policy without the platform switch fails readiness"
+    );
+
+    owner
+        .batch_execute(
+            "DROP POLICY tenant_isolation ON blocks;
+             CREATE POLICY tenant_isolation ON blocks
+                 USING (sp_platform() OR (TRUE))
+                 WITH CHECK (sp_platform() OR (TRUE));",
+        )
+        .await
+        .unwrap();
+    assert!(
+        !db::rls_guard_installed(&t.pool).await.unwrap(),
+        "a policy without the unbound guard fails readiness"
+    );
+
+    owner
+        .batch_execute("DROP POLICY tenant_isolation ON blocks;")
+        .await
+        .unwrap();
+    assert!(
+        !db::rls_guard_installed(&t.pool).await.unwrap(),
+        "a table without the policy must fail readiness"
+    );
+
+    drop(owner);
     t.drop_db().await;
 }
 

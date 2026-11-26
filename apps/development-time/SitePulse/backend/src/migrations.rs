@@ -87,6 +87,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(53, "V53__child_table_tenant_rls.sql"),
     migration!(54, "V54__tenant_rls_fail_closed.sql"),
     migration!(55, "V55__system_reference_tables.sql"),
+    migration!(56, "V56__tenant_rls_platform_guard.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.
