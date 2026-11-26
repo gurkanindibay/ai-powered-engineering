@@ -89,6 +89,9 @@ pub fn split_monthly_dues(
     }
 
     let chargeable_days = period_end.signed_duration_since(charge_start).num_days() + 1;
+    // One share per responsible person for the whole month, in day order: a person whose
+    // days are not contiguous (a tenant returning after a stay) keeps a single debt, which
+    // is what `uq_unit_period_expense` can store.
     let mut segments: Vec<((ResponsibleParty, Option<i64>), i64)> = Vec::new();
     for offset in 0..chargeable_days {
         let Some(date) = charge_start.checked_add_days(Days::new(offset as u64)) else {
@@ -99,9 +102,9 @@ pub fn split_monthly_dues(
             .find(|span| contains(span, date))
             .map(|span| (span.party, span.person_id))
             .unwrap_or((ResponsibleParty::Owner, None));
-        match segments.last_mut() {
-            Some((last, days)) if *last == key => *days += 1,
-            _ => segments.push((key, 1)),
+        match segments.iter_mut().find(|(seen, _)| *seen == key) {
+            Some((_, days)) => *days += 1,
+            None => segments.push((key, 1)),
         }
     }
 
@@ -444,6 +447,86 @@ mod tests {
         assert_eq!(
             shares.iter().map(|share| share.amount).sum::<Decimal>(),
             money("1000.00")
+        );
+    }
+
+    #[test]
+    fn a_tenant_inside_the_month_leaves_one_owner_share() {
+        // Owner days 1-5 and 16-30 are the same debt: one share, not two rows the
+        // unique index would collapse.
+        let spans = [OccupancySpan {
+            party: ResponsibleParty::Tenant,
+            person_id: Some(7),
+            starts_on: date("2026-11-06"),
+            ends_before: Some(date("2026-11-16")),
+        }];
+        let shares = split_monthly_dues(
+            money("1500.00"),
+            date("2026-11-01"),
+            None,
+            &spans,
+            true,
+            date("2026-11-30"),
+        )
+        .expect("valid amount");
+        assert_eq!(
+            shares,
+            vec![
+                ProratedShare {
+                    party: ResponsibleParty::Owner,
+                    person_id: None,
+                    amount: money("1000.00")
+                },
+                ProratedShare {
+                    party: ResponsibleParty::Tenant,
+                    person_id: Some(7),
+                    amount: money("500.00")
+                },
+            ]
+        );
+        assert_eq!(
+            shares.iter().map(|share| share.amount).sum::<Decimal>(),
+            money("1500.00")
+        );
+    }
+
+    #[test]
+    fn a_person_who_returns_in_the_same_month_keeps_one_share() {
+        let spans = [
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                person_id: Some(2),
+                starts_on: date("2026-11-01"),
+                ends_before: Some(date("2026-11-06")),
+            },
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                person_id: Some(3),
+                starts_on: date("2026-11-06"),
+                ends_before: Some(date("2026-11-16")),
+            },
+            OccupancySpan {
+                party: ResponsibleParty::Tenant,
+                person_id: Some(2),
+                starts_on: date("2026-11-16"),
+                ends_before: None,
+            },
+        ];
+        let shares = split_monthly_dues(
+            money("1500.00"),
+            date("2026-11-01"),
+            None,
+            &spans,
+            true,
+            date("2026-11-30"),
+        )
+        .expect("valid amount");
+        assert_eq!(shares.len(), 2, "{shares:?}");
+        assert_eq!(shares[0].person_id, Some(2));
+        assert_eq!(shares[1].person_id, Some(3));
+        assert_eq!(
+            shares.iter().map(|share| share.amount).sum::<Decimal>(),
+            money("1500.00")
         );
     }
 
