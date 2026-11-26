@@ -57,7 +57,10 @@ class PagesSiteTests(unittest.TestCase):
                        "epics": 1, "epics_verified": 0, "epics_failing": 1},
             "epics": [{"id": "EPIC-01", "title": "Safe title", "stories": 1, "stories_with_scenarios": 1,
                        "stories_passing": 0, "scenarios": 1, "automated": 1, "passing": 0, "failing": 1,
-                       "no_result": 0, "planned": 0, "health": "failing", "ignored": sentinel}],
+                       "no_result": 0, "planned": 0, "health": "failing", "ignored": sentinel,
+                       "story_details": [{"id": "STORY-01-01", "title": "Safe story", "state": "failing",
+                                          "scenarios": [{"id": "SC-01-01-01", "name": "Safe scenario",
+                                                         "state": "failing", "failure": sentinel}]}]}],
             "scenarios": {"SC-01-01-01": {"state": "failing", "name": "Safe scenario", "epic": "EPIC-01",
                                           "story": "STORY-01-01", "error": sentinel}},
             "recent_changes": [{"samples": [sentinel]}],
@@ -95,6 +98,11 @@ class PagesSiteTests(unittest.TestCase):
             self.assertTrue((site / "index.html").is_file())
             self.assertTrue((site / "latest.html").is_file())
             self.assertTrue((site / "history.html").is_file())
+            dashboard = (site / "index.html").read_text(encoding="utf-8")
+            self.assertIn("Show 1 stories", dashboard)
+            self.assertIn("STORY-01-01", dashboard)
+            self.assertIn("Safe story", dashboard)
+            self.assertIn("SC-01-01-01", dashboard)
             self.assertTrue((site / "reports/12345-2/index.html").is_file())
             self.assertIn("reports/12345-2/", (site / "history.html").read_text(encoding="utf-8"))
             all_public = "\n".join(path.read_text(encoding="utf-8") for path in site.rglob("*") if path.is_file())

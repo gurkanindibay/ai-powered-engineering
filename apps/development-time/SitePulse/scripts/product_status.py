@@ -107,8 +107,10 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
                "stories_with_scenarios": 0, "stories_passing": 0, "scenarios": 0, "automated": 0,
                **{state: 0 for state in STATES}}
         epic_evidence = defaultdict(int)
+        story_rows = []
         for story in story_ids:
             states = []
+            story_scenarios = []
             for scenario in by_story.get(story, []):
                 browser_state = scenario_state(scenario.mode, statuses.get(scenario.id, []))
                 evidence_state = _canonical_evidence(resolved.get(scenario.id, {}).get("evidence"))
@@ -120,9 +122,15 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
                                            "browser_step_history": statuses.get(scenario.id, []),
                                            **({"evidence": evidence_state} if evidence_state else {})}
                 states.append(state)
+                story_scenarios.append({"id": scenario.id, "name": scenario.name, "state": state})
             if states:
                 row["stories_with_scenarios"] += 1
                 row["stories_passing"] += all(state == "passing" for state in states)
+            story_state = ("failing" if "failing" in states else "planned" if states and all(s == "planned" for s in states)
+                           else "passing" if states and all(s == "passing" for s in states)
+                           else "no_result" if states else "not_specified")
+            story_rows.append({"id": story, "title": catalogue.stories[story], "state": story_state,
+                               "scenarios": story_scenarios})
             for state in states:
                 row[state] += 1
             row["scenarios"] += len(states)
@@ -130,6 +138,7 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
         if evidence:
             row["evidence_counts"] = dict(sorted(epic_evidence.items()))
         row["health"] = epic_health(row)
+        row["story_details"] = story_rows
         epics.append(row)
     keys = ("stories", "stories_with_scenarios", "stories_passing", "scenarios", "automated", *STATES)
     totals = {key: sum(row[key] for row in epics) for key in keys}
@@ -408,6 +417,19 @@ def _epic_row(row: dict) -> str:
     counts = " · ".join(f"{row[state]} {STATE_LABELS[state].split(' ')[0].lower().rstrip(',')}"
                              for state in STATES if row[state]) or "no scenarios"
     health = row["health"]
+    story_details = row.get("story_details", [])
+    story_rows = ""
+    for story in story_details:
+        scenario_rows = "".join(
+            f'<li><span class="epic-id">{_esc(scenario["id"])}</span> {_esc(scenario["name"])} '
+            f'<span class="muted">({_esc(STATE_LABELS.get(scenario["state"], scenario["state"]))})</span></li>'
+            for scenario in story.get("scenarios", []))
+        story_rows += (f'<li><span class="epic-id">{_esc(story["id"])}</span> {_esc(story["title"])} '
+                       f'<span class="health {story["state"]}">{_esc(STATE_LABELS.get(story["state"], "No scenarios"))}</span>'
+                       f'<ul>{scenario_rows}</ul></li>')
+    story_cell = (f'<details class="story-breakdown"><summary>Show {len(story_details)} stories</summary>'
+                  f'<ul>{story_rows}</ul></details>') if story_details else ""
+    story_detail_row = f'<tr class="story-detail"><td colspan="6">{story_cell}</td></tr>' if story_cell else ""
     return (
         f'<tr><td class="epic"><span class="epic-id">{_esc(row["id"])}</span> {_esc(row["title"])}</td>'
         f'<td class="num">{row["stories_with_scenarios"]}/{row["stories"]}</td>'
@@ -415,7 +437,7 @@ def _epic_row(row: dict) -> str:
         f'<td class="num">{_pct(row["automated"], row["scenarios"])}%</td>'
         f'<td class="num">{_pct(row["passing"], row["scenarios"])}%</td>'
         f'<td><span class="health {health}"><span aria-hidden="true">{HEALTH_ICONS[health]}</span> '
-        f'{_esc(HEALTH_LABELS[health])}</span></td></tr>')
+        f'{_esc(HEALTH_LABELS[health])}</span></td></tr>{story_detail_row}')
 
 
 def _attention(latest: dict) -> str:
@@ -703,7 +725,9 @@ figure.wide{grid-column:1/-1}figcaption{margin-bottom:8px}figcaption b{display:b
 figcaption span{font-size:12px;color:var(--text-2)}
 .chart svg{display:block;width:100%;height:auto;overflow:visible}.chart text{font:11px system-ui,sans-serif;fill:var(--muted)}
 .chart .val{fill:var(--text);font-weight:600}.chart .hit{cursor:pointer}
-.table-view{margin-top:10px;font-size:13px}.table-view summary,.change summary{cursor:pointer}
+.table-view{margin-top:10px;font-size:13px}.table-view summary,.change summary,.story-breakdown summary{cursor:pointer}
+.story-detail td{padding:0 12px 8px 24px}.story-breakdown{font-size:13px}.story-breakdown>summary{color:var(--text-2);font-weight:600}
+.story-breakdown ul{margin:6px 0;padding-left:22px}.story-breakdown ul ul{margin:3px 0;color:var(--text-2)}
 .table-view table{margin-top:8px}
 .day{margin-top:14px}.day h3{color:var(--text-2);font-weight:600}
 .change{background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:8px 12px;margin:6px 0}

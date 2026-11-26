@@ -70,6 +70,10 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual(epic["health"], "failing")
         self.assertEqual(snap["totals"]["epics_failing"], 1)
         self.assertEqual(snap["scenarios"]["SC-01-01-03"]["state"], "no_result")
+        first_story = epic["story_details"][0]
+        self.assertEqual((first_story["id"], first_story["state"]), ("STORY-01-01", "failing"))
+        self.assertEqual([scenario["state"] for scenario in first_story["scenarios"]],
+                         ["passing", "failing", "no_result", "planned"])
         self.assertEqual(snap["generated_at"], "2026-11-15T10:00:00Z")
 
     def test_epic_is_verified_only_when_every_scenario_passes(self):
@@ -152,6 +156,9 @@ class DashboardTest(unittest.TestCase):
         legacy = ps.snapshot_from_summary({"run_id": "20261113T080000Z-abc1234", "status": "PASS", "junit": junit})
         page = ps.render_html([legacy, first, {**second, "href": "reports/2-1/"}])
         self.assertIn("SitePulse product status", page)
+        self.assertIn("Show 2 stories", page)
+        self.assertIn("STORY-01-01", page)
+        self.assertIn("SC-01-01-02", page)
         self.assertIn("Demo &lt;epic&gt;", page)
         self.assertNotIn("Demo <epic>", page)
         self.assertIn("1 failing scenario", page)

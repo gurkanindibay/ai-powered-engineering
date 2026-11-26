@@ -116,6 +116,21 @@ def _safe_snapshot(raw: object, summary: dict) -> dict | None:
                    else "not_specified"}
             row.update({key: int(value) for key in EPIC_NUMBERS
                         if (value := _nonnegative_number(epic.get(key))) is not None})
+            story_details = []
+            for story in epic.get("story_details", []) if isinstance(epic.get("story_details", []), list) else []:
+                if not isinstance(story, dict) or not re.fullmatch(r"STORY-\d{2}-\d{2}", str(story.get("id", ""))):
+                    continue
+                state = story.get("state") if story.get("state") in (*SNAPSHOT_STATES, "not_specified") else "no_result"
+                scenarios = []
+                for scenario in story.get("scenarios", []) if isinstance(story.get("scenarios", []), list) else []:
+                    if not isinstance(scenario, dict) or not SCENARIO_ID.fullmatch(str(scenario.get("id", ""))):
+                        continue
+                    scenario_state = scenario.get("state") if scenario.get("state") in SNAPSHOT_STATES else "no_result"
+                    scenarios.append({"id": scenario["id"], "name": _safe_label(scenario.get("name"), scenario["id"]),
+                                      "state": scenario_state})
+                story_details.append({"id": story["id"], "title": _safe_label(story.get("title"), story["id"]),
+                                      "state": state, "scenarios": scenarios})
+            row["story_details"] = story_details
             safe_epics.append(row)
         result["epics"] = safe_epics
     scenarios = raw.get("scenarios")
