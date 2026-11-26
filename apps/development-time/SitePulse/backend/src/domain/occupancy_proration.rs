@@ -1,9 +1,10 @@
 //! Splits monthly operational dues between the people responsible for its days.
 //!
 //! A session's end date is exclusive, matching `unit_occupancies`. Days with no
-//! active session belong to the owner. Consecutive days of the same responsible
-//! person form one share, so successive occupants of a unit get their own debt;
-//! the final share receives the remainder so rounding cannot change the total.
+//! active session belong to the owner. All days of the same responsible person
+//! form one share, even when they are not contiguous, so successive occupants of
+//! a unit get their own debt and one person never owes two rows of a period; the
+//! final share receives the remainder so rounding cannot change the total.
 
 use chrono::{Datelike, Days, NaiveDate};
 use rust_decimal::{Decimal, RoundingStrategy};
