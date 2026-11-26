@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
@@ -258,14 +259,27 @@ class PublicSafeReportingTests(unittest.TestCase):
             actions_evidence = tmp_path / "actions-evidence"
             site = tmp_path / "site"
 
-            # 1. Run ci_test_report.build
-            summary = ctr.build(shards, out, "CI test run", history, actions_evidence, "45054743421", "1")
+            # The pending requirement this check needs lives in the fixture catalogue, not in
+            # the repository's: with every scenario automated, a live catalogue holds none and
+            # the pending surface would go unchecked.
+            pending_scenario = ctr.ft.Scenario(
+                id="SC-06-06-99",
+                name="A requirement nobody automated yet",
+                tags=["EPIC-06", "STORY-06-06", "layer:backend", "pending"],
+                file="EPIC-06/STORY-06-06-forced-password-change-gate.feature",
+                line=1,
+            )
+            catalogue = ctr.ft.load_catalogue()
+            catalogue.scenarios.append(pending_scenario)
+
+            with mock.patch.object(ctr.ft, "load_catalogue", return_value=catalogue):
+                # 1. Run ci_test_report.build
+                summary = ctr.build(shards, out, "CI test run", history, actions_evidence, "45054743421", "1")
+                # 2. Run publish_test_report.build
+                pub_result = pub.build(out, site, "45054743421", "1")
             self.assertEqual(summary["status"], "FAIL")
             self.assertEqual(summary["junit"]["tests"], 4)
             self.assertEqual(summary["junit"]["failures"], 1)
-
-            # 2. Run publish_test_report.build
-            pub_result = pub.build(out, site, "45054743421", "1")
             self.assertEqual(pub_result["reports"], 1)
 
             # 3. VERIFY: None of the sensitive values appear in ANY public surface
@@ -313,11 +327,12 @@ class PublicSafeReportingTests(unittest.TestCase):
             self.assertEqual(unmapped_in_json[0]["native_id"], "test_unmapped_backend_check")
 
             # 7. VERIFY: Pending requirements remain in the scenario view.
-            #    The catalogue is this repository's, so read the pending scenarios from it
-            #    instead of naming one: automating a scenario, or tagging an existing one
-            #    `@linked`, must not break this public-surface check. A catalogue with no
-            #    pending scenario left has nothing to verify here.
-            pending = [s for s in ft.load_catalogue().scenarios if s.id and s.mode == "pending"]
+            pending = [s for s in catalogue.scenarios if s.id and s.mode == "pending"]
+            self.assertIn(
+                pending_scenario.id,
+                [scenario.id for scenario in pending],
+                "the fixture catalogue holds a pending scenario",
+            )
             for scenario in pending:
                 self.assertIn(scenario.id, latest_html)
                 self.assertEqual(status_json["scenarios"][scenario.id]["state"], "planned", scenario.id)
