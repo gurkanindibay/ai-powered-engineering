@@ -100,7 +100,17 @@ def fresh_data(stack):
 # eglDestroySync found" and the page crashes, about one load in five, which surfaced as
 # hung clicks and selector timeouts right after Flutter's first frame (issue #422).
 # CPU rasterisation removes that code path; it changes no rendered result the tests read.
-WEBKIT_LAUNCH_ENV = {"WEBKIT_SKIA_ENABLE_CPU_RENDERING": "1"}
+#
+# JavaScriptCore compiling on background threads while the code already runs corrupts
+# CanvasKit's wasm now and then: "RuntimeError: Out of bounds memory access" while laying out
+# a paragraph (the screen then stays blank), or a dead renderer process (issue #527). Playwright
+# 1.55.0 (WebKit 26.0) failed about 1 load in 70; with concurrent JIT off, none did. All JIT
+# tiers stay on, so CanvasKit keeps its speed. Re-check with scripts/webkit_load_soak.py when
+# Playwright is upgraded.
+WEBKIT_LAUNCH_ENV = {
+    "WEBKIT_SKIA_ENABLE_CPU_RENDERING": "1",
+    "JSC_useConcurrentJIT": "0",
+}
 
 
 @pytest.fixture(scope="session")
