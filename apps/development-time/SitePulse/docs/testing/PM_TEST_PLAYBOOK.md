@@ -160,7 +160,7 @@ What it proves: a unit whose occupants change over time keeps every month's liab
 | Reference clock | 2026-11-19 |
 | Periods | 3 (`Eylül`, `Ekim`, `Kasım 2026`) |
 | People | 10 (owners, tenants and former occupants) |
-| Liabilities / receipts | 21 / 0 |
+| Liabilities / receipts | 23 / 0 |
 | Overdue | 9,750.00 |
 
 | Unit | Type | Due | Advance | State |
@@ -221,7 +221,7 @@ What it proves: a bank statement finds the right unit through its virtual IBAN, 
 | Reference clock | 2026-11-19 |
 | Periods | 3 |
 | People | 11 (including one duplicate candidate) |
-| Liabilities / receipts | 21 / 0 |
+| Liabilities / receipts | 23 / 0 |
 | Overdue | 9,750.00 |
 | Virtual IBANs assigned | 7 |
 | Duplicate candidates | 1 |

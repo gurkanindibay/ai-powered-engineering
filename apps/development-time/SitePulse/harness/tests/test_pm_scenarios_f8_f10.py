@@ -115,7 +115,8 @@ class TestPmScenariosF8F10Constants(unittest.TestCase):
         self.assertEqual(totals["people"], 11)  # 10 changing occupancy + 1 duplicate candidate
         self.assertEqual(totals["accounts"], 7)
         self.assertEqual(totals["periods"], 3)
-        self.assertEqual(totals["liabilities"], 21)
+        # Two periods carry one row per successive occupant: A-2's Kasım tenants and A-4's sale month.
+        self.assertEqual(totals["liabilities"], 23)
         self.assertEqual(totals["receipts"], 0)
         self.assertEqual(totals["overdue"], Decimal("9750.00"))
         self.assertEqual(totals["advance"], Decimal("0.00"))
