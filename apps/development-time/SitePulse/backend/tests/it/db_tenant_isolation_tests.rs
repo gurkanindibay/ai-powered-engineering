@@ -799,6 +799,7 @@ async fn seed_resident(t: &TestDb, site: i64, name: &str, email: &str) -> i64 {
 /// gate, so it gets its own PostgreSQL coverage: a former tenant and a joint
 /// owner reach their own statement, an unrelated resident does not, and the
 /// grant does not widen to another unit route.
+// covers: SC-13-03-22 (Issue #489: a held advance grants only its owner's section)
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn statement_access_grants_former_debtors_in_postgresql() {
@@ -914,7 +915,6 @@ async fn statement_access_grants_former_debtors_in_postgresql() {
         body
     );
 
-    // covers: SC-13-03-22 (Issue #489: a held advance grants only its owner's section)
     let held_owner_token = login(&app, "held-owner@sitepulse.test", resident_password()).await;
     let (status, body) = call(&app, "GET", &statement_uri, &held_owner_token, None).await;
     assert_eq!(

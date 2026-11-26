@@ -309,13 +309,13 @@ mod tests {
         let day = date("2026-11-02");
         let owner = OccupancySpan {
             party: ResponsibleParty::Owner,
-            person_id: None,
+            person_id: Some(1),
             starts_on: day,
             ends_before: None,
         };
         let tenant = OccupancySpan {
             party: ResponsibleParty::Tenant,
-            person_id: None,
+            person_id: Some(2),
             starts_on: day,
             ends_before: None,
         };
@@ -344,13 +344,13 @@ mod tests {
         let spans = [
             OccupancySpan {
                 party: ResponsibleParty::Owner,
-                person_id: None,
+                person_id: Some(1),
                 starts_on: date("2026-10-01"),
                 ends_before: Some(date("2026-10-11")),
             },
             OccupancySpan {
                 party: ResponsibleParty::Tenant,
-                person_id: None,
+                person_id: Some(2),
                 starts_on: date("2026-10-11"),
                 ends_before: None,
             },
@@ -369,12 +369,12 @@ mod tests {
             vec![
                 ProratedShare {
                     party: ResponsibleParty::Owner,
-                    person_id: None,
+                    person_id: Some(1),
                     amount: money("483.87")
                 },
                 ProratedShare {
                     party: ResponsibleParty::Tenant,
-                    person_id: None,
+                    person_id: Some(2),
                     amount: money("1016.13")
                 },
             ]

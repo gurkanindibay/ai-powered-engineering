@@ -167,6 +167,44 @@ class CatalogueTests(unittest.TestCase):
             self.assertEqual({link["test"]["name"] for link in evidence[0]["SC-42-02-01"]},
                              {"next_test", "test_enclosing", "test_decorated"})
 
+    def test_report_links_carry_the_name_the_evidence_resolver_finds(self):
+        """The HTML report must not show a link as unnamed when the gate resolver names it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _workspace(tmp)
+            (root / "e2e" / "tests" / "test_demo.py").write_text(
+                '@pytest.mark.covers("SC-42-02-01")\n'
+                "@pytest.mark.parametrize(\n"
+                '    ("a", "b"),\n'
+                "    [(1, 2)],\n"
+                ")\n"
+                "def test_parametrised(a, b):\n"
+                "    assert a != b\n"
+                "\n"
+                "def helper():\n"
+                "    # covers: SC-42-02-01\n"
+                "    pass\n"
+                "\n"
+                "def test_unrelated():\n"
+                "    assert 2 + 2 == 4\n",
+                encoding="utf-8")
+            (root / "flutter" / "test").mkdir(parents=True)
+            (root / "flutter" / "test" / "demo_test.dart").write_text(
+                "// covers: SC-42-02-01\n"
+                "testWidgets(\n"
+                "  'when the page advances then it shows the next range',\n"
+                "  (tester) async {\n"
+                "    expect(1, 1);\n"
+                "  },\n"
+                ");\n",
+                encoding="utf-8")
+            catalogue = ft.load_catalogue(root)
+            names = {link["test"] for link in catalogue.resolved_links()["SC-42-02-01"]}
+        self.assertEqual(len(catalogue.links["SC-42-02-01"]), 3)
+        self.assertIn("test_parametrised", names, "a stacked decorator block names its test")
+        self.assertIn("when the page advances then it shows the next range", names,
+                      "a Dart testWidgets name is on the line after the marker")
+        self.assertIn("", names, "a declaration with no test attached stays unnamed")
+
     def test_bad_declarations_fail_even_with_other_valid_evidence(self):
         cases = {
             "backend/tests/ignored.rs": (

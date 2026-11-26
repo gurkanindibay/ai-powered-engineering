@@ -276,10 +276,39 @@ class Catalogue:
     links: dict[str, list[dict]]
     problems: list[str]
     root: Path = ROOT
+    # Derived data, cached because the resolver reads every test file once. The catalogue is
+    # built and then read: change `scenarios` or `links` before the first resolve, not after.
+    _evidence: tuple | None = field(default=None, repr=False, compare=False)
+    _resolved_links: dict[str, list[dict]] | None = field(default=None, repr=False, compare=False)
 
     @property
     def migrated_epics(self) -> list[str]:
         return sorted({parents_of(s.id)[0] for s in self.scenarios if s.id})
+
+    def resolved_links(self) -> dict[str, list[dict]]:
+        """Each link with the test name the evidence resolver attaches to it.
+
+        A report must not show a link as unnamed when the resolver the gate uses can name
+        it; only a declaration with no test attached stays without a name. The resolver is
+        authoritative: the five-line scan's name is used only for a link the resolver did
+        not return, because that scan gives a marker inside a helper body the next test's
+        name, which is the misattribution this method removes.
+        """
+        if self._resolved_links is None:
+            resolved, _, _ = scenario_evidence(self)
+            names = {
+                (scenario_id, entry["ref"]["file"], entry["ref"]["line"]):
+                    (entry["test"] or {}).get("name", "")
+                for scenario_id, entries in resolved.items() for entry in entries
+            }
+            self._resolved_links = {
+                scenario_id: [
+                    {**ref, "test": names.get((scenario_id, ref["file"], ref["line"]), ref["test"])}
+                    for ref in refs
+                ]
+                for scenario_id, refs in self.links.items()
+            }
+        return self._resolved_links
 
     def by_story(self) -> dict[str, list[Scenario]]:
         grouped: dict[str, list[Scenario]] = defaultdict(list)
@@ -315,6 +344,8 @@ def load_catalogue(root: Path = ROOT) -> Catalogue:
 
 
 def scenario_evidence(catalogue: Catalogue) -> tuple[dict, list[str], int]:
+    if catalogue._evidence is not None:
+        return catalogue._evidence
     # The CLI is also invoked via a symlink and loaded directly by the harness tests.
     scripts = str(Path(__file__).resolve().parent)
     if scripts not in sys.path:
@@ -326,7 +357,8 @@ def scenario_evidence(catalogue: Catalogue) -> tuple[dict, list[str], int]:
     tests = inventory(repo, root)["tests"]
     resolved = resolve_links(root, repo, catalogue.links, tests)
     verdicts = [scenario_verdict(s, resolved.get(s.id, [])) for s in catalogue.scenarios]
-    return resolved, verdicts, verified_count(verdicts)
+    catalogue._evidence = (resolved, verdicts, verified_count(verdicts))
+    return catalogue._evidence
 
 
 def check(catalogue: Catalogue, evidence: tuple[dict, list[str], int] | None = None) -> list[str]:
@@ -518,6 +550,7 @@ def build_report(catalogue: Catalogue, history: list[dict], epic_filter: str | N
     for record in history:
         by_scenario[record["scenario"]].append(record)
     by_story = catalogue.by_story()
+    resolved_links = catalogue.resolved_links()
     epics = []
     for epic in sorted(catalogue.epics):
         if epic_filter and epic != epic_filter:
@@ -546,7 +579,7 @@ def build_report(catalogue: Catalogue, history: list[dict], epic_filter: str | N
                     "failing_step": failing_step(last) if last else "",
                     "recent": [{"status": r["status"], "started_at": r["started_at"], "commit": r["commit"][:7],
                                 "failing_step": failing_step(r)} for r in runs[-RECENT_RUNS:]],
-                    "linked_tests": catalogue.links.get(scenario.id, []),
+                    "linked_tests": resolved_links.get(scenario.id, []),
                 })
             stories.append({"id": story, "title": catalogue.stories[story],
                             "status": worst([r["status"] for r in rows], STORY_ORDER), "scenarios": rows})
