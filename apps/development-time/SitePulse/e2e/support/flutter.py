@@ -26,19 +26,21 @@ TEXT_CONNECTION_JS = """(() => {
     if (window.__e2eTextConnections) return;
     window.__e2eTextConnections = true;
     // A field stays connected while any `input` listener is left on it. A Set mirrors the
-    // DOM, which ignores a repeated add and a removal of a listener it does not have.
+    // DOM, which identifies a listener by function and capture flag, and ignores a repeated
+    // add and a removal of a listener it does not have.
     const attached = new WeakMap();
     for (const [method, adds] of [['addEventListener', true], ['removeEventListener', false]]) {
         const original = EventTarget.prototype[method];
-        EventTarget.prototype[method] = function (type, listener, ...rest) {
-            const result = original.call(this, type, listener, ...rest);
+        EventTarget.prototype[method] = function (type, listener, options, ...rest) {
+            const result = original.call(this, type, listener, options, ...rest);
             if (type === 'input' && listener
                     && (this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement)) {
-                const listeners = attached.get(this) || new Set();
-                attached.set(this, listeners);
-                if (adds) listeners.add(listener);
-                else listeners.delete(listener);
-                this.toggleAttribute('%s', listeners.size > 0);
+                const capture = typeof options === 'boolean' ? options : !!(options && options.capture);
+                const phases = attached.get(this) || [new Set(), new Set()];
+                attached.set(this, phases);
+                if (adds) phases[+capture].add(listener);
+                else phases[+capture].delete(listener);
+                this.toggleAttribute('%s', phases.some(listeners => listeners.size > 0));
             }
             return result;
         };
@@ -107,6 +109,16 @@ def wait_text_connected(page: Page, target: Locator) -> bool:
         if monotonic() >= deadline:
             return False
         page.wait_for_timeout(50)
+
+
+def focus_text_field(page: Page, field: Locator) -> None:
+    """Focus an <input> without a test id until the app receives what is typed into it."""
+    for _ in range(3):
+        field.click()
+        if wait_text_connected(page, field):
+            return
+        field.evaluate("e => e.blur()")  # the app missed that focus; only a new one reaches it
+    raise AssertionError("the text field never connected to the app")
 
 
 def _survives(page: Page, target: Locator, value: str) -> bool:

@@ -117,7 +117,23 @@ class FillTest(unittest.TestCase):
             self.fill([None])
 
     def test_the_tracker_marks_the_attribute_the_wait_reads(self) -> None:
-        self.assertIn(f"toggleAttribute('{flutter.CONNECTED_ATTR}', listeners.size > 0)", flutter.TEXT_CONNECTION_JS)
+        self.assertIn(f"toggleAttribute('{flutter.CONNECTED_ATTR}', phases.some(", flutter.TEXT_CONNECTION_JS)
+
+    def focus(self, connects_after_ms: list[float | None]) -> FakeField:
+        clock = FakeClock()
+        field = FakeField(clock, connects_after_ms)
+        with mock.patch.object(flutter, "monotonic", clock):
+            flutter.focus_text_field(FakePage(clock), field)
+        return field
+
+    def test_a_missed_focus_is_repeated_for_a_field_without_a_test_id(self) -> None:
+        # The date picker's input: one click left it unfocused in the app on a CI mobile run.
+        field = self.focus([None, 100])
+        self.assertEqual((field.connected, field.focuses, field.blurs), (True, 2, 1))
+
+    def test_a_field_without_a_test_id_that_never_connects_fails(self) -> None:
+        with self.assertRaisesRegex(AssertionError, "never connected"):
+            self.focus([None])
 
 
 if __name__ == "__main__":
