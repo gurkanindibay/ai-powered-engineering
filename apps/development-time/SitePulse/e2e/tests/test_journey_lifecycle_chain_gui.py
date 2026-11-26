@@ -26,7 +26,7 @@ from pages import ResidentHome, ResidentsTab, Shell, UnitWorkspace
 from pages.login import LoginPage
 from pages.person import PersonPicker
 from support.api import raw_call
-from support.flutter import ID_ATTR, by_id, focus_text_field, text_of
+from support.flutter import ID_ATTR, by_id, fill_input, text_of
 from support.journey import Journey
 from support.journey_attempts import ledger_invariants
 from support.journey_gui import (
@@ -138,10 +138,7 @@ def _accrue_through_the_dialog(page, api, fixture, period: str, due: str, due_da
     switch.last.click()
     field = page.locator("flt-semantics input, flt-semantics textarea").last
     field.wait_for(state="attached", timeout=10_000)
-    focus_text_field(page, field)
-    field.press("Control+a")
-    field.press("Delete")
-    field.type(f"{due_day:02d}.{month:02d}.{year}")
+    fill_input(page, field, f"{due_day:02d}.{month:02d}.{year}", "the accrual due date")
     page.get_by_text("Tamam", exact=True).last.click()
     _wait_for_id_text(page, "accrual_dialog_due_date", f"{due_day:02d}.{month:02d}.{year}")
 

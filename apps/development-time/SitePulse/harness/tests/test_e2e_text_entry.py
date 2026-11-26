@@ -123,16 +123,16 @@ class FillTest(unittest.TestCase):
         clock = FakeClock()
         field = FakeField(clock, connects_after_ms)
         with mock.patch.object(flutter, "monotonic", clock):
-            flutter.focus_text_field(FakePage(clock), field)
+            flutter.fill_input(FakePage(clock), field, "10.10.2026", "the accrual due date")
         return field
 
-    def test_a_missed_focus_is_repeated_for_a_field_without_a_test_id(self) -> None:
+    def test_a_field_without_a_test_id_is_focused_again_when_the_app_misses_it(self) -> None:
         # The date picker's input: one click left it unfocused in the app on a CI mobile run.
         field = self.focus([None, 100])
-        self.assertEqual((field.connected, field.focuses, field.blurs), (True, 2, 1))
+        self.assertEqual((field.app_value, field.focuses, field.blurs), ("10.10.2026", 2, 1))
 
-    def test_a_field_without_a_test_id_that_never_connects_fails(self) -> None:
-        with self.assertRaisesRegex(AssertionError, "never connected"):
+    def test_a_field_without_a_test_id_that_never_connects_fails_without_typing(self) -> None:
+        with self.assertRaisesRegex(AssertionError, "could not set the accrual due date"):
             self.focus([None])
 
 

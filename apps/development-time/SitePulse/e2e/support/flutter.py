@@ -7,6 +7,7 @@ semantics tree and renders every `testId(...)` widget as a DOM node carrying
 from __future__ import annotations
 
 from time import monotonic
+from typing import Callable
 
 from playwright.sync_api import BrowserContext, Locator, Page
 
@@ -72,16 +73,36 @@ def fill(page: Page, test_id: str, value: str) -> None:
     """Replace the text of a TextField tagged with test_id."""
     field = by_id(page, test_id)
     field.first.wait_for(state="attached")
-    # Flutter web creates the DOM <input> only while the field has focus, and syncs its editing
-    # state asynchronously; a select-all issued too early can miss prefilled text. So focus first,
-    # use the input once it exists, and verify the value instead of trusting one attempt.
+    _set_value(page, value, repr(test_id), lambda: _field_input(page, field))
+
+
+def fill_input(page: Page, field: Locator, value: str, label: str) -> None:
+    """Replace the text of an <input> that carries no test id (the date picker's, e.g.)."""
+    _set_value(page, value, label, lambda: (field.first.click(), field.first)[1])
+
+
+def _field_input(page: Page, field: Locator) -> Locator:
+    """Click the field so Flutter creates its DOM <input>, and return that input."""
+    field.first.click()
+    target = field.locator("input, textarea").first
+    try:
+        target.wait_for(state="attached", timeout=3_000)
+    except Exception:
+        target = page.locator("input:focus, textarea:focus").first
+    return target
+
+
+def _set_value(page: Page, value: str, label: str, focus: Callable[[], Locator]) -> None:
+    """Type `value` into the input `focus` returns, retrying the whole entry until it sticks.
+
+    Flutter web creates the DOM <input> only while the field has focus, and syncs its editing
+    state asynchronously; a select-all issued too early can miss prefilled text. So focus first,
+    use the input once it exists, and verify the value instead of trusting one attempt. A focus
+    the app missed leaves the field disconnected: only blurring and clicking it again reaches it,
+    so the retry starts over from `focus`.
+    """
     for _ in range(3):
-        field.first.click()
-        target = field.locator("input, textarea").first
-        try:
-            target.wait_for(state="attached", timeout=3_000)
-        except Exception:
-            target = page.locator("input:focus, textarea:focus").first
+        target = focus()
         if not wait_text_connected(page, target):
             target.evaluate("e => e.blur()")  # so the next click focuses it again
             continue
@@ -92,7 +113,7 @@ def fill(page: Page, test_id: str, value: str) -> None:
         target.type(value)
         if target.evaluate("e => e.value ?? ''") == value and _survives(page, target, value):
             return
-    raise AssertionError(f"could not set {test_id!r} to {value!r}")
+    raise AssertionError(f"could not set {label} to {value!r}")
 
 
 def wait_text_connected(page: Page, target: Locator) -> bool:
@@ -109,16 +130,6 @@ def wait_text_connected(page: Page, target: Locator) -> bool:
         if monotonic() >= deadline:
             return False
         page.wait_for_timeout(50)
-
-
-def focus_text_field(page: Page, field: Locator) -> None:
-    """Focus an <input> without a test id until the app receives what is typed into it."""
-    for _ in range(3):
-        field.click()
-        if wait_text_connected(page, field):
-            return
-        field.evaluate("e => e.blur()")  # the app missed that focus; only a new one reaches it
-    raise AssertionError("the text field never connected to the app")
 
 
 def _survives(page: Page, target: Locator, value: str) -> bool:
