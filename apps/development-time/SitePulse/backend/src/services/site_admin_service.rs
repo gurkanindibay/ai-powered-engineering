@@ -636,6 +636,7 @@ impl SiteAdminService {
                 if !t_email_norm.is_empty() {
                     let existing_t_user = client
                         .query_opt(
+                            // person-scope: identity — registration checks that the email is globally unique
                             "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                             &[&t_email_norm],
                         )
@@ -645,6 +646,7 @@ impl SiteAdminService {
                         // S2: the tenant gets their own account and their own activation link.
                         let tenant_user_id: i64 = client
                             .query_one(
+                                // person-scope: site — creates the tenant's login for the caller's site
                                 r#"
                                 INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
                                 VALUES ($1, $2, $3, NULL, 'HOME_RESIDENT', TRUE)
@@ -846,6 +848,7 @@ impl SiteAdminService {
                 .map_err(|e| e.to_string())?;
                 let joined = client
                     .execute(
+                        // person-scope: person — person id and unit are resolved within the site before the household insert
                         r#"
                         INSERT INTO occupancy_members (occupancy_id, person_id, full_name, relationship, phone, email, is_emergency_contact)
                         SELECT uo.id, p.id, p.full_name, $3, COALESCE(p.phone, ''), COALESCE(p.email, ''), false
@@ -1701,6 +1704,7 @@ impl SiteAdminService {
                         if let Some(ref t_name) = req.tenant_full_name {
                             client
                                 .execute(
+                                    // person-scope: person — tenant/owner person ids come from the unit row selected with site_id = $2
                                     "UPDATE persons SET full_name = $1 WHERE id = $2",
                                     &[t_name, &tenant_person_id],
                                 )
@@ -1710,6 +1714,7 @@ impl SiteAdminService {
                         if let Some(ref t_phone) = req.tenant_phone {
                             client
                                 .execute(
+                                    // person-scope: person — person id from the unit row selected with site_id = $2
                                     "UPDATE persons SET phone = $1 WHERE id = $2",
                                     &[t_phone, &tenant_person_id],
                                 )
@@ -1797,6 +1802,7 @@ impl SiteAdminService {
                         if let Some(ref name) = req.owner_full_name {
                             client
                                 .execute(
+                                    // person-scope: person — person id from the unit row selected with site_id = $2
                                     "UPDATE persons SET full_name = $1 WHERE id = $2",
                                     &[name, &owner_person_id],
                                 )
@@ -1806,6 +1812,7 @@ impl SiteAdminService {
                         if let Some(ref phone) = req.phone {
                             client
                                 .execute(
+                                    // person-scope: person — person id from the unit row selected with site_id = $2
                                     "UPDATE persons SET phone = $1 WHERE id = $2",
                                     &[phone, &owner_person_id],
                                 )
@@ -3293,6 +3300,7 @@ impl SiteAdminService {
             if let Ok(mut conn) = pool.get().await {
                 let site_num = crate::db::parse_id_to_i64(site_id).unwrap_or(0);
                 if let Ok(client) = crate::db::begin_tenant_read(&mut conn, site_num).await {
+                    // person-scope: person — the unit id is read inside a tenant-bound transaction
                     let query = r#"
                     SELECT 
                         uo.id,

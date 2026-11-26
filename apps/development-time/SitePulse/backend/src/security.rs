@@ -82,6 +82,7 @@ async fn version(state: &AppState, user: &User) -> Result<i64, SecurityError> {
             crate::db::require_id("user", &user.id).map_err(|_| SecurityError::Unauthenticated)?;
         let row = client
             .query_opt(
+                // person-scope: identity — session validation by the authenticated user id
                 "SELECT auth_version FROM users WHERE id=$1 AND is_active",
                 &[&id],
             )
@@ -273,6 +274,7 @@ pub async fn refresh(
         crate::db::tx_bind_platform(&tx)
             .await
             .map_err(|_| SecurityError::Unavailable)?;
+        // person-scope: identity — refresh token validation by session user id
         let row=tx.query_opt("SELECT s.id,s.user_id,s.auth_version,s.expires_at,s.revoked_at,t.consumed_at,u.auth_version,u.is_active FROM auth_refresh_tokens t JOIN auth_sessions s ON s.id=t.session_id JOIN users u ON u.id=s.user_id WHERE t.digest=$1 AND t.expires_at>now() FOR UPDATE OF s,t",&[&digest]).await.map_err(|_|SecurityError::Unavailable)?.ok_or(SecurityError::Unauthenticated)?;
         let sid: String = row.get(0);
         if row.get::<_, Option<DateTime<Utc>>>(5).is_some() {
@@ -296,6 +298,7 @@ pub async fn refresh(
         // Use the same connection while holding the session lock; no second pool checkout.
         let user_row = tx
             .query_one(
+                // person-scope: identity — refresh token validation by session user id
                 "SELECT email,role,site_id FROM users WHERE id=$1",
                 &[&row.get::<_, i64>(1)],
             )

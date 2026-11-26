@@ -67,6 +67,7 @@ pub async fn save_unit(
     let effective_owner_id = if let Some(oid) = owner_id_num {
         let exists = client
             .query_opt(
+                // person-scope: platform — startup sync mirrors the loaded unit's person cards
                 "SELECT id FROM persons WHERE id = $1 AND deleted_at IS NULL",
                 &[&oid],
             )
@@ -75,6 +76,7 @@ pub async fn save_unit(
         if exists {
             Some(oid)
         } else {
+            // person-scope: platform — startup sync mirrors the loaded unit's person cards
             let user_row = client.query_opt("SELECT COALESCE(p.full_name, ''), COALESCE(p.phone, ''), u.email FROM users u LEFT JOIN persons p ON u.person_id = p.id WHERE u.id = $1", &[&oid]).await?;
             if let Some(ur) = user_row {
                 let name: String = ur.get(0);
@@ -103,6 +105,7 @@ pub async fn save_unit(
     let effective_tenant_id = if let Some(tid) = tenant_id_num {
         let exists = client
             .query_opt(
+                // person-scope: platform — startup sync mirrors the loaded unit's person cards
                 "SELECT id FROM persons WHERE id = $1 AND deleted_at IS NULL",
                 &[&tid],
             )
@@ -111,6 +114,7 @@ pub async fn save_unit(
         if exists {
             Some(tid)
         } else {
+            // person-scope: platform — startup sync mirrors the loaded unit's person cards
             let user_row = client.query_opt("SELECT COALESCE(p.full_name, ''), COALESCE(p.phone, ''), u.email FROM users u LEFT JOIN persons p ON u.person_id = p.id WHERE u.id = $1", &[&tid]).await?;
             if let Some(ur) = user_row {
                 let name: String = ur.get(0);
@@ -299,6 +303,7 @@ pub async fn save_unit_member_ref(
     let person_id = crate::services::person_service::resolve_person_ref(&tx, site, person).await?;
     let card = tx
         .query_one(
+            // person-scope: person — person_id is resolved by resolve_person_ref within the unit's site
             "SELECT full_name, COALESCE(phone, ''), COALESCE(email, '') FROM persons WHERE id=$1",
             &[&person_id],
         )
@@ -467,6 +472,7 @@ pub async fn transfer_unit_ownership_db(
             .ok_or(OccupancyError::PersonNotFound)?,
         None => tx
             .query_opt(
+                // person-scope: identity — the buyer is looked up by email before the person row exists
                 "SELECT person_id FROM users WHERE LOWER(email) = $1 AND is_active AND person_id IS NOT NULL",
                 &[&crate::domain::email::NormalizedEmail::normalize(
                     &transfer.new_user.email,
@@ -680,6 +686,7 @@ pub async fn fetch_units_summary_from_db(pool: &Pool) -> DbResult<Vec<UnitSummar
     let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
     let rows = client
         .query(
+            // person-scope: platform — system summary across all sites
             r#"
             SELECT
                 u.id::text,

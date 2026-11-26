@@ -182,6 +182,7 @@ async fn read_snapshot(
 ) -> Result<UnitSnapshot, OccupancyError> {
     let owners = tx
         .query(
+            // person-scope: person — the unit id is resolved within the site before the snapshot
             r#"
             SELECT o.person_id, p.full_name, COALESCE(w.share_percentage, 100.00), COALESCE(w.start_date, u.created_at::date, $2::date)
             FROM sp_unit_owner_ids($1) o
@@ -202,11 +203,13 @@ async fn read_snapshot(
         })
         .collect::<Vec<_>>();
     let session_sql = if lock {
+        // person-scope: person — the unit id is resolved within the site before the snapshot
         "SELECT oc.id, oc.person_id, p.full_name, oc.occupancy_type, oc.start_date \
          FROM unit_occupancies oc JOIN persons p ON p.id = oc.person_id \
          WHERE oc.unit_id = $1 AND oc.is_active \
          ORDER BY oc.start_date DESC, oc.id DESC LIMIT 1 FOR UPDATE OF oc"
     } else {
+        // person-scope: person — the unit id is resolved within the site before the snapshot
         "SELECT oc.id, oc.person_id, p.full_name, oc.occupancy_type, oc.start_date \
          FROM unit_occupancies oc JOIN persons p ON p.id = oc.person_id \
          WHERE oc.unit_id = $1 AND oc.is_active \

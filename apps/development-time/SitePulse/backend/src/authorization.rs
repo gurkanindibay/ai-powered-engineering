@@ -345,6 +345,7 @@ pub async fn resource(
                     .map_err(|_| SecurityError::Unauthenticated)?;
                 let actor_row = client
                     .query_opt(
+                        // person-scope: identity — the actor is the session user (claims.sub); the receipt itself was fetched with the caller's site
                         "SELECT u.role, u.person_id FROM users AS u WHERE u.id = $1",
                         &[&user],
                     )
@@ -702,6 +703,7 @@ pub async fn assign_role(
     )
     .await
     .map_err(|_| SecurityError::Unavailable)?;
+    // person-scope: site — inserts the user_site_roles row for the site in $2
     tx.execute("INSERT INTO user_site_roles(user_id,site_id,role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",&[&user,&site,&input.role.as_str()]).await.map_err(|_|SecurityError::Unavailable)?;
     tx.execute(
         "UPDATE auth_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL",
@@ -765,12 +767,14 @@ pub async fn assign_platform_role(
         .map_err(|_| SecurityError::Unavailable)?;
     let n = if input.enabled {
         tx.execute(
+            // person-scope: platform — SaaS admin assignment in a platform-bound transaction
             "UPDATE users SET role='SAAS_ADMIN',site_id=NULL,is_active=true WHERE id=$1",
             &[&id],
         )
         .await
     } else {
         tx.execute(
+            // person-scope: platform — SaaS admin role assignment runs in a platform-bound transaction
             "UPDATE users SET is_active=false WHERE id=$1 AND role='SAAS_ADMIN'",
             &[&id],
         )
@@ -780,6 +784,7 @@ pub async fn assign_platform_role(
     if n != 1 {
         return Err(SecurityError::NotFound);
     }
+    // person-scope: platform — SaaS admin assignment in a platform-bound transaction
     tx.execute("DELETE FROM user_site_roles WHERE user_id=$1", &[&id])
         .await
         .map_err(|_| SecurityError::Unavailable)?;

@@ -931,6 +931,7 @@ pub async fn fetch_debt_aging_report_from_db(
         let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
         let rows = client
             .query(
+                // person-scope: platform — site_id 'all' reads every site in a platform-bound transaction
                 r#"
                 SELECT
                     dl.id::text,

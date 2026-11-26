@@ -203,6 +203,10 @@ GATES: Dict[str, List[CommandSpec]] = {
     # routes check ownership, no guessed tenants, service transactions bind their
     # tenant, and every tenant-keyed table has a row-level security policy (V21).
     "tenant-lint": [CommandSpec(["python3", "scripts/tenant_isolation_lint.py", "--json"], ".", 120)],
+    # Identity tables (users, user_site_roles, persons) are RLS-exempt, so every query
+    # against them states its scope: a site key in the statement or a
+    # `// person-scope: site|person|identity|platform` annotation (issue #535).
+    "person-scope-lint": [CommandSpec(["python3", "scripts/person_scope_lint.py", "--json"], ".", 120)],
     # No guard on the global AppState lock is held across database/network I/O.
     "lock-lint": [CommandSpec(["python3", "scripts/lock_scope_lint.py", "--json"], ".", 120)],
     # Cross-stack logging standards (docs/standards/LOGGING_STANDARDS.md): no println/dbg in backend,

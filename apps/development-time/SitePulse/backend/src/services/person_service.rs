@@ -473,6 +473,7 @@ impl PersonService {
                     "HOME_RESIDENT"
                 };
                 tx.query_one(
+                    // person-scope: site — opens the login for the person's site
                     "INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password) \
                      VALUES ($1, $2, $3, NULL, $4, TRUE) RETURNING id",
                     &[&site, &person_id, &email, &role],

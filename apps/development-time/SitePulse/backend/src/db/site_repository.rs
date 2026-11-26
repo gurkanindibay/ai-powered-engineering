@@ -229,6 +229,7 @@ pub async fn create_site_with_manager_and_blocks(
     let normalized_email = crate::domain::email::NormalizedEmail::normalize(admin_email);
     if tx
         .query_opt(
+            // person-scope: platform — SaaS admin creates a site before its id exists; the admin email is globally unique
             "SELECT 1 FROM users WHERE LOWER(email) = $1 AND is_active",
             &[&normalized_email],
         )
@@ -264,6 +265,7 @@ pub async fn create_site_with_manager_and_blocks(
 
     let user_row = tx
         .query_one(
+            // person-scope: platform — SaaS admin creates a site before its id exists
             r#"
             INSERT INTO users (site_id, email, password_hash, role, must_change_password, person_id)
             VALUES ($1, $2, $3, 'SITE_MANAGER', true, $4)
@@ -498,6 +500,7 @@ pub async fn reset_site_admin_password_by_site(
 
             client
                 .execute(
+                    // person-scope: person — the user id is the site's SITE_MANAGER, resolved with u.site_id = $1
                     "UPDATE users SET password_hash = $1, must_change_password = true WHERE id = $2",
                     &[&password_hash, &u_id],
                 )

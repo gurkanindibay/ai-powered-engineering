@@ -236,6 +236,7 @@ impl HomeResidentInvitationService {
             if let Ok(client) = pool.get().await {
                 if let Ok(Some(row)) = client
                     .query_opt(
+                        // person-scope: identity — invitation checks that the email is globally unique
                         "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                         &[&email_norm],
                     )

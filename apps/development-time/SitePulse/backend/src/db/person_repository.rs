@@ -109,6 +109,7 @@ pub async fn insert_site_person<'a>(
     let person_type: Option<&str> = person_type.into();
     let row = client
         .query_one(
+            // person-scope: site — inserts the person row for the site in $5
             "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
             &[&full_name, &phone, &email, &person_type, &site_id],
         )
@@ -125,6 +126,7 @@ pub async fn insert_platform_person(
 ) -> Result<i64, tokio_postgres::Error> {
     let row = client
         .query_one(
+            // person-scope: platform — SaaS admin person, created before any site exists
             "INSERT INTO persons (full_name, email, person_type) VALUES ($1, $2, $3) RETURNING id",
             &[&full_name, &email, &person_type],
         )
@@ -143,6 +145,7 @@ pub async fn ensure_legacy_person(
 ) -> Result<(), tokio_postgres::Error> {
     client
         .execute(
+            // person-scope: platform — legacy sync id without a site row
             "INSERT INTO persons (id, full_name, phone, email, person_type) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING",
             &[&id, &full_name, &phone, &email, &person_type],
         )

@@ -254,6 +254,7 @@ impl RegistrationApprovalService {
                     .ok_or(SecurityError::NotFound)?;
                 let has_login = tx
                     .query_opt(
+                        // person-scope: person — the person id is the registration's person, resolved within the site
                         "SELECT 1 FROM users WHERE person_id=$1 AND is_active",
                         &[&chosen],
                     )
@@ -277,6 +278,7 @@ impl RegistrationApprovalService {
                 .await
                 .map_err(|_| SecurityError::Conflict)?
             };
+            // person-scope: site — registers the approved person's login for the site
             let user_id:i64=tx.query_one("INSERT INTO users(site_id,person_id,email,password_hash,role,must_change_password) VALUES ($1,$2,$3,$4,$5,true) RETURNING id",&[&site,&person,&email,&hash,&role.as_str()]).await.map_err(|_|SecurityError::Conflict)?.get(0);
             let existing=tx.query_opt("SELECT id FROM units WHERE block_id=$1 AND unit_number=$2 AND site_id=$3 FOR UPDATE",&[&block_id,&number,&site]).await.map_err(|_|SecurityError::Unavailable)?;
             let unit_id: i64 = if let Some(row) = existing {
@@ -285,6 +287,7 @@ impl RegistrationApprovalService {
                 tx.query_one("INSERT INTO units(block_id,site_id,unit_number,floor,land_share) VALUES ($1,$2,$3,$4,1) RETURNING id",&[&block_id,&site,&number,&floor]).await.map_err(|_|SecurityError::Unavailable)?.get(0)
             };
             tx.execute(
+                // person-scope: site — role row for the approved person's site
                 "INSERT INTO user_site_roles(user_id,site_id,role) VALUES ($1,$2,$3)",
                 &[&user_id, &site, &role.as_str()],
             )

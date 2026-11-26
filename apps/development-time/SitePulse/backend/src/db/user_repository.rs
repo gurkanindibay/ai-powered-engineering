@@ -29,6 +29,7 @@ pub async fn save_user(
         if !user.full_name.is_empty() {
             client
                 .execute(
+                    // person-scope: person — the person id belongs to the user row being saved; callers resolve it in their site
                     "UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3",
                     &[&user.full_name, &user.phone, &pid],
                 )
@@ -47,6 +48,7 @@ pub async fn save_user(
             if !user.full_name.is_empty() {
                 client
                     .execute(
+                        // person-scope: person — the person id belongs to the user row being saved; callers resolve it in their site
                         "UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3",
                         &[&user.full_name, &user.phone, &pid],
                     )
@@ -92,6 +94,7 @@ pub async fn save_user(
     // assigns ids; an in-memory id is never used to pick the row to overwrite.
     let updated = client
         .execute(
+            // person-scope: identity — accounts are identified by the globally unique email
             r#"
             UPDATE users SET
                 site_id = COALESCE($1, site_id),
@@ -120,6 +123,7 @@ pub async fn save_user(
     if updated == 0 {
         client
             .execute(
+                // person-scope: site — inserts the account for the site in $1
                 r#"
                 INSERT INTO users (site_id, email, password_hash, role, must_change_password, auth_provider, google_sub, avatar_url, person_id, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -191,6 +195,7 @@ pub async fn upgrade_legacy_password_hashes(
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let rows = client
+        // person-scope: platform — startup migration of legacy password hashes across every site
         .query("SELECT id, password_hash FROM users WHERE password_hash IS NOT NULL AND password_hash NOT LIKE '$argon2%'", &[])
         .await?;
     let mut changed = 0;
@@ -203,6 +208,7 @@ pub async fn upgrade_legacy_password_hashes(
         };
         changed += client
             .execute(
+                // person-scope: platform — startup migration of legacy password hashes
                 "UPDATE users SET password_hash = $1, must_change_password = TRUE WHERE id = $2",
                 &[&new_hash, &id],
             )
@@ -220,6 +226,7 @@ pub async fn ensure_bootstrap_admin(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let exists = client
+        // person-scope: platform — bootstrap/startup check for the platform admin
         .query_opt("SELECT 1 FROM users WHERE role = 'SAAS_ADMIN' LIMIT 1", &[])
         .await?
         .is_some();
@@ -233,6 +240,7 @@ pub async fn ensure_bootstrap_admin(
     // Platform people have no site; persons are unique per site, so look up before inserting.
     let existing = client
         .query_opt(
+            // person-scope: platform — the SaaS admin person has no site
             "SELECT id FROM persons WHERE site_id IS NULL AND lower(email) = $1 AND deleted_at IS NULL",
             &[&email],
         )
@@ -251,6 +259,7 @@ pub async fn ensure_bootstrap_admin(
     };
     client
         .execute(
+            // person-scope: platform — bootstrap platform admin
             "INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
              VALUES (NULL, $1, $2, $3, 'SAAS_ADMIN', TRUE)",
             &[&person_id, &email, &hash],
@@ -284,6 +293,7 @@ pub async fn get_user_by_email(
     let email_norm = crate::domain::email::NormalizedEmail::normalize(email);
     let row = client
         .query_opt(
+            // person-scope: identity — sign-in lookup by globally unique email
             "SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
              FROM users u
              LEFT JOIN persons p ON u.person_id = p.id
@@ -350,6 +360,7 @@ pub async fn get_user_by_id_from_client(
     let row = if let Some(num) = id_num {
         client
             .query_opt(
+                // person-scope: identity — session lookup by user id
                 "SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
                  FROM users u
                  LEFT JOIN persons p ON u.person_id = p.id
