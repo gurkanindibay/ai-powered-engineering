@@ -90,6 +90,10 @@ ROUTE_TABLE_RE = re.compile(r'\b(?:get|post|put|patch|delete)\s+"([^"]+)"\s*=>\s
 TX_OPEN_RE = re.compile(r"\.transaction\(\)|\.build_transaction\(\)")
 TX_BIND_WINDOW = 30
 PLATFORM_MARKER = "tenant-guard: platform"
+PLATFORM_BIND_RE = re.compile(r"\b(?:tx_bind_platform|begin_platform_read|begin_platform_tx)\b")
+# Files that legitimately open owner-only transactions: the guard helpers themselves and
+# the DDL migration runner, which must run as the schema owner and cannot be bound.
+SCHEMA_OWNER_FILES = {"src/db/tenant_guard.rs", "src/migrations.rs"}
 DELEGATED_MARKER = "tenant-scope: checked in"
 TENANT_RLS_CONFIG = json.loads((ROOT / "scripts/tenant_rls_config.json").read_text())
 TENANT_KEYS = tuple(TENANT_RLS_CONFIG["tenant_keys"])
@@ -260,30 +264,37 @@ def lint_guessed_tenants(backend: Path, findings: list[Finding]) -> None:
 
 
 def lint_transactions(backend: Path, findings: list[Finding]) -> None:
-    for subdir in ("services", "db"):
-        root = backend / "src" / subdir
-        if not root.is_dir():
+    src = backend / "src"
+    if not src.is_dir():
+        return
+    for f in sorted(src.rglob("*.rs")):
+        rel = f.relative_to(backend).as_posix()
+        if rel in SCHEMA_OWNER_FILES:
             continue
-        for f in sorted(root.rglob("*.rs")):
-            rel = f.relative_to(backend).as_posix()
-            if rel == "src/db/tenant_guard.rs":
+        code = _strip_test_modules(f.read_text(encoding="utf-8"))
+        lines = code.splitlines()
+        for i, line in enumerate(lines):
+            if not TX_OPEN_RE.search(line):
                 continue
-            code = _strip_test_modules(f.read_text(encoding="utf-8"))
-            lines = code.splitlines()
-            for i, line in enumerate(lines):
-                if not TX_OPEN_RE.search(line):
-                    continue
-                window = "\n".join(lines[max(0, i - 3) : i + TX_BIND_WINDOW])
-                if (
-                    "tx_bind_tenant" in window
-                    or "tx_bind_platform" in window
-                    or PLATFORM_MARKER in window
-                ):
-                    continue
+            before = "\n".join(lines[max(0, i - 3) : i + TX_BIND_WINDOW])
+            if PLATFORM_MARKER in before and not PLATFORM_BIND_RE.search(before):
+                # The comment claims a platform transaction, so the bind it justifies
+                # must be there too: an unbound one fails closed at runtime instead.
                 findings.append(Finding(
-                    "unbound-tenant-transaction", rel, i + 1,
-                    "transaction is not bound to its tenant: call `crate::db::tx_bind_tenant(&tx, site)` "
-                    f"or `tx_bind_platform(&tx)` first (or mark with `// {PLATFORM_MARKER}`)"))
+                    "platform-marker-unbound", rel, i + 1,
+                    f"`// {PLATFORM_MARKER}` without `crate::db::tx_bind_platform(&tx)`: "
+                    "either bind the platform transaction or drop the marker"))
+                continue
+            if (
+                "tx_bind_tenant" in before
+                or "tx_bind_platform" in before
+                or PLATFORM_MARKER in before
+            ):
+                continue
+            findings.append(Finding(
+                "unbound-tenant-transaction", rel, i + 1,
+                "transaction is not bound to its tenant: call `crate::db::tx_bind_tenant(&tx, site)` "
+                f"or `tx_bind_platform(&tx)` first (or mark with `// {PLATFORM_MARKER}`)"))
 
 
 def _tenant_table_names(backend: Path) -> set[str]:
@@ -295,12 +306,30 @@ def _tenant_table_names(backend: Path) -> set[str]:
         | set(tenant_keyed_tables(migrations).keys())
         | set(TENANT_RLS_CONFIG["root_tables"])
     )
-    return tables - RLS_EXEMPT
+    tables -= RLS_EXEMPT
+    # A view over tenant tables is as tenant-scoped as the tables behind it: a query
+    # through one is just as unbound (V33 views, for example, hid two real leaks).
+    return tables | _tenant_view_names(migrations, tables)
+
+
+def _tenant_view_names(migrations: Path, tenant_tables: set[str]) -> set[str]:
+    """Views whose definition reads at least one tenant table (latest definition wins)."""
+    definitions: dict[str, str] = {}
+    for f in sorted(migrations.glob("V*.sql"), key=lambda p: int(re.match(r"V(\d+)", p.name).group(1))):
+        sql = re.sub(r"--[^\n]*", "", f.read_text(encoding="utf-8"))
+        for m in re.finditer(
+            r"CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+(\w+).*?;", sql, re.S | re.I
+        ):
+            definitions[m.group(1).lower()] = m.group(0)
+    if not definitions:
+        return set()
+    body_re = re.compile(r"\b(?:" + "|".join(sorted(tenant_tables)) + r")\b")
+    return {name for name, ddl in definitions.items() if body_re.search(ddl)}
 
 
 def lint_pool_queries(backend: Path, findings: list[Finding]) -> None:
-    db_dir = backend / "src" / "db"
-    if not db_dir.is_dir():
+    src = backend / "src"
+    if not src.is_dir():
         return
     tenant_tables = _tenant_table_names(backend)
     if not tenant_tables:
@@ -309,16 +338,21 @@ def lint_pool_queries(backend: Path, findings: list[Finding]) -> None:
     tx_helper_re = re.compile(
         r"\b(?:begin_tenant_read|begin_tenant_tx|begin_platform_read|begin_platform_tx)\b"
     )
-    for f in sorted(db_dir.rglob("*.rs")):
+    # A pool acquisition: `pool.get()`, the shared security connection, or the
+    # `state.pool.as_ref()...get().await` form the handlers and services use.
+    conn_re = re.compile(
+        r"\b(?:pool\.get|security_connection)\(|\.get\(\)\s*\.\s*await"
+    )
+    for f in sorted(src.rglob("*.rs")):
         rel = f.relative_to(backend).as_posix()
-        if rel == "src/db/tenant_guard.rs":
+        if rel in ("src/db/tenant_guard.rs", "src/db/security_repository.rs"):
             continue
         code = _strip_test_modules(f.read_text(encoding="utf-8"))
         fn_starts = [
             m.start()
             for m in re.finditer(r"(?m)^[ \t]*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+\w+", code)
         ]
-        for m in re.finditer(r"\bpool\.get\(", code):
+        for m in conn_re.finditer(code):
             pos = m.start()
             # Scope to the enclosing function body.
             fn_start = max((s for s in fn_starts if s <= pos), default=0)
@@ -335,7 +369,7 @@ def lint_pool_queries(backend: Path, findings: list[Finding]) -> None:
                 target = hit.group(0) if hit else "finance record"
                 findings.append(Finding(
                     "unbound-pool-query", rel, _line_of(code, pos),
-                    f"direct `pool.get()` query touches tenant table `{target}` without a bound "
+                    f"direct pool query touches tenant table `{target}` without a bound "
                     "transaction: use `begin_tenant_read`/`begin_tenant_tx` (or "
                     f"`begin_platform_read`/`begin_platform_tx` with `// {PLATFORM_MARKER}`)"))
 

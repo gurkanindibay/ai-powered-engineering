@@ -187,7 +187,11 @@ impl PersonDirectoryService {
         site: i64,
         f: &Filters,
     ) -> Result<DirectoryPage, PersonDirectoryError> {
-        let client = pool.get().await.map_err(storage)?;
+        let mut conn = pool.get().await.map_err(storage)?;
+        // `v_person_roles` resolves ownership through `units`, a tenant table.
+        let client = crate::db::begin_tenant_read(&mut conn, site)
+            .await
+            .map_err(storage)?;
         let filter = "WHERE p.site_id = $1 \
              AND ($2 = '' OR strpos(lower(p.full_name), $2) > 0 OR strpos(lower(COALESCE(p.email, '')), $2) > 0 \
                   OR strpos(regexp_replace(COALESCE(p.phone, ''), '\\D', '', 'g'), regexp_replace($2, '\\D', '', 'g')) > 0 AND regexp_replace($2, '\\D', '', 'g') <> '') \

@@ -15,16 +15,22 @@ use tower::ServiceExt;
 struct TestDb {
     name: String,
     admin: Pool,
+    owner: Pool,
     pool: Pool,
 }
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
+        let crate::test_db::TestDatabase {
+            name,
+            admin,
+            owner,
+            pool,
+        } = crate::test_db::create(tag).await;
         // One real site manager per site: tokens are session-backed, so the
         // tests log in through /api/v1/auth/login instead of minting tokens.
         let hash = auth::hash_password(MANAGER_PASSWORD).expect("hash");
-        pool.get()
+        owner.get()
             .await
             .expect("connection")
             .execute(
@@ -39,7 +45,12 @@ impl TestDb {
             )
             .await
             .expect("seed site managers");
-        Self { name, admin, pool }
+        Self {
+            name,
+            admin,
+            owner,
+            pool,
+        }
     }
 
     async fn drop_db(self) {
@@ -55,17 +66,17 @@ impl TestDb {
     }
 
     async fn scalar_i64(&self, sql: &str) -> i64 {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn scalar_text(&self, sql: &str) -> String {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn exec(&self, sql: &str) {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.batch_execute(sql).await.expect(sql);
     }
 

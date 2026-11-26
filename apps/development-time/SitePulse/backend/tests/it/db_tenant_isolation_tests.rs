@@ -24,16 +24,22 @@ use tower::ServiceExt;
 struct TestDb {
     name: String,
     admin: Pool,
+    owner: Pool,
     pool: Pool,
 }
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
+        let crate::test_db::TestDatabase {
+            name,
+            admin,
+            owner,
+            pool,
+        } = crate::test_db::create(tag).await;
         // One real site manager per site: tokens are session-backed, so the
         // tests log in through /api/v1/auth/login instead of minting tokens.
         let hash = auth::hash_password(MANAGER_PASSWORD).expect("hash");
-        pool.get()
+        owner.get()
             .await
             .expect("connection")
             .execute(
@@ -48,7 +54,12 @@ impl TestDb {
             )
             .await
             .expect("seed site managers");
-        Self { name, admin, pool }
+        Self {
+            name,
+            admin,
+            owner,
+            pool,
+        }
     }
 
     async fn drop_db(self) {
@@ -64,17 +75,17 @@ impl TestDb {
     }
 
     async fn scalar_i64(&self, sql: &str) -> i64 {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn scalar_text(&self, sql: &str) -> String {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn exec(&self, sql: &str) {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.batch_execute(sql).await.expect(sql);
     }
 
@@ -227,13 +238,14 @@ async fn rls_hides_other_tenants_inside_a_bound_transaction() {
     assert!(message.contains("row-level security"), "{:?}", err);
     drop(tx);
 
-    // The binding ends with the transaction: the pooled connection is clean.
+    // The binding ends with the transaction: the pooled connection is clean, so an
+    // unbound query fails closed instead of leaking every site (V54).
     let unbound: i64 = client
         .query_one("SELECT count(*) FROM sites", &[])
         .await
         .unwrap()
         .get(0);
-    assert!(unbound >= 2);
+    assert_eq!(unbound, 0, "an unbound query sees no tenant rows");
     drop(client);
     t.drop_db().await;
 }
@@ -305,7 +317,7 @@ struct ChildParents {
 /// Creates one unit, person and row per parent table for `site`, so a child row
 /// can be inserted through a parent the tenant owns.
 async fn seed_child_parents(t: &TestDb, site: i64, tag: &str) -> ChildParents {
-    let client = t.pool.get().await.expect("connection");
+    let client = t.owner.get().await.expect("connection");
     let block: i64 = client
         .query_one(
             "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 1) RETURNING id",
@@ -1185,7 +1197,10 @@ async fn the_database_rejects_capital_dues_billed_to_a_tenant() {
     let t = TestDb::create("capital").await;
     let a = t.site_id("begonya-sitesi").await;
     let unit = t.unit_of(a).await;
-    let client = t.pool.get().await.expect("connection");
+    let mut conn = t.owner.get().await.expect("connection");
+    // A platform transaction so the check constraint, not row-level security, is what
+    // a capital-due insert meets.
+    let client = db::begin_platform_tx(&mut conn).await.unwrap();
     let insert = |period: &str, debtor: &str, expense_type: &str| {
         format!(
             "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type)
@@ -1401,7 +1416,7 @@ async fn readiness_reports_tenant_rls_policy_and_runtime_role_safety() {
         policy_installed,
         "all tenant-keyed tables must be protected"
     );
-    let client = t.pool.get().await.unwrap();
+    let client = t.owner.get().await.unwrap();
     client
         .batch_execute("ALTER TABLE public.autopay_attempts NO FORCE ROW LEVEL SECURITY")
         .await

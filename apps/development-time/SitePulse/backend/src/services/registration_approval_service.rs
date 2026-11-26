@@ -119,29 +119,39 @@ impl RegistrationApprovalService {
         site_id: &str,
     ) -> Vec<PendingRegistrationResponse> {
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(rows) = crate::db::logged(client
-                    .query(
-                        "SELECT request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at FROM pending_registrations WHERE site_id = $1 AND status = 'PENDING' ORDER BY submitted_at DESC",
-                        &[&crate::db::parse_id_to_i64(site_id).unwrap_or(0)],
-                    )
-                    .await, "registration_approval_service") {
-                    return rows
-                        .into_iter()
-                        .map(|row| PendingRegistrationResponse {
-                            request_id: row.get(0),
-                            site_id: row.get::<_, i64>(1).to_string(),
-                            block: row.get(2),
-                            unit_no: row.get(3),
-                            floor: row.get(4),
-                            full_name: row.get(5),
-                            email: row.get(6),
-                            phone: row.get(7),
-                            is_resident: row.get(8),
-                            status: row.get(9),
-                            submitted_at: row.get::<_, Option<chrono::DateTime<chrono::Utc>>>(10).unwrap_or_else(chrono::Utc::now),
-                        })
-                        .collect();
+            if let (Some(site_num), Ok(mut conn)) = (
+                crate::db::parse_id_to_i64(site_id).filter(|id| *id > 0),
+                pool.get().await,
+            ) {
+                if let Ok(client) = crate::db::begin_tenant_read(&mut conn, site_num).await {
+                    let rows_res = client
+                        .query(
+                            "SELECT request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at FROM pending_registrations WHERE site_id = $1 AND status = 'PENDING' ORDER BY submitted_at DESC",
+                            &[&site_num],
+                        )
+                        .await;
+                    let _ = client.commit().await;
+                    if let Some(rows) = crate::db::logged(rows_res, "registration_approval_service")
+                    {
+                        return rows
+                            .into_iter()
+                            .map(|row| PendingRegistrationResponse {
+                                request_id: row.get(0),
+                                site_id: row.get::<_, i64>(1).to_string(),
+                                block: row.get(2),
+                                unit_no: row.get(3),
+                                floor: row.get(4),
+                                full_name: row.get(5),
+                                email: row.get(6),
+                                phone: row.get(7),
+                                is_resident: row.get(8),
+                                status: row.get(9),
+                                submitted_at: row
+                                    .get::<_, Option<chrono::DateTime<chrono::Utc>>>(10)
+                                    .unwrap_or_else(chrono::Utc::now),
+                            })
+                            .collect();
+                    }
                 }
             }
         }

@@ -360,6 +360,7 @@ async fn split_shares_of_one_role_must_name_distinct_people() {
 struct TestDb {
     name: String,
     admin: Pool,
+    owner: Pool,
     pool: Pool,
 }
 
@@ -367,8 +368,18 @@ impl TestDb {
     /// `tag` keeps the database name unique per test: the rust-db-test gate runs these tests on
     /// several threads of one process, so the process id alone collides.
     async fn create(tag: &str) -> Self {
-        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
-        Self { name, admin, pool }
+        let crate::test_db::TestDatabase {
+            name,
+            admin,
+            owner,
+            pool,
+        } = crate::test_db::create(tag).await;
+        Self {
+            name,
+            admin,
+            owner,
+            pool,
+        }
     }
 
     async fn drop_db(self) {
@@ -403,7 +414,7 @@ async fn capital_debtor(pool: &Pool, unit: i64, project: i64, installment: i32) 
 // covers: SC-08-05-06, SC-08-05-07, SC-13-03-05, SC-13-12-02
 async fn only_an_approved_override_makes_the_seller_pay_later_installments() {
     let db = TestDb::create("approved_override").await;
-    let client = db.pool.get().await.expect("connection");
+    let client = db.owner.get().await.expect("connection");
     let row = client
         .query_one(
             "SELECT u.id, u.site_id, u.owner_person_id
@@ -454,7 +465,7 @@ async fn only_an_approved_override_makes_the_seller_pay_later_installments() {
     // No override: the owner on record at accrual (the buyer) is billed.
     capital.accrue_installment(&project.id, 1).await.expect("1");
     assert_eq!(
-        capital_debtor(&db.pool, unit, project_id, 1).await,
+        capital_debtor(&db.owner, unit, project_id, 1).await,
         Some(buyer)
     );
 
@@ -485,7 +496,7 @@ async fn only_an_approved_override_makes_the_seller_pay_later_installments() {
     ));
     capital.accrue_installment(&project.id, 2).await.expect("2");
     assert_eq!(
-        capital_debtor(&db.pool, unit, project_id, 2).await,
+        capital_debtor(&db.owner, unit, project_id, 2).await,
         Some(buyer)
     );
 
@@ -539,12 +550,12 @@ async fn only_an_approved_override_makes_the_seller_pay_later_installments() {
     );
     capital.accrue_installment(&project.id, 3).await.expect("3");
     assert_eq!(
-        capital_debtor(&db.pool, unit, project_id, 3).await,
+        capital_debtor(&db.owner, unit, project_id, 3).await,
         Some(seller)
     );
     // Debt accrued before the approval stays where it was.
     assert_eq!(
-        capital_debtor(&db.pool, unit, project_id, 1).await,
+        capital_debtor(&db.owner, unit, project_id, 1).await,
         Some(buyer)
     );
 
@@ -568,7 +579,7 @@ async fn a_rejected_override_request_leaves_the_seller_as_the_owner() {
     use sitepulse_backend::services::sale_clearance_service::TransferFlowError;
 
     let db = TestDb::create("rejected_override").await;
-    let client = db.pool.get().await.expect("connection");
+    let client = db.owner.get().await.expect("connection");
     let row = client
         .query_one(
             "SELECT u.id, u.site_id, u.owner_person_id

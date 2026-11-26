@@ -170,7 +170,7 @@ pub async fn site_is_active(pool: &Pool, site_id: &str) -> DbResult<bool> {
 /// # Errors
 /// Propagates database failures.
 pub async fn site_is_active_from_client(
-    client: &tokio_postgres::Client,
+    client: &impl tokio_postgres::GenericClient,
     site_id: &str,
 ) -> DbResult<bool> {
     let Some(id) = parse_id_to_i64(site_id) else {

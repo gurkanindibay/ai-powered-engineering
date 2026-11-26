@@ -203,10 +203,13 @@ pub async fn statement_unit(
         Err(err) => return Err(err),
     }
     let unit_id = UnitId::parse(id)?;
-    if let Some(client) = crate::db::security_connection(state).await? {
+    if let Some(mut conn) = crate::db::security_connection(state).await? {
         let site = SiteId::parse(&claims.site_id)?;
         let user = crate::db::require_id("user", &claims.sub)
             .map_err(|_| SecurityError::Unauthenticated)?;
+        let client = crate::db::begin_tenant_read(&mut conn, site.0)
+            .await
+            .map_err(|_| SecurityError::Unavailable)?;
         let row = client
             .query_opt(
                 "SELECT 1 FROM units u JOIN users actor ON actor.id=$3 \
@@ -225,6 +228,7 @@ pub async fn statement_unit(
             )
             .await
             .map_err(|_| SecurityError::Unavailable)?;
+        let _ = client.commit().await;
         return row
             .map(|_| StatementAccess::Historical)
             .ok_or(SecurityError::NotFound);
@@ -273,11 +277,15 @@ async fn unit_relationship(
     owner_only: bool,
 ) -> Result<(), SecurityError> {
     let unit = UnitId::parse(id)?;
-    if let Some(client) = crate::db::security_connection(state).await? {
+    if let Some(mut conn) = crate::db::security_connection(state).await? {
         let site = SiteId::parse(&claims.site_id)?;
         let user = crate::db::require_id("user", &claims.sub)
             .map_err(|_| SecurityError::Unauthenticated)?;
+        let client = crate::db::begin_tenant_read(&mut conn, site.0)
+            .await
+            .map_err(|_| SecurityError::Unavailable)?;
         let row=client.query_opt("SELECT u.site_id FROM units u JOIN users actor ON actor.id=$3 WHERE u.id=$1 AND u.site_id=$2 AND u.deleted_at IS NULL AND (NOT $5 OR u.owner_person_id=actor.person_id) AND (actor.role='SITE_MANAGER' OR $4 OR u.owner_person_id=actor.person_id OR u.tenant_person_id=actor.person_id OR EXISTS (SELECT 1 FROM occupancy_members m JOIN unit_occupancies o ON o.id=m.occupancy_id WHERE o.unit_id=u.id AND o.end_date IS NULL AND m.person_id=actor.person_id))",&[&unit.0,&site.0,&user,&claims.is_saas_admin(),&owner_only]).await.map_err(|_|SecurityError::Unavailable)?;
+        let _ = client.commit().await;
         return row.map(|_| ()).ok_or(SecurityError::NotFound);
     }
     let inner = state.inner.read().await;
@@ -313,8 +321,11 @@ pub async fn resource(
     kind: &str,
     id: &str,
 ) -> Result<(), SecurityError> {
-    if let Some(client) = crate::db::security_connection(state).await? {
+    if let Some(mut conn) = crate::db::security_connection(state).await? {
         let site = SiteId::parse(&claims.site_id)?;
+        let client = crate::db::begin_tenant_read(&mut conn, site.0)
+            .await
+            .map_err(|_| SecurityError::Unavailable)?;
         let row=match kind {
             "registration"=>client.query_opt("SELECT site_id FROM pending_registrations WHERE request_id=$1 AND site_id=$2",&[&id,&site.0]).await,
             "project"=>{let id=parse(id,&["cproj-"])?;client.query_opt("SELECT site_id FROM capital_projects WHERE id=$1 AND site_id=$2",&[&id,&site.0]).await},
@@ -344,7 +355,8 @@ pub async fn resource(
                     .ok_or(SecurityError::Unauthenticated)?;
                 let actor_role: String = actor_row.get(0);
                 let actor_person_id: i64 = actor_row.get(1);
-                drop(client);
+                let _ = client.commit().await;
+                drop(conn);
                 unit(state, claims, &unit_id.to_string()).await?;
                 if actor_role != "SITE_MANAGER" && !claims.is_saas_admin() {
                     let allowed = match actor_role.as_str() {
@@ -559,16 +571,21 @@ pub async fn request_grant(
         .map(|p| serde_json::to_value(p).and_then(serde_json::from_value::<String>))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| SecurityError::BadRequest)?;
-    let client = state
+    let mut conn = state
         .pool
         .as_ref()
         .ok_or(SecurityError::Unavailable)?
         .get()
         .await
         .map_err(|_| SecurityError::Unavailable)?;
+    // tenant-guard: platform — a SaaS admin grants cross-site support access.
+    let tx = crate::db::begin_platform_tx(&mut conn)
+        .await
+        .map_err(|_| SecurityError::Unavailable)?;
     let id = uuid::Uuid::new_v4().to_string();
     let expiry = chrono::Utc::now() + chrono::Duration::minutes(input.minutes);
-    client.execute("INSERT INTO support_grants(id,operator_user_id,site_id,permissions,reason,expires_at) VALUES ($1,$2,$3,$4,$5,$6)",&[&id,&operator,&site.0,&permissions,&input.reason,&expiry]).await.map_err(|_|SecurityError::Unavailable)?;
+    tx.execute("INSERT INTO support_grants(id,operator_user_id,site_id,permissions,reason,expires_at) VALUES ($1,$2,$3,$4,$5,$6)",&[&id,&operator,&site.0,&permissions,&input.reason,&expiry]).await.map_err(|_|SecurityError::Unavailable)?;
+    tx.commit().await.map_err(|_| SecurityError::Unavailable)?;
     Ok(Json(GrantResult { id }))
 }
 /// Apply the authenticated security operation.
@@ -584,19 +601,24 @@ pub async fn approve_grant(
         return Err(SecurityError::Forbidden);
     }
 
-    let client = state
+    let mut conn = state
         .pool
         .as_ref()
         .ok_or(SecurityError::Unavailable)?
         .get()
         .await
         .map_err(|_| SecurityError::Unavailable)?;
+    // tenant-guard: platform — a second SaaS admin approves a cross-site grant.
+    let tx = crate::db::begin_platform_tx(&mut conn)
+        .await
+        .map_err(|_| SecurityError::Unavailable)?;
     let id = crate::db::require_id("user", &ctx.claims.sub)
         .map_err(|_| SecurityError::Unauthenticated)?;
-    let n=client.execute("UPDATE support_grants SET approved_by=$1 WHERE id=$2 AND operator_user_id<>$1 AND approved_by IS NULL AND revoked_at IS NULL AND expires_at>now()",&[&id,&input.id]).await.map_err(|_|SecurityError::Unavailable)?;
+    let n=tx.execute("UPDATE support_grants SET approved_by=$1 WHERE id=$2 AND operator_user_id<>$1 AND approved_by IS NULL AND revoked_at IS NULL AND expires_at>now()",&[&id,&input.id]).await.map_err(|_|SecurityError::Unavailable)?;
     if n != 1 {
         return Err(SecurityError::NotFound);
     }
+    tx.commit().await.map_err(|_| SecurityError::Unavailable)?;
     Ok(Json(serde_json::json!({"status":"SUCCESS"})))
 }
 /// Apply the authenticated security operation.
@@ -612,20 +634,24 @@ pub async fn revoke_grant(
         return Err(SecurityError::Forbidden);
     }
 
-    let client = state
+    let mut conn = state
         .pool
         .as_ref()
         .ok_or(SecurityError::Unavailable)?
         .get()
         .await
         .map_err(|_| SecurityError::Unavailable)?;
-    client
-        .execute(
-            "UPDATE support_grants SET revoked_at=now() WHERE id=$1 AND revoked_at IS NULL",
-            &[&input.id],
-        )
+    // tenant-guard: platform — a SaaS admin revokes a cross-site grant.
+    let tx = crate::db::begin_platform_tx(&mut conn)
         .await
         .map_err(|_| SecurityError::Unavailable)?;
+    tx.execute(
+        "UPDATE support_grants SET revoked_at=now() WHERE id=$1 AND revoked_at IS NULL",
+        &[&input.id],
+    )
+    .await
+    .map_err(|_| SecurityError::Unavailable)?;
+    tx.commit().await.map_err(|_| SecurityError::Unavailable)?;
     tracing::info!(actor_id=%ctx.claims.sub,"Support grant revoked");
     Ok(Json(serde_json::json!({"status":"SUCCESS"})))
 }
@@ -654,13 +680,16 @@ pub async fn assign_role(
     }
     let pool = state.pool.as_ref().ok_or(SecurityError::Unavailable)?;
     let mut client = pool.get().await.map_err(|_| SecurityError::Unavailable)?;
+    let site = SiteId::parse(&ctx.claims.site_id)?.0;
+    let user =
+        crate::db::require_id("user", &input.user_id).map_err(|_| SecurityError::BadRequest)?;
     let tx = client
         .transaction()
         .await
         .map_err(|_| SecurityError::Unavailable)?;
-    let site = SiteId::parse(&ctx.claims.site_id)?.0;
-    let user =
-        crate::db::require_id("user", &input.user_id).map_err(|_| SecurityError::BadRequest)?;
+    crate::db::tx_bind_tenant(&tx, site)
+        .await
+        .map_err(|_| SecurityError::Unavailable)?;
     let row=tx.query_opt("SELECT role FROM users WHERE id=$1 AND site_id=$2 AND is_active AND role IN ('HOME_OWNER','HOME_RESIDENT') FOR UPDATE",&[&user,&site]).await.map_err(|_|SecurityError::Unavailable)?.ok_or(SecurityError::NotFound)?;
     let old: String = row.get(0);
     tx.execute(
@@ -728,8 +757,12 @@ pub async fn assign_platform_role(
         .get()
         .await
         .map_err(|_| SecurityError::Unavailable)?;
+    // tenant-guard: platform — SaaS admin role assignment.
     let tx = client
         .transaction()
+        .await
+        .map_err(|_| SecurityError::Unavailable)?;
+    crate::db::tx_bind_platform(&tx)
         .await
         .map_err(|_| SecurityError::Unavailable)?;
     let n = if input.enabled {

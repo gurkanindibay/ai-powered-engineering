@@ -477,12 +477,16 @@ impl OccupancyService {
         let pool = self.state.db_pool()?;
         let site = crate::db::require_id("site", site_id).ok()?;
         let unit = parse_unit_id(unit_id)?;
-        let client = pool
+        let mut conn = pool
             .get()
             .await
             .inspect_err(
                 |error| tracing::warn!(%error, "seller lookup could not reach the database"),
             )
+            .ok()?;
+        let client = crate::db::begin_tenant_read(&mut conn, site)
+            .await
+            .inspect_err(|error| tracing::warn!(%error, "seller lookup could not bind the site"))
             .ok()?;
         let row = client
             .query_opt(

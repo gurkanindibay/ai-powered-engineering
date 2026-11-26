@@ -38,7 +38,10 @@ SEED_DIR = BACKEND / "db" / "seed"
 UPGRADE_FROM = 7
 
 CONTAINER = os.environ.get("SITEPULSE_PG_CONTAINER", "sitepulse-postgres")
-DB_USER = os.environ.get("DB_USER", "sitepulse_user")
+# Provisioning identity: this check creates databases and applies migrations, so it
+# runs as the schema owner (`DB_ADMIN_USER`) when CI separates it from the runtime role.
+DB_USER = os.environ.get("DB_ADMIN_USER") or os.environ.get("DB_USER", "sitepulse_user")
+DB_PASS = os.environ.get("DB_ADMIN_PASS") or os.environ.get("DB_PASS", "")
 ADMIN_DB = "postgres"
 
 SCHEMA_DUMP = """
@@ -462,7 +465,7 @@ UPGRADE_ASSERTIONS = [
 
 def psql(db: str, sql: str, stop: bool = True) -> subprocess.CompletedProcess:
     if shutil.which("psql"):
-        dsn = (f"postgresql://{DB_USER}:{os.environ.get('DB_PASS', '')}@{os.environ.get('DB_HOST', '127.0.0.1')}:"
+        dsn = (f"postgresql://{DB_USER}:{DB_PASS}@{os.environ.get('DB_HOST', '127.0.0.1')}:"
                f"{os.environ.get('DB_PORT', '5432')}/{db}")
         cmd = ["psql", dsn, "-X", "-q", "-t", "-A"]
     else:

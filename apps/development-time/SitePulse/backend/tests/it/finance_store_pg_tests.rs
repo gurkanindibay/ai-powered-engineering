@@ -131,6 +131,8 @@ fn assert_same(memory: &FinanceBook, db: &FinanceBook) {
 async fn every_spec009_record_round_trips_through_postgresql() {
     let test_db = crate::test_db::create("finance_store").await;
     let pool = test_db.pool.clone();
+    // Fixture assertions read as the schema owner; the app keeps the runtime pool.
+    let owner = test_db.owner.clone();
     let state = AppState::with_pool(Some(pool.clone()));
     {
         let mut inner = state.inner.write().await;
@@ -722,7 +724,7 @@ async fn every_spec009_record_round_trips_through_postgresql() {
     let reloaded = load_finance_book(&pool).await.unwrap();
     assert_same(&memory, &reloaded);
     // The due's adjustment and the budget transition columns are written too.
-    let adjusted: Decimal = pool
+    let adjusted: Decimal = owner
         .get()
         .await
         .unwrap()

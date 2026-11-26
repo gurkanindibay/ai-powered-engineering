@@ -116,6 +116,15 @@ jobs:
     needs: e2e-plan
     name: rust (build, clippy, tests, schema, API system)
     runs-on: ubuntu-24.04
+    # The database gates run the application as a non-superuser runtime role, exactly as
+    # production does, so a query that forgets to bind a tenant fails here instead of
+    # returning every tenant's rows. The owner identity (`DB_ADMIN_*`) only provisions:
+    # it creates the databases and applies migrations.
+    env:
+      DB_USER: sitepulse_runtime
+      DB_PASS: ci-runtime-password
+      DB_ADMIN_USER: sitepulse_user
+      DB_ADMIN_PASS: ci-only-password
     services:
       postgres:
         image: postgres:16-alpine
@@ -142,6 +151,17 @@ jobs:
           python-version: "3.12"
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Provision the runtime role
+        env:
+          PGPASSWORD: ${{ env.DB_ADMIN_PASS }}
+        run: |
+          psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_ADMIN_USER" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          -- Production runs the service as a role that is neither superuser, table owner
+          -- nor BYPASSRLS, so row-level security applies to it.
+          CREATE ROLE sitepulse_runtime LOGIN PASSWORD 'ci-runtime-password'
+            NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB;
+          SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'sitepulse_runtime';
+          SQL
       - name: Install cargo-llvm-cov
         run: |
           curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz \
@@ -171,7 +191,7 @@ jobs:
         working-directory: apps/development-time/SitePulse/backend
         run: |
           mkdir -p "${{ runner.temp }}/sitepulse-suite-rust/coverage"
-          PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres \
+          PGPASSWORD="$DB_ADMIN_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_ADMIN_USER" -d postgres \
             -c "DROP DATABASE IF EXISTS sitepulse_cov;" -c "CREATE DATABASE sitepulse_cov;"
           cargo llvm-cov clean --workspace
           cargo llvm-cov --no-report --locked

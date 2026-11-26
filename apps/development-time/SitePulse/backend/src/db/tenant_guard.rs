@@ -80,6 +80,26 @@ pub async fn tx_bind_platform(tx: &deadpool_postgres::Transaction<'_>) -> DbResu
     Ok(())
 }
 
+/// Grants the runtime identity membership in [`TENANT_ROLE`] (V25), as database
+/// provisioning does in production.
+///
+/// Test fixtures run with split identities: the owner creates and migrates the
+/// throwaway database, the runtime role serves the application. This call gives
+/// that runtime role the tenant role it needs for `SET LOCAL ROLE` binding.
+pub async fn provision_runtime_role(admin: &Pool, runtime_role: &str) -> DbResult<()> {
+    if runtime_role.is_empty()
+        || !runtime_role
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return Err(format!("refusing to grant a role name '{}'", runtime_role).into());
+    }
+    let client = admin.get().await?;
+    let statement = format!("GRANT {} TO {}", TENANT_ROLE, runtime_role);
+    client.batch_execute(&statement).await?;
+    Ok(())
+}
+
 /// The tenant the current transaction is bound to, if any (diagnostics/tests).
 pub async fn tx_bound_tenant(tx: &deadpool_postgres::Transaction<'_>) -> DbResult<Option<i64>> {
     let row = tx

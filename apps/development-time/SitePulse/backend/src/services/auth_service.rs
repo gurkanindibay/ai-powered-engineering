@@ -64,11 +64,15 @@ impl AuthService {
         if !matches!(user.role, Role::HomeOwner | Role::HomeResident) {
             return Ok(None);
         }
-        if let Some(client) = crate::db::security_connection(&self.state).await.map_err(|e| e.to_string())? {
+        if let Some(mut conn) = crate::db::security_connection(&self.state).await.map_err(|e| e.to_string())? {
             let site = crate::db::require_id("site", &user.site_id)?;
+            let client = crate::db::begin_tenant_read(&mut conn, site)
+                .await
+                .map_err(|_| "Identity storage unavailable".to_string())?;
             // A former resident whose charge is still open keeps the unit, so the
             // statement they must settle stays reachable; a current tie wins the pick.
             let row=client.query_opt("SELECT u.id FROM units u WHERE u.site_id=$1 AND u.deleted_at IS NULL AND (u.owner_person_id=$2 OR u.tenant_person_id=$2 OR EXISTS(SELECT 1 FROM occupancy_members m JOIN unit_occupancies o ON o.id=m.occupancy_id WHERE o.unit_id=u.id AND o.is_active AND o.end_date IS NULL AND m.person_id=$2) OR EXISTS(SELECT 1 FROM dues_liabilities d WHERE d.unit_id=u.id AND d.liable_person_id=$2 AND d.status NOT IN ('PAID','CANCELLED'))) ORDER BY (CASE WHEN u.owner_person_id=$2 OR u.tenant_person_id=$2 THEN 0 ELSE 1 END), u.id LIMIT 1",&[&site,&user.person_id]).await.map_err(|_|"Identity storage unavailable".to_string())?;
+            let _ = client.commit().await;
             return Ok(row.map(|r| r.get::<_, i64>(0).to_string()));
         }
         let inner = self.state.inner.read().await;
@@ -552,12 +556,16 @@ impl AuthService {
             .await
             .map_err(|_| "Identity storage unavailable")?;
         let digest = auth::token_digest(raw_token.trim());
+        // The site is unknown until the invitation is consumed, and `invitation_tokens`
+        // is tenant-isolated: resolve it as an explicit platform step, then bind the
+        // invitation's tenant for every write below (RLS, V21).
+        crate::db::tx_bind_platform(&tx)
+            .await
+            .map_err(|_| "Identity storage unavailable")?;
         let row=tx.query_opt("DELETE FROM invitation_tokens invite USING units unit,sites site WHERE invite.token=$1 AND invite.token_type='UNIT' AND invite.expires_at>now() AND invite.unit_id=unit.id AND unit.site_id=site.id AND unit.deleted_at IS NULL AND site.deleted_at IS NULL AND site.status IN ('ACTIVE','TRIAL') RETURNING invite.unit_id,unit.site_id,invite.relationship",&[&digest]).await.map_err(|_|"Invitation storage unavailable")?.ok_or("Invitation token is invalid or has already been used.")?;
         let unit: i64 = row.get(0);
         let site: i64 = row.get(1);
         let relationship: Option<String> = row.get(2);
-        // The tenant is known once the invitation is consumed: bind it (RLS, V21)
-        // so every write below is confined to the invitation's site.
         crate::db::tx_bind_tenant(&tx, site)
             .await
             .map_err(|_| "Identity storage unavailable")?;

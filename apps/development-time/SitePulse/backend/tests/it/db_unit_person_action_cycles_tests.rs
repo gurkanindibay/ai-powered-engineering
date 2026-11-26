@@ -31,14 +31,20 @@ const IGNORE: &str = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate";
 struct TestDb {
     name: String,
     admin: Pool,
+    owner: Pool,
     pool: Pool,
 }
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
+        let crate::test_db::TestDatabase {
+            name,
+            admin,
+            owner,
+            pool,
+        } = crate::test_db::create(tag).await;
         let hash = auth::hash_password(manager_password()).expect("hash");
-        pool.get()
+        owner.get()
             .await
             .expect("connection")
             .execute(
@@ -53,7 +59,12 @@ impl TestDb {
             )
             .await
             .expect("seed site managers");
-        Self { name, admin, pool }
+        Self {
+            name,
+            admin,
+            owner,
+            pool,
+        }
     }
 
     async fn drop_db(self) {
@@ -69,17 +80,17 @@ impl TestDb {
     }
 
     async fn int(&self, sql: &str) -> i64 {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn text(&self, sql: &str) -> String {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn exec(&self, sql: &str) {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.batch_execute(sql).await.expect(sql);
     }
 }
@@ -424,7 +435,7 @@ impl Env {
     }
 
     async fn primary_contact(&self) -> Option<i64> {
-        let client = self.t.pool.get().await.expect("connection");
+        let client = self.t.owner.get().await.expect("connection");
         let row = client
             .query_one(
                 &format!(

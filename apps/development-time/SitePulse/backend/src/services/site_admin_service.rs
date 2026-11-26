@@ -1309,8 +1309,15 @@ impl SiteAdminService {
 
         // 1. Try DB first if pool available
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                let query = r#"
+            if let Ok(mut conn) = pool.get().await {
+                let tx_res = if site_numeric > 0 {
+                    crate::db::begin_tenant_read(&mut conn, site_numeric).await
+                } else {
+                    // tenant-guard: platform — empty/non-numeric site_id fallback.
+                    crate::db::begin_platform_read(&mut conn).await
+                };
+                if let Ok(client) = tx_res {
+                    let query = r#"
                     SELECT 
                         u.id::text as unit_id,
                         u.primary_responsible_contact,
@@ -1351,11 +1358,11 @@ impl SiteAdminService {
                     WHERE u.site_id = $1
                     ORDER BY b.block_name, u.unit_number
                 "#;
-                let mut household_map: std::collections::HashMap<
-                    String,
-                    Vec<crate::models::UnitMemberDto>,
-                > = std::collections::HashMap::new();
-                if let Some(m_rows) = crate::db::logged(client
+                    let mut household_map: std::collections::HashMap<
+                        String,
+                        Vec<crate::models::UnitMemberDto>,
+                    > = std::collections::HashMap::new();
+                    if let Some(m_rows) = crate::db::logged(client
                     .query(
                         r#"
                         SELECT uo.unit_id, om.id, om.full_name, om.relationship, COALESCE(om.phone, ''), COALESCE(om.email, ''), (uo.occupancy_type = 'OWNER'), om.occupancy_id, om.person_id
@@ -1385,95 +1392,95 @@ impl SiteAdminService {
                     }
                 }
 
-                if let Some(rows) = crate::db::logged(
-                    client.query(query, &[&site_numeric]).await,
-                    "site_admin_service",
-                ) {
-                    if !rows.is_empty() {
-                        let mut db_result = Vec::new();
-                        let mut seen = std::collections::HashSet::new();
-                        for r in rows {
-                            let email: String = r.get("email");
-                            let full_name: String = r.get("full_name");
-                            let block_name: String = r.get("block_name");
-                            let unit_no: i32 = r.get("unit_number");
-                            let unit_id_val: String = r.get("unit_id");
+                    let rows_res = client.query(query, &[&site_numeric]).await;
+                    let _ = client.commit().await;
+                    if let Some(rows) = crate::db::logged(rows_res, "site_admin_service") {
+                        if !rows.is_empty() {
+                            let mut db_result = Vec::new();
+                            let mut seen = std::collections::HashSet::new();
+                            for r in rows {
+                                let email: String = r.get("email");
+                                let full_name: String = r.get("full_name");
+                                let block_name: String = r.get("block_name");
+                                let unit_no: i32 = r.get("unit_number");
+                                let unit_id_val: String = r.get("unit_id");
 
-                            let dedup_key = format!("{}-{}", block_name, unit_no);
-                            if !seen.insert(dedup_key) {
-                                continue;
-                            }
-                            let floor_val: i32 = r.get("floor");
-                            let land_share_val: i32 = r.get("land_share");
-                            let dues_val: Decimal = r.get("monthly_dues");
-                            let is_resident: bool = r.get("is_resident");
-                            let occ_status: String = r.get("occupancy_status");
-                            let t_name: Option<String> = r.get("tenant_full_name");
-                            let t_email: Option<String> = r.get("tenant_email");
-                            let t_phone: Option<String> = r.get("tenant_phone");
-                            let op_balance: Decimal = r.get("operational_dues_balance");
-                            let cap_balance: Decimal = r.get("capital_dues_balance");
+                                let dedup_key = format!("{}-{}", block_name, unit_no);
+                                if !seen.insert(dedup_key) {
+                                    continue;
+                                }
+                                let floor_val: i32 = r.get("floor");
+                                let land_share_val: i32 = r.get("land_share");
+                                let dues_val: Decimal = r.get("monthly_dues");
+                                let is_resident: bool = r.get("is_resident");
+                                let occ_status: String = r.get("occupancy_status");
+                                let t_name: Option<String> = r.get("tenant_full_name");
+                                let t_email: Option<String> = r.get("tenant_email");
+                                let t_phone: Option<String> = r.get("tenant_phone");
+                                let op_balance: Decimal = r.get("operational_dues_balance");
+                                let cap_balance: Decimal = r.get("capital_dues_balance");
 
-                            let mut household =
-                                household_map.get(&unit_id_val).cloned().unwrap_or_default();
-                            if household.is_empty() {
-                                household = household_map
-                                    .get(&unit_no.to_string())
-                                    .cloned()
-                                    .unwrap_or_default();
-                            }
-                            if household.is_empty() {
-                                household = household_map
-                                    .get(&format!("d-{}", unit_no))
-                                    .cloned()
-                                    .unwrap_or_default();
-                            }
-                            if household.is_empty() {
-                                household = household_map
-                                    .get(&format!("unit-{}", unit_no))
-                                    .cloned()
-                                    .unwrap_or_default();
-                            }
+                                let mut household =
+                                    household_map.get(&unit_id_val).cloned().unwrap_or_default();
+                                if household.is_empty() {
+                                    household = household_map
+                                        .get(&unit_no.to_string())
+                                        .cloned()
+                                        .unwrap_or_default();
+                                }
+                                if household.is_empty() {
+                                    household = household_map
+                                        .get(&format!("d-{}", unit_no))
+                                        .cloned()
+                                        .unwrap_or_default();
+                                }
+                                if household.is_empty() {
+                                    household = household_map
+                                        .get(&format!("unit-{}", unit_no))
+                                        .cloned()
+                                        .unwrap_or_default();
+                                }
 
-                            db_result.push(HomeOwnerResponse {
-                                primary_responsible: r
-                                    .get::<_, Option<serde_json::Value>>(
-                                        "primary_responsible_contact",
-                                    )
-                                    .and_then(|value| serde_json::from_value(value).ok()),
-                                unit_id: unit_id_val,
-                                site_id: site_id.to_string(),
-                                block: block_name,
-                                unit_no,
-                                floor: floor_val,
-                                owner_full_name: full_name,
-                                email,
-                                phone: r.get("phone"),
-                                land_share: format!("{}/24", land_share_val),
-                                monthly_dues: dues_val,
-                                house_type: r.get("house_type"),
-                                is_resident,
-                                activation: None,
-                                tenant_activation: None,
-                                pending_email_changes: Vec::new(),
-                                warnings: Vec::new(),
-                                must_change_password: r.get("must_change_password"),
-                                created_at: r.get("created_at"),
-                                occupancy_status: Some(OccupancyStatus::from_str_loose(
-                                    &occ_status,
-                                )),
-                                tenant_full_name: t_name,
-                                tenant_email: t_email,
-                                tenant_phone: t_phone,
-                                operational_dues_balance: Some(op_balance),
-                                capital_dues_balance: Some(cap_balance),
-                                advance_balance: None,
-                                household_residents: household,
-                                owner_person_id: r.get("owner_person_id"),
-                                tenant_person_id: r.get("tenant_person_id"),
-                            });
+                                db_result.push(HomeOwnerResponse {
+                                    primary_responsible: r
+                                        .get::<_, Option<serde_json::Value>>(
+                                            "primary_responsible_contact",
+                                        )
+                                        .and_then(|value| serde_json::from_value(value).ok()),
+                                    unit_id: unit_id_val,
+                                    site_id: site_id.to_string(),
+                                    block: block_name,
+                                    unit_no,
+                                    floor: floor_val,
+                                    owner_full_name: full_name,
+                                    email,
+                                    phone: r.get("phone"),
+                                    land_share: format!("{}/24", land_share_val),
+                                    monthly_dues: dues_val,
+                                    house_type: r.get("house_type"),
+                                    is_resident,
+                                    activation: None,
+                                    tenant_activation: None,
+                                    pending_email_changes: Vec::new(),
+                                    warnings: Vec::new(),
+                                    must_change_password: r.get("must_change_password"),
+                                    created_at: r.get("created_at"),
+                                    occupancy_status: Some(OccupancyStatus::from_str_loose(
+                                        &occ_status,
+                                    )),
+                                    tenant_full_name: t_name,
+                                    tenant_email: t_email,
+                                    tenant_phone: t_phone,
+                                    operational_dues_balance: Some(op_balance),
+                                    capital_dues_balance: Some(cap_balance),
+                                    advance_balance: None,
+                                    household_residents: household,
+                                    owner_person_id: r.get("owner_person_id"),
+                                    tenant_person_id: r.get("tenant_person_id"),
+                                });
+                            }
+                            return db_result;
                         }
-                        return db_result;
                     }
                 }
             }
@@ -2425,24 +2432,28 @@ impl SiteAdminService {
 
     pub async fn delete_unit_member(
         &self,
-        _site_id: &str,
+        site_id: &str,
         unit_id: &str,
         resident_id: &str,
     ) -> Result<(), String> {
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                let unit_id_num = crate::db::require_id("entity", unit_id)?;
-                let member_id = crate::db::parse_id_to_i64(resident_id);
-                client.execute(
+            if let Ok(mut conn) = pool.get().await {
+                let site_num = crate::db::require_id("entity", site_id)?;
+                if let Ok(client) = crate::db::begin_tenant_tx(&mut conn, site_num).await {
+                    let unit_id_num = crate::db::require_id("entity", unit_id)?;
+                    let member_id = crate::db::parse_id_to_i64(resident_id);
+                    client.execute(
                     "DELETE FROM occupancy_members WHERE id = $1 AND occupancy_id IN (SELECT id FROM unit_occupancies WHERE unit_id = $2)",
                     &[&member_id, &unit_id_num],
                 ).await.map_err(|e| e.to_string())?;
-                crate::db::responsible_contact_repository::clear_stale_primary_contact(
-                    &client,
-                    unit_id_num,
-                )
-                .await
-                .map_err(|e| e.to_string())?;
+                    crate::db::responsible_contact_repository::clear_stale_primary_contact(
+                        &client,
+                        unit_id_num,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    client.commit().await.map_err(|e| e.to_string())?;
+                }
             }
         }
 
@@ -2462,7 +2473,7 @@ impl SiteAdminService {
     #[allow(clippy::too_many_arguments)]
     pub async fn update_unit_member(
         &self,
-        _site_id: &str,
+        site_id: &str,
         unit_id: &str,
         resident_id: &str,
         full_name: &str,
@@ -2477,13 +2488,17 @@ impl SiteAdminService {
                 })?
                 .as_str();
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                let unit_id_num = crate::db::require_id("entity", unit_id)?;
-                let member_id = crate::db::parse_id_to_i64(resident_id);
-                client.execute(
+            if let Ok(mut conn) = pool.get().await {
+                let site_num = crate::db::require_id("entity", site_id)?;
+                if let Ok(client) = crate::db::begin_tenant_tx(&mut conn, site_num).await {
+                    let unit_id_num = crate::db::require_id("entity", unit_id)?;
+                    let member_id = crate::db::parse_id_to_i64(resident_id);
+                    client.execute(
                     "UPDATE occupancy_members SET full_name = $1, phone = $2, email = $3, relationship = $4 WHERE id = $5 AND occupancy_id IN (SELECT id FROM unit_occupancies WHERE unit_id = $6)",
                     &[&full_name, &phone, &email, &relationship, &member_id, &unit_id_num],
                 ).await.map_err(|e| e.to_string())?;
+                    client.commit().await.map_err(|e| e.to_string())?;
+                }
             }
         }
 
@@ -2515,8 +2530,9 @@ impl SiteAdminService {
 
         // 1. Try DB first if pool available
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(rows) = crate::db::logged(client
+            if let Ok(mut conn) = pool.get().await {
+                if let Ok(client) = crate::db::begin_tenant_read(&mut conn, site_numeric).await {
+                    if let Some(rows) = crate::db::logged(client
                     .query(
                         "SELECT id, site_id, type_name, dues_amount, description FROM house_types WHERE site_id = $1 ORDER BY dues_amount ASC",
                         &[&site_numeric],
@@ -2539,6 +2555,7 @@ impl SiteAdminService {
                             }
                         })
                         .collect();
+                }
                 }
             }
         }
@@ -2612,10 +2629,13 @@ impl SiteAdminService {
         let type_name_trimmed = request.type_name.trim().to_string();
 
         let id_str = if let Some(ref pool) = self.state.pool {
-            let client = pool
+            let mut conn = pool
                 .get()
                 .await
                 .map_err(|e| format!("DB connection error: {}", e))?;
+            let client = crate::db::begin_tenant_tx(&mut conn, site_numeric)
+                .await
+                .map_err(|e| e.to_string())?;
             let row = client
                 .query_one(
                     r#"
@@ -2636,6 +2656,7 @@ impl SiteAdminService {
                 .await
                 .map_err(|e| format!("DB insert error: {}", e))?;
             let db_id: i64 = row.get(0);
+            client.commit().await.map_err(|e| e.to_string())?;
             db_id.to_string()
         } else {
             let inner = self.state.inner.read().await;
@@ -2673,15 +2694,18 @@ impl SiteAdminService {
     pub async fn delete_house_type(&self, site_id: &str, id: &str) -> Result<(), String> {
         let site_numeric = crate::db::require_id("entity", site_id)?;
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Ok(numeric_id) = id.parse::<i64>() {
-                    client
-                        .execute(
-                            "DELETE FROM house_types WHERE id = $1 AND site_id = $2",
-                            &[&numeric_id, &site_numeric],
-                        )
-                        .await
-                        .map_err(|e| e.to_string())?;
+            if let Ok(mut conn) = pool.get().await {
+                if let Ok(client) = crate::db::begin_tenant_tx(&mut conn, site_numeric).await {
+                    if let Ok(numeric_id) = id.parse::<i64>() {
+                        client
+                            .execute(
+                                "DELETE FROM house_types WHERE id = $1 AND site_id = $2",
+                                &[&numeric_id, &site_numeric],
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
+                    }
+                    client.commit().await.map_err(|e| e.to_string())?;
                 }
             }
         }
@@ -2757,10 +2781,13 @@ impl SiteAdminService {
         let site_numeric = crate::db::require_id("entity", site_id)?;
 
         let id_str = if let Some(ref pool) = self.state.pool {
-            let client = pool
+            let mut conn = pool
                 .get()
                 .await
                 .map_err(|e| format!("DB connection error: {}", e))?;
+            let client = crate::db::begin_tenant_tx(&mut conn, site_numeric)
+                .await
+                .map_err(|e| e.to_string())?;
             let existing = client
                 .query_opt(
                     "SELECT id FROM blocks WHERE site_id = $1 AND LOWER(block_name) = LOWER($2)",
@@ -2769,7 +2796,7 @@ impl SiteAdminService {
                 .await
                 .map_err(|e| format!("DB query error: {}", e))?;
 
-            if let Some(row) = existing {
+            let id = if let Some(row) = existing {
                 let db_id: i64 = row.get(0);
                 client
                     .execute(
@@ -2789,7 +2816,9 @@ impl SiteAdminService {
                     .map_err(|e| format!("DB insert error: {}", e))?;
                 let db_id: i64 = row.get(0);
                 db_id.to_string()
-            }
+            };
+            client.commit().await.map_err(|e| e.to_string())?;
+            id
         } else {
             let inner = self.state.inner.read().await;
             let max_id = inner
@@ -3242,7 +3271,7 @@ impl SiteAdminService {
 
     pub async fn get_unit_occupancy_history(
         &self,
-        _site_id: &str,
+        site_id: &str,
         unit_id: &str,
     ) -> Result<Vec<crate::models::OccupancyHistoryItem>, String> {
         let unit_numeric = crate::db::parse_id_to_i64(unit_id)
@@ -3262,8 +3291,10 @@ impl SiteAdminService {
             .ok_or_else(|| format!("Invalid unit ID: {}", unit_id))?;
 
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                let query = r#"
+            if let Ok(mut conn) = pool.get().await {
+                let site_num = crate::db::parse_id_to_i64(site_id).unwrap_or(0);
+                if let Ok(client) = crate::db::begin_tenant_read(&mut conn, site_num).await {
+                    let query = r#"
                     SELECT 
                         uo.id,
                         uo.unit_id,
@@ -3283,30 +3314,31 @@ impl SiteAdminService {
                     WHERE uo.unit_id = $1
                     ORDER BY uo.start_date DESC, uo.id DESC
                 "#;
-                if let Some(rows) = crate::db::logged(
-                    client.query(query, &[&unit_numeric]).await,
-                    "site_admin_service",
-                ) {
-                    let items = rows
-                        .into_iter()
-                        .map(|r| crate::models::OccupancyHistoryItem {
-                            id: r.get(0),
-                            unit_id: r.get(1),
-                            person_id: r.get(2),
-                            person_name: r.get(3),
-                            person_phone: r.get(4),
-                            person_email: r.get(5),
-                            role: DebtorType::from_str_loose(&r.get::<_, String>(6)),
-                            start_date: r.get(7),
-                            end_date: r.get(8),
-                            is_active: r.get(9),
-                            exit_balance: r.get(10),
-                            notes: r.get(11),
-                            created_at: r.get(12),
-                        })
-                        .collect::<Vec<_>>();
-                    if !items.is_empty() {
-                        return Ok(items);
+                    if let Some(rows) = crate::db::logged(
+                        client.query(query, &[&unit_numeric]).await,
+                        "site_admin_service",
+                    ) {
+                        let items = rows
+                            .into_iter()
+                            .map(|r| crate::models::OccupancyHistoryItem {
+                                id: r.get(0),
+                                unit_id: r.get(1),
+                                person_id: r.get(2),
+                                person_name: r.get(3),
+                                person_phone: r.get(4),
+                                person_email: r.get(5),
+                                role: DebtorType::from_str_loose(&r.get::<_, String>(6)),
+                                start_date: r.get(7),
+                                end_date: r.get(8),
+                                is_active: r.get(9),
+                                exit_balance: r.get(10),
+                                notes: r.get(11),
+                                created_at: r.get(12),
+                            })
+                            .collect::<Vec<_>>();
+                        if !items.is_empty() {
+                            return Ok(items);
+                        }
                     }
                 }
             }

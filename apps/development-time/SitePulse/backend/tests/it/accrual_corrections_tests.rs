@@ -800,6 +800,8 @@ async fn approving_the_same_correction_twice_concurrently_applies_it_once() {
 async fn corrections_round_trip_through_postgresql() {
     let test_db = crate::test_db::create("accrual_corrections").await;
     let pool = test_db.pool.clone();
+    // Fixture SQL writes run as the schema owner; the app keeps the runtime pool.
+    let owner = test_db.owner.clone();
     let state = AppState::with_pool(Some(pool.clone()));
     {
         let mut inner = state.inner.write().await;
@@ -845,7 +847,8 @@ async fn corrections_round_trip_through_postgresql() {
         .unwrap();
     // Give the original a canonical period key (STORY-07-08) so the re-issue can be
     // checked to carry it over. The scratch label is unique per run, so is the key.
-    pool.get()
+    owner
+        .get()
         .await
         .unwrap()
         .execute(
@@ -855,7 +858,7 @@ async fn corrections_round_trip_through_postgresql() {
         .await
         .unwrap();
     // ...and an operating budget as its legal basis (KMK 37).
-    let budget: i64 = pool
+    let budget: i64 = owner
         .get()
         .await
         .unwrap()
@@ -867,7 +870,8 @@ async fn corrections_round_trip_through_postgresql() {
         .await
         .unwrap()
         .get(0);
-    pool.get()
+    owner
+        .get()
         .await
         .unwrap()
         .execute(
@@ -909,7 +913,7 @@ async fn corrections_round_trip_through_postgresql() {
         .unwrap();
     assert_eq!(approved.replacement_due_ids.len(), 2);
     for replacement_id in &approved.replacement_due_ids {
-        let row = pool
+        let row = owner
             .get()
             .await
             .unwrap()
@@ -974,7 +978,7 @@ async fn corrections_round_trip_through_postgresql() {
         corrections.decide(&third, note.id, approve()),
     );
     assert_eq!([x.is_ok(), y.is_ok()].iter().filter(|ok| **ok).count(), 1);
-    let approvals: i64 = pool
+    let approvals: i64 = owner
         .get()
         .await
         .unwrap()
@@ -988,7 +992,7 @@ async fn corrections_round_trip_through_postgresql() {
     assert_eq!(approvals, 1);
 
     let stored: (String, rust_decimal::Decimal) = {
-        let client = pool.get().await.unwrap();
+        let client = owner.get().await.unwrap();
         let row = client
             .query_one(
                 "SELECT status, principal_amount FROM dues_liabilities WHERE id = $1::text::bigint",
@@ -999,7 +1003,7 @@ async fn corrections_round_trip_through_postgresql() {
         (row.get(0), row.get(1))
     };
     assert_eq!(stored.1, d("400.00"));
-    let cancelled: String = pool
+    let cancelled: String = owner
         .get()
         .await
         .unwrap()
@@ -1016,7 +1020,7 @@ async fn corrections_round_trip_through_postgresql() {
     split_due.debtor_type = DebtorType::Tenant;
     split_due.period = format!("{}s", &period[..9]);
     let split_due = store.insert_due(split_due).await.unwrap().unwrap();
-    pool.get()
+    owner.get()
         .await
         .unwrap()
         .execute(
@@ -1069,7 +1073,7 @@ async fn corrections_round_trip_through_postgresql() {
         .unwrap();
     assert_eq!(split_approved.replacement_due_ids.len(), 2);
     assert_eq!(split_approved.advance_credited, Some(d("1400.00")));
-    let replacements: i64 = pool
+    let replacements: i64 = owner
         .get()
         .await
         .unwrap()

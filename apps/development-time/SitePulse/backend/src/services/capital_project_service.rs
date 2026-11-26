@@ -60,52 +60,65 @@ impl CapitalProjectService {
 
         // 1. Database persistence if pool is present
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                let row_res = client
-                    .query_one(
-                        r#"
-                        INSERT INTO capital_projects (
-                            site_id, title, category, description, total_budget, allocation_basis,
-                            target_start_date, target_completion_date, contractor_name,
-                            contractor_tax_no, contractor_iban, contract_amount, status, created_at
+            let site_num = crate::db::require_id("entity", &site_id)?;
+            if let Ok(mut conn) = pool.get().await {
+                if let Ok(client) = crate::db::begin_tenant_tx(&mut conn, site_num).await {
+                    let row_res = client
+                        .query_one(
+                            r#"
+                            INSERT INTO capital_projects (
+                                site_id, title, category, description, total_budget, allocation_basis,
+                                target_start_date, target_completion_date, contractor_name,
+                                contractor_tax_no, contractor_iban, contract_amount, status, created_at
+                            )
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'ACTIVE', $13)
+                            RETURNING id
+                            "#,
+                            &[
+                                &site_num,
+                                &req.title,
+                                &category,
+                                &req.description,
+                                &req.total_budget,
+                                &allocation_basis,
+                                &target_start_date,
+                                &req.target_completion_date,
+                                &req.contractor_name,
+                                &req.contractor_tax_no,
+                                &req.contractor_iban,
+                                &req.contract_amount,
+                                &now,
+                            ],
                         )
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'ACTIVE', $13)
-                        RETURNING id
-                        "#,
-                        &[
-                            &crate::db::require_id("entity", &site_id)?,
-                            &req.title,
-                            &category,
-                            &req.description,
-                            &req.total_budget,
-                            &allocation_basis,
-                            &target_start_date,
-                            &req.target_completion_date,
-                            &req.contractor_name,
-                            &req.contractor_tax_no,
-                            &req.contractor_iban,
-                            &req.contract_amount,
-                            &now,
-                        ],
-                    )
-                    .await;
+                        .await;
 
-                match row_res {
-                    Ok(row) => {
-                        let id_num: i64 = row.get("id");
-                        project_id_str = id_num.to_string();
+                    match row_res {
+                        Ok(row) => {
+                            let id_num: i64 = row.get("id");
+                            let _ = client.commit().await;
+                            project_id_str = id_num.to_string();
+                        }
+                        Err(e) => {
+                            warn!("PostgreSQL error inserting capital_project: {}. Falling back to memory.", e);
+                            let inner = self.state.inner.read().await;
+                            let max_id = inner
+                                .capital_projects
+                                .iter()
+                                .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                                .max()
+                                .unwrap_or(0);
+                            project_id_str = (max_id + 1).to_string();
+                        }
                     }
-                    Err(e) => {
-                        warn!("PostgreSQL error inserting capital_project: {}. Falling back to memory.", e);
-                        let inner = self.state.inner.read().await;
-                        let max_id = inner
-                            .capital_projects
-                            .iter()
-                            .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
-                            .max()
-                            .unwrap_or(0);
-                        project_id_str = (max_id + 1).to_string();
-                    }
+                } else {
+                    let inner = self.state.inner.read().await;
+                    let max_id = inner
+                        .capital_projects
+                        .iter()
+                        .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                        .max()
+                        .unwrap_or(0);
+                    project_id_str = (max_id + 1).to_string();
                 }
             } else {
                 let inner = self.state.inner.read().await;
@@ -154,8 +167,14 @@ impl CapitalProjectService {
 
                 // DB insert if available
                 if let Some(pool) = &self.state.pool {
-                    if let Ok(client) = pool.get().await {
-                        if let Some(p_id) = crate::db::parse_id_to_i64(&project_id_str) {
+                    if let (Ok(mut conn), Some(p_id)) = (
+                        pool.get().await,
+                        crate::db::parse_id_to_i64(&project_id_str),
+                    ) {
+                        let Some(site_num) = crate::db::parse_id_to_i64(&site_id) else {
+                            continue;
+                        };
+                        if let Ok(client) = crate::db::begin_tenant_tx(&mut conn, site_num).await {
                             let row_res = client
                                 .query_one(
                                     r#"
@@ -180,6 +199,7 @@ impl CapitalProjectService {
                                 .await;
                             if let Ok(row) = row_res {
                                 let id_val: i64 = row.get("id");
+                                let _ = client.commit().await;
                                 inst_id = id_val.to_string();
                             }
                         }
@@ -263,62 +283,75 @@ impl CapitalProjectService {
 
         // 1. Try DB query
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                let rows_res = client
-                    .query(
-                        r#"
-                        SELECT 
-                            cp.id, cp.site_id, cp.title, cp.category, cp.description, cp.total_budget,
-                            cp.allocation_basis, cp.target_start_date, cp.target_completion_date,
-                            cp.contractor_name, cp.contractor_tax_no, cp.contractor_iban,
-                            cp.contract_amount, cp.status, cp.created_at,
-                            COALESCE((
-                                SELECT SUM(paid_amount) FROM dues_liabilities 
-                                WHERE capital_project_id = cp.id
-                            ), 0.00) as collected_amount,
-                            COALESCE((
-                                SELECT SUM(amount) FROM capital_contractor_disbursements 
-                                WHERE project_id = cp.id
-                            ), 0.00) as disbursed_amount,
-                            (SELECT COUNT(*) FROM capital_project_installments WHERE project_id = cp.id) as installments_count
-                        FROM capital_projects cp
-                        WHERE $1::bigint IS NULL OR cp.site_id = $1
-                        ORDER BY cp.created_at DESC
-                        "#,
-                        &[&crate::db::parse_id_to_i64(site_id)],
-                    )
-                    .await;
+            if let Ok(mut conn) = pool.get().await {
+                let site_opt = crate::db::parse_id_to_i64(site_id);
+                let tx_res = match site_opt {
+                    Some(site_num) if site_num > 0 => {
+                        crate::db::begin_tenant_read(&mut conn, site_num).await
+                    }
+                    _ => {
+                        // tenant-guard: platform — empty site_id lists across all sites.
+                        crate::db::begin_platform_read(&mut conn).await
+                    }
+                };
+                if let Ok(client) = tx_res {
+                    let rows_res = client
+                        .query(
+                            r#"
+                            SELECT 
+                                cp.id, cp.site_id, cp.title, cp.category, cp.description, cp.total_budget,
+                                cp.allocation_basis, cp.target_start_date, cp.target_completion_date,
+                                cp.contractor_name, cp.contractor_tax_no, cp.contractor_iban,
+                                cp.contract_amount, cp.status, cp.created_at,
+                                COALESCE((
+                                    SELECT SUM(paid_amount) FROM dues_liabilities 
+                                    WHERE capital_project_id = cp.id
+                                ), 0.00) as collected_amount,
+                                COALESCE((
+                                    SELECT SUM(amount) FROM capital_contractor_disbursements 
+                                    WHERE project_id = cp.id
+                                ), 0.00) as disbursed_amount,
+                                (SELECT COUNT(*) FROM capital_project_installments WHERE project_id = cp.id) as installments_count
+                            FROM capital_projects cp
+                            WHERE $1::bigint IS NULL OR cp.site_id = $1
+                            ORDER BY cp.created_at DESC
+                            "#,
+                            &[&site_opt],
+                        )
+                        .await;
+                    let _ = client.commit().await;
 
-                if let Ok(rows) = rows_res {
-                    for r in rows {
-                        let id_num: i64 = r.get("id");
-                        let total_b: Decimal = r.get("total_budget");
-                        let coll_b: Decimal = r.get("collected_amount");
-                        let disb_b: Decimal = r.get("disbursed_amount");
-                        let inst_c: i64 = r.get("installments_count");
+                    if let Ok(rows) = rows_res {
+                        for r in rows {
+                            let id_num: i64 = r.get("id");
+                            let total_b: Decimal = r.get("total_budget");
+                            let coll_b: Decimal = r.get("collected_amount");
+                            let disb_b: Decimal = r.get("disbursed_amount");
+                            let inst_c: i64 = r.get("installments_count");
 
-                        projects.push(CapitalProject {
-                            id: id_num.to_string(),
-                            site_id: r.get::<_, i64>("site_id").to_string(),
-                            title: r.get("title"),
-                            category: r.get("category"),
-                            description: r.get("description"),
-                            total_budget: total_b,
-                            allocation_basis: r.get("allocation_basis"),
-                            target_start_date: r.get("target_start_date"),
-                            target_completion_date: r.get("target_completion_date"),
-                            contractor_name: r.get("contractor_name"),
-                            contractor_tax_no: r.get("contractor_tax_no"),
-                            contractor_iban: r.get("contractor_iban"),
-                            contract_amount: r.get("contract_amount"),
-                            status: r.get("status"),
-                            collected_amount: coll_b,
-                            disbursed_amount: disb_b,
-                            remaining_fund_balance: coll_b - disb_b,
-                            total_units_count: 12,
-                            installments_count: inst_c,
-                            created_at: r.get("created_at"),
-                        });
+                            projects.push(CapitalProject {
+                                id: id_num.to_string(),
+                                site_id: r.get::<_, i64>("site_id").to_string(),
+                                title: r.get("title"),
+                                category: r.get("category"),
+                                description: r.get("description"),
+                                total_budget: total_b,
+                                allocation_basis: r.get("allocation_basis"),
+                                target_start_date: r.get("target_start_date"),
+                                target_completion_date: r.get("target_completion_date"),
+                                contractor_name: r.get("contractor_name"),
+                                contractor_tax_no: r.get("contractor_tax_no"),
+                                contractor_iban: r.get("contractor_iban"),
+                                contract_amount: r.get("contract_amount"),
+                                status: r.get("status"),
+                                collected_amount: coll_b,
+                                disbursed_amount: disb_b,
+                                remaining_fund_balance: coll_b - disb_b,
+                                total_units_count: 12,
+                                installments_count: inst_c,
+                                created_at: r.get("created_at"),
+                            });
+                        }
                     }
                 }
             }
@@ -378,8 +411,11 @@ impl CapitalProjectService {
         let mut list = Vec::new();
 
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
+            // tenant-guard: platform — project_id already verified by handler scope.
+            if let (Ok(mut conn), Some(p_id)) =
+                (pool.get().await, crate::db::parse_id_to_i64(project_id))
+            {
+                if let Ok(client) = crate::db::begin_platform_read(&mut conn).await {
                     let rows_res = client
                         .query(
                             r#"
@@ -392,6 +428,7 @@ impl CapitalProjectService {
                             &[&p_id],
                         )
                         .await;
+                    let _ = client.commit().await;
 
                     if let Ok(rows) = rows_res {
                         for r in rows {
@@ -900,8 +937,11 @@ impl CapitalProjectService {
         let mut list = Vec::new();
 
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
+            // tenant-guard: platform — project_id already verified by handler scope.
+            if let (Ok(mut conn), Some(p_id)) =
+                (pool.get().await, crate::db::parse_id_to_i64(project_id))
+            {
+                if let Ok(client) = crate::db::begin_platform_read(&mut conn).await {
                     let rows_res = client
                         .query(
                             r#"
@@ -915,6 +955,7 @@ impl CapitalProjectService {
                             &[&p_id],
                         )
                         .await;
+                    let _ = client.commit().await;
 
                     if let Ok(rows) = rows_res {
                         for r in rows {

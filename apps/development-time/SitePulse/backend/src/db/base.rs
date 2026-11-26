@@ -28,41 +28,70 @@ pub type DbResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 ///   against the Mozilla root store). The default is `disable` for local
 ///   development; production requires `require`.
 pub fn create_pool() -> Result<Option<Pool>, String> {
-    create_pool_named(std::env::var("DB_NAME").ok())
+    create_pool_named(std::env::var("DB_NAME").ok(), None)
 }
 
 /// Like [`create_pool`] for an explicit database (throwaway test databases).
 /// Credentials, host and TLS mode still come from the environment.
 pub fn create_pool_for(dbname: &str) -> Option<Pool> {
-    create_pool_named(Some(dbname.to_string())).ok().flatten()
+    create_pool_named(Some(dbname.to_string()), None).ok().flatten()
 }
 
-fn create_pool_named(dbname: Option<String>) -> Result<Option<Pool>, String> {
+/// Schema-owner pool for fixtures that provision a throwaway database.
+///
+/// Reads `DB_ADMIN_USER`/`DB_ADMIN_PASS` and falls back to the runtime identity
+/// (`DB_USER`/`DB_PASS`) when they are not set. CI sets both so the database is
+/// created and migrated as the owner while the application runs as a
+/// non-superuser runtime role, which is what makes row-level security apply.
+pub fn create_admin_pool_for(dbname: &str) -> Option<Pool> {
+    create_pool_named(Some(dbname.to_string()), admin_credentials())
+        .ok()
+        .flatten()
+}
+
+/// `(user, password)` of the schema owner when it differs from the runtime identity.
+pub fn admin_credentials() -> Option<(String, String)> {
+    let user = std::env::var("DB_ADMIN_USER").ok().filter(|u| !u.is_empty())?;
+    let password = std::env::var("DB_ADMIN_PASS")
+        .ok()
+        .filter(|p| !p.is_empty())?;
+    Some((user, password))
+}
+
+fn create_pool_named(
+    dbname: Option<String>,
+    credentials: Option<(String, String)>,
+) -> Result<Option<Pool>, String> {
     let in_memory = std::env::var("SITEPULSE_IN_MEMORY")
         .map(|v| v == "true")
         .unwrap_or(false);
     let production = crate::state::AppStateInner::is_production();
-    let password = match std::env::var("DB_PASS") {
-        Ok(p) if !p.is_empty() => p,
-        _ if in_memory && !production => {
-            warn!(
-                "SITEPULSE_IN_MEMORY=true: running without PostgreSQL; nothing will be persisted"
-            );
-            return Ok(None);
-        }
-        _ => {
-            return Err(
-                "DB_PASS is required; use SITEPULSE_IN_MEMORY=true for a database-less demo"
-                    .to_string(),
-            )
-        }
+    let (user, password) = if let Some(credentials) = credentials {
+        credentials
+    } else {
+        let password = match std::env::var("DB_PASS") {
+            Ok(p) if !p.is_empty() => p,
+            _ if in_memory && !production => {
+                warn!(
+                    "SITEPULSE_IN_MEMORY=true: running without PostgreSQL; nothing will be persisted"
+                );
+                return Ok(None);
+            }
+            _ => {
+                return Err(
+                    "DB_PASS is required; use SITEPULSE_IN_MEMORY=true for a database-less demo"
+                        .to_string(),
+                )
+            }
+        };
+        let user = std::env::var("DB_USER").unwrap_or_else(|_| "sitepulse_user".to_string());
+        (user, password)
     };
     let host = std::env::var("DB_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port = std::env::var("DB_PORT")
         .ok()
         .and_then(|p| p.parse::<u16>().ok())
         .unwrap_or(5432);
-    let user = std::env::var("DB_USER").unwrap_or_else(|_| "sitepulse_user".to_string());
     let dbname = dbname.unwrap_or_else(|| "sitepulse".to_string());
     let ssl_mode = std::env::var("DB_SSLMODE")
         .unwrap_or_else(|_| "disable".to_string())
@@ -216,16 +245,26 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
         .await?;
 
     // 2. Synchronize sequences
+    // `pg_sequence_last_value` keeps the sync from ever moving a sequence backwards:
+    // row-level security can hide rows from `MAX(..)` (audit tables fail closed even
+    // for platform transactions), and resetting to 1 would break the next insert.
     tx.batch_execute(
         r#"
             DO $$
             DECLARE r record;
+                    seq text;
+                    seen bigint;
+                    issued bigint;
             BEGIN
                 FOR r IN SELECT table_name, column_name FROM information_schema.columns
                          WHERE table_schema = 'public' AND is_identity = 'YES' LOOP
-                    EXECUTE format(
-                        'SELECT setval(pg_get_serial_sequence(%L, %L), COALESCE((SELECT MAX(%I) FROM %I), 0) + 1, false)',
-                        r.table_name, r.column_name, r.column_name, r.table_name);
+                    seq := pg_get_serial_sequence(format('public.%I', r.table_name), r.column_name);
+                    CONTINUE WHEN seq IS NULL;
+                    EXECUTE format('SELECT COALESCE(MAX(%I), 0) FROM public.%I',
+                                   r.column_name, r.table_name) INTO seen;
+                    EXECUTE format('SELECT pg_sequence_last_value(%L::regclass)', seq) INTO issued;
+                    EXECUTE format('SELECT setval(%L, GREATEST(%s, %s) + 1, false)',
+                                   seq, seen, COALESCE(issued, 0));
                 END LOOP;
             END $$;
             "#,

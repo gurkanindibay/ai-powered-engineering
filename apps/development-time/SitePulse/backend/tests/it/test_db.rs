@@ -10,7 +10,12 @@ const TEMPLATE_LOCK_ID: i64 = 8_378_001;
 
 pub struct TestDatabase {
     pub name: String,
+    /// The `postgres` database, used to create and drop throwaway databases.
     pub admin: Pool,
+    /// The clone as the schema owner: fixture SQL and assertions, which must not be
+    /// narrowed by row-level security and may need DDL.
+    pub owner: Pool,
+    /// The clone as the runtime identity: the application under test.
     pub pool: Pool,
 }
 
@@ -23,7 +28,7 @@ pub async fn create(tag: &str) -> TestDatabase {
         .take(20)
         .collect::<String>();
     let name = format!("sp_it_{}_{}", safe_tag, uuid::Uuid::new_v4().simple());
-    let admin = db::create_pool_for("postgres").expect("DB_PASS is required for PostgreSQL tests");
+    let admin = db::create_admin_pool_for("postgres").expect("DB_PASS is required for PostgreSQL tests");
     admin
         .get()
         .await
@@ -31,9 +36,12 @@ pub async fn create(tag: &str) -> TestDatabase {
         .batch_execute(&format!("CREATE DATABASE {name} TEMPLATE {template}"))
         .await
         .expect("clone PostgreSQL test template");
+    let owner = db::create_admin_pool_for(&name).expect("owner connection pool");
+    // The application pool uses the runtime identity (`DB_USER`): when CI splits
+    // it from the owner, row-level security applies to every query it makes.
     let pool = db::create_pool_for(&name).expect("test database connection pool");
 
-    TestDatabase { name, admin, pool }
+    TestDatabase { name, admin, owner, pool }
 }
 
 async fn ensure_template() -> String {
@@ -52,7 +60,7 @@ async fn ensure_template() -> String {
         safe_run_id,
         migrations::latest_version()
     );
-    let admin = db::create_pool_for("postgres").expect("DB_PASS is required for PostgreSQL tests");
+    let admin = db::create_admin_pool_for("postgres").expect("DB_PASS is required for PostgreSQL tests");
     let client = admin.get().await.expect("PostgreSQL admin connection");
     client
         .query_one("SELECT pg_advisory_lock($1)", &[&TEMPLATE_LOCK_ID])
@@ -72,13 +80,24 @@ async fn ensure_template() -> String {
             .batch_execute(&format!("CREATE DATABASE {template}"))
             .await
             .expect("create PostgreSQL test template");
-        let template_pool = db::create_pool_for(&template).expect("template connection pool");
+        // The template is migrated and seeded by the schema owner, so a cloned
+        // database carries both the schema and the owner's privileges.
+        let template_pool =
+            db::create_admin_pool_for(&template).expect("template connection pool");
         db::init_db(&template_pool)
             .await
             .expect("apply migrations to PostgreSQL test template");
         db::seed_test_data(&template_pool)
             .await
             .expect("seed PostgreSQL test template");
+        // Only when CI splits the identities: the runtime role needs the tenant
+        // role V25 uses for `SET LOCAL ROLE` binding.
+        if db::admin_credentials().is_some() {
+            let runtime_role = std::env::var("DB_USER").unwrap_or_else(|_| "sitepulse_user".to_string());
+            db::provision_runtime_role(&template_pool, &runtime_role)
+                .await
+                .expect("grant the tenant role to the runtime identity");
+        }
         drop(template_pool);
     }
 

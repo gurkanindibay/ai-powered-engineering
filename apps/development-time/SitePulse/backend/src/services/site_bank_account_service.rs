@@ -81,8 +81,11 @@ impl SiteBankAccountService {
 
         let now = Utc::now();
         let new_id = if let Some(ref pool) = self.state.pool {
-            let client = pool.get().await.map_err(|e| e.to_string())?;
+            let mut conn = pool.get().await.map_err(|e| e.to_string())?;
             let site_id_num = crate::db::require_id("entity", site_id)?;
+            let client = crate::db::begin_tenant_tx(&mut conn, site_id_num)
+                .await
+                .map_err(|e| e.to_string())?;
             let config_by_num = req
                 .configured_by
                 .as_deref()
@@ -112,6 +115,7 @@ impl SiteBankAccountService {
                 ],
             ).await.map_err(|e| e.to_string())?;
             let db_id: i64 = row.get(0);
+            client.commit().await.map_err(|e| e.to_string())?;
             db_id.to_string()
         } else {
             let inner = self.state.inner.read().await;
