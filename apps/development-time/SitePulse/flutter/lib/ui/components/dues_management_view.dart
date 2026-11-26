@@ -60,6 +60,27 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     super.dispose();
   }
 
+  /// Opens [index], or reloads it when it is already active.
+  ///
+  /// A segment that is opened fresh builds its widget, which loads itself; that
+  /// keeps one user action to one request. Re-selecting the active segment is
+  /// the refresh gesture the segment tabs and the payment action have always
+  /// offered, so it reloads the segment in place.
+  void _selectSegment(int index) {
+    if (index == _activeSegment) {
+      _refreshSegment(index);
+      return;
+    }
+    setState(() => _activeSegment = index);
+    if (index == 2 || index == 4) _refreshSegment(index);
+  }
+
+  void _refreshSegment(int index) {
+    if (index == 1) widget.controller.fetchPaymentStream();
+    if (index == 2) widget.controller.fetchDebtAgingReport();
+    if (index == 4) widget.controller.fetchCapitalProjects();
+  }
+
   void _nextMonth() {
     final months = widget.controller.availableDuesMonths;
     if (months.isEmpty) return;
@@ -791,9 +812,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               'action_payment_tracking',
               ElevatedButton.icon(
                 key: const Key('action_payment_tracking'),
-                onPressed: () {
-                  setState(() => _activeSegment = 1);
-                },
+                onPressed: () => _selectSegment(1),
                 icon: const Icon(Icons.account_balance_wallet, size: 14),
                 label: const Text('Tahsilat & Kasa Takibi', style: TextStyle(fontSize: 12)),
                 style: ElevatedButton.styleFrom(
@@ -1139,11 +1158,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     final isSelected = _activeSegment == index;
     return testId('segment_tab_$index', selectableSemantics(selected: isSelected, child: InkWell(
       key: Key('segment_tab_$index'),
-      onTap: () {
-        setState(() => _activeSegment = index);
-        if (index == 2) widget.controller.fetchDebtAgingReport();
-        if (index == 4) widget.controller.fetchCapitalProjects();
-      },
+      onTap: () => _selectSegment(index),
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),

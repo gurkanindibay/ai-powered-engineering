@@ -373,15 +373,21 @@ void main() {
       expect(streamRequests, hasLength(1),
           reason: 'the action button and the segment it mounts must not both fetch');
 
+      // Re-selecting the active segment is the refresh gesture: one request,
+      // not a second copy from a remount.
+      await tester.tap(find.byKey(const Key('action_payment_tracking')));
+      await tester.pumpAndSettle();
+      expect(streamRequests, hasLength(2));
+
       // Leaving and re-entering the segment is one user action per entry, and
       // each entry fetches once.
       await tester.tap(find.byKey(const Key('segment_tab_2')));
       await tester.pumpAndSettle();
-      expect(streamRequests, hasLength(1));
+      expect(streamRequests, hasLength(2));
 
       await tester.tap(find.byKey(const Key('segment_tab_1')));
       await tester.pumpAndSettle();
-      expect(streamRequests, hasLength(2));
+      expect(streamRequests, hasLength(3));
     });
 
     // covers: SC-09-01-03
