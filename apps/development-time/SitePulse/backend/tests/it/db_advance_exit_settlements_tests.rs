@@ -36,8 +36,7 @@ impl TestDb {
             admin,
             owner,
             pool,
-        } =
-            crate::test_db::create("advance_exit").await;
+        } = crate::test_db::create("advance_exit").await;
         Self {
             name,
             admin,

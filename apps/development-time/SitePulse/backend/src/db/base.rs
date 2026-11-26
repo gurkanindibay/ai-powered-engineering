@@ -34,7 +34,9 @@ pub fn create_pool() -> Result<Option<Pool>, String> {
 /// Like [`create_pool`] for an explicit database (throwaway test databases).
 /// Credentials, host and TLS mode still come from the environment.
 pub fn create_pool_for(dbname: &str) -> Option<Pool> {
-    create_pool_named(Some(dbname.to_string()), None).ok().flatten()
+    create_pool_named(Some(dbname.to_string()), None)
+        .ok()
+        .flatten()
 }
 
 /// Schema-owner pool for fixtures that provision a throwaway database.
@@ -51,7 +53,9 @@ pub fn create_admin_pool_for(dbname: &str) -> Option<Pool> {
 
 /// `(user, password)` of the schema owner when it differs from the runtime identity.
 pub fn admin_credentials() -> Option<(String, String)> {
-    let user = std::env::var("DB_ADMIN_USER").ok().filter(|u| !u.is_empty())?;
+    let user = std::env::var("DB_ADMIN_USER")
+        .ok()
+        .filter(|u| !u.is_empty())?;
     let password = std::env::var("DB_ADMIN_PASS")
         .ok()
         .filter(|p| !p.is_empty())?;

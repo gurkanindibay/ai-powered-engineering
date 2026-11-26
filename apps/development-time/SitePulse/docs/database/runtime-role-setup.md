@@ -33,3 +33,25 @@ GRANT sitepulse_tenant TO sitepulse_runtime;
 Use the actual runtime role name selected by deployment configuration. If V25 could
 not create `sitepulse_tenant`, rerun provisioning with the migration role authorized
 to create it, then apply the migration before starting the service.
+
+## CI runs the database gates as the runtime role
+
+The point of the two identities is that an unbound query fails closed. CI proves it:
+the `rust` job of `sitepulse-ci.yml` provisions `sitepulse_runtime`
+(`LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`) and runs
+`rust-db-test`, `schema-integrity` and `api-system` with:
+
+| Variable | Identity | Used for |
+|:---|:---|:---|
+| `DB_USER` / `DB_PASS` | `sitepulse_runtime` | the application under test: every request, service and repository call |
+| `DB_ADMIN_USER` / `DB_ADMIN_PASS` | `sitepulse_user` (owner) | creating the throwaway databases, applying migrations, fixture SQL and assertions |
+
+The fixtures in `backend/tests/it/test_db.rs` expose that split as
+`TestDatabase::owner` (assertions and fixture SQL) and `TestDatabase::pool` (the
+application). `scripts/api_system_check.py` and `scripts/schema_integrity_check.py`
+read `DB_ADMIN_*` when it is set and fall back to `DB_USER`/`DB_PASS` otherwise, so a
+single identity still works locally.
+
+A test that needs to inspect rows therefore reads them through `owner`, and a test that
+proves isolation uses `pool`. Adding a query that forgets to bind now fails CI instead
+of returning every tenant's rows in production.

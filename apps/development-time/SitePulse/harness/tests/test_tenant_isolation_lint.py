@@ -113,7 +113,7 @@ class TenantIsolationLintTests(unittest.TestCase):
         rules = _run(tenant_lint, {
             "src/services/a.rs": "async fn a() { let tx = client.transaction().await?; tx.execute(q).await?; }\n",
             "src/services/b.rs": "async fn b() {\n let tx = client.transaction().await?;\n crate::db::tx_bind_tenant(&tx, site).await?;\n}\n",
-            "src/services/c.rs": "async fn c() {\n // tenant-guard: platform\n let tx = client.transaction().await?;\n}\n",
+            "src/services/c.rs": "async fn c() {\n // tenant-guard: platform\n let tx = client.transaction().await?;\n crate::db::tx_bind_platform(&tx).await?;\n}\n",
         })
         self.assertEqual(rules, ["unbound-tenant-transaction"])
 
@@ -176,9 +176,59 @@ class TenantIsolationLintTests(unittest.TestCase):
             "src/db/a.rs": "async fn a() { let tx = client.transaction().await?; tx.execute(q).await?; }\n",
             "src/db/b.rs": "async fn b() {\n let tx = client.transaction().await?;\n super::tx_bind_tenant(&tx, site).await?;\n}\n",
             "src/db/c.rs": "async fn c() {\n let tx = client.transaction().await?;\n super::tx_bind_platform(&tx).await?;\n}\n",
-            "src/db/d.rs": "async fn d() {\n // tenant-guard: platform\n let tx = client.transaction().await?;\n}\n",
+            "src/db/d.rs": "async fn d() {\n // tenant-guard: platform\n let tx = client.transaction().await?;\n super::tx_bind_platform(&tx).await?;\n}\n",
         })
         self.assertEqual(rules, ["unbound-tenant-transaction"])
+
+    def test_platform_marker_alone_is_not_a_bind(self):
+        rules = _run(tenant_lint, {
+            "src/services/a.rs": (
+                "async fn a(pool: &Pool) {\n"
+                "    // tenant-guard: platform - identity flow\n"
+                "    let tx = pool.get().await?.transaction().await?;\n"
+                "    tx.execute(q).await?;\n"
+                "}\n"
+            ),
+            "src/services/b.rs": (
+                "async fn b(pool: &Pool) {\n"
+                "    // tenant-guard: platform - identity flow\n"
+                "    let mut conn = pool.get().await?;\n"
+                "    let tx = begin_platform_tx(&mut conn).await?;\n"
+                "    tx.execute(q).await?;\n"
+                "}\n"
+            ),
+        })
+        self.assertEqual(rules, ["platform-marker-unbound"])
+
+    def test_pool_acquisition_through_state_is_flagged(self):
+        rules = _run(tenant_lint, {
+            "migrations/V1__init.sql": "CREATE TABLE units (\n    id BIGINT,\n    site_id BIGINT\n);\n",
+            "migrations/V2__rls.sql": "SELECT sp_enable_tenant_rls('units', 'site_id = sp_tenant_site()');\n",
+            "src/handlers/a.rs": (
+                "async fn leak(state: State<AppState>) {\n"
+                "    let client = state.pool.as_ref().ok_or(x)?.get().await?;\n"
+                "    client.query(\"SELECT id FROM units\", &[]).await?;\n"
+                "}\n"
+            ),
+        })
+        self.assertEqual(rules, ["unbound-pool-query"])
+
+    def test_views_over_tenant_tables_count_as_tenant_tables(self):
+        rules = _run(tenant_lint, {
+            "migrations/V1__init.sql": "CREATE TABLE units (\n    id BIGINT,\n    site_id BIGINT\n);\n",
+            "migrations/V2__rls.sql": "SELECT sp_enable_tenant_rls('units', 'site_id = sp_tenant_site()');\n",
+            "migrations/V3__view.sql": (
+                "CREATE OR REPLACE VIEW v_unit_directory WITH (security_invoker = true) AS\n"
+                "SELECT id, site_id FROM units;\n"
+            ),
+            "src/services/a.rs": (
+                "async fn leak(pool: &Pool) {\n"
+                "    let client = pool.get().await?;\n"
+                "    client.query(\"SELECT id FROM v_unit_directory\", &[]).await?;\n"
+                "}\n"
+            ),
+        })
+        self.assertEqual(rules, ["unbound-pool-query"])
 
     def test_db_direct_pool_queries_on_tenant_tables_are_flagged(self):
         rules = _run(tenant_lint, {

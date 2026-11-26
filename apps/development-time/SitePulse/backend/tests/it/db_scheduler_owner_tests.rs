@@ -10,12 +10,11 @@ use sitepulse_backend::{scheduler::run_accrual_with_report, state::AppState};
 // covers: SC-13-01-08
 async fn scheduled_accrual_reads_unit_ownership_from_the_database() {
     let crate::test_db::TestDatabase {
-            name,
-            admin,
-            owner,
-            pool,
-        } =
-        crate::test_db::create("scheduler_owner").await;
+        name,
+        admin,
+        owner,
+        pool,
+    } = crate::test_db::create("scheduler_owner").await;
     let client = owner.get().await.expect("test connection");
     let rows = client
         .query(
