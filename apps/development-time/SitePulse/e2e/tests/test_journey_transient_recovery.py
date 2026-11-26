@@ -46,7 +46,8 @@ def test_payment_stream_distinguishes_loading_failure_and_recovery(
 
         held_routes: list[Route] = []
         server_errors: list[tuple[int, str]] = []
-        hold_next_response = True
+        failed_requests = 0
+        stream_mode = "hold"
 
         page.on(
             "response",
@@ -55,32 +56,47 @@ def test_payment_stream_distinguishes_loading_failure_and_recovery(
             else None,
         )
 
-        def hold_payment_stream(route: Route) -> None:
-            nonlocal hold_next_response
-            if hold_next_response:
-                hold_next_response = False
+        def fail_stream(route: Route) -> None:
+            nonlocal failed_requests
+            failed_requests += 1
+            route.fulfill(
+                status=503,
+                content_type="application/json",
+                body='{"error":"TEMPORARY_FAILURE"}',
+            )
+
+        def control_payment_stream(route: Route) -> None:
+            if stream_mode == "hold":
                 held_routes.append(route)
+            elif stream_mode == "fail":
+                fail_stream(route)
             else:
                 route.continue_()
 
-        page.route("**/api/v1/payments/stream*", hold_payment_stream)
+        # Opening the page requests the stream more than once (the button and the
+        # tab it mounts both fetch). A single answered copy ends the loading
+        # state, so no request may complete until loading has been observed.
+        page.route("**/api/v1/payments/stream*", control_payment_stream)
         by_id(page, "action_payment_tracking").click()
-        assert len(held_routes) == 1, "the payment stream request must be held before it completes"
         by_id(page, "payment_stream_loading").wait_for(state="attached", timeout=5_000)
+        assert held_routes, "the payment stream request must be held before it completes"
+        assert by_id(page, "payment_stream_error").count() == 0
+        assert by_id(page, "payment_stream_empty").count() == 0
 
-        held_routes.pop().fulfill(
-            status=503,
-            content_type="application/json",
-            body='{"error":"TEMPORARY_FAILURE"}',
-        )
+        stream_mode = "fail"
+        while held_routes:
+            fail_stream(held_routes.pop(0))
         by_id(page, "payment_stream_error").wait_for(state="attached", timeout=10_000)
         assert by_id(page, "payment_stream_empty").count() == 0
 
+        stream_mode = "pass"
         page.get_by_role("button", name="Tekrar Dene").click()
         by_id(page, "payment_stream_error").wait_for(state="detached", timeout=15_000)
+        # The error leaves as soon as the retry starts loading; wait for the data.
+        by_id_prefix(page, "payment_entry_").first.wait_for(state="attached", timeout=15_000)
         assert "8.000,00" in page_text(page)
-        assert len(server_errors) == 1, server_errors
-        assert server_errors[0][0] == 503 and "/api/v1/payments/stream" in server_errors[0][1]
+        assert len(server_errors) == failed_requests, server_errors
+        assert all(status == 503 and "/api/v1/payments/stream" in url for status, url in server_errors)
     except BaseException as failure:
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
         raise
