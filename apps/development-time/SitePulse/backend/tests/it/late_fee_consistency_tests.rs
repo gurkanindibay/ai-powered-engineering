@@ -1,10 +1,9 @@
 //! STORY-07-13: one late-fee figure across the dashboard, the statement and the ledger.
 
-use chrono::{Datelike, Days, Months, NaiveDate, Utc};
+use chrono::{Datelike, Days, Months, NaiveDate};
 use rust_decimal::Decimal;
 use sitepulse_backend::models::Role;
 use sitepulse_backend::models::*;
-use sitepulse_backend::scheduler::site_local_date;
 use sitepulse_backend::services::accounting_service::AccountingService;
 use sitepulse_backend::services::billing_period_service::BillingPeriodService;
 use sitepulse_backend::services::dues_calculation_service::DuesCalculationService;
@@ -24,7 +23,7 @@ fn date(y: i32, m: u32, day: u32) -> NaiveDate {
 }
 
 fn today() -> NaiveDate {
-    site_local_date("Europe/Istanbul", Utc::now())
+    crate::support::site_today()
 }
 
 fn liability(id: &str, amount: &str, due: NaiveDate) -> DuesLiability {

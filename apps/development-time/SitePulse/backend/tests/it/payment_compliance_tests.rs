@@ -62,8 +62,9 @@ async fn state_with(dues: Vec<DuesLiability>) -> AppState {
     state
 }
 
+/// Today in the site's time zone, the date every service works with.
 fn today() -> NaiveDate {
-    Utc::now().date_naive()
+    crate::support::site_today()
 }
 
 async fn webhook(

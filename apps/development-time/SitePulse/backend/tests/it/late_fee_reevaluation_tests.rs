@@ -17,7 +17,7 @@ fn money(s: &str) -> Decimal {
 /// 1,400.00 due 40 days ago with 70.00 late fee accrued through due date + 30.
 async fn state_with_charged_late_fee(paid_penalty: &str) -> (AppState, NaiveDate) {
     let state = AppState::new();
-    let due_date = Utc::now().date_naive() - chrono::Days::new(40);
+    let due_date = crate::support::site_today() - chrono::Days::new(40);
     {
         let mut inner = state.inner.write().await;
         inner.dues.clear();

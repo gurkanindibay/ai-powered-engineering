@@ -19,7 +19,7 @@ fn due(id: &str, debtor: DebtorType) -> DuesLiability {
         principal_amount: d("800.00"),
         delay_penalty: Decimal::ZERO,
         total_amount: d("800.00"),
-        due_date: chrono::Utc::now().date_naive() + chrono::Days::new(15),
+        due_date: crate::support::site_today() + chrono::Days::new(15),
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
@@ -635,7 +635,7 @@ async fn when_unassigned_confirmation_has_unrecognized_sender_and_person_stamped
             site_id: "site-1".to_string(),
             transaction: BankTransactionItem {
                 transaction_id: "TX-UNREC-01".to_string(),
-                date: chrono::Utc::now().date_naive(),
+                date: crate::support::site_today(),
                 amount: d("800.00"),
                 currency: "TRY".to_string(),
                 description: "Aidat ödemesi".to_string(),

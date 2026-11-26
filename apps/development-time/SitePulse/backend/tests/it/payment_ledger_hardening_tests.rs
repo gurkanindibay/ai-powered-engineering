@@ -33,8 +33,9 @@ fn d(s: &str) -> Decimal {
     Decimal::from_str_exact(s).unwrap()
 }
 
+/// Today in the site's time zone, the date every service works with.
 fn today() -> NaiveDate {
-    Utc::now().date_naive()
+    crate::support::site_today()
 }
 
 fn liability(

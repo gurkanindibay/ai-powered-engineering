@@ -239,7 +239,9 @@ def test_non_excel_banks_have_no_excel_sample_download(login_as, page):
 @pytest.mark.gui_id("GUI-07-08")
 # Fixed by SPEC-005 R1/R3: the webhook settles through the canonical path, penalty first.
 def test_fast_webhook_pays_the_balance_once(login_as, page, builders, api, actors, stack):
-    api.clock.set_date(date.today())
+    # The SQL builder dates the dues from the fixture day, so the clock has to agree
+    # with it; the runner's UTC date is a day behind Istanbul between 21:00 and 24:00 UTC.
+    api.clock.set_date(date.fromisoformat(api.stack.fixture_today))
     builders.overdue_dues(principal=DUES, days_overdue=10)
     homeowner = api.login(**actors["homeowner"])
     total = api_amount(api.resident_dashboard(homeowner)["total_debt"])
@@ -261,7 +263,9 @@ def test_fast_webhook_pays_the_balance_once(login_as, page, builders, api, actor
 @pytest.mark.gui_id("GUI-07-09")
 # Fixed by SPEC-005 R1/R3: the webhook settles through the canonical path, penalty first.
 def test_overpayment_becomes_an_advance(login_as, page, builders, api, actors):
-    api.clock.set_date(date.today())
+    # The SQL builder dates the dues from the fixture day, so the clock has to agree
+    # with it; the runner's UTC date is a day behind Istanbul between 21:00 and 24:00 UTC.
+    api.clock.set_date(date.fromisoformat(api.stack.fixture_today))
     builders.overdue_dues(principal=DUES, days_overdue=10)
     homeowner = api.login(**actors["homeowner"])
     total = api_amount(api.resident_dashboard(homeowner)["total_debt"])

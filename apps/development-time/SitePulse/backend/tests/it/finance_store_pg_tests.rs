@@ -32,6 +32,11 @@ use sitepulse_backend::services::portfolio_service::PortfolioService;
 use sitepulse_backend::services::resident_request_service::ResidentRequestService;
 use sitepulse_backend::state::AppState;
 
+/// Today in the site's time zone, the date every service works with.
+fn site_today() -> chrono::NaiveDate {
+    crate::support::site_today()
+}
+
 fn d(s: &str) -> Decimal {
     Decimal::from_str_exact(s).unwrap()
 }
@@ -175,7 +180,7 @@ async fn every_spec009_record_round_trips_through_postgresql() {
         inner.users.push(u);
     }
     let store = FinanceStore::new(&state);
-    let today = Utc::now().date_naive();
+    let today = site_today();
     let due = store
         .insert_due(DuesLiability {
             id: String::new(),
