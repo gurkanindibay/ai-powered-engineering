@@ -312,9 +312,15 @@ class PublicSafeReportingTests(unittest.TestCase):
             self.assertEqual(len(unmapped_in_json), 1)
             self.assertEqual(unmapped_in_json[0]["native_id"], "test_unmapped_backend_check")
 
-            # 7. VERIFY: Pending requirements remain in the scenario view
-            self.assertIn("SC-13-01-10", latest_html)
-            self.assertEqual(status_json["scenarios"]["SC-13-01-10"]["state"], "planned")
+            # 7. VERIFY: Pending requirements remain in the scenario view.
+            #    The catalogue is this repository's, so read the pending scenarios from it
+            #    instead of naming one: automating a scenario, or tagging an existing one
+            #    `@linked`, must not break this public-surface check.
+            pending = [s for s in ft.load_catalogue().scenarios if s.id and s.mode == "pending"]
+            self.assertTrue(pending, "the catalogue must still hold a @pending scenario")
+            for scenario in pending:
+                self.assertIn(scenario.id, latest_html)
+                self.assertEqual(status_json["scenarios"][scenario.id]["state"], "planned", scenario.id)
 
             # 8. VERIFY: Distinct outline examples are shown distinctly
             self.assertIn("example-1", latest_html)

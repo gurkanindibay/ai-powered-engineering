@@ -9,6 +9,7 @@ import pytest
 
 from support.api import ApiError
 from support.journey_attempts import (
+    JourneyClock,
     JourneyManifest,
     ledger_invariants,
     site_in_state,
@@ -213,6 +214,179 @@ def test_f3_period_exists_open_zero_liabilities(request, api, actors, stack):
         overview = api.site_overview(fixture.manager, fixture.site_id)
         assert Decimal(str(overview["summary"]["total_overdue_with_interest"])) == Decimal("0.00")
         ledger_invariants(api, fixture.manager, fixture.site_id, stage="F3-initial")
+    except BaseException as failure:
+        teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
+    else:
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
+
+
+def pin_reference_schedule_and_tariff(api, fixture) -> None:
+    """Pin the F3 accrual schedule and house-type tariff the charges must follow.
+
+    Pinning them keeps the expected amounts independent of environment defaults: the
+    journey bills on the 10th, so the schedule is set to that and read back, and the
+    Flat/Large flat tariffs behind the 1450.00 and 1016.13 amounts are asserted as literals.
+    """
+    pinned = {
+        "accrual_day": 1,
+        "due_day": 10,
+        "grace_days": 0,
+        "catch_up_limit_months": 12,
+        "go_live_date": None,
+    }
+    api.call("PUT", "/api/v1/accrual-schedule", fixture.manager.token, body=pinned)
+    stored = api.call("GET", "/api/v1/accrual-schedule", fixture.manager.token)
+    for key, value in pinned.items():
+        assert stored[key] == value, f"accrual schedule {key} is not pinned"
+
+    tariffs = {
+        row["type_name"]: Decimal(str(row["dues_amount"]))
+        for row in api.call(
+            "GET",
+            f"/api/v1/site-admin/house-types?site_id={fixture.site_id}",
+            fixture.manager.token,
+        )
+    }
+    assert tariffs == {"Flat": Decimal("1500.00"), "Large flat": Decimal("2250.00")}
+
+
+def period_liabilities(stack, site_id: str, unit_id: str, period: str) -> str:
+    """The stored liability rows of one unit and period, in a stable text form."""
+    return stack.sql(
+        "SELECT d.principal_amount, d.debtor_type, d.due_date, "
+        "COALESCE(d.effective_due_date::text, ''), COALESCE(d.source_period, ''), d.delay_penalty "
+        "FROM dues_liabilities d "
+        f"WHERE d.unit_id = {int(unit_id)} AND d.period = '{period}' "
+        "ORDER BY d.id;"
+    )
+
+
+@pytest.mark.covers("SC-13-01-10")
+@pytest.mark.edge
+def test_f3_primary_resident_charged_from_start_residing_date(request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    try:
+        fixture = site_in_state("F3", api=api, stack=stack, saas=saas, manifest=manifest)
+        pin_reference_schedule_and_tariff(api, fixture)
+        unit_a1 = int(fixture.unit_ids[0])
+
+        # The owner starts residing on 2026-11-02 and the session opens on that day.
+        clock = JourneyClock(api, "2026-11-02")
+        api.register_home_owner(
+            fixture.manager,
+            block="A",
+            unit_no=1,
+            owner_full_name="Ayşe Kaya",
+            email=f"{manifest.attempt_id[:8]}.ayse.455@journey.e2e.test",
+            is_resident=True,
+            house_type="Flat",
+            site_id=fixture.site_id,
+        )
+        assert clock.current_date.isoformat() == "2026-11-02"
+        assert stack.sql(
+            "SELECT start_date FROM unit_occupancies "
+            f"WHERE unit_id = {unit_a1} AND is_active ORDER BY id DESC LIMIT 1;"
+        ) == "2026-11-02"
+
+        # October keeps no liability for A-1: its days had nobody to bill.
+        assert period_liabilities(stack, fixture.site_id, unit_a1, "Ekim 2026") == ""
+
+        api.accrue_period(fixture.manager, "Kasım 2026", None, "2026-11-10")
+
+        # 29 of 30 days of the 1500.00 Flat tariff, charged from the start residing date.
+        assert period_liabilities(stack, fixture.site_id, unit_a1, "Kasım 2026") == (
+            "1450.00|OWNER|2026-11-10|2026-11-10||0.00"
+        )
+        overview = ledger_invariants(api, fixture.manager, fixture.site_id, stage="F3-start-residing")
+        flat = next(f for f in overview["flats"] if str(f["id"]) == str(unit_a1))
+        assert Decimal(str(flat["amount_due"])) == Decimal("1450.00")
+    except BaseException as failure:
+        teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
+    else:
+        teardown_with_evidence(stack, manifest, failed=None, capture_evidence=manifest.save)
+
+
+@pytest.mark.covers("SC-13-01-15")
+@pytest.mark.edge
+def test_f3_backdated_start_residing_date_creates_the_supplementary_charge(request, api, actors, stack):
+    saas = api.login(actors["saas"]["email"], actors["saas"]["password"])
+    manifest = JourneyManifest.create(
+        E2E / ".artifacts" / "journeys",
+        run_id=request.node.nodeid,
+        shard_id=os.environ.get("PYTEST_XDIST_WORKER", "main"),
+    )
+    try:
+        fixture = site_in_state("F3", api=api, stack=stack, saas=saas, manifest=manifest)
+        pin_reference_schedule_and_tariff(api, fixture)
+        unit_a3 = int(fixture.unit_ids[2])
+
+        # October is already an accrued month with its own due date and no A-3 liability.
+        assert stack.sql(
+            "SELECT due_date FROM dues_periods "
+            f"WHERE site_id = {int(fixture.site_id)} AND period_name = 'Ekim 2026';"
+        ) == "2026-10-10"
+        assert period_liabilities(stack, fixture.site_id, unit_a3, "Ekim 2026") == ""
+
+        # The title is registered on 2026-11-19 without opening a session first.
+        clock = JourneyClock(api, "2026-11-19")
+        api.register_home_owner(
+            fixture.manager,
+            block="A",
+            unit_no=3,
+            owner_full_name="Burak Şahin",
+            email=f"{manifest.attempt_id[:8]}.burak.455@journey.e2e.test",
+            is_resident=False,
+            house_type="Flat",
+            site_id=fixture.site_id,
+        )
+        owner_person_id = stack.sql(f"SELECT owner_person_id FROM units WHERE id = {unit_a3};").strip()
+        assert owner_person_id
+        assert stack.sql(
+            f"SELECT COUNT(*) FROM unit_occupancies WHERE unit_id = {unit_a3};"
+        ) == "0"
+
+        # Assigning the owner as a resident effective 2026-10-11 back-dates the session.
+        transition = api.call(
+            "POST",
+            f"/api/v1/site-admin/units/{unit_a3}/occupancy-transitions?site_id={fixture.site_id}",
+            fixture.manager.token,
+            body={
+                "command": "OWNER_MOVE_IN",
+                "effective_date": "2026-10-11",
+                "person_id": int(owner_person_id),
+            },
+        )
+        assert transition["opened"]["start_date"] == "2026-10-11"
+
+        charges = transition["supplementary_charges"]
+        assert len(charges) == 1, "one supplementary charge for the unbilled October days"
+        charge = charges[0]
+        assert Decimal(str(charge["principal_amount"])) == Decimal("1016.13")
+        assert charge["period"] == "Ekim 2026"
+        assert charge["debtor_type"] == "OWNER"
+
+        # 21 of 31 days: the days before 2026-10-11 stay charged to nobody, so they carry
+        # no liability of their own and no share named anyone else.
+        assert period_liabilities(stack, fixture.site_id, unit_a3, "Ekim 2026") == (
+            "1016.13|OWNER|2026-10-10|2026-11-19|2026-10|0.00"
+        )
+        overview = ledger_invariants(api, fixture.manager, fixture.site_id, stage="F3-backdated")
+        flat = next(f for f in overview["flats"] if str(f["id"]) == str(unit_a3))
+        assert Decimal(str(flat["amount_due"])) == Decimal("1016.13")
+
+        # The charge counts from its 2026-11-19 creation, so ten days later at 2026-11-29
+        # it has 16.94: 1016.13 x 5% x 10 / 30.
+        clock.set_date("2026-11-29")
+        clock.tick()
+        assert stack.sql(
+            f"SELECT delay_penalty FROM dues_liabilities WHERE id = {int(charge['id'])};"
+        ) == "16.94"
+        ledger_invariants(api, fixture.manager, fixture.site_id, stage="F3-backdated-late-fee")
     except BaseException as failure:
         teardown_with_evidence(stack, manifest, failed=failure, capture_evidence=manifest.save)
     else:

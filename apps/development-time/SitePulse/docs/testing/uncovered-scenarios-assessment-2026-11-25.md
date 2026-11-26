@@ -31,7 +31,7 @@ The planned scenarios are concentrated in **EPIC-13 (21)**. EPIC-02 and EPIC-06 
 | 9 | Deliver and verify manager credential SMS | `SC-03-04-03` | **Potential product change and tests.** Verify the onboarding flow is wired to credential delivery and use a fake gateway in CI to assert the dispatch. |
 | 10 | Automate Google sign-in with a CI identity-provider fake | `SC-06-03-02`, `SC-06-05-01`, `SC-06-05-02` | Verify the login option, provider redirect and profile after callback with the shared fake. |
 | 11 | Complete and automate the resident capital-dues view | `SC-10-06-03`, `SC-10-06-04` | **Product and tests.** Verify owner project details and deliver and test the tenant guidance banner. |
-| 12 | Extend F3 coverage for start-residing dates | `SC-13-01-10`, `SC-13-01-15` | Pin the accrual schedule and house-type tariff. Verify ordinary and backdated occupancy against expected charges. |
+| 12 | Extend F3 coverage for start-residing dates | `SC-13-01-10`, `SC-13-01-15` | Delivered in [#455](https://github.com/gurkanindibay/ai-powered-engineering/issues/455): the journey pins the accrual schedule and house-type tariff, then verifies ordinary and backdated occupancy against the expected charges. |
 | 13 | Automate recovery from transient failures and stale actions | `SC-13-08-02`, `SC-13-08-06`, `SC-13-08-07` | Reuse browser response interception to distinguish loading, failure and empty states, recover a committed payment after a lost response, and refresh stale occupancy state. |
 | 14 | Automate browser session isolation | `SC-13-08-04`, `SC-13-10-08` | Verify the browser clears prior data after manager-session expiry and discards a late response after switching tenants. |
 | 15 | Verify resident payment confirmation across views | `SC-13-04-13` | Confirm the same payment is visible in the resident statement and manager view. |
@@ -40,7 +40,7 @@ The planned scenarios are concentrated in **EPIC-13 (21)**. EPIC-02 and EPIC-06 
 | 18 | Automate partial Excel import | `SC-13-05-10` | Run the mixed-validity file in the journey fixture and assert accepted records and visible row errors. Reuse companion file work where applicable. [#418](https://github.com/gurkanindibay/ai-powered-engineering/issues/418) |
 | 19 | Verify manager statements in the four-period multi-site journey | `SC-13-13-05` | Check the browser entry points and assert period history, payer identity, site scoping and cash totals against ledger expectations. Reconcile the pending tag with the work delivered under [#251](https://github.com/gurkanindibay/ai-powered-engineering/issues/251). |
 
-All 30 pending IDs appear once. The five potential product issues cover 10 scenarios. The remaining 14 issues cover 20 scenarios. Close each issue when its scenario assertions run and pass in the appropriate CI lane and the `@pending` tags are removed. For issue 4, sequence it after issue 3 if the same accrual path blocks both.
+All 27 pending IDs appear once. The five potential product issues cover 10 scenarios. Item 12 is delivered, so the remaining 13 issues cover 18 scenarios. Close each issue when its scenario assertions run and pass in the appropriate CI lane and the `@pending` tags are removed. For issue 4, sequence it after issue 3 if the same accrual path blocks both.
 
 ## Existing work and CI evidence
 

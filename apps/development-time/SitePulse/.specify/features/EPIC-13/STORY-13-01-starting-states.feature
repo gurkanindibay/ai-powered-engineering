@@ -92,8 +92,7 @@ Feature: Site admin starting points F0 to F3
     And 0 liabilities exist for it
     And the dashboard shows total outstanding 0.00
 
-  # Pending: needs the F3 fixture to pin the accrual schedule and the house-type tariff (#271); the charge logic itself is covered by backend/tests/supplementary_charge_tests.rs (SC-07-09-07, SC-07-09-08, SC-13-01-14).
-  @SC-13-01-10 @J-04 @depth:2 @state:F3 @layer:backend @edge @role_manager @pending
+  @SC-13-01-10 @J-04 @depth:2 @state:F3 @layer:backend @edge @role_manager @linked
   Scenario: A primary resident is charged from their start residing date, not before
     Given the site is in state F3
     When the manager adds owner "Ayşe Kaya" as primary resident of unit "A-1" with start residing date "2026-11-02"
@@ -102,8 +101,7 @@ Feature: Site admin starting points F0 to F3
     Then unit "A-1" is charged principal of 1450.00 for "Kasım 2026", which is 29 of 30 days
     And the ledger invariants hold
 
-  # Pending: needs the F3 fixture to pin the accrual schedule and the house-type tariff (#271); the charge logic itself is covered by backend/tests/supplementary_charge_tests.rs (SC-07-09-07, SC-07-09-08, SC-13-01-14).
-  @SC-13-01-15 @J-04 @depth:2 @state:F3 @layer:backend @edge @role_manager @pending
+  @SC-13-01-15 @J-04 @depth:2 @state:F3 @layer:backend @edge @role_manager @linked
   Scenario: A back-dated start residing date creates the charge for an already accrued period
     Given the site is in state F3
     When the manager assigns "Burak Şahin" as owner and primary resident of unit "A-3" effective "2026-10-11"

@@ -339,9 +339,9 @@ Three systemic gaps sit behind these:
 - **100 links point at the 21 wrapper tests.** CI ignores the wrapper file, so in CI those scenarios get no per-scenario evidence. The wrapped suites still run in their own gates, but a scenario passes as soon as its file does. The wrappers also run `cargo test` without `--ignored`, so an ignored test inside a wrapped file is never exercised.
 - **Layer drift:** 3 `@layer:gui` scenarios (SC-07-08-03, SC-12-08-01, SC-12-08-02) are covered only by Rust DB or Flutter widget tests.
 
-### Pending scenarios (30)
+### Pending scenarios (25)
 
-22 of the 30 are EPIC-13 journey scenarios. Two are `@smoke` and block confidence in the main manager journey.
+18 of the 25 are EPIC-13 journey scenarios. Only SC-13-08-01 is `@smoke`, and it blocks confidence in the main manager journey.
 
 | Scenario | Priority | Layer | Blocker (from the feature file's `Pending:` note) |
 | --- | --- | --- | --- |
@@ -354,7 +354,6 @@ Three systemic gaps sit behind these:
 | SC-02-02-02, SC-02-03-05, SC-02-05-02 | core | gui | Badge has no semantics id; scenario outdated (activation link); resident feed not opened |
 | SC-13-03-07, -09 (same-day handover, kuruş rounding) | edge | backend | **Product gap**: accrual splits by role |
 | SC-13-03-14 Failed replacement rolls everything back | edge | backend | Needs fault injection at the persistence boundary |
-| SC-13-01-10, SC-13-01-15 | edge | backend | Needs F3 fixture (#271) |
 | SC-13-05-10, SC-13-08-06, SC-13-08-07, SC-13-10-08 | edge | gui | Excel import, lost-response, stale-action and late-response isolation journeys |
 | SC-05-02-01 Concurrent balance modification | none | backend | No test runs two concurrent payments on one unit |
 | SC-10-06-03, SC-10-06-04 | none | gui/flutter | Capital card detail; banner text not implemented |

@@ -989,6 +989,12 @@ impl SiteAdminService {
                 existing_unit_pos.and_then(|p| inner.units[p].owner_user_id.clone());
             let existing_tenant_id =
                 existing_unit_pos.and_then(|p| inner.units[p].tenant_user_id.clone());
+            // Registering a party must not move the unit's creation date: occupancy-aware
+            // proration starts its chargeable window there (STORY-07-09). Only a unit the
+            // site creates here starts today.
+            let created_on = existing_unit_pos
+                .and_then(|p| inner.units[p].created_on)
+                .or(Some(site_today));
 
             let mut explicit_tenant_user_id_in_mem: Option<String> = None;
             if has_explicit_tenant {
@@ -1068,7 +1074,7 @@ impl SiteAdminService {
                 virtual_iban: Some(viban),
                 house_type: effective_house_type.clone(),
                 monthly_tariff_override: custom_tariff_override,
-                created_on: Some(site_today),
+                created_on,
             };
 
             // Insert or update in-memory unit
