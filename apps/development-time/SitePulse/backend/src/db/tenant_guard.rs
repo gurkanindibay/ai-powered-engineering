@@ -1,4 +1,4 @@
-//! Database-level tenant guardrail (defense in depth, migrations V25 and V54).
+//! Database-level tenant guardrail (defense in depth, migrations V25, V54 and V56).
 //!
 //! Tenant-bound transactions call [`tx_bind_tenant`] first. It
 //!
@@ -10,7 +10,9 @@
 //!
 //! Platform-wide transactions (start-up load, scheduler, SaaS administration)
 //! must opt in explicitly via [`tx_bind_platform`] (setting `app.platform = 'on'`).
-//! Unbound queries fail closed (V54).
+//! Unbound queries fail closed (V54, V56): a policy is
+//! `sp_platform() OR (sp_tenant_site() IS NOT NULL AND (<predicate>))`, so an
+//! unbound session reads no rows and cannot write.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -69,8 +71,9 @@ pub async fn tx_bind_tenant(tx: &deadpool_postgres::Transaction<'_>, site_id: i6
 }
 
 /// Marks the transaction as an explicit platform-wide operation (`app.platform = 'on'`).
-/// Used by start-up loads, schedulers, and SaaS administration so unbound
-/// tenant-table queries fail closed (V54).
+/// Used by start-up loads, schedulers, and SaaS administration: `sp_platform()` is
+/// the only predicate that lets a session without a tenant site read tenant tables
+/// (V56), so anything that forgets to bind reads nothing.
 pub async fn tx_bind_platform(tx: &deadpool_postgres::Transaction<'_>) -> DbResult<()> {
     tx.execute(
         "SELECT set_config('app.platform', 'on', true), set_config('app.tenant_site_id', '', true)",
