@@ -4,7 +4,6 @@ import re
 import time
 
 from playwright.sync_api import Page, expect
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from pathlib import Path
 
@@ -22,16 +21,7 @@ class ManagerCockpit:
         self.page = page
 
     def wait(self) -> "ManagerCockpit":
-        marker = by_id(self.page, "btn_open_unified_dues_center")
-        try:
-            marker.wait_for(timeout=20_000)
-        except PlaywrightTimeoutError:
-            # A signed-in page occasionally redraws the cockpit without publishing its
-            # semantics node, so the id never appears even though the dashboard is there
-            # (#502). Reloading rebuilds the semantics tree and the session survives in
-            # storage; this only runs on the path that would otherwise fail.
-            self.page.reload(wait_until="networkidle")
-            marker.wait_for(timeout=20_000)
+        by_id(self.page, "btn_open_unified_dues_center").wait_for(timeout=20_000)
         return self
 
     # -- 'Onay Bekleyen Başvurular' (EPIC-04) ------------------------------
