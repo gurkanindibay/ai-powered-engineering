@@ -436,14 +436,13 @@ def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack,
 
         # Search for an absent unit label
         fill(page, "resident_search_field", "Z-999-ABSENT")
-        try:
-            by_id(page, "units_filtered_empty_state").wait_for(timeout=10_000)
-        except Exception:
-            page.wait_for_load_state("networkidle")
 
-        # Directory reports zero matches
-        lines = page_lines(page)
-        assert any("bulunamadı" in line.lower() or "bulunamadi" in line.lower() or "bulunmuyor" in line.lower() for line in lines)
+        # Directory reports zero matches. Waiting for `units_filtered_empty_state` to be
+        # "visible" burned the whole timeout (its semantics node has no box) and reading the
+        # page right after that raced the paint, so wait for the wording the assertion reads.
+        lines = page_lines_until(page, EMPTY_STATE)
+        assert any("bulunamadı" in line.lower() or "bulunamadi" in line.lower() or "bulunmuyor" in line.lower() for line in lines), \
+            f"the directory reports no zero-match message; it shows: {lines[:20]}"
         assert not any("A Blok 1" in line or "Ayşe Kaya" in line or "A-01" in line or "A-1" in line for line in lines)
 
         # Clear search
@@ -455,14 +454,11 @@ def test_f5_unit_search_zero_matches_is_recoverable(request, api, actors, stack,
             reset_btn.click()
         else:
             fill(page, "resident_search_field", "")
-        try:
-            by_id(page, "units_filtered_empty_state").wait_for(state="detached", timeout=10_000)
-        except Exception:
-            page.wait_for_load_state("networkidle")
 
         # All units reappear and site unit count remains 7
-        refreshed_lines = page_lines(page)
-        assert any("A Blok 1" in line or "Ayşe Kaya" in line or "A-01" in line or "A-1" in line for line in refreshed_lines)
+        refreshed_lines = page_lines_until(page, re.compile(r"A Blok 1|Ayşe Kaya|A-01|A-1"))
+        assert any("A Blok 1" in line or "Ayşe Kaya" in line or "A-01" in line or "A-1" in line for line in refreshed_lines), \
+            f"the directory stayed empty after clearing the search; it shows: {refreshed_lines[:20]}"
         assert stack.sql(f"SELECT COUNT(*) FROM units WHERE site_id = {int(fixture.site_id)};") == "7"
 
 
