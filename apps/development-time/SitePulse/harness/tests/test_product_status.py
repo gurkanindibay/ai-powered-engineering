@@ -87,20 +87,33 @@ class SnapshotTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _write_catalogue(root)
-            evidence = {"scenarios": {"SC-01-01-01": {"evidence": "passing"},
+            evidence = {"attempt": "2", "workflow_run": "https://github.com/owner/repo/actions/runs/123",
+                        "scenarios": {"SC-01-01-01": {"evidence": "passing", "cases": [{
+                            "test_name": "test_named_scenario", "status": "passing",
+                            "workflow_run": "https://github.com/owner/repo/actions/runs/123", "attempt": "2",
+                            "tested_commit": "a" * 40}]},
                          "SC-01-01-02": {"evidence": "failing"},
-                         "SC-01-01-03": {"evidence": "scheduled"},
+                         "SC-01-01-03": {"evidence": "historical", "cases": [{
+                             "test_name": "test_stale_result", "status": "historical", "test_status": "passing",
+                             "workflow_run": "https://github.com/owner/repo/actions/runs/122", "attempt": "1",
+                             "tested_commit": "b" * 40}]},
                          "SC-01-01-04": {"evidence": "planned"}}}
             snap = ps.build_snapshot(ft.load_catalogue(root), [_record("SC-01-01-01", "FAIL")], evidence=evidence)
         self.assertEqual((snap["totals"]["passing"], snap["totals"]["failing"],
                           snap["totals"]["no_result"]), (1, 1, 1))
         self.assertEqual(snap["totals"]["evidence_counts"],
-                         {"failing": 1, "passing": 1, "pending": 1, "scheduled": 1})
+                         {"failing": 1, "historical": 1, "passing": 1, "pending": 1})
+        self.assertEqual(snap["scenarios"]["SC-01-01-03"]["state"], "no_result")
         self.assertEqual((snap["scenarios"]["SC-01-01-04"]["state"],
                           snap["scenarios"]["SC-01-01-04"]["evidence"]), ("planned", "pending"))
         row = snap["scenarios"]["SC-01-01-01"]
         self.assertEqual((row["state"], row["browser_state"], row["browser_step_history"]),
                          ("passing", "failing", ["FAIL"]))
+        self.assertEqual((snap["attempt"], snap["workflow_run"], row["evidence_cases"][0]["test_name"]),
+                         ("2", "https://github.com/owner/repo/actions/runs/123", "test_named_scenario"))
+        page = ps.render_html([snap], {"detail": "feature-report.html", "history": "history.html"})
+        self.assertIn("test_named_scenario", page)
+        self.assertIn("commit <code>aaaaaaaaaaaa</code>", page)
 
     def test_summary_fallback_reads_the_time_from_the_run_id(self):
         snap = ps.snapshot_from_summary({"run_id": "20261115T203425Z-c3318fa", "status": "PASS", "junit": {"tests": 3}})

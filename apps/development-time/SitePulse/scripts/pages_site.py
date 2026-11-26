@@ -31,6 +31,7 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 DATE_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 SCENARIO_ID = re.compile(r"^SC-\d{2}-\d{2}-\d{2,}$")
 SAFE_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/()'&+-]{0,119}$")
+WORKFLOW_RUN_URL = re.compile(r"^https://[A-Za-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/\d+$")
 STATES = {"PASS", "FAIL", "SKIPPED", "ERROR", "NOT RUN", "INCOMPLETE", "UNKNOWN"}
 SNAPSHOT_STATES = {"passing", "failing", "no_result", "planned"}
 HEALTH = {"failing", "verified", "in_progress", "not_automated", "not_specified"}
@@ -96,6 +97,10 @@ def _safe_snapshot(raw: object, summary: dict) -> dict | None:
         "run_id": (raw["run_id"] if isinstance(raw.get("run_id"), str) and
                    re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{7,40}", raw["run_id"]) else ""),
         "commit": summary["commit"],
+        "attempt": (raw.get("attempt") if isinstance(raw.get("attempt"), str)
+                    and raw.get("attempt").isdigit() else ""),
+        "workflow_run": (raw.get("workflow_run") if isinstance(raw.get("workflow_run"), str)
+                         and WORKFLOW_RUN_URL.fullmatch(raw.get("workflow_run")) else ""),
         "status": summary["status"],
         "junit": summary["junit"],
         "catalogue_history": [],
@@ -147,6 +152,32 @@ def _safe_snapshot(raw: object, summary: dict) -> dict | None:
                 "epic": _safe_label(scenario.get("epic"), ""),
                 "story": _safe_label(scenario.get("story"), ""),
             }
+            evidence_cases = scenario.get("evidence_cases")
+            if isinstance(evidence_cases, list):
+                public_cases = []
+                for case in evidence_cases:
+                    if not isinstance(case, dict):
+                        continue
+                    status = case.get("status")
+                    test_status = case.get("test_status")
+                    if status not in {"passing", "failing", "skipped", "historical", "unresolved"}:
+                        continue
+                    if test_status not in {"passing", "failing", "skipped", "unresolved"}:
+                        test_status = status if status != "historical" else "unresolved"
+                    tested_commit = case.get("tested_commit")
+                    if not isinstance(tested_commit, str) or not re.fullmatch(r"[0-9a-f]{7,40}", tested_commit):
+                        tested_commit = ""
+                    public_cases.append({
+                        "test_name": _safe_label(case.get("test_name"), "test case"),
+                        "status": status,
+                        "test_status": test_status,
+                        "workflow_run": (case.get("workflow_run") if isinstance(case.get("workflow_run"), str)
+                                         and WORKFLOW_RUN_URL.fullmatch(case.get("workflow_run")) else ""),
+                        "attempt": _safe_label(case.get("attempt"), ""),
+                        "tested_commit": tested_commit,
+                    })
+                if public_cases:
+                    safe_scenarios[identifier]["evidence_cases"] = public_cases
         result["scenarios"] = safe_scenarios
     history = raw.get("catalogue_history")
     if isinstance(history, list):

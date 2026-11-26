@@ -20,6 +20,7 @@ import feature_traceability as ft
 CASE_STATUSES = {"passed": "passing", "failed": "failing", "error": "failing",
                  "skipped": "skipped", "cancelled": "skipped", "not-run": "skipped"}
 PUBLIC_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/()'&+-]{0,119}$")
+WORKFLOW_RUN_URL = re.compile(r"^https://[A-Za-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/\d+$")
 DART_INTERPOLATION = re.compile(r"(?<!\\)\$(?:\{[^{}]*\}|[A-Za-z_]\w*)")
 # An interpolated title needs this much literal text to identify its cases.
 MIN_TEMPLATE_LITERAL = 12
@@ -27,6 +28,10 @@ MIN_TEMPLATE_LITERAL = 12
 
 def safe_public_label(value: object, fallback: str = "") -> str:
     return value if isinstance(value, str) and PUBLIC_LABEL.fullmatch(value) else fallback
+
+
+def safe_workflow_run(value: object) -> str:
+    return value if isinstance(value, str) and WORKFLOW_RUN_URL.fullmatch(value) else ""
 
 
 def safe_static_case_name(value: object) -> str:
@@ -141,7 +146,8 @@ def named_links(catalogue: ft.Catalogue) -> dict[str, list[dict]]:
 
 
 def build_evidence(scenarios: dict, cases: list[dict], links: dict[str, list[dict]],
-                   run_id: object = None, commit: object = None) -> dict:
+                   run_id: object = None, commit: object = None, attempt: object = None,
+                   workflow_run: object = None) -> dict:
     """Match on the cases' full names; every case field in the result is sanitized for publication."""
     by_test: dict[str, list[tuple[str, int]]] = defaultdict(list)
     by_flutter_stem: dict[str, list[int]] = defaultdict(list)
@@ -180,15 +186,33 @@ def build_evidence(scenarios: dict, cases: list[dict], links: dict[str, list[dic
             for index in by_flutter_stem.get(stem, []):
                 if _case_matches(ref, cases[index]):
                     matched_indexes.add(index)
-        matched = [{"producer": safe_public_label(cases[index].get("producer"), "unknown"),
-                    "suite": safe_public_label(cases[index].get("suite"), "unknown"),
-                    "native_id": safe_static_case_name(cases[index].get("native_id")),
-                    "status": CASE_STATUSES.get(str(cases[index].get("status", "")).lower(), "unresolved")}
-                   for index in sorted(matched_indexes)]
+        matched = []
+        for index in sorted(matched_indexes):
+            case = cases[index]
+            native_id = str(case.get("native_id", ""))
+            native_name = native_id.rsplit("::", 1)[-1]
+            test_status = CASE_STATUSES.get(str(case.get("status", "")).lower(), "unresolved")
+            tested_commit = case.get("tested_commit", commit)
+            historical = (isinstance(commit, str) and bool(commit) and isinstance(tested_commit, str)
+                          and bool(tested_commit) and tested_commit != commit)
+            matched.append({
+                "producer": safe_public_label(case.get("producer"), "unknown"),
+                "suite": safe_public_label(case.get("suite"), "unknown"),
+                "native_id": safe_static_case_name(native_id),
+                "test_name": safe_public_label(native_name, "test case"),
+                "status": "historical" if historical else test_status,
+                "test_status": test_status,
+                "workflow_run": safe_workflow_run(workflow_run),
+                "attempt": safe_public_label(attempt),
+                "tested_commit": tested_commit if isinstance(tested_commit, str)
+                and re.fullmatch(r"[0-9a-f]{7,40}", tested_commit) else "",
+            })
         state = scenarios[scenario_id].get("state", "unresolved")
-        statuses = {item["status"] for item in matched}
+        statuses = {item["status"] for item in matched if item["status"] != "historical"}
         # A @pending scenario is not automated, so a linked partial test cannot make it pass.
-        if matched and (state != "planned" or "failing" in statuses):
+        if matched and not statuses and all(item["status"] == "historical" for item in matched):
+            evidence_status = "historical"
+        elif matched and (state != "planned" or "failing" in statuses):
             has_incomplete_source = any(
                 str(cases[index].get("suite_status", "collected")) not in ("collected", "collected-with-failures")
                 for index in matched_indexes)
@@ -207,7 +231,8 @@ def build_evidence(scenarios: dict, cases: list[dict], links: dict[str, list[dic
         by_scenario[scenario_id] = {"state": state, "evidence": evidence_status,
                                     "links": refs, "cases": matched}
     counts = Counter(row["evidence"] for row in by_scenario.values())
-    return {"schema": 1, "run_id": run_id, "commit": commit,
+    return {"schema": 1, "run_id": run_id, "attempt": attempt, "commit": commit,
+            "workflow_run": safe_workflow_run(workflow_run),
             "scenario_count": len(by_scenario), "evidence_counts": dict(sorted(counts.items())),
             "scenarios": by_scenario,
             "unresolved_links": [{"scenario_id": sid, "links": row["links"]}
@@ -220,14 +245,18 @@ def compare(artifact_dir: Path, repository_root: Path) -> dict:
     if not isinstance(scenarios, dict):
         raise ValueError("product-status.json has no scenario catalogue")
     return build_evidence(scenarios, _load_cases(artifact_dir / "case-results.jsonl"),
-                          named_links(ft.load_catalogue(repository_root)), status.get("run_id"), status.get("commit"))
+                          named_links(ft.load_catalogue(repository_root)), status.get("run_id"), status.get("commit"),
+                          status.get("attempt"), status.get("workflow_run"))
 
 
 def render_markdown(report: dict) -> str:
     counts = report["evidence_counts"]
     lines = ["## Scenario evidence across CI lanes", "",
+             f"**Workflow run:** {report.get('workflow_run') or 'unavailable'} · attempt "
+             f"{report.get('attempt') or 'unknown'} · tested commit `{report.get('commit') or 'unknown'}`.", "",
              f"**Evidence:** {counts.get('passing', 0)} passing · {counts.get('failing', 0)} failing · "
-             f"{counts.get('skipped', 0)} skipped · {counts.get('scheduled', 0)} scheduled · "
+             f"{counts.get('skipped', 0)} skipped · {counts.get('historical', 0)} historical · "
+             f"{counts.get('scheduled', 0)} scheduled · "
              f"{counts.get('planned', 0)} planned · "
              f"{counts.get('coarse', 0)} coarse · {counts.get('incomplete', 0)} incomplete · "
              f"{counts.get('unresolved', 0)} unresolved.", "",
@@ -250,11 +279,19 @@ def add_html_section(page: str, report: dict) -> str:
     tiles = " ".join(
         f'<span class="scenario-evidence-count {html.escape(state)}">{counts.get(state, 0)} '
         f'{html.escape(state)}</span>'
-        for state in ("passing", "failing", "skipped", "scheduled", "planned", "coarse", "unresolved", "incomplete")
+        for state in ("passing", "failing", "skipped", "historical", "scheduled", "planned", "coarse", "unresolved", "incomplete")
     )
     rows = []
     for scenario_id, row in report["scenarios"].items():
-        cases = "; ".join(f"{case['suite']}: {case['native_id']} ({case['status']})" for case in row["cases"])
+        case_labels = []
+        for case in row["cases"]:
+            status = case["status"]
+            if status == "historical":
+                status = f"historical, result {case['test_status']}"
+            case_labels.append(
+                f"{case['suite']}: {case['test_name']} ({status}) · run {case['workflow_run'] or 'unavailable'}"
+                f" attempt {case['attempt'] or 'unknown'} · commit {case['tested_commit'] or 'unknown'}")
+        cases = "; ".join(case_labels)
         refs = "; ".join(f"{ref['file']}:{ref['line']} {ref['test']}" for ref in row["links"])
         detail = cases or ("Scheduled in nightly lane" if row["evidence"] == "scheduled" else refs)
         rows.append(

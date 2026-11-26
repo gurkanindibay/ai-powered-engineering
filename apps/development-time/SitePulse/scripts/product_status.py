@@ -53,6 +53,7 @@ STATES = ("passing", "failing", "no_result", "planned")
 STATE_LABELS = {"passing": "Passing", "failing": "Failing", "no_result": "Automated, no CI result",
                 "planned": "Planned (not automated)"}
 SHORT_LABELS = {"passing": "passing", "failing": "failing", "no_result": "no CI result", "planned": "planned"}
+WORKFLOW_RUN_URL = re.compile(r"^https://[A-Za-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/\d+$")
 HEALTH_LABELS = {"failing": "Failing", "verified": "Verified", "in_progress": "In progress",
                  "not_automated": "Not automated", "not_specified": "No scenarios"}
 HEALTH_ICONS = {"failing": "✕", "verified": "✓", "in_progress": "◐", "not_automated": "○",
@@ -120,7 +121,9 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
                 scenarios[scenario.id] = {"state": state, "name": scenario.name, "epic": epic, "story": story,
                                            "browser_state": browser_state,
                                            "browser_step_history": statuses.get(scenario.id, []),
-                                           **({"evidence": evidence_state} if evidence_state else {})}
+                                           **({"evidence": evidence_state} if evidence_state else {}),
+                                           **({"evidence_cases": resolved.get(scenario.id, {}).get("cases", [])}
+                                              if resolved.get(scenario.id, {}).get("cases") else {})}
                 states.append(state)
                 story_scenarios.append({"id": scenario.id, "name": scenario.name, "state": state})
             if states:
@@ -195,6 +198,8 @@ def build_snapshot(catalogue: ft.Catalogue, run_records: list[dict], summary: di
 
     return {"schema": SCHEMA, "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "run_id": summary.get("run_id", ""), "commit": summary.get("commit", ""),
+            "attempt": (evidence or {}).get("attempt", ""),
+            "workflow_run": (evidence or {}).get("workflow_run", ""),
             "task": summary.get("task", ""), "status": summary.get("status", "NO RESULTS"),
             "junit": summary.get("junit", {}), "totals": totals, "epics": epics, "scenarios": scenarios,
             "catalogue_history": history["points"], "recent_changes": history["changes"],
@@ -508,6 +513,35 @@ def _trend_table(days: list[dict]) -> str:
             f'</thead><tbody>{rows}</tbody></table></div></details>')
 
 
+def _named_evidence_html(latest: dict) -> str:
+    rows = []
+    for scenario_id, scenario in sorted(latest.get("scenarios", {}).items()):
+        if not isinstance(scenario, dict):
+            continue
+        for case in scenario.get("evidence_cases", []):
+            if not isinstance(case, dict):
+                continue
+            workflow_run = case.get("workflow_run", "")
+            if isinstance(workflow_run, str) and WORKFLOW_RUN_URL.fullmatch(workflow_run):
+                run_label = f'<a href="{_esc(workflow_run)}">run</a>'
+            else:
+                run_label = "run unavailable"
+            result = case.get("test_status") if case.get("status") == "historical" else case.get("status")
+            status_label = "historical" if case.get("status") == "historical" else str(result or "unresolved")
+            rows.append(
+                f'<tr><td><code>{_esc(scenario_id)}</code></td><td>{_esc(case.get("test_name", "test case"))}</td>'
+                f'<td><span class="health {_esc(status_label)}">{_esc(status_label)}</span></td>'
+                f'<td>{run_label} · attempt {_esc(case.get("attempt", "unknown"))} · '
+                f'commit <code>{_esc(str(case.get("tested_commit", ""))[:12] or "unknown")}</code></td></tr>')
+    if not rows:
+        return ""
+    return ('<section id="named-evidence"><h2>Named scenario evidence</h2>'
+            '<p class="lede">Test outcomes include the workflow attempt and exact tested commit. '
+            'Historical results do not verify the current commit.</p><div class="scroll"><table><thead><tr>'
+            '<th>Scenario</th><th>Test</th><th>Result</th><th>Provenance</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div></section>')
+
+
 def _inventory_html(latest: dict) -> str:
     inventory = latest.get("inventory", {})
     if not inventory:
@@ -616,7 +650,7 @@ def render_html(snapshots: list[dict], links: dict | None = None) -> str:
     if evidence_counts:
         evidence_summary = " · ".join(
             f'{evidence_counts.get(state, 0)} {state}'
-            for state in ("passing", "failing", "skipped", "scheduled", "pending", "coarse", "incomplete", "unresolved")
+            for state in ("passing", "failing", "skipped", "historical", "scheduled", "pending", "coarse", "incomplete", "unresolved")
             if evidence_counts.get(state, 0))
         tiles += _tile("Named scenario evidence", str(sum(evidence_counts.values())), evidence_summary)
     legend = "".join(f'<span class="key"><i class="seg {state}"></i>{_esc(STATE_LABELS[state])}</span>'
@@ -651,6 +685,7 @@ def render_html(snapshots: list[dict], links: dict | None = None) -> str:
 report on, such as Rust or Flutter unit tests, or were skipped. They count as automated, not as passing.</p>
 </section>
 
+{_named_evidence_html(latest)}
 {_inventory_html(latest)}
 
 <section><h2>Needs attention</h2><div class="notes">{_attention(latest)}</div></section>
