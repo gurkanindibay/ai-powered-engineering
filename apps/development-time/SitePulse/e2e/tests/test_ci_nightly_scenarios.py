@@ -8,6 +8,8 @@ from nightly.test_tenant_contract import test_additional_tenant_resource_reads_r
 from pages import ResidentHome
 from support.flutter import by_id
 
+pytest_plugins = ["nightly.test_tenant_contract"]
+
 
 @pytest.mark.core
 @pytest.mark.covers("SC-01-04-04")
