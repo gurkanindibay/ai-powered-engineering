@@ -29,6 +29,7 @@ pub async fn save_user(
         if !user.full_name.is_empty() {
             client
                 .execute(
+                    // person-scope: person — the person id belongs to the user row being saved; callers resolve it in their site
                     "UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3",
                     &[&user.full_name, &user.phone, &pid],
                 )
@@ -191,6 +192,7 @@ pub async fn upgrade_legacy_password_hashes(
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let rows = client
+        // person-scope: platform — startup migration of legacy password hashes across every site
         .query("SELECT id, password_hash FROM users WHERE password_hash IS NOT NULL AND password_hash NOT LIKE '$argon2%'", &[])
         .await?;
     let mut changed = 0;
@@ -220,6 +222,7 @@ pub async fn ensure_bootstrap_admin(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let exists = client
+        // person-scope: platform — bootstrap/startup check for the platform admin
         .query_opt("SELECT 1 FROM users WHERE role = 'SAAS_ADMIN' LIMIT 1", &[])
         .await?
         .is_some();

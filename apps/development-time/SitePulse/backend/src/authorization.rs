@@ -345,6 +345,7 @@ pub async fn resource(
                     .map_err(|_| SecurityError::Unauthenticated)?;
                 let actor_row = client
                     .query_opt(
+                        // person-scope: identity — the actor is the session user (claims.sub); the receipt itself was fetched with the caller's site
                         "SELECT u.role, u.person_id FROM users AS u WHERE u.id = $1",
                         &[&user],
                     )
@@ -771,6 +772,7 @@ pub async fn assign_platform_role(
         .await
     } else {
         tx.execute(
+            // person-scope: platform — SaaS admin role assignment runs in a platform-bound transaction
             "UPDATE users SET is_active=false WHERE id=$1 AND role='SAAS_ADMIN'",
             &[&id],
         )

@@ -158,6 +158,7 @@ impl PersonMergeService {
 
         // Login: the target's login wins; otherwise the source's login follows the card.
         tx.execute(
+            // person-scope: person — both person ids are locked with site_id = $2 before the merge
             "UPDATE users SET is_active = FALSE WHERE person_id = $1 AND is_active \
                AND EXISTS (SELECT 1 FROM users t WHERE t.person_id = $2 AND t.is_active)",
             &[&source_id, &target_id],

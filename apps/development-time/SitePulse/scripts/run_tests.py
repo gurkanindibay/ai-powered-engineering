@@ -52,6 +52,7 @@ ORDER = [
     "rust-standards-lint",
     "test-quality-lint",
     "tenant-lint",
+    "person-scope-lint",
     "lock-lint",
     "testid-lint",
     "feature-traceability",
@@ -77,7 +78,7 @@ ORDER = [
 GATE_GROUPS: Dict[str, List[str]] = {
     # Python only: no Rust, Flutter or PostgreSQL needed.
     "lint": [
-        "harness-selftest", "persistence-lint", "rust-standards-lint", "test-quality-lint", "tenant-lint", "lock-lint",
+        "harness-selftest", "persistence-lint", "rust-standards-lint", "test-quality-lint", "tenant-lint", "person-scope-lint", "lock-lint",
         "testid-lint", "feature-traceability", "ui-style-lint", "flutter-reuse", "logging-standards-lint",
         "security-lint",
     ],

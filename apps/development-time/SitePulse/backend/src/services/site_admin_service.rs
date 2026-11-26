@@ -636,6 +636,7 @@ impl SiteAdminService {
                 if !t_email_norm.is_empty() {
                     let existing_t_user = client
                         .query_opt(
+                            // person-scope: identity — registration checks that the email is globally unique
                             "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                             &[&t_email_norm],
                         )
@@ -1701,6 +1702,7 @@ impl SiteAdminService {
                         if let Some(ref t_name) = req.tenant_full_name {
                             client
                                 .execute(
+                                    // person-scope: person — tenant/owner person ids come from the unit row selected with site_id = $2
                                     "UPDATE persons SET full_name = $1 WHERE id = $2",
                                     &[t_name, &tenant_person_id],
                                 )

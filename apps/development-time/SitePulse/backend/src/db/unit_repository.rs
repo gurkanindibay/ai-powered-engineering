@@ -67,6 +67,7 @@ pub async fn save_unit(
     let effective_owner_id = if let Some(oid) = owner_id_num {
         let exists = client
             .query_opt(
+                // person-scope: platform — startup sync mirrors the loaded unit's person cards
                 "SELECT id FROM persons WHERE id = $1 AND deleted_at IS NULL",
                 &[&oid],
             )
@@ -299,6 +300,7 @@ pub async fn save_unit_member_ref(
     let person_id = crate::services::person_service::resolve_person_ref(&tx, site, person).await?;
     let card = tx
         .query_one(
+            // person-scope: person — person_id is resolved by resolve_person_ref within the unit's site
             "SELECT full_name, COALESCE(phone, ''), COALESCE(email, '') FROM persons WHERE id=$1",
             &[&person_id],
         )
@@ -467,6 +469,7 @@ pub async fn transfer_unit_ownership_db(
             .ok_or(OccupancyError::PersonNotFound)?,
         None => tx
             .query_opt(
+                // person-scope: identity — the buyer is looked up by email before the person row exists
                 "SELECT person_id FROM users WHERE LOWER(email) = $1 AND is_active AND person_id IS NOT NULL",
                 &[&crate::domain::email::NormalizedEmail::normalize(
                     &transfer.new_user.email,

@@ -807,6 +807,7 @@ async fn person_contact(
 ) -> Result<(String, Option<String>, Option<String>), OccupancyError> {
     let row = tx
         .query_one(
+            // person-scope: person — person ids come from the occupancy sessions loaded for this site's unit
             "SELECT full_name, phone, email FROM persons WHERE id = $1",
             &[&person_id],
         )

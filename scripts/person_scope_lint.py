@@ -1,0 +1,1 @@
+../apps/development-time/SitePulse/scripts/person_scope_lint.py

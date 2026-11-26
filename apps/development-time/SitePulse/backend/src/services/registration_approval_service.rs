@@ -254,6 +254,7 @@ impl RegistrationApprovalService {
                     .ok_or(SecurityError::NotFound)?;
                 let has_login = tx
                     .query_opt(
+                        // person-scope: person — the person id is the registration's person, resolved within the site
                         "SELECT 1 FROM users WHERE person_id=$1 AND is_active",
                         &[&chosen],
                     )

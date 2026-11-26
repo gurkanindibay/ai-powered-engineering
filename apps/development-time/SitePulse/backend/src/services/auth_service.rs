@@ -223,6 +223,7 @@ impl AuthService {
                 .await
                 .map_err(|_| "Identity storage unavailable")?;
             let id = client
+                // person-scope: identity — sign-in by global identity (google_sub) before a site is known
                 .query_opt("SELECT id FROM users WHERE google_sub=$1", &[&payload.sub])
                 .await
                 .map_err(|_| "Identity storage unavailable")?
@@ -465,6 +466,7 @@ impl AuthService {
             if let Ok(client) = pool.get().await {
                 if let Ok(Some(row)) = client
                     .query_opt(
+                        // person-scope: identity — registration checks that the email is globally unique
                         "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                         &[&crate::domain::email::NormalizedEmail::normalize(
                             &new_user.email,
@@ -506,6 +508,7 @@ impl AuthService {
             .map_err(|e| e.to_string())?
         {
             let id = crate::db::require_id("user", &user.id)?;
+            // person-scope: identity — links google_sub to the authenticated user
             let n=client.execute("UPDATE users SET google_sub=$1,auth_provider='HYBRID' WHERE id=$2 AND (google_sub IS NULL OR google_sub=$1)",&[&payload.sub,&id]).await.map_err(|_|"Google identity cannot be linked".to_string())?;
             if n != 1 {
                 return Err("Google identity cannot be linked".to_string());
@@ -690,6 +693,7 @@ impl AuthService {
             let client = pool.get().await.map_err(|e| e.to_string())?;
             client
                 .execute(
+                    // person-scope: identity — password change by the globally unique email before sign-in
                     "UPDATE users SET password_hash = $1, must_change_password = false WHERE LOWER(email) = $2 AND is_active",
                     &[&new_hash, &email_norm],
                 )
