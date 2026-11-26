@@ -1918,6 +1918,12 @@ class DashboardController extends ChangeNotifier {
   bool _isPaymentStreamLoading = false;
   bool get isPaymentStreamLoading => _isPaymentStreamLoading;
 
+  /// Sequence of the latest payment-stream request. Only the newest request may
+  /// write the stream state, so a slow older response can never overwrite the
+  /// data (or end the loading state) of a request the user started later.
+  /// Declared here because the payments methods live in an extension.
+  int _paymentStreamRequestSeq = 0;
+
   // ---------------------------------------------------------------------------
   // EPIC-10: Capital Expenditure & Fixtures (Demirbaş Yönetimi) State & Methods
   // ---------------------------------------------------------------------------

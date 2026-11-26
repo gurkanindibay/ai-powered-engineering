@@ -73,9 +73,8 @@ def test_payment_stream_distinguishes_loading_failure_and_recovery(
             else:
                 route.continue_()
 
-        # Opening the page requests the stream more than once (the button and the
-        # tab it mounts both fetch). A single answered copy ends the loading
-        # state, so no request may complete until loading has been observed.
+        # Opening the page requests the stream once: the stream tab is the single
+        # loader, so no request may complete until loading has been observed.
         page.route("**/api/v1/payments/stream*", control_payment_stream)
         by_id(page, "action_payment_tracking").click()
         by_id(page, "payment_stream_loading").wait_for(state="attached", timeout=5_000)

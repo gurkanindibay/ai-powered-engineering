@@ -854,6 +854,7 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                       controller: widget.controller,
                       initialUnitId: widget.initialUnitId,
                       isEmbedded: false,
+                      autoLoad: false,
                     ),
                     DebtAgingWidget(
                       controller: widget.controller,
@@ -999,11 +1000,17 @@ class PaymentStreamWidget extends StatefulWidget {
   final String? initialUnitId;
   final bool isEmbedded;
 
+  /// Whether mounting the widget requests the stream itself. Owners that load
+  /// the stream for it (for example [PaymentTrackingPage], whose refresh button
+  /// reloads both tabs) pass `false` so one user action sends one request.
+  final bool autoLoad;
+
   const PaymentStreamWidget({
     super.key,
     required this.controller,
     this.initialUnitId,
     this.isEmbedded = false,
+    this.autoLoad = true,
   });
 
   @override
@@ -1019,9 +1026,11 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
+    if (widget.autoLoad) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadData();
+      });
+    }
   }
 
   @override

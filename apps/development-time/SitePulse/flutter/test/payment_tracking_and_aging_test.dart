@@ -1,5 +1,6 @@
 @Tags(['finance'])
 library;
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:decimal/decimal.dart';
@@ -345,5 +346,117 @@ void main() {
       await tester.pumpAndSettle();
       expect(navigatedToDues, isTrue);
     });
+
+    // covers: SC-09-01-03
+    testWidgets('opening payment tracking from the dues view sends one stream request', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final streamRequests = _countPaymentStreamRequests(controller);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: DuesManagementView(controller: controller),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(streamRequests, isEmpty,
+          reason: 'the dues view must not load the stream before it is opened');
+
+      await tester.tap(find.byKey(const Key('action_payment_tracking')));
+      await tester.pumpAndSettle();
+      expect(streamRequests, hasLength(1),
+          reason: 'the action button and the segment it mounts must not both fetch');
+
+      // Leaving and re-entering the segment is one user action per entry, and
+      // each entry fetches once.
+      await tester.tap(find.byKey(const Key('segment_tab_2')));
+      await tester.pumpAndSettle();
+      expect(streamRequests, hasLength(1));
+
+      await tester.tap(find.byKey(const Key('segment_tab_1')));
+      await tester.pumpAndSettle();
+      expect(streamRequests, hasLength(2));
+    });
+
+    // covers: SC-09-01-03
+    testWidgets('opening the payment tracking page sends one stream request', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final streamRequests = _countPaymentStreamRequests(controller);
+
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: PaymentTrackingPage(controller: controller))),
+      );
+      await tester.pumpAndSettle();
+
+      expect(streamRequests, hasLength(1),
+          reason: 'the page and the stream widget it mounts must not both fetch');
+    });
+
+    test('a superseded payment stream response does not overwrite the newer one', () async {
+      final originalTransport = ApiClient.transport;
+      addTearDown(() => ApiClient.transport = originalTransport);
+      final slowResponse = Completer<void>();
+      ApiClient.transport = MockClient((request) async {
+        if (request.url.queryParameters['search'] == 'slow') {
+          await slowResponse.future;
+          return _paymentStreamResponse(totalCount: 1);
+        }
+        return _paymentStreamResponse(totalCount: 2);
+      });
+      final networkController = DashboardController(isTestMode: false);
+      addTearDown(networkController.dispose);
+
+      final slow = networkController.fetchPaymentStream(search: 'slow');
+      final fast = networkController.fetchPaymentStream(search: 'fast');
+      await fast;
+      slowResponse.complete();
+      await slow;
+
+      expect(networkController.paymentStream, isNotNull);
+      expect(networkController.paymentStream!.totalCount, 2,
+          reason: 'the response of the superseded request must be ignored');
+      expect(networkController.paymentStreamError, isNull);
+      expect(networkController.isPaymentStreamLoading, isFalse);
+    });
   });
+}
+
+http.Response _paymentStreamResponse({required int totalCount}) => http.Response(
+      jsonEncode({
+        'entries': <Object>[],
+        'total_volume': '0.00',
+        'settled_volume': '0.00',
+        'unmatched_volume': '0.00',
+        'total_count': totalCount,
+      }),
+      200,
+      headers: {'content-type': 'application/json'},
+    );
+
+/// Counts `/api/v1/payments/stream` requests for [controller] by switching it to
+/// the network path with a recording transport. Returns the live request list.
+List<http.Request> _countPaymentStreamRequests(DashboardController controller) {
+  final originalTransport = ApiClient.transport;
+  addTearDown(() => ApiClient.transport = originalTransport);
+  final requests = <http.Request>[];
+  ApiClient.transport = MockClient((request) async {
+    if (request.url.path == '/api/v1/payments/stream') {
+      requests.add(request);
+      return _paymentStreamResponse(totalCount: 0);
+    }
+    return http.Response('[]', 200, headers: {'content-type': 'application/json'});
+  });
+  // Test mode answers the stream locally, so the network path is required to
+  // observe the requests.
+  controller.isTestMode = false;
+  return requests;
 }
