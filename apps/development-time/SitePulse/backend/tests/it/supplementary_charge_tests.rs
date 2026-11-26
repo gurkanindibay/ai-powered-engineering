@@ -99,7 +99,7 @@ async fn post(state: &AppState, start: &str, today: &str) -> Vec<DuesLiability> 
         .expect("supplementary charges post")
 }
 
-// covers: SC-07-09-07
+// covers: SC-07-09-07, SC-13-01-15
 #[tokio::test]
 async fn when_the_month_is_open_then_the_charge_is_posted_in_that_month() {
     let state = state_with(
@@ -172,7 +172,7 @@ async fn when_the_month_is_closed_then_the_charge_refers_to_it_but_is_posted_in_
     assert!(inner.dues.iter().all(|due| due.period != "Ekim 2026"));
 }
 
-// covers: SC-13-01-14, SC-13-12-03
+// covers: SC-13-01-14, SC-13-12-03, SC-13-01-15
 #[tokio::test]
 async fn when_the_charge_is_created_late_then_its_late_fee_counts_from_the_creation_date() {
     let state = state_with(
