@@ -153,6 +153,22 @@ def _evidence_cases(collected: object, inventory_cases: list[dict]) -> list[dict
     return full + inventory_cases[len(full):]
 
 
+def _with_suite_provenance(cases: object, suites: object) -> list[dict]:
+    """Attach the selected suite's completeness state to internal resolver inputs."""
+    def runner_key(value: object) -> object:
+        return {"cargo-test": "cargo", "flutter-test": "flutter"}.get(value, value)
+
+    states = {}
+    for suite in suites if isinstance(suites, list) else []:
+        if not isinstance(suite, dict):
+            continue
+        names = {suite.get("suite"), suite.get("gate"), *suite.get("expected_shards", [])}
+        for name in names:
+            states[(runner_key(suite.get("runner")), name)] = suite.get("status", "incomplete")
+    return [dict(case, suite_status=states.get((runner_key(case.get("runner")), case.get("suite")), "incomplete"))
+            for case in cases if isinstance(case, dict)] if isinstance(cases, list) else []
+
+
 def _public_inventory(suites: object, gates: object, cases: object) -> dict:
     public_suites = []
     for suite in suites if isinstance(suites, list) else []:
@@ -524,9 +540,13 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
     if coverage is not None:
         summary["coverage"] = coverage
     snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history(), inventory=inventory)
+    evidence_cases = _with_suite_provenance(collection.get("cases"), collection.get("suites"))
+    inventory_evidence_cases = _with_suite_provenance(inventory.get("cases"), inventory.get("suites"))
     evidence = scenario_evidence.build_evidence(
-        snapshot["scenarios"], _evidence_cases(collection.get("cases"), inventory.get("cases", [])),
+        snapshot["scenarios"], _evidence_cases(evidence_cases, inventory_evidence_cases),
         scenario_evidence.named_links(catalogue), meta["run_id"], commit_override or meta["commit"])
+    snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history(),
+                                inventory=inventory, evidence=evidence)
     feature_page = (out / "feature-report.html").read_text(encoding="utf-8")
     (out / "feature-report.html").write_text(scenario_evidence.add_html_section(feature_page, evidence),
                                              encoding="utf-8")

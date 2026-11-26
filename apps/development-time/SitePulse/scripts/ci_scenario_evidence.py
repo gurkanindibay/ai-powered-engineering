@@ -134,6 +134,8 @@ def named_links(catalogue: ft.Catalogue) -> dict[str, list[dict]]:
                 ref["test"] = test["name"]
                 if test.get("case_id"):
                     ref["case_id"] = test["case_id"]
+            else:
+                ref["evidence_kind"] = safe_public_label(entry.get("kind"), "unknown")
             links[scenario_id].append(ref)
     return links
 
@@ -187,13 +189,19 @@ def build_evidence(scenarios: dict, cases: list[dict], links: dict[str, list[dic
         statuses = {item["status"] for item in matched}
         # A @pending scenario is not automated, so a linked partial test cannot make it pass.
         if matched and (state != "planned" or "failing" in statuses):
+            has_incomplete_source = any(
+                str(cases[index].get("suite_status", "collected")) not in ("collected", "collected-with-failures")
+                for index in matched_indexes)
             evidence_status = ("failing" if "failing" in statuses else
+                               "incomplete" if has_incomplete_source else
                                "passing" if "passing" in statuses else
                                "skipped" if statuses == {"skipped"} else "unresolved")
         elif any("nightly" in str(ref.get("file", "")).lower() for ref in refs):
             evidence_status = "scheduled"
         elif state == "planned":
             evidence_status = "planned"
+        elif any(ref.get("evidence_kind") in {"wrapper", "file-level", "script"} for ref in refs):
+            evidence_status = "coarse"
         else:
             evidence_status = "unresolved"
         by_scenario[scenario_id] = {"state": state, "evidence": evidence_status,
@@ -221,6 +229,7 @@ def render_markdown(report: dict) -> str:
              f"**Evidence:** {counts.get('passing', 0)} passing · {counts.get('failing', 0)} failing · "
              f"{counts.get('skipped', 0)} skipped · {counts.get('scheduled', 0)} scheduled · "
              f"{counts.get('planned', 0)} planned · "
+             f"{counts.get('coarse', 0)} coarse · {counts.get('incomplete', 0)} incomplete · "
              f"{counts.get('unresolved', 0)} unresolved.", "",
              "Unresolved scenario links are listed below with their declared source tests.", ""]
     unresolved = report["unresolved_links"]
@@ -241,7 +250,7 @@ def add_html_section(page: str, report: dict) -> str:
     tiles = " ".join(
         f'<span class="scenario-evidence-count {html.escape(state)}">{counts.get(state, 0)} '
         f'{html.escape(state)}</span>'
-        for state in ("passing", "failing", "skipped", "scheduled", "planned", "unresolved")
+        for state in ("passing", "failing", "skipped", "scheduled", "planned", "coarse", "unresolved", "incomplete")
     )
     rows = []
     for scenario_id, row in report["scenarios"].items():
@@ -263,6 +272,8 @@ def add_html_section(page: str, report: dict) -> str:
         'font-weight:600;text-transform:capitalize;background:#e6edf5}.scenario-evidence-count.passing{background:#d9f2e2}'
         '.scenario-evidence-count.failing{background:#ffe0e0}.scenario-evidence-count.skipped{background:#fff0c2}'
         '.scenario-evidence-count.scheduled{background:#dce9ff}.scenario-evidence-count.unresolved{background:#f5d9ff}'
+        '.scenario-evidence-count.incomplete{background:#f4c7c3}'
+        '.scenario-evidence-count.coarse{background:#f0e1bf}'
         '.ci-scenario-evidence table{border-collapse:collapse;width:100%}.ci-scenario-evidence th,'
         '.ci-scenario-evidence td{border:1px solid #d8dee8;padding:.45rem;text-align:left;vertical-align:top}'
         '.ci-scenario-evidence td:last-child{overflow-wrap:anywhere}</style>'

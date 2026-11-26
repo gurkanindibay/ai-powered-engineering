@@ -36,6 +36,11 @@ def _count(value: object) -> int:
         return 0
 
 
+def _runner_key(value: object) -> object:
+    """Normalize legacy adapter labels to the runner names in the suite catalogue."""
+    return {"cargo-test": "cargo", "flutter-test": "flutter"}.get(value, value)
+
+
 def _errors(value: object) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value]
@@ -61,7 +66,9 @@ def _latest_by_attempt(items: list[tuple[Path, dict[str, Any]]], run_id: str, co
     for folder, metadata in items:
         if str(metadata.get("run_id")) != str(run_id):
             continue
-        if commit and metadata.get("commit") and metadata.get("commit") != commit:
+        # Artifact identity is part of the proof: absent or different commits are
+        # not eligible to contribute cases to this run.
+        if commit and metadata.get("commit") != commit:
             continue
         value = str(metadata.get(key, ""))
         if not value:
@@ -247,7 +254,12 @@ def collect(suite_root: Path, e2e_root: Path, run_id: str, attempt: str, commit:
         producer = str(entry["producer"])
         requested = producer_status.get(producer, "unknown")
         source = producer_sources.get(producer)
-        suite_cases = [case for case in cases if case.get("suite") == entry["suite"] and case.get("runner") == entry["runner"]]
+        # Producer adapters name cases after the gate (for example ``rust-test``),
+        # while the dashboard exposes the stable product suite name (``rust``).
+        # Match both the display suite and its declared shard names.
+        suite_cases = [case for case in cases
+                       if _runner_key(case.get("runner")) == _runner_key(entry["runner"])
+                       and case.get("suite") in ({entry["suite"]} | set(entry["shards"]))]
         if entry["suite"] == "e2e":
             missing_shards = [shard for shard in entry["shards"] if shard not in shards]
             selected = [str(shards[shard][1].get("attempt")) for shard in entry["shards"] if shard in shards]
