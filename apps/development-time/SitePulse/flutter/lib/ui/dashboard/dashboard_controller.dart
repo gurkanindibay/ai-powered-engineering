@@ -134,8 +134,41 @@ class DashboardController extends ChangeNotifier {
     });
   }
 
-  Future<void> _completeGoogleSignIn(GoogleSignInAccount account) async {
-    final idToken = account.authentication.idToken;
+  /// E2E builds offer the in-repo Google fake instead of Google Identity
+  /// Services, so the login screen can be exercised without the real provider.
+  bool get usesFakeGoogleSignIn => kE2E && !isTestMode;
+
+  static const String _e2eGoogleTokenKey = 'e2e.googleToken';
+
+  bool _fakeGoogleRedirectConsumed = false;
+
+  /// Consumes the one-shot token the fake provider stored before returning to
+  /// the login screen, then clears it so a reload does not sign in again.
+  Future<void> consumeFakeGoogleRedirect() async {
+    if (!usesFakeGoogleSignIn || _fakeGoogleRedirectConsumed) return;
+    final token = readPreference(_e2eGoogleTokenKey);
+    if (token == null || token.isEmpty) return;
+    _fakeGoogleRedirectConsumed = true;
+    writePreference(_e2eGoogleTokenKey, null);
+    await _completeGoogleIdToken(token);
+  }
+
+  Future<void> _completeGoogleSignIn(GoogleSignInAccount account) =>
+      _completeGoogleIdToken(
+        account.authentication.idToken,
+        fallbackEmail: account.email,
+        fallbackName: account.displayName,
+        fallbackPhoto: account.photoUrl,
+      );
+
+  /// Exchanges a verified Google ID token for a SitePulse session. The identity
+  /// provider (real or the E2E fake) has already authenticated the person.
+  Future<void> _completeGoogleIdToken(
+    String? idToken, {
+    String? fallbackEmail,
+    String? fallbackName,
+    String? fallbackPhoto,
+  }) async {
     if (idToken == null || idToken.isEmpty) {
       _authMessage = 'Google hesabından kimlik doğrulama bilgisi alınamadı.';
       notify();
@@ -155,7 +188,7 @@ class DashboardController extends ChangeNotifier {
       final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final user = data['user'] as Map<String, dynamic>?;
       if (user == null) throw const FormatException('Missing server profile');
-      final email = user['email']?.toString() ?? account.email;
+      final email = user['email']?.toString() ?? fallbackEmail ?? '';
       final role = UserRole.fromApi(user['role']);
       final siteId = user['site_id']?.toString() ?? '';
       final unitId = user['unit_id']?.toString() ?? '';
@@ -175,10 +208,10 @@ class DashboardController extends ChangeNotifier {
       _userSession = _createSession(
         role,
         AuthProvider.google,
-        customName: user['full_name']?.toString() ?? account.displayName ?? email,
+        customName: user['full_name']?.toString() ?? fallbackName ?? email,
         customEmail: email,
         customPhone: user['phone']?.toString() ?? '',
-        avatarUrl: user['avatar_url']?.toString() ?? account.photoUrl,
+        avatarUrl: user['avatar_url']?.toString() ?? fallbackPhoto,
         mustChangePassword: mustChangePassword,
       ).copyWith(id: user['id']?.toString(), permissions: permissions);
       _isAuthenticated = true;

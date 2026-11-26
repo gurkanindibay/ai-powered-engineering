@@ -23,7 +23,9 @@ class PrebuiltWebBundleTests(unittest.TestCase):
             (bundle / "index.html").touch()
             (bundle / "main.dart.js").touch()
             # No Flutter inputs in this temporary checkout.
-            fingerprint = hashlib.sha256(stack.api_base().encode()).hexdigest()
+            digest = hashlib.sha256(stack.api_base().encode())
+            digest.update(stack.fake_google_page().encode())
+            fingerprint = digest.hexdigest()
             (bundle / ".source-fingerprint").write_text(fingerprint, encoding="utf-8")
             with (
                 patch.multiple(stack, SITEPULSE=root, PREBUILT_DIR=root, WEB_BUILD=bundle),

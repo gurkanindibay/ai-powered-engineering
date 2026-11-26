@@ -49,22 +49,16 @@ def test_empty_credentials_are_rejected_without_a_request(login_page, page):
     assert login_calls == []
 
 
-@pytest.mark.skip(reason="Pending in-repo fake Google OIDC provider for CI")
 @pytest.mark.edge
+@pytest.mark.covers("SC-06-03-02")
 @pytest.mark.gui_id("GUI-06-11")
 def test_google_sign_in_redirects_to_the_provider(login_page, page):
-    google_requests: list[str] = []
-    page.on("request", lambda r: google_requests.append(r.url) if "accounts.google.com" in r.url else None)
-    page.context.on(
-        "page",
-        lambda popup: popup.on(
-            "request", lambda r: google_requests.append(r.url) if "accounts.google.com" in r.url else None
-        ),
-    )
     by_id(page, "login_tab_homeOwner").click()
     by_id(page, "btn_google_sign_in").click()
-    page.wait_for_load_state("networkidle")
-    assert google_requests or "accounts.google.com" in page.url
+    # The fake provider is the sign-in host in CI: the browser navigates away
+    # from the app and shows its account chooser.
+    page.wait_for_url("**/fake-google.html", timeout=15_000)
+    assert page.locator("#fake-google-account").is_visible()
 
 
 # ------------------------------------------------------------------ EPIC-01

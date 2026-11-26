@@ -357,7 +357,7 @@ Three systemic gaps sit behind these:
 | SC-13-01-10, SC-13-01-15 | edge | backend | Needs F3 fixture (#271) |
 | SC-13-05-10, SC-13-08-06, SC-13-08-07, SC-13-10-08 | edge | gui | Excel import, lost-response, stale-action and late-response isolation journeys |
 | SC-05-02-01 Concurrent balance modification | none | backend | No test runs two concurrent payments on one unit |
-| SC-06-05-02, SC-10-06-03, SC-10-06-04 | none | gui/flutter | Google IdP stub; capital card detail; banner text not implemented |
+| SC-10-06-03, SC-10-06-04 | none | gui/flutter | Capital card detail; banner text not implemented |
 
 Six pending scenarios are blocked by product gaps, not by missing tests. They belong on the product backlog with the scenario as the acceptance test. Beyond the catalogue, `GUI_COVERAGE_GAPS.md` lists about 20 UI features with no browser scenario. EPIC-11 (payments phase 3) has no GUI scenarios at all.
 
