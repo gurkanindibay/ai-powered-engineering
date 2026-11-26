@@ -128,6 +128,33 @@ class TenantIsolationLintTests(unittest.TestCase):
         })
         self.assertEqual(rules, ["rls-coverage"])  # notes; users is exempt
 
+    def test_parent_scoped_child_tables_need_a_policy(self):
+        rules = _run(tenant_lint, {
+            "migrations/V1__init.sql": (
+                "CREATE TABLE assembly_meetings (\n    id BIGINT,\n    site_id BIGINT\n);\n"
+                "CREATE TABLE assembly_agenda_items (\n    id BIGINT,\n    meeting_id BIGINT\n);\n"
+            ),
+            "migrations/V2__rls.sql": "SELECT sp_enable_tenant_rls('assembly_meetings', 'x');\n",
+        })
+        self.assertEqual(rules, ["rls-coverage"])
+
+    def test_parent_scoped_child_tables_pass_with_their_policy(self):
+        rules = _run(tenant_lint, {
+            "migrations/V1__init.sql": (
+                "CREATE TABLE assembly_meetings (\n    id BIGINT,\n    site_id BIGINT\n);\n"
+                "CREATE TABLE assembly_agenda_items (\n    id BIGINT,\n    meeting_id BIGINT\n);\n"
+                "CREATE TABLE payment_plans (\n    id BIGINT,\n    site_id BIGINT\n);\n"
+                "CREATE TABLE payment_plan_installments (\n    id BIGINT,\n    plan_id BIGINT\n);\n"
+            ),
+            "migrations/V2__rls.sql": (
+                "SELECT sp_enable_tenant_rls('assembly_meetings', 'x');\n"
+                "SELECT sp_enable_tenant_rls('assembly_agenda_items', 'x');\n"
+                "SELECT sp_enable_tenant_rls('payment_plans', 'x');\n"
+                "SELECT sp_enable_tenant_rls('payment_plan_installments', 'x');\n"
+            ),
+        })
+        self.assertEqual(rules, [])
+
 
 class LockScopeLintTests(unittest.TestCase):
     def test_write_guard_held_across_database_io(self):

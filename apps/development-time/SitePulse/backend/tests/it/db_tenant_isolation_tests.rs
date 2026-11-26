@@ -238,6 +238,402 @@ async fn rls_hides_other_tenants_inside_a_bound_transaction() {
     t.drop_db().await;
 }
 
+/// The parent rows a child table in
+/// [`child_tables_scoped_through_a_parent_stay_in_their_site`] needs.
+struct ChildParents {
+    meeting: i64,
+    due: i64,
+    mandate: i64,
+    case: i64,
+    entry: i64,
+    plan: i64,
+    occupancy: i64,
+}
+
+/// Creates one unit, person and row per parent table for `site`, so a child row
+/// can be inserted through a parent the tenant owns.
+async fn seed_child_parents(t: &TestDb, site: i64, tag: &str) -> ChildParents {
+    let client = t.pool.get().await.expect("connection");
+    let block: i64 = client
+        .query_one(
+            "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 1) RETURNING id",
+            &[&site, &format!("RLS {}", tag)],
+        )
+        .await
+        .expect("insert block")
+        .get(0);
+    let person: i64 = client
+        .query_one(
+            "INSERT INTO persons (full_name, person_type, site_id) VALUES ($1, 'HOME_OWNER', $2) RETURNING id",
+            &[&format!("RLS Person {}", tag), &site],
+        )
+        .await
+        .expect("insert person")
+        .get(0);
+    let unit: i64 = client
+        .query_one(
+            "INSERT INTO units (block_id, site_id, unit_number, floor, occupancy_status, owner_person_id)
+             VALUES ($1, $2, 1, 0, 'OWNER_OCCUPIED', $3) RETURNING id",
+            &[&block, &site, &person],
+        )
+        .await
+        .expect("insert unit")
+        .get(0);
+    let due: i64 = client
+        .query_one(
+            "INSERT INTO dues_liabilities (unit_id, period, debtor_type, expense_type, principal_amount, due_date)
+             VALUES ($1, 'January 2026', 'OWNER', 'OPERATIONAL_DUES', 10.00, DATE '2026-01-31') RETURNING id",
+            &[&unit],
+        )
+        .await
+        .expect("insert due")
+        .get(0);
+    let meeting: i64 = client
+        .query_one(
+            "INSERT INTO assembly_meetings
+                 (site_id, kind, call_number, scheduled_at, location, status, created_by, created_at)
+             VALUES ($1, 'ORDINARY', 1, now(), $2, 'PLANNED', 'rls-test', now()) RETURNING id",
+            &[&site, &format!("RLS Hall {}", tag)],
+        )
+        .await
+        .expect("insert meeting")
+        .get(0);
+    let method: i64 = client
+        .query_one(
+            "INSERT INTO saved_payment_methods
+                 (site_id, unit_id, debtor_type, owner_ref, provider, token_ref, brand, last4,
+                  exp_month, exp_year, status, created_at)
+             VALUES ($1, $2, 'OWNER', $3, 'FAKE', $4, 'VISA', '4242', 12, 2030, 'ACTIVE', now())
+             RETURNING id",
+            &[
+                &site,
+                &unit,
+                &format!("owner-{}", tag),
+                &format!("token-{}", tag),
+            ],
+        )
+        .await
+        .expect("insert payment method")
+        .get(0);
+    let mandate: i64 = client
+        .query_one(
+            "INSERT INTO autopay_mandates
+                 (site_id, unit_id, debtor_type, payment_method_id, status, consented_by,
+                  consented_at, updated_at)
+             VALUES ($1, $2, 'OWNER', $3, 'ACTIVE', 'rls-test', now(), now()) RETURNING id",
+            &[&site, &unit, &method],
+        )
+        .await
+        .expect("insert mandate")
+        .get(0);
+    let case: i64 = client
+        .query_one(
+            "INSERT INTO collection_cases
+                 (site_id, unit_id, debtor_type, due_ids, opened_amount, status, opened_by, opened_at)
+             VALUES ($1, $2, 'OWNER', '[]'::jsonb, 10.00, 'REMINDED', 'rls-test', now()) RETURNING id",
+            &[&site, &unit],
+        )
+        .await
+        .expect("insert collection case")
+        .get(0);
+    let entry: i64 = client
+        .query_one(
+            "INSERT INTO manual_journal_entries
+                 (site_id, entry_date, kind, description, created_by, created_at)
+             VALUES ($1, DATE '2026-01-01', 'GENERAL', $2, 'rls-test', now()) RETURNING id",
+            &[&site, &format!("RLS journal {}", tag)],
+        )
+        .await
+        .expect("insert journal entry")
+        .get(0);
+    let plan: i64 = client
+        .query_one(
+            "INSERT INTO payment_plans
+                 (site_id, unit_id, debtor_type, due_ids, total_amount, installment_count,
+                  first_due_date, grace_days, status, opened_on, created_by, approved_by)
+             VALUES ($1, $2, 'OWNER', '[]'::jsonb, 100.00, 2, DATE '2026-02-01', 0, 'ACTIVE',
+                     DATE '2026-01-01', 'creator', 'approver') RETURNING id",
+            &[&site, &unit],
+        )
+        .await
+        .expect("insert payment plan")
+        .get(0);
+    let occupancy: i64 = client
+        .query_one(
+            "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active)
+             VALUES ($1, $2, 'OWNER', DATE '2026-01-01', TRUE) RETURNING id",
+            &[&unit, &person],
+        )
+        .await
+        .expect("insert occupancy")
+        .get(0);
+    ChildParents {
+        meeting,
+        due,
+        mandate,
+        case,
+        entry,
+        plan,
+        occupancy,
+    }
+}
+
+/// A bound transaction sees only the child rows of its own site and cannot
+/// insert a child under another site's parent.
+async fn assert_child_table_is_isolated(
+    t: &TestDb,
+    site: i64,
+    table: &str,
+    own: i64,
+    foreign: i64,
+    foreign_insert: &str,
+) {
+    let mut client = t.pool.get().await.expect("connection");
+    let tx = db::begin_tenant_read(&mut client, site).await.unwrap();
+    let visible: i64 = tx
+        .query_one(
+            &format!("SELECT count(*) FROM {table} WHERE id IN ({own}, {foreign})"),
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        visible, 1,
+        "{}: a bound tenant sees only its own row",
+        table
+    );
+    let leaked: i64 = tx
+        .query_one(
+            &format!("SELECT count(*) FROM {table} WHERE id = {foreign}"),
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(leaked, 0, "{}: another tenant's row is invisible", table);
+    tx.rollback().await.unwrap();
+    drop(client);
+
+    let mut client = t.pool.get().await.expect("connection");
+    let tx = client.transaction().await.unwrap();
+    db::tx_bind_tenant(&tx, site).await.unwrap();
+    let err = tx
+        .execute(foreign_insert, &[])
+        .await
+        .expect_err("a cross-tenant child insert must fail");
+    let message = err
+        .as_db_error()
+        .map(|e| e.message().to_string())
+        .unwrap_or_default();
+    assert!(
+        message.contains("row-level security"),
+        "{}: expected an RLS error, got {:?}",
+        table,
+        err
+    );
+    drop(tx);
+    drop(client);
+}
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn child_tables_scoped_through_a_parent_stay_in_their_site() {
+    let t = TestDb::create("rls_child").await;
+    let a = t.site_id("begonya-sitesi").await;
+    let b = t.site_id("kardelen-rezidans").await;
+    let pa = seed_child_parents(&t, a, "a").await;
+    let pb = seed_child_parents(&t, b, "b").await;
+
+    let agenda_a = t
+        .scalar_i64(&format!(
+            "INSERT INTO assembly_agenda_items (meeting_id, seq, title, rule, status)
+             VALUES ({}, 1, 'Agenda A', 'SIMPLE', 'OPEN') RETURNING id",
+            pa.meeting
+        ))
+        .await;
+    let agenda_b = t
+        .scalar_i64(&format!(
+            "INSERT INTO assembly_agenda_items (meeting_id, seq, title, rule, status)
+             VALUES ({}, 1, 'Agenda B', 'SIMPLE', 'OPEN') RETURNING id",
+            pb.meeting
+        ))
+        .await;
+    let attempt_a = t
+        .scalar_i64(&format!(
+            "INSERT INTO autopay_attempts
+                 (mandate_id, due_id, attempt_no, amount, status, attempted_on, created_at)
+             VALUES ({}, {}, 1, 10.00, 'DECLINED', DATE '2026-01-15', now()) RETURNING id",
+            pa.mandate, pa.due
+        ))
+        .await;
+    let attempt_b = t
+        .scalar_i64(&format!(
+            "INSERT INTO autopay_attempts
+                 (mandate_id, due_id, attempt_no, amount, status, attempted_on, created_at)
+             VALUES ({}, {}, 1, 10.00, 'DECLINED', DATE '2026-01-15', now()) RETURNING id",
+            pb.mandate, pb.due
+        ))
+        .await;
+    let event_a = t
+        .scalar_i64(&format!(
+            "INSERT INTO collection_case_events
+                 (case_id, to_status, actor, occurred_on, created_at)
+             VALUES ({}, 'REMINDED', 'rls-test', DATE '2026-01-15', now()) RETURNING id",
+            pa.case
+        ))
+        .await;
+    let event_b = t
+        .scalar_i64(&format!(
+            "INSERT INTO collection_case_events
+                 (case_id, to_status, actor, occurred_on, created_at)
+             VALUES ({}, 'REMINDED', 'rls-test', DATE '2026-01-15', now()) RETURNING id",
+            pb.case
+        ))
+        .await;
+    let line_a = t
+        .scalar_i64(&format!(
+            "INSERT INTO manual_journal_lines (entry_id, account_code, debit, credit)
+             VALUES ({}, '100', 5.00, 0) RETURNING id",
+            pa.entry
+        ))
+        .await;
+    let line_b = t
+        .scalar_i64(&format!(
+            "INSERT INTO manual_journal_lines (entry_id, account_code, debit, credit)
+             VALUES ({}, '100', 5.00, 0) RETURNING id",
+            pb.entry
+        ))
+        .await;
+    let installment_a = t
+        .scalar_i64(&format!(
+            "INSERT INTO payment_plan_installments (plan_id, seq, due_date, amount)
+             VALUES ({}, 1, DATE '2026-02-01', 50.00) RETURNING id",
+            pa.plan
+        ))
+        .await;
+    let installment_b = t
+        .scalar_i64(&format!(
+            "INSERT INTO payment_plan_installments (plan_id, seq, due_date, amount)
+             VALUES ({}, 1, DATE '2026-02-01', 50.00) RETURNING id",
+            pb.plan
+        ))
+        .await;
+    let member_a = t
+        .scalar_i64(&format!(
+            "INSERT INTO occupancy_members (occupancy_id, full_name, relationship)
+             VALUES ({}, 'Member A', 'OTHER') RETURNING id",
+            pa.occupancy
+        ))
+        .await;
+    let member_b = t
+        .scalar_i64(&format!(
+            "INSERT INTO occupancy_members (occupancy_id, full_name, relationship)
+             VALUES ({}, 'Member B', 'OTHER') RETURNING id",
+            pb.occupancy
+        ))
+        .await;
+
+    let cases = [
+        (
+            "assembly_agenda_items",
+            agenda_a,
+            agenda_b,
+            format!(
+                "INSERT INTO assembly_agenda_items (meeting_id, seq, title, rule, status)
+                 VALUES ({}, 2, 'Foreign agenda', 'SIMPLE', 'OPEN')",
+                pb.meeting
+            ),
+        ),
+        (
+            "autopay_attempts",
+            attempt_a,
+            attempt_b,
+            format!(
+                "INSERT INTO autopay_attempts
+                     (mandate_id, due_id, attempt_no, amount, status, attempted_on, created_at)
+                 VALUES ({}, {}, 2, 10.00, 'DECLINED', DATE '2026-01-16', now())",
+                pb.mandate, pb.due
+            ),
+        ),
+        (
+            "collection_case_events",
+            event_a,
+            event_b,
+            format!(
+                "INSERT INTO collection_case_events
+                     (case_id, to_status, actor, occurred_on, created_at)
+                 VALUES ({}, 'REMINDED', 'rls-test', DATE '2026-01-16', now())",
+                pb.case
+            ),
+        ),
+        (
+            "manual_journal_lines",
+            line_a,
+            line_b,
+            format!(
+                "INSERT INTO manual_journal_lines (entry_id, account_code, debit, credit)
+                 VALUES ({}, '100', 6.00, 0)",
+                pb.entry
+            ),
+        ),
+        (
+            "payment_plan_installments",
+            installment_a,
+            installment_b,
+            format!(
+                "INSERT INTO payment_plan_installments (plan_id, seq, due_date, amount)
+                 VALUES ({}, 2, DATE '2026-03-01', 50.00)",
+                pb.plan
+            ),
+        ),
+        (
+            "occupancy_members",
+            member_a,
+            member_b,
+            format!(
+                "INSERT INTO occupancy_members (occupancy_id, full_name, relationship)
+                 VALUES ({}, 'Foreign member', 'OTHER')",
+                pb.occupancy
+            ),
+        ),
+    ];
+
+    for (table, own, foreign, foreign_insert) in cases {
+        assert_child_table_is_isolated(&t, a, table, own, foreign, &foreign_insert).await;
+    }
+
+    // A local mandate does not let the tenant attach another site's liability.
+    let mut client = t.pool.get().await.expect("connection");
+    let tx = client.transaction().await.unwrap();
+    db::tx_bind_tenant(&tx, a).await.unwrap();
+    let err = tx
+        .execute(
+            &format!(
+                "INSERT INTO autopay_attempts
+                     (mandate_id, due_id, attempt_no, amount, status, attempted_on, created_at)
+                 VALUES ({}, {}, 3, 10.00, 'DECLINED', DATE '2026-01-17', now())",
+                pa.mandate, pb.due
+            ),
+            &[],
+        )
+        .await
+        .expect_err("a foreign due must not attach to a local mandate");
+    let message = err
+        .as_db_error()
+        .map(|e| e.message().to_string())
+        .unwrap_or_default();
+    assert!(
+        message.contains("row-level security"),
+        "autopay_attempts: expected an RLS error for a foreign due, got {:?}",
+        err
+    );
+    drop(tx);
+    drop(client);
+
+    t.drop_db().await;
+}
+
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn get_views_never_change_the_ledger_and_accrual_offsets_transactionally() {
