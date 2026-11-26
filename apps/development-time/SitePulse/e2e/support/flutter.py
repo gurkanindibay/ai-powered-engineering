@@ -6,9 +6,13 @@ semantics tree and renders every `testId(...)` widget as a DOM node carrying
 """
 from __future__ import annotations
 
+from time import monotonic
+
 from playwright.sync_api import Locator, Page
 
 ID_ATTR = "flt-semantics-identifier"
+# How long a typed value must survive before the widget is trusted with it.
+SETTLE_MS = 300
 
 
 def by_id(page: Page, test_id: str) -> Locator:
@@ -32,7 +36,7 @@ def fill(page: Page, test_id: str, value: str) -> None:
     field.first.wait_for(state="attached")
     # Flutter web creates the DOM <input> only while the field has focus, and syncs its editing
     # state asynchronously; a select-all issued too early can miss prefilled text. So focus first,
-    # use the input once it exists, and verify the DOM value instead of trusting one attempt.
+    # use the input once it exists, and verify the value instead of trusting one attempt.
     for _ in range(3):
         field.first.click()
         target = field.locator("input, textarea").first
@@ -45,9 +49,30 @@ def fill(page: Page, test_id: str, value: str) -> None:
         if (target.evaluate("e => e.value ?? ''") or "") != "":
             continue
         target.type(value)
-        if target.evaluate("e => e.value ?? ''") == value:
+        if target.evaluate("e => e.value ?? ''") == value and _survives(page, target, value):
             return
     raise AssertionError(f"could not set {test_id!r} to {value!r}")
+
+
+def _survives(page: Page, target: Locator, value: str) -> bool:
+    """True when the app keeps the typed value instead of resetting the input to empty.
+
+    Flutter web connects a focused text field to the framework asynchronously. Text
+    typed before that connection is pushed back to the widget, whose controller is
+    still empty, and the DOM input is cleared a frame later: the field looks filled
+    for one call and is empty when the app validates the form (#502, the password on a
+    freshly booted tab). Typing again after the connection exists sticks, so the
+    caller retries while the value disappears.
+    """
+    if not value:
+        return True
+    deadline = monotonic() + SETTLE_MS / 1000
+    while True:
+        if (target.evaluate("e => e.value ?? ''") or "") == "":
+            return False
+        if monotonic() >= deadline:
+            return True
+        page.wait_for_timeout(100)
 
 
 def text_of(locator: Locator) -> str:
