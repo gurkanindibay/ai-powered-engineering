@@ -23,15 +23,16 @@ pub async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
             tenant_rls = json!({ "status": "probe_failed", "error": crate::error::sanitized("Tenant RLS readiness probe failed", &error) });
         }
     }
-    let status = if ready {
-        StatusCode::OK
-    } else {
+    let status = if !ready && state.settings.production {
         StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::OK
     };
     (
         status,
         Json(json!({
             "status": if ready { "UP" } else { "DEGRADED" },
+            "readiness": if ready { "READY" } else { "NOT_READY" },
             "service": "SitePulse Rust Backend",
             "version": "1.0.0",
             "engine": "Axum / Tokio",
