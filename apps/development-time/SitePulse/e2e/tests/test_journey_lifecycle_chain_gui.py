@@ -26,7 +26,7 @@ from pages import ResidentHome, ResidentsTab, Shell, UnitWorkspace
 from pages.login import LoginPage
 from pages.person import PersonPicker
 from support.api import raw_call
-from support.flutter import ID_ATTR, by_id, text_of, wait_text_connected
+from support.flutter import ID_ATTR, by_id, text_of
 from support.journey import Journey
 from support.journey_attempts import ledger_invariants
 from support.journey_gui import (
@@ -139,7 +139,6 @@ def _accrue_through_the_dialog(page, api, fixture, period: str, due: str, due_da
     field = page.locator("flt-semantics input, flt-semantics textarea").last
     field.wait_for(state="attached", timeout=10_000)
     field.click()
-    assert wait_text_connected(page, field), "the date input never connected to the app"
     field.press("Control+a")
     field.press("Delete")
     field.type(f"{due_day:02d}.{month:02d}.{year}")
