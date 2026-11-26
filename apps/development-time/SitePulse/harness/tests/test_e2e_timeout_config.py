@@ -47,8 +47,15 @@ class E2ETimeoutConfigTest(unittest.TestCase):
         grace = float(re.search(r"^GRACE_S = ([0-9.]+)$", guard, re.MULTILINE).group(1))
         self.assertGreaterEqual(grace, 60, "pytest-timeout and teardown need time to finish first")
         self.assertLessEqual(grace, 600)
+        setup = float(re.search(r"^SETUP_S = ([0-9.]+)$", guard, re.MULTILINE).group(1))
+        self.assertGreaterEqual(setup, 60, "the first setup of a lane builds the whole stack")
+        self.assertLessEqual(setup, 900)
         self.assertIn("os._exit(1)", guard)
         self.assertNotRegex(guard, r"faulthandler\.dump_traceback_later\(")
+        # Armed for the whole protocol: a hang in setup or teardown left the job at its limit
+        # while a call-phase guard never fired (#520).
+        self.assertIn("def pytest_runtest_protocol(", guard)
+        self.assertNotIn("def pytest_runtest_call(", guard)
 
     def test_plugin_is_pinned_with_the_other_test_dependencies(self) -> None:
         lines = (E2E / "requirements.txt").read_text().splitlines()

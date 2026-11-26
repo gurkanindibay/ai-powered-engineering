@@ -1,11 +1,14 @@
-"""Hard deadline behind pytest-timeout: a wedged test ends the run instead of the CI job.
+"""Hard deadline behind pytest-timeout: a wedged run ends instead of reaching the CI job limit.
 
 pytest-timeout's signal method raises inside the test body only, once, and with
-`timeout_func_only` nothing limits the teardown. A browser that stops answering then
-blocks the process until the job limit (#520: a WebKit journey hit its 900 s limit and
-the job idled for 70 more minutes). GRACE_S after a test's own limit, this dumps every
-thread's stack (the main thread's too) and exits the process. It is armed from the test
-body through teardown; setup is excluded because the first one builds the whole stack.
+`timeout_func_only` nothing limits the setup or the teardown. A browser that stops
+answering then blocks the process until the job limit (#520: a WebKit journey hit its
+900 s limit and the job idled for 70 more minutes; a later run hung in a phase no test
+body covers and the job died at 90 minutes). So this guard is armed for the whole
+runtest protocol — setup, call and teardown — with the flow allowance the first test of
+a lane needs to build the whole stack, and again for the session-scoped finalizers that
+run after the last test. At the deadline it dumps every thread's stack (the main
+thread's too) and exits the process.
 """
 from __future__ import annotations
 
@@ -20,6 +23,10 @@ import pytest
 
 # Room for pytest-timeout to fail the test and for screenshots, traces and fixtures to close.
 GRACE_S = 180.0
+# A test's setup builds whatever its fixtures need; the first one of a lane builds the whole stack.
+SETUP_S = 300.0
+# Session-scoped fixtures tear down after the last test, where no test deadline is left.
+TEARDOWN_S = 300.0
 
 _stderr = pytest.StashKey()
 _timer = pytest.StashKey()
@@ -65,6 +72,16 @@ def _disarm(config: pytest.Config) -> None:
         timer.cancel()
 
 
+def _arm(config: pytest.Config, nodeid: str, deadline: float) -> None:
+    """Watch `nodeid` for `deadline` seconds, replacing whatever was watched before."""
+    _disarm(config)
+    marker = config.rootpath / ".artifacts" / "hang-guard.json"
+    timer = threading.Timer(deadline, _abort, (config.stash[_stderr], marker, nodeid, deadline))
+    timer.daemon = True
+    config.stash[_timer] = timer
+    timer.start()
+
+
 def pytest_configure(config: pytest.Config) -> None:
     # Output capture replaces fd 2 while tests run; keep the real one for the dump.
     config.stash[_stderr] = os.dup(sys.__stderr__.fileno())
@@ -77,25 +94,20 @@ def pytest_unconfigure(config: pytest.Config) -> None:
         os.close(fd)
 
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_runtest_call(item: pytest.Item) -> None:
-    # Not faulthandler.dump_traceback_later: pytest cancels that one as soon as a test
-    # fails, which is just before the teardown of a wedged browser.
-    limit = test_limit(item)
-    if limit <= 0:
-        return
-    deadline = limit + GRACE_S
-    marker = item.config.rootpath / ".artifacts" / "hang-guard.json"
-    timer = threading.Timer(deadline, _abort, (item.config.stash[_stderr], marker, item.nodeid, deadline))
-    timer.daemon = True
-    item.config.stash[_timer] = timer
-    timer.start()
-
-
-@pytest.hookimpl(hookwrapper=True)
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_protocol(item: pytest.Item):
-    yield
-    _disarm(item.config)
+    # Not faulthandler.dump_traceback_later: pytest cancels that one as soon as a test
+    # fails, which is just before the teardown of a wedged browser. Setup and teardown are
+    # inside this window; pytest-timeout bounds only the body.
+    limit = test_limit(item)
+    if limit > 0:
+        _arm(item.config, item.nodeid, SETUP_S + limit + GRACE_S)
+    try:
+        yield
+    finally:
+        # Session-scoped finalizers may hang after a report that already ended the tests.
+        if limit > 0:
+            _arm(item.config, item.nodeid, TEARDOWN_S)
 
 
 def pytest_enter_pdb(config: pytest.Config) -> None:
