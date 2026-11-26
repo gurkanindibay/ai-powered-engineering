@@ -3,13 +3,13 @@
 pytest-timeout's signal method raises inside the test body only, once, and with
 `timeout_func_only` nothing limits the setup or the teardown. A browser that stops
 answering then blocks the process until the job limit (#520: a WebKit journey hit its
-900 s limit and the job idled for 70 more minutes; a later run hung in a phase no test
-body covers and the job died at 90 minutes). So this guard is armed for the whole
-runtest protocol — setup, call and teardown — with the flow allowance the first test of
-a lane needs to build the whole stack, and again for the session-scoped finalizers that
-run after the last test. Collection, which runs before any test exists to name, has its
-own budget. At the deadline it dumps every thread's stack (the main thread's too) and
-exits the process.
+900 s limit and the job idled for 70 more minutes; a later shard hung in a setup no test
+body covers and sat until the 90-minute job limit). So this guard is armed for the whole
+runtest protocol — setup, call and teardown — with an allowance for the first test of a
+lane to build the whole stack, and again for the session-scoped finalizers that run after
+the last test. Collection, which runs before any test exists to name, has its own budget.
+At the deadline it dumps every thread's stack (the main thread's too) and exits the
+process.
 """
 from __future__ import annotations
 
