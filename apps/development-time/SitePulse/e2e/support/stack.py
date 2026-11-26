@@ -67,6 +67,9 @@ def web_base() -> str:
 FAKE_GOOGLE_TOKEN = (
     "mock-google-token:e2e-google-sub:e2e.google@example.test:Google E2E Kullanıcı"
 )
+# The preference helper in the Flutter app reads `sitepulse.` + the Dart key;
+# the fake page must store under the same name it then clears.
+E2E_GOOGLE_TOKEN_KEY = "sitepulse.e2e.googleToken"
 
 
 def fake_google_page() -> str:
@@ -77,6 +80,7 @@ def fake_google_page() -> str:
     production; no request leaves the machine.
     """
     token_literal = json.dumps(FAKE_GOOGLE_TOKEN)
+    key_literal = json.dumps(E2E_GOOGLE_TOKEN_KEY)
     return f"""<!doctype html>
 <html lang="tr">
 <head>
@@ -106,7 +110,7 @@ def fake_google_page() -> str:
     document.getElementById('fake-google-account').addEventListener('click', function () {{
       // The app reads and clears this one-shot token on the login screen
       // (its preference helper adds the `sitepulse.` prefix itself).
-      window.localStorage.setItem('sitepulse.e2e.googleToken', {token_literal});
+      window.localStorage.setItem({key_literal}, {token_literal});
       window.location.replace('/#/login');
     }});
   </script>

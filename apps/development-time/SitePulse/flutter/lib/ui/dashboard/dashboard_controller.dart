@@ -153,11 +153,6 @@ class DashboardController extends ChangeNotifier {
     await _completeGoogleIdToken(token);
   }
 
-  /// Completes the fake identity provider's callback. The token is the mock
-  /// token the server verifies outside production.
-  Future<void> completeFakeGoogleSignIn(String idToken) =>
-      _completeGoogleIdToken(idToken);
-
   Future<void> _completeGoogleSignIn(GoogleSignInAccount account) =>
       _completeGoogleIdToken(
         account.authentication.idToken,

@@ -6,6 +6,7 @@ from playwright.sync_api import expect
 from pages import ManagerCockpit, ResidentHome, SaasAdmin, Shell
 from support.api import ApiError
 from support.flutter import by_id, input_value, nav_tab_count, text_of
+from support.stack import E2E_GOOGLE_TOKEN_KEY
 from support.money import parse_try
 
 
@@ -58,6 +59,7 @@ def test_google_sign_in_option_completes_with_the_fake_provider(login_page, page
         "UPDATE users SET google_sub = 'e2e-google-sub', auth_provider = 'GOOGLE', "
         "avatar_url = 'https://lh3.googleusercontent.com/a/e2e-google-user' "
         "WHERE email = 'ahmet.yilmaz@begonya.com';")
+    # The backend caches users in memory at boot, so reload after the SQL update.
     stack.restart_backend()
     login_page.open()
 
@@ -69,6 +71,10 @@ def test_google_sign_in_option_completes_with_the_fake_provider(login_page, page
     page.wait_for_url("**/fake-google.html", timeout=15_000)
     page.locator("#fake-google-account").click()
     ResidentHome(page).wait()
+    # The app consumed and cleared the one-shot provider token (a wrong key would
+    # leave it behind and only surface later as a dashboard timeout).
+    assert page.evaluate(
+        "key => window.localStorage.getItem(key)", E2E_GOOGLE_TOKEN_KEY) is None
 
     Shell(page).open_profile()
     expect(page.get_by_text("Ahmet Yılmaz", exact=False).first).to_be_visible()
