@@ -186,6 +186,7 @@ proptest! {
         let end = start + Days::new(tenant_len_days);
         let spans = vec![OccupancySpan {
             party: ResponsibleParty::Tenant,
+            person_id: None,
             starts_on: start,
             ends_before: Some(end),
         }];
@@ -224,11 +225,13 @@ proptest! {
         let spans_multi = vec![
             OccupancySpan {
                 party: ResponsibleParty::Tenant,
+                person_id: None,
                 starts_on: start,
                 ends_before: Some(end),
             },
             OccupancySpan {
                 party: ResponsibleParty::Owner,
+                person_id: None,
                 starts_on: period_start,
                 ends_before: Some(start),
             },

@@ -1,8 +1,9 @@
 """EPIC-13 J-10: residents and owners change after periods were accrued (state F6).
 
-Executes the backend scenarios of .specify/features/EPIC-13/STORY-13-03-occupancy-changes.feature.
+Executes the scenarios of .specify/features/EPIC-13/STORY-13-03-occupancy-changes.feature.
 Every scenario builds its own isolated site (README section 5) and asserts `ledger_invariants()`
-after each stage (README section 4).
+after each stage (README section 4). SC-13-03-03 is the GUI layer of the per-person split: the
+former and the current tenant each sign in and see only the debt that names them.
 """
 from __future__ import annotations
 
@@ -12,6 +13,10 @@ from pathlib import Path
 
 import pytest
 
+from pages import ResidentHome
+from pages.login import LoginPage
+from support.flutter import by_id, by_id_prefix, text_of
+from support.journey_gui import page_lines, resident_email
 from support.journey_attempts import JourneyManifest, teardown_sites
 from support.journey_occupancy import (
     OccupancyJourney,
@@ -23,6 +28,7 @@ from support.journey_occupancy import (
     tenant_move_in,
     transition,
 )
+from support.money import format_try, parse_try
 
 E2E = Path(__file__).resolve().parents[1]
 D = Decimal
@@ -408,3 +414,198 @@ def test_move_out_after_accrual_resplits_open_liability(journey_site):
     j.invariants("SC-13-05-09")
 
 
+@pytest.mark.covers("SC-13-03-02")
+@pytest.mark.core
+@pytest.mark.role_manager
+def test_tenant_replaced_mid_month_keeps_the_old_debt_with_the_old_tenant(journey_site):
+    j = journey_site()
+    assert j.shares(2, "Kasım 2026") == {"Selin Demir": D("700.00"), "Mert Kılıç": D("800.00")}
+
+    ekim = j.share_rows(2, "Ekim 2026")
+    selin_row = next(row for row in ekim if row["debtor"] == "TENANT")
+    assert selin_row["name"] == "Selin Demir"
+    assert selin_row["principal"] == D("1016.13")
+    assert selin_row["effective_due"] == "2026-10-11", "October was accrued on the 11th"
+
+    # Mert replaced Selin on 2026-11-15: nothing before that day is his.
+    earlier = j.share_rows(2, "Eylül 2026") + ekim
+    assert all(row["name"] != "Mert Kılıç" for row in earlier), earlier
+
+    # The fee counts 39 days from the effective due date (2026-10-11), not 2026-10-10.
+    j.clock.tick()
+    assert _penalty(j, 2, "Ekim 2026") == D("66.05")
+    j.invariants("SC-13-03-02")
+
+
+@pytest.mark.covers("SC-13-03-07")
+@pytest.mark.edge
+@pytest.mark.role_manager
+def test_handover_on_the_same_day_splits_the_month(journey_site):
+    j = journey_site()
+    j.clock.advance_to("2026-12-12")
+    tenant_move_in(j, 2, "Nil Acar", "nil")
+    j.accrue("Aralık 2026", due="2026-12-10")
+
+    sessions = j.stack.sql(
+        "SELECT p.full_name || '|' || o.start_date || '|' || COALESCE(o.end_date::text, '') "
+        "FROM unit_occupancies o JOIN persons p ON p.id = o.person_id "
+        f"WHERE o.unit_id = {int(j.unit_id(2))} ORDER BY o.start_date, o.id;"
+    ).splitlines()
+    assert "Mert Kılıç|2026-11-15|2026-12-12" in sessions, sessions
+    assert "Nil Acar|2026-12-12|" in sessions, sessions
+
+    shares = j.shares(2, "Aralık 2026")
+    assert shares == {"Mert Kılıç": D("532.26"), "Nil Acar": D("967.74")}
+    assert sum(shares.values()) == D("1500.00"), "no day is charged to two debtors and none to nobody"
+    j.invariants("SC-13-03-07")
+
+
+@pytest.mark.covers("SC-13-03-09")
+@pytest.mark.edge
+@pytest.mark.role_manager
+@pytest.mark.parametrize(
+    ("tariff", "move_ins", "shares"),
+    [
+        ("1500.01", [("2026-11-16", "Selin Demir", "selin")],
+         [("Burak Şahin", "750.01"), ("Selin Demir", "750.00")]),
+        ("1000.00", [("2026-11-11", "Selin Demir", "selin"), ("2026-11-21", "Mert Kılıç", "mert")],
+         [("Burak Şahin", "333.33"), ("Selin Demir", "333.33"), ("Mert Kılıç", "333.34")]),
+    ],
+    ids=["two-segments", "three-segments"],
+)
+def test_a_tariff_that_does_not_divide_evenly_keeps_every_kurus(journey_site, tariff, move_ins, shares):
+    j = journey_site("BASE", vacate_a2=False)
+    unit = int(j.unit_id(3))
+    j.stack.sql(
+        "BEGIN; "
+        f"DELETE FROM unit_occupancies WHERE unit_id = {unit}; "
+        "UPDATE units SET tenant_person_id = NULL, occupancy_status = 'VACANT', "
+        f"monthly_tariff_override = {tariff} WHERE id = {unit}; COMMIT;"
+    )
+    j.stack.restart_backend()
+    j.clock.set_date(j.clock.current_date.isoformat())
+    j.manager = j.api.login(j.fixture.manager_email, j.fixture.manager_password)
+
+    for move_in, name, key in move_ins:
+        j.clock.advance_to(move_in)
+        tenant_move_in(j, 3, name, key)
+    j.accrue("Kasım 2026")
+
+    rows = [(row["name"], f"{row['principal']:.2f}") for row in j.share_rows(3, "Kasım 2026")]
+    assert rows == shares, "shares are in day order and the last one carries the remainder"
+    assert sum(D(amount) for _, amount in rows) == D(tariff)
+    j.invariants("SC-13-03-09")
+
+
+@pytest.mark.covers("SC-13-03-21")
+@pytest.mark.core
+@pytest.mark.role_manager
+def test_every_liability_row_names_the_person_who_owes_it(journey_site):
+    j = journey_site()
+    for unit_number, expected in [(2, "Ahmet Yılmaz"), (3, "Burak Şahin")]:
+        owner_rows = [
+            row
+            for period in ("Eylül 2026", "Ekim 2026", "Kasım 2026")
+            for row in j.share_rows(unit_number, period)
+            if row["debtor"] == "OWNER"
+        ]
+        assert owner_rows, f"A-{unit_number} has owner liabilities"
+        assert {row["name"] for row in owner_rows} == {expected}, owner_rows
+
+    # A-4 was sold on 2026-11-05: the seller keeps the months accrued before it, and the
+    # sale month splits by day between the seller (days 1-4) and the buyer (days 5-30).
+    for period, expected in [
+        ("Eylül 2026", {"Ahmet Yılmaz": D("1500.00")}),
+        ("Ekim 2026", {"Ahmet Yılmaz": D("1500.00")}),
+        ("Kasım 2026", {"Ahmet Yılmaz": D("200.00"), "Gül Tanrıverdi": D("1300.00")}),
+    ]:
+        owner_rows = [row for row in j.share_rows(4, period) if row["debtor"] == "OWNER"]
+        assert {row["name"]: row["principal"] for row in owner_rows} == expected, (period, owner_rows)
+
+    # No operational liability is left without the person who owes it.
+    for unit_number in (2, 3, 4):
+        for period in ("Eylül 2026", "Ekim 2026", "Kasım 2026"):
+            rows = j.share_rows(unit_number, period)
+            assert all(row["name"] for row in rows), (unit_number, period, rows)
+
+    assert j.shares(3, "Kasım 2026") == {"Oya Çelik": D("650.00"), "Burak Şahin": D("850.00")}
+    assert j.shares(3, "Eylül 2026") == {"Burak Şahin": D("1500.00")}
+    assert j.shares(3, "Ekim 2026") == {"Burak Şahin": D("1500.00")}
+    assert all(row["name"] != "Oya Çelik" for row in j.share_rows(3, "Ekim 2026"))
+    j.invariants("SC-13-03-21")
+
+
+def _penalty(j: OccupancyJourney, unit_number: int, period: str) -> Decimal:
+    return D(j.stack.sql(
+        "SELECT delay_penalty FROM dues_liabilities "
+        f"WHERE unit_id = {int(j.unit_id(unit_number))} AND period = '{period}' "
+        "AND debtor_type = 'TENANT' AND status <> 'CANCELLED' ORDER BY id LIMIT 1;"
+    ))
+
+
+
+def _login_account(j: OccupancyJourney, full_name: str) -> None:
+    """Gives a person recorded by an occupancy transition a login, as a resident needs one."""
+    person = int(j.people[full_name])
+    email = j.stack.sql(f"SELECT email FROM persons WHERE id = {person};")
+    password_hash = j.stack.sql(
+        f"SELECT password_hash FROM users WHERE id = {int(j.manifest.user_ids[0])};")
+    j.stack.sql(
+        "INSERT INTO users (site_id, email, password_hash, role, is_active, must_change_password, person_id) "
+        f"VALUES ({int(j.site_id)}, '{email}', '{password_hash}', 'HOME_RESIDENT', TRUE, FALSE, {person});"
+    )
+    j.stack.restart_backend()
+    j.clock.set_date(j.clock.current_date.isoformat())
+    j.manager = j.api.login(j.fixture.manager_email, j.fixture.manager_password)
+
+
+def _resident_statement(page, login_page, j, person_name: str) -> tuple[list[str], Decimal, list[tuple[str, str]]]:
+    """Signs a resident in and reads the statement their dashboard opens.
+
+    Returns the page's visible lines, the tenant section's total, and the period rows the
+    statement attributes to that person.
+    """
+    email = resident_email(j.stack, j.fixture, person_name)
+    session = j.api.login(email, j.fixture.manager_password)
+    statement = j.api.call(
+        "GET", f"/api/v1/residents/{j.unit_id(2)}/statement?site_id={j.site_id}", session.token)
+    tenant = next(debtor for debtor in statement["debtors"] if debtor["debtor_type"] == "TENANT")
+    expected = [
+        (item["period"], D(str(item["total_outstanding"]))) for item in tenant["open_items"]
+    ]
+
+    resident = page.context.new_page()
+    try:
+        LoginPage(resident, login_page.base_url).open().login("resident", email, j.fixture.manager_password)
+        ResidentHome(resident).wait()
+        by_id(resident, "resident_statement_entry").click()
+        total_element = by_id_prefix(resident, "statement_total_tenant").first
+        total_element.wait_for(timeout=20_000)
+        return page_lines(resident), parse_try(text_of(total_element)), expected
+    finally:
+        resident.close()
+
+
+@pytest.mark.covers("SC-13-03-03")
+@pytest.mark.role_resident
+def test_former_and_current_tenant_see_only_their_own_debt(journey_site, page, login_page):
+    j = journey_site()
+    # The transition records the incoming tenant as a person; the scenario needs both residents
+    # to sign in, so this one gets a login the way the second manager does.
+    _login_account(j, "Mert Kılıç")
+
+    # Selin owes her Ekim share with its penalty and her Kasım share, and nothing later.
+    selin, selin_total, selin_rows = _resident_statement(page, login_page, j, "Selin Demir")
+    assert [period for period, _ in selin_rows] == ["Ekim 2026", "Kasım 2026"], "her own periods only"
+    assert selin_total == sum(amount for _, amount in selin_rows), selin
+    for period, amount in selin_rows:
+        assert f"{period} · {format_try(amount)}" in selin, selin
+    assert "Aralık 2026" not in selin, "nothing after her 2026-11-14 share is hers"
+
+    # Mert owes only the days he held the unit.
+    mert, mert_total, mert_rows = _resident_statement(page, login_page, j, "Mert Kılıç")
+    assert [period for period, _ in mert_rows] == ["Kasım 2026"], "the replaced tenant's October debt is not his"
+    assert mert_total == sum(amount for _, amount in mert_rows), mert
+    assert f"Kasım 2026 · {format_try(mert_rows[0][1])}" in mert, mert
+    assert "Ekim 2026" not in mert, mert
+    assert selin_total > mert_total

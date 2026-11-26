@@ -6,16 +6,14 @@
 //! `db::occupancy_repository`. A move never changes ownership; an owner
 //! move-in opens a session for an owner on record and accepts no new person.
 
-use chrono::{Datelike, NaiveDate};
+use chrono::NaiveDate;
 use deadpool_postgres::Transaction;
 
 use crate::db::occupancy_repository::{
     self as repo, ClosedSession, OccupancyError, OpenedSession, TransitionInput, UnitSnapshot,
 };
 use crate::domain::billing_period::BillingPeriod;
-use crate::domain::occupancy_proration::{
-    self as proration, OccupancySpan, ProratedShare, ResponsibleParty,
-};
+use crate::domain::occupancy_proration::{self as proration, OccupancySpan, ResponsibleParty};
 use crate::domain::unit_state::{self, Command, CommandKind, SessionRole};
 use crate::models::{
     DebtorType, OccupancyHistoryItem, OccupancyTransitionRequest, OccupancyTransitionResponse,
@@ -38,9 +36,9 @@ pub struct Seller {
     pub owner_occupied: bool,
 }
 
-/// Computes one monthly operational dues liability per responsible role.
-/// Invalid historical dates are ignored conservatively; uncovered days remain
-/// the owner's responsibility.
+/// Computes one monthly operational dues liability per responsible person, so
+/// successive occupants of a unit carry their own debt. Invalid historical dates
+/// are ignored conservatively; uncovered days remain the titled owner's.
 pub fn accrual_shares(
     amount: Decimal,
     period: BillingPeriod,
@@ -48,7 +46,7 @@ pub fn accrual_shares(
     history: &[OccupancyHistoryItem],
     proration_enabled: bool,
     accrued_on: NaiveDate,
-) -> Vec<(DebtorType, Decimal)> {
+) -> Vec<(DebtorType, Decimal, Option<i64>)> {
     let spans: Vec<OccupancySpan> = history
         .iter()
         .filter_map(|item| {
@@ -62,6 +60,7 @@ pub fn accrual_shares(
                     DebtorType::Owner => ResponsibleParty::Owner,
                     DebtorType::Tenant => ResponsibleParty::Tenant,
                 },
+                person_id: (item.person_id > 0).then_some(item.person_id),
                 starts_on,
                 ends_before,
             })
@@ -79,137 +78,16 @@ pub fn accrual_shares(
         shares
             .into_iter()
             .filter(|share| share.amount > Decimal::ZERO)
-            .map(map_share)
+            .map(|share| {
+                let debtor = match share.party {
+                    ResponsibleParty::Owner => DebtorType::Owner,
+                    ResponsibleParty::Tenant => DebtorType::Tenant,
+                };
+                (debtor, share.amount, share.person_id)
+            })
             .collect()
     })
     .unwrap_or_default()
-}
-
-fn map_share(share: ProratedShare) -> (DebtorType, Decimal) {
-    let debtor = match share.party {
-        ResponsibleParty::Owner => DebtorType::Owner,
-        ResponsibleParty::Tenant => DebtorType::Tenant,
-    };
-    (debtor, share.amount)
-}
-
-/// Computes monthly operational dues shares broken down by responsible role and person.
-/// Uncovered days belong to the unit's titled owner.
-pub fn detailed_accrual_shares(
-    amount: Decimal,
-    period: BillingPeriod,
-    unit_created_on: Option<NaiveDate>,
-    history: &[OccupancyHistoryItem],
-    owner_person_id: Option<i64>,
-    proration_enabled: bool,
-) -> Vec<(DebtorType, Decimal, Option<i64>)> {
-    if !proration_enabled {
-        let active_tenant_pid = history
-            .iter()
-            .filter(|h| h.role == DebtorType::Tenant && h.is_active && h.person_id > 0)
-            .map(|h| h.person_id)
-            .next_back();
-        return accrual_shares(
-            amount,
-            period,
-            unit_created_on,
-            history,
-            proration_enabled,
-            period.first_day(),
-        )
-        .into_iter()
-        .map(|(debtor, amt)| {
-            let pid = match debtor {
-                DebtorType::Tenant => active_tenant_pid,
-                DebtorType::Owner => owner_person_id,
-            };
-            (debtor, amt, pid)
-        })
-        .collect();
-    }
-
-    let period_start = period.first_day();
-    let period_end = period.last_day();
-    let days_in_month = i64::from(period_end.day());
-    let charge_start = unit_created_on.unwrap_or(period_start).max(period_start);
-    if charge_start > period_end {
-        return Vec::new();
-    }
-
-    let chargeable_days = period_end.signed_duration_since(charge_start).num_days() + 1;
-    let mut ordered_parties: Vec<(DebtorType, Option<i64>)> = Vec::new();
-    let mut party_days: std::collections::HashMap<(DebtorType, Option<i64>), i64> =
-        std::collections::HashMap::new();
-
-    for offset in 0..chargeable_days {
-        let Some(date) = charge_start.checked_add_days(chrono::Days::new(offset as u64)) else {
-            continue;
-        };
-
-        let matched = history.iter().find(|item| {
-            let start = NaiveDate::parse_from_str(&item.start_date, "%Y-%m-%d").ok();
-            let end = item
-                .end_date
-                .as_deref()
-                .and_then(|e| NaiveDate::parse_from_str(e, "%Y-%m-%d").ok());
-            start.is_some_and(|s| s <= date) && end.is_none_or(|e| date < e)
-        });
-
-        let who = match matched {
-            Some(item) if item.role == DebtorType::Tenant => {
-                let pid = if item.person_id > 0 {
-                    Some(item.person_id)
-                } else {
-                    None
-                };
-                (DebtorType::Tenant, pid)
-            }
-            Some(item) if item.role == DebtorType::Owner => {
-                let pid = if item.person_id > 0 {
-                    Some(item.person_id)
-                } else {
-                    owner_person_id
-                };
-                (DebtorType::Owner, pid)
-            }
-            _ => (DebtorType::Owner, owner_person_id),
-        };
-
-        if !party_days.contains_key(&who) {
-            ordered_parties.push(who);
-        }
-        *party_days.entry(who).or_default() += 1;
-    }
-
-    let active_amount = (amount * Decimal::from(chargeable_days) / Decimal::from(days_in_month))
-        .round_dp_with_strategy(2, rust_decimal::RoundingStrategy::MidpointAwayFromZero);
-
-    if ordered_parties.is_empty() {
-        return Vec::new();
-    }
-    if ordered_parties.len() == 1 {
-        return vec![(ordered_parties[0].0, active_amount, ordered_parties[0].1)];
-    }
-
-    let mut shares = Vec::new();
-    let mut allocated = Decimal::ZERO;
-    let last_idx = ordered_parties.len() - 1;
-
-    for (i, party) in ordered_parties.into_iter().enumerate() {
-        let days = party_days.get(&party).copied().unwrap_or(0);
-        let share_amount = if i == last_idx {
-            active_amount - allocated
-        } else {
-            (amount * Decimal::from(days) / Decimal::from(days_in_month))
-                .round_dp_with_strategy(2, rust_decimal::RoundingStrategy::MidpointAwayFromZero)
-        };
-        if share_amount > Decimal::ZERO {
-            allocated += share_amount;
-            shares.push((party.0, share_amount, party.1));
-        }
-    }
-
-    shares
 }
 
 /// Reads a unit id in any of the forms the API accepts (`14`, `d-14`, `unit-14`).
@@ -342,7 +220,7 @@ impl OccupancyService {
                 if is_closed {
                     continue;
                 }
-                let dues: Vec<_> = inner
+                let mut dues: Vec<_> = inner
                     .dues
                     .iter()
                     .filter(|due| {
@@ -353,19 +231,134 @@ impl OccupancyService {
                     })
                     .cloned()
                     .collect();
-                if dues.len() == 1 {
-                    candidates.push((p, dues[0].clone(), created_on, history.clone()));
+                if dues.is_empty() {
+                    continue;
                 }
+                // Liabilities are created in day order, so the rows and the split line up.
+                dues.sort_by_key(|due| crate::db::parse_id_to_i64(&due.id).unwrap_or(0));
+                let accrued: Decimal = dues.iter().map(|due| due.principal_amount).sum();
+                let targets = accrual_shares(accrued, p, created_on, &history, true, p.first_day());
+                candidates.push((p, dues, targets));
             }
             candidates
         };
 
         let mut results = Vec::new();
         let correction_service = CorrectionService::new(&self.state);
-        for (period, due, created_on, history) in candidate_periods {
-            let existing_pending = {
+        for (period, dues, targets) in candidate_periods {
+            let reason = format!("Occupancy changed during open period {}", period.key());
+            // Accept the rows the month's split already describes, then reconcile the tail:
+            // an occupancy change cuts the person of the last row, and every new share
+            // follows theirs.
+            let Some(first) = (0..dues.len()).find(|&i| {
+                targets.get(i).is_none_or(|target| {
+                    target.0 != dues[i].debtor_type
+                        || target.2 != dues[i].liable_person_id
+                        || target.1 != dues[i].principal_amount
+                })
+            }) else {
+                continue;
+            };
+            let last = dues.len() - 1;
+            for (i, due) in dues
+                .iter()
+                .enumerate()
+                .skip(first)
+                .take(last.saturating_sub(first))
+            {
+                let shares: &[(DebtorType, Decimal, Option<i64>)] = match targets.get(i) {
+                    Some(share) => std::slice::from_ref(share),
+                    None => &[],
+                };
+                results.extend(
+                    self.request_row_correction(&correction_service, caller, due, shares, &reason)
+                        .await?,
+                );
+            }
+            let anchor = &dues[last];
+            let tail = targets.get(last..).unwrap_or_default();
+            results.extend(
+                self.request_row_correction(&correction_service, caller, anchor, tail, &reason)
+                    .await?,
+            );
+        }
+        Ok(results)
+    }
+
+    /// Requests the four-eyes correction that turns one liability into `shares`: a split when
+    /// several people owe the days, a re-issue when one does, a cancellation when nobody does.
+    /// A pending correction of the same liability is returned instead of a second request.
+    async fn request_row_correction(
+        &self,
+        service: &CorrectionService,
+        caller: &Caller,
+        due: &crate::models::DuesLiability,
+        shares: &[(DebtorType, Decimal, Option<i64>)],
+        reason: &str,
+    ) -> FinanceResult<Vec<crate::models::AccrualCorrection>> {
+        let unchanged = shares.len() == 1
+            && shares[0].0 == due.debtor_type
+            && shares[0].1 == due.principal_amount
+            && (shares[0].2.is_none() || shares[0].2 == due.liable_person_id);
+        if unchanged {
+            return Ok(Vec::new());
+        }
+        let request = match shares {
+            [] => crate::models::RequestCorrectionRequest {
+                due_id: due.id.clone(),
+                kind: crate::models::CORRECTION_CANCEL.to_string(),
+                amount: None,
+                due_date: None,
+                debtor_type: None,
+                replacement_shares: Vec::new(),
+                reason: reason.to_string(),
+            },
+            [(debtor_type, amount, _)] => crate::models::RequestCorrectionRequest {
+                due_id: due.id.clone(),
+                kind: crate::models::CORRECTION_REISSUE.to_string(),
+                amount: Some(*amount),
+                due_date: None,
+                debtor_type: Some(debtor_type.as_str().to_string()),
+                replacement_shares: Vec::new(),
+                reason: reason.to_string(),
+            },
+            shares => {
+                let total: Decimal = shares.iter().map(|share| share.1).sum();
+                if total > due.principal_amount {
+                    tracing::warn!(
+                        due = %due.id,
+                        %total,
+                        principal = %due.principal_amount,
+                        "Skipping an occupancy correction whose shares exceed the liability"
+                    );
+                    return Ok(Vec::new());
+                }
+                crate::models::RequestCorrectionRequest {
+                    due_id: due.id.clone(),
+                    kind: crate::models::CORRECTION_SPLIT_REISSUE.to_string(),
+                    amount: None,
+                    due_date: None,
+                    debtor_type: None,
+                    replacement_shares: shares
+                        .iter()
+                        .map(|(debtor_type, amount, liable_person_id)| {
+                            crate::models::CorrectionReplacementShare {
+                                debtor_type: *debtor_type,
+                                amount: *amount,
+                                liable_person_id: *liable_person_id,
+                                due_date: None,
+                            }
+                        })
+                        .collect(),
+                    reason: reason.to_string(),
+                }
+            }
+        };
+        match service.request(caller, request).await {
+            Ok(correction) => Ok(vec![correction]),
+            Err(error) => {
                 let inner = self.state.inner.read().await;
-                inner
+                match inner
                     .finance
                     .corrections
                     .iter()
@@ -374,109 +367,12 @@ impl OccupancyService {
                             && crate::auth::same_id(&c.due_id, &due.id)
                     })
                     .cloned()
-            };
-            if let Some(existing) = existing_pending {
-                results.push(existing);
-                continue;
-            }
-
-            let owner_person_id = {
-                let inner = self.state.inner.read().await;
-                inner
-                    .units
-                    .iter()
-                    .find(|u| crate::auth::same_id(&u.id, &due.unit_id))
-                    .and_then(|u| u.owner_user_id.as_deref())
-                    .and_then(|s| s.strip_prefix("person-").unwrap_or(s).parse::<i64>().ok())
-            };
-
-            let shares = detailed_accrual_shares(
-                due.principal_amount,
-                period,
-                created_on,
-                &history,
-                owner_person_id,
-                true,
-            );
-            if shares.len() >= 2 {
-                let request = crate::models::RequestCorrectionRequest {
-                    due_id: due.id.clone(),
-                    kind: crate::models::CORRECTION_SPLIT_REISSUE.to_string(),
-                    amount: None,
-                    due_date: None,
-                    debtor_type: None,
-                    replacement_shares: shares
-                        .into_iter()
-                        .map(|(debtor_type, amount, liable_person_id)| {
-                            crate::models::CorrectionReplacementShare {
-                                debtor_type,
-                                amount,
-                                liable_person_id,
-                                due_date: None,
-                            }
-                        })
-                        .collect(),
-                    reason: format!("Occupancy changed during open period {}", period.key()),
-                };
-                match correction_service.request(caller, request).await {
-                    Ok(c) => results.push(c),
-                    Err(e) => {
-                        let inner = self.state.inner.read().await;
-                        if let Some(existing) = inner
-                            .finance
-                            .corrections
-                            .iter()
-                            .find(|c| {
-                                c.status == crate::models::REQUEST_PENDING
-                                    && crate::auth::same_id(&c.due_id, &due.id)
-                            })
-                            .cloned()
-                        {
-                            results.push(existing);
-                        } else {
-                            return Err(e);
-                        }
-                    }
-                }
-            } else if shares.len() == 1 {
-                let (target_debtor, target_amount, target_person) = shares[0];
-                if due.debtor_type != target_debtor
-                    || due.principal_amount != target_amount
-                    || (target_person.is_some() && due.liable_person_id != target_person)
                 {
-                    let request = crate::models::RequestCorrectionRequest {
-                        due_id: due.id.clone(),
-                        kind: crate::models::CORRECTION_REISSUE.to_string(),
-                        amount: Some(target_amount),
-                        due_date: None,
-                        debtor_type: Some(target_debtor.as_str().to_string()),
-                        replacement_shares: Vec::new(),
-                        reason: format!("Occupancy changed during open period {}", period.key()),
-                    };
-                    match correction_service.request(caller, request).await {
-                        Ok(c) => results.push(c),
-                        Err(e) => {
-                            let inner = self.state.inner.read().await;
-                            if let Some(existing) = inner
-                                .finance
-                                .corrections
-                                .iter()
-                                .find(|c| {
-                                    c.status == crate::models::REQUEST_PENDING
-                                        && crate::auth::same_id(&c.due_id, &due.id)
-                                })
-                                .cloned()
-                            {
-                                results.push(existing);
-                            } else {
-                                return Err(e);
-                            }
-                        }
-                    }
+                    Some(existing) => Ok(vec![existing]),
+                    None => Err(error),
                 }
             }
         }
-        Ok(results)
     }
 
     /// Requests a four-eyes split correction when a transition changes one

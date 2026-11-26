@@ -66,24 +66,39 @@ impl AuthService {
         }
         if let Some(client) = crate::db::security_connection(&self.state).await.map_err(|e| e.to_string())? {
             let site = crate::db::require_id("site", &user.site_id)?;
-            let row=client.query_opt("SELECT u.id FROM units u WHERE u.site_id=$1 AND u.deleted_at IS NULL AND (u.owner_person_id=$2 OR u.tenant_person_id=$2 OR EXISTS(SELECT 1 FROM occupancy_members m JOIN unit_occupancies o ON o.id=m.occupancy_id WHERE o.unit_id=u.id AND o.is_active AND o.end_date IS NULL AND m.person_id=$2)) ORDER BY u.id LIMIT 1",&[&site,&user.person_id]).await.map_err(|_|"Identity storage unavailable".to_string())?;
+            // A former resident whose charge is still open keeps the unit, so the
+            // statement they must settle stays reachable; a current tie wins the pick.
+            let row=client.query_opt("SELECT u.id FROM units u WHERE u.site_id=$1 AND u.deleted_at IS NULL AND (u.owner_person_id=$2 OR u.tenant_person_id=$2 OR EXISTS(SELECT 1 FROM occupancy_members m JOIN unit_occupancies o ON o.id=m.occupancy_id WHERE o.unit_id=u.id AND o.is_active AND o.end_date IS NULL AND m.person_id=$2) OR EXISTS(SELECT 1 FROM dues_liabilities d WHERE d.unit_id=u.id AND d.liable_person_id=$2 AND d.status NOT IN ('PAID','CANCELLED'))) ORDER BY (CASE WHEN u.owner_person_id=$2 OR u.tenant_person_id=$2 THEN 0 ELSE 1 END), u.id LIMIT 1",&[&site,&user.person_id]).await.map_err(|_|"Identity storage unavailable".to_string())?;
             return Ok(row.map(|r| r.get::<_, i64>(0).to_string()));
         }
         let inner = self.state.inner.read().await;
-        Ok(inner
+        let mut still_owing = None;
+        for unit in inner
             .units
             .iter()
-            .find(|u| {
-                crate::authorization::same_site(&u.site_id, &user.site_id)
-                    && (u.owner_user_id.as_deref() == Some(&user.id)
-                        || u.tenant_user_id.as_deref() == Some(&user.id)
-                        || inner.unit_members.get(&u.id).is_some_and(|members| {
-                            members
-                                .iter()
-                                .any(|m| m.email.eq_ignore_ascii_case(&user.email))
-                        }))
-            })
-            .map(|u| u.id.clone()))
+            .filter(|u| crate::authorization::same_site(&u.site_id, &user.site_id))
+        {
+            let current = unit.owner_user_id.as_deref() == Some(&user.id)
+                || unit.tenant_user_id.as_deref() == Some(&user.id)
+                || inner.unit_members.get(&unit.id).is_some_and(|members| {
+                    members
+                        .iter()
+                        .any(|m| m.email.eq_ignore_ascii_case(&user.email))
+                });
+            if current {
+                return Ok(Some(unit.id.clone()));
+            }
+            // A former resident whose charge is still open keeps the unit reachable.
+            let owes = inner.dues.iter().any(|due| {
+                crate::auth::same_id(&due.unit_id, &unit.id)
+                    && due.liable_person_id == user.person_id
+                    && due.status.is_collectable()
+            });
+            if owes && still_owing.is_none() {
+                still_owing = Some(unit.id.clone());
+            }
+        }
+        Ok(still_owing)
         }.await.map_err(IdentityError)
     }
 

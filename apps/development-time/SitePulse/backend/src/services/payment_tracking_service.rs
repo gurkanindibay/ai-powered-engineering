@@ -2164,11 +2164,41 @@ impl PaymentTrackingService {
             ..history_item
         };
         inner.users.push(new_user.clone());
-        inner
-            .unit_occupancies
-            .entry(unit_id.clone())
-            .or_default()
-            .push(history_item);
+        {
+            let entries = inner.unit_occupancies.entry(unit_id.clone()).or_default();
+            // The database ends the seller's session on the transfer date and opens the
+            // buyer's; memory mirrors it, so accrual splits the sold month by day.
+            let mut closed = false;
+            for entry in entries
+                .iter_mut()
+                .filter(|entry| entry.is_active && entry.role == DebtorType::Owner)
+            {
+                entry.end_date = Some(transfer_date.to_string());
+                entry.is_active = false;
+                entry.exit_balance = old_owner_exit_balance;
+                closed = true;
+            }
+            if !closed {
+                entries.push(history_item);
+            }
+            if req.new_owner_moves_in {
+                entries.push(OccupancyHistoryItem {
+                    id: now.timestamp_millis() + 1,
+                    unit_id: unit_num_i64,
+                    person_id: assigned_person_id,
+                    person_name: req.new_owner_name.clone(),
+                    person_phone: None,
+                    person_email: None,
+                    role: DebtorType::Owner,
+                    start_date: transfer_date.to_string(),
+                    end_date: None,
+                    is_active: true,
+                    exit_balance: Decimal::ZERO,
+                    notes: None,
+                    created_at: now,
+                });
+            }
+        }
 
         // Update unit owner
         inner.units[unit_idx].owner_user_id = Some(format!("person-{}", assigned_person_id));

@@ -20,8 +20,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And the "Eylül 2026" principal of 1500.00 for "A-2" is an owner liability
     And the ledger invariants hold
 
-  # Pending: the accrual splits a period by role (owner, tenant), not by person, so two successive tenants share one tenant liability; the effective due date comes from the real server date, not the E2E clock (the clock drives the scheduler only); the jointly liable owner needs #207.
-  @SC-13-03-02 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-03-02 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @linked
   Scenario: A tenant replaced mid-month leaves the old debt with the old tenant
     Given the site is in state F6
     Then the "Kasım 2026" principal shares for "A-2" are "Selin Demir" 700.00 and "Mert Kılıç" 800.00
@@ -29,8 +28,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     And that fee counts 39 days from the effective due date "2026-10-11", the day October was accrued, not from "2026-10-10"
     And "Mert Kılıç" owes nothing for "Eylül 2026" or "Ekim 2026"
 
-  # Pending: GUI layer is not automated yet; needs the per-person split of SC-13-03-02.
-  @SC-13-03-03 @J-10 @depth:2 @state:F6 @layer:gui @core @role_resident @pending
+  @SC-13-03-03 @J-10 @depth:2 @state:F6 @layer:gui @core @role_resident @linked
   Scenario: A former tenant still sees their own debt and the new tenant sees only theirs
     Given the site is in state F6
     When "Selin Demir" signs in
@@ -51,8 +49,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then "A-3" has a tenant liability of 1500.00 and no owner liability for "Aralık 2026"
     And the ledger invariants hold
 
-  # Pending: owner liabilities and the rows re-issued by a split correction carry no liable person id, so "who owes" cannot be asserted per person on those rows.
-  @SC-13-03-21 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @pending
+  @SC-13-03-21 @J-10 @depth:1 @state:F6 @layer:backend @core @role_manager @linked
   Scenario: Every liability row names the person who owes it
     Given the site is in state F6
     Then the owner liabilities of "A-2", "A-3" and "A-4" name the owner of record as liable person
@@ -102,8 +99,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
     Then she sees her own advance of 0.00 and no held advance
     And she cannot see Ahmet's name or held balance
 
-  # Pending: effective dates after the real server date are refused and the accrual splits by role, so a same-day tenant handover on 2026-12-12 cannot be built.
-  @SC-13-03-07 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @pending
+  @SC-13-03-07 @J-10 @depth:1 @state:F6 @layer:backend @edge @role_manager @linked
   Scenario: Handover on the same day splits the month with no gap and no overlap
     Given the site is in state F6
     And the clock has advanced to the effective date of the handover
@@ -129,8 +125,7 @@ Feature: Residents and owners change after periods were accrued (state F6)
       | Şubat 2028    | 2028-02-15 | 724.14      | 775.86       |
       | Şubat 2027    | 2027-02-15 | 750.00      | 750.00       |
 
-  # Pending: the accrual splits by role, so two successive tenants share one tenant liability and the three-segment row cannot be asserted.
-  @SC-13-03-09 @J-10 @depth:1 @layer:backend @edge @role_manager @pending
+  @SC-13-03-09 @J-10 @depth:1 @layer:backend @edge @role_manager @linked
   Scenario Outline: A tariff that does not divide evenly never gains or loses a kuruş
     Given unit "A-3" is owned and vacant on "2026-11-01" with monthly tariff <tariff>
     And the occupancy of "Kasım 2026" is <segments>

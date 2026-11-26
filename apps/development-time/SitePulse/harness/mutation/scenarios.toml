@@ -366,9 +366,9 @@ area = "proration"
 operator = "rounding-residual"
 risk = "high"
 file = "backend/src/domain/occupancy_proration.rs"
-original = "amount: active_amount - first_amount,"
-mutant = "amount: (monthly_amount * Decimal::from(chargeable_days - first_days) / Decimal::from(days_in_month)).round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero),"
-intent = "Owner and tenant shares are rounded independently, so they may not add up to the month's amount (lost or extra kuruş)."
+original = "            active_amount - allocated"
+mutant = "            (monthly_amount * Decimal::from(days) / Decimal::from(days_in_month)).round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)"
+intent = "Every share is rounded independently, so the shares may not add up to the month's amount (lost or extra kuruş)."
 suites = ["rust-unit", "rust-integration"]
 
 [[scenario]]
