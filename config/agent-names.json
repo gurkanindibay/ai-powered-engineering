@@ -6,7 +6,7 @@
     {"pattern": "sonnet", "name": "Alparslan", "model": "Claude Sonnet", "rank": 3, "why": "the field commander who wins the main battle: development"},
     {"pattern": "haiku", "name": "Ulubatlı Hasan", "model": "Claude Haiku", "rank": 4, "why": "one swift soldier with one clear mission: chores"},
     {"pattern": "gpt.*astra", "name": "Metehan", "model": "GPT Astra", "rank": 2, "why": "grand strategist and empire builder: design-heavy work"},
-    {"pattern": "gpt-?6-2.*sol", "name": "Melikşah", "model": "GPT-6.2 Sol", "rank": 3, "why": "ruled the empire at full strength: routine implementation"},
+    {"pattern": "gpt-?6-2(?![0-9]).*sol", "name": "Melikşah", "model": "GPT-6.2 Sol", "rank": 3, "why": "ruled the empire at full strength: routine implementation"},
     {"pattern": "gpt.*sol", "name": "Tuğrul Bey", "model": "GPT Sol (earlier versions)", "rank": 3, "why": "the founding predecessor of Melikşah"},
     {"pattern": "gemini.*pro", "name": "Baybars", "model": "Gemini Pro", "rank": 2, "why": "undefeated strategist: heavy Gemini work"},
     {"pattern": "gemini.*flash", "name": "Kuşçubaşı Eşref", "model": "Gemini Flash", "rank": 4, "why": "fast, agile special operations: routine edits and test runs"},

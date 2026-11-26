@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import fcntl
 import json
 import os
 import re
@@ -45,7 +46,6 @@ LABEL_PREFIX = "agent:"
 IDLE_TTL = timedelta(days=3)
 ISSUE_TTL = timedelta(days=14)
 LOCK_TIMEOUT_SECONDS = 10.0
-LOCK_STALE_SECONDS = 60.0
 TITLE_MAX = 80
 
 
@@ -80,6 +80,15 @@ def bound_name(roster: dict, model: str) -> str | None:
     return next((m["name"] for m in roster["models"] if re.search(m["pattern"], wanted)), None)
 
 
+def same_identity(roster: dict, left: str, right: str) -> bool:
+    """Two spellings of one bound model ("sonnet", "claude-sonnet-5-5") share a
+    name; unlisted models must match exactly."""
+    bound = bound_name(roster, left)
+    if bound:
+        return bound == bound_name(roster, right)
+    return normalize_model(left) == normalize_model(right)
+
+
 def pick_name(roster: dict, model: str, taken: set[str]) -> str:
     """Model-bound name (numbered if busy), else the first free pool name."""
     base = bound_name(roster, model)
@@ -95,31 +104,24 @@ def pick_name(roster: dict, model: str, taken: set[str]) -> str:
 
 @contextlib.contextmanager
 def locked(path: Path) -> Iterator[None]:
-    """Exclusive-create lock file: portable, and enough for agents on one machine."""
+    """flock: the kernel drops it if the holder dies, so there is no stale lock to break."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.parent.name == STATE_RELATIVE.parent.name:
         # Ignores itself, so it works on branches without our root .gitignore line.
         ignore = path.parent / ".gitignore"
         if not ignore.exists():
             ignore.write_text("*\n", encoding="utf-8")
-    lock = path.with_name(path.name + ".lock")
     deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
-    while True:
-        try:
-            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-            break
-        except FileExistsError:
-            with contextlib.suppress(FileNotFoundError):
-                if time.time() - lock.stat().st_mtime > LOCK_STALE_SECONDS:
-                    lock.unlink()
-                    continue
-            if time.monotonic() > deadline:
-                raise RosterError(f"timed out waiting for {lock}")
-            time.sleep(0.05)
-    try:
-        yield
-    finally:
-        lock.unlink(missing_ok=True)
+    with open(path.with_name(path.name + ".lock"), "a", encoding="utf-8") as lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() > deadline:
+                    raise RosterError(f"timed out waiting for {lock.name}")
+                time.sleep(0.05)
+        yield  # closing the file releases the lock
 
 
 def read_state(path: Path) -> list[dict]:
@@ -160,15 +162,23 @@ def reserve(path: Path, harness: str, session: str, model: str, issue: int | Non
     now = now or now_utc()
     with locked(path):
         entries = [e for e in read_state(path) if alive(e, now)]
-        mine = next((e for e in entries
-                     if (e["harness"], e["session"], e["model"]) == (harness, session, normalize_model(model))), None)
+        own = [e for e in entries if (e["harness"], e["session"]) == (harness, session)]
+        mine = next((e for e in own if same_identity(roster, e["model"], model)), None)
         if mine is None:
             taken = {e["name"] for e in entries} | (taken_elsewhere or set())
             mine = {"name": pick_name(roster, model, taken), "harness": harness, "session": session,
                     "model": normalize_model(model), "issues": [], "reserved_at": now.isoformat(timespec="seconds")}
             entries.append(mine)
-        if issue is not None and issue not in mine["issues"]:
-            mine["issues"].append(issue)
+        mine["model"] = normalize_model(model)
+        if issue is not None:
+            # The model changed mid-task: the issue moves to the new name.
+            for other in own:
+                if other is not mine and issue in other["issues"]:
+                    other["issues"].remove(issue)
+                    if not other["issues"]:
+                        entries.remove(other)
+            if issue not in mine["issues"]:
+                mine["issues"].append(issue)
         mine["updated_at"] = now.isoformat(timespec="seconds")
         write_state(path, entries)
     return dict(mine)

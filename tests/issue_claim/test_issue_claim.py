@@ -272,6 +272,27 @@ class AgentNameTests(unittest.TestCase):
         }
         self.assertEqual({m: agent_names.bound_name(self.roster, m) for m in expected}, expected)
 
+    def test_later_gpt_version_does_not_inherit_the_6_2_name(self):
+        self.assertEqual(agent_names.bound_name(self.roster, "gpt-6.20-sol"), "Tuğrul Bey")
+
+    def test_model_spellings_share_one_name(self):
+        self.assertEqual([self.reserve("a", "sonnet"), self.reserve("a")], ["Alparslan", "Alparslan"])
+        self.assertEqual([e["model"] for e in agent_names.read_state(self.state)], ["claude-sonnet-5-5"])
+
+    def test_model_switch_moves_the_issue_to_the_new_name(self):
+        self.reserve("a", issue=1)
+        self.assertEqual(self.reserve("a", "opus", issue=1), "Yavuz Sultan Selim")
+        self.assertEqual([(e["name"], e["issues"]) for e in agent_names.read_state(self.state)],
+                         [("Yavuz Sultan Selim", [1])])
+
+    def test_lock_excludes_a_second_holder(self):
+        self.addCleanup(setattr, agent_names, "LOCK_TIMEOUT_SECONDS", agent_names.LOCK_TIMEOUT_SECONDS)
+        agent_names.LOCK_TIMEOUT_SECONDS = 0.1
+        with agent_names.locked(self.state):
+            with self.assertRaises(agent_names.RosterError):
+                self.reserve("a")
+        self.assertEqual(self.reserve("a"), "Alparslan")
+
     def test_names_are_unique_and_labels_fit_github(self):
         names = [m["name"] for m in self.roster["models"]] + self.roster["pool"]
         self.assertEqual(len(names), len(set(names)))
