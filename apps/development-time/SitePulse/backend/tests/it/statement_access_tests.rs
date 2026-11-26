@@ -168,6 +168,27 @@ async fn state_after_move_out() -> AppState {
     state
 }
 
+/// Unit A-14 after Mert Kılıç replaced Dan Yılmaz: Mert is the tenant now and
+/// owes November, while Dan still owes his October share.
+async fn state_after_tenant_replacement() -> AppState {
+    let state = state_after_move_out().await;
+    {
+        let mut inner = state.inner.write().await;
+        let today = site_today(&inner, SITE);
+        inner
+            .units
+            .iter_mut()
+            .find(|unit| unit.id == UNIT)
+            .expect("fixture unit")
+            .tenant_user_id = Some("person-202".to_string());
+        let mut november = due("due-mert-nov", 202, DebtorType::Tenant, "Kasım 2026", today);
+        november.principal_amount = d("800.00");
+        november.total_amount = d("800.00");
+        inner.dues.push(november);
+    }
+    state
+}
+
 /// Unit A-14 after Ben Kaya sold it to Gül Tanrıverdi on 2026-12-20 with Dan
 /// still renting: Ben owes his December owner share, Gül owns the unit now, and
 /// Dan owes his December tenant share.
@@ -438,6 +459,56 @@ async fn former_tenant_reads_only_their_own_section_after_move_out() {
         "no other tenant's correction: {body}"
     );
     assert!(!body.contains("other-tenant-reason"), "{body}");
+}
+
+#[tokio::test]
+// covers: SC-13-03-03 (the former and the new tenant each read only their own debt)
+async fn former_and_current_tenant_read_only_their_own_debt() {
+    let state = state_after_tenant_replacement().await;
+
+    let dan = support::token(&state, "person-201", Role::HomeResident, SITE, None).await;
+    let (status, body) = call(
+        build_router(state.clone()),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&dan),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "former tenant statement: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let debtors = statement["debtors"].as_array().expect("debtors");
+    assert_eq!(debtors.len(), 1, "only Dan's own section: {body}");
+    assert_eq!(debtors[0]["name"], "Dan Yılmaz", "{body}");
+    assert_eq!(debtors[0]["is_former"], true, "{body}");
+    let items = debtors[0]["open_items"].as_array().expect("open items");
+    assert_eq!(items.len(), 1, "Dan owes October only: {body}");
+    assert_eq!(items[0]["period"], "Ekim 2026", "{body}");
+    assert_eq!(items[0]["principal_outstanding"], "1016.13", "{body}");
+
+    let mert = support::token(&state, "person-202", Role::HomeResident, SITE, None).await;
+    let (status, body) = call(
+        build_router(state),
+        "GET",
+        "/api/v1/residents/d-14/statement",
+        Some(&mert),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "current tenant statement: {body}");
+    let statement: serde_json::Value = serde_json::from_str(&body).expect("statement JSON");
+    let debtors = statement["debtors"].as_array().expect("debtors");
+    assert_eq!(debtors.len(), 1, "only Mert's own section: {body}");
+    assert_eq!(debtors[0]["name"], "Mert Kılıç", "{body}");
+    assert_eq!(debtors[0]["is_former"], false, "{body}");
+    let items = debtors[0]["open_items"].as_array().expect("open items");
+    assert_eq!(items.len(), 1, "Mert owes November only: {body}");
+    assert_eq!(items[0]["period"], "Kasım 2026", "{body}");
+    assert_eq!(items[0]["principal_outstanding"], "800.00", "{body}");
+    assert!(
+        !body.contains("dan-oct") && !body.contains("1016.13"),
+        "the former tenant's debt is not his: {body}"
+    );
 }
 
 #[tokio::test]

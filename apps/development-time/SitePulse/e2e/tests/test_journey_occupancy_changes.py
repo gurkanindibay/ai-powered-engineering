@@ -103,8 +103,8 @@ def test_resident_added_after_accruals_is_charged_from_start_date(journey_site):
     assert _party_names(j, 3)["OWNER"] == "Burak Şahin"
     assert j.roles(3, "Eylül 2026") == {"OWNER": D("1500.00")}
     assert j.roles(3, "Ekim 2026") == {"OWNER": D("1500.00")}
-    # The re-split rows carry no liable person id (pending SC-13-03-21), so shares are asserted by role;
-    # the owner and tenant of record are asserted above.
+    # Shares are asserted by role here; SC-13-03-21 proves every liability row names its
+    # liable person, and the owner and tenant of record are asserted above.
     assert j.roles(3, "Kasım 2026") == {"OWNER": D("850.00"), "TENANT": D("650.00")}
     j.invariants("SC-13-03-04 before December")
     j.accrue("Aralık 2026", due="2026-12-10")
