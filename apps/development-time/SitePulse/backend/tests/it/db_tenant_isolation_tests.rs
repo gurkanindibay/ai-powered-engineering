@@ -242,7 +242,7 @@ async fn rls_hides_other_tenants_inside_a_bound_transaction() {
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn rls_fails_closed_when_unbound_and_allows_explicit_platform() {
     let t = TestDb::create("rls_fail_closed").await;
-    let a = t.site_id("site-begonya").await;
+    let a = t.site_id("begonya-sitesi").await;
     let mut client = t.pool.get().await.unwrap();
 
     // Unbound non-bypass role sees zero rows and cannot insert.
