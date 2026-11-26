@@ -24,8 +24,6 @@ def test_no_dues_shows_zero_balance_without_overdue_badge(login_as, page, api, a
 @pytest.mark.smoke
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-01")
-@pytest.mark.covers("SC-01-01-01")
-@pytest.mark.covers("SC-01-02-01")
 @pytest.mark.covers("SC-01-03-01")
 @pytest.mark.covers("SC-01-04-01")
 def test_overdue_balance_matches_backend_total(builders, login_as, page, api, actors):

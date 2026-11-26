@@ -46,6 +46,7 @@ fn resident_dashboard_authz(role: Role) -> sitepulse_backend::authorization::Aut
     }
 }
 
+// covers: SC-01-02-01
 #[test]
 fn when_overdue_by_10_days_then_calculates_exact_5_percent_pro_rated_penalty() {
     let service = DuesCalculationService::new();

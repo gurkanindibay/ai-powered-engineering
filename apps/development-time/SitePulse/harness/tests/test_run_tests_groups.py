@@ -4,10 +4,13 @@ CI runs one job per group (`run_tests.py --group <name>`), so a gate in ORDER th
 lists, or a group that no CI job runs, would silently never run in CI.
 """
 import importlib.util
+import io
 import re
 import sys
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = PROJECT_ROOT.parents[2]
@@ -47,6 +50,31 @@ class GateGroupTests(unittest.TestCase):
         for gate in run_tests.GATE_GROUPS["lint"]:
             self.assertLess(order.index(gate), first_compile, gate)
         self.assertEqual(order[-1], "test-run-recorded")
+
+    # covers: SC-05-05-01
+    def test_one_command_runs_every_lane_and_returns_their_exit_code(self):
+        executed = []
+
+        def passing(name, root):
+            executed.append(name)
+            return run_tests.GateResult(name, True)
+
+        with mock.patch.object(run_tests, "run_gate", passing), redirect_stdout(io.StringIO()):
+            self.assertEqual(run_tests.main([]), 0, "exit code 0 when every gate passes")
+        self.assertEqual(executed, run_tests.ORDER, "the single command runs every gate in order")
+        for lane in ("harness-selftest", "feature-traceability", "rust-test", "flutter-test"):
+            self.assertIn(lane, executed, f"the {lane} lane executes")
+        self.assertIn(
+            "harness/tests",
+            [arg for spec in run_tests.GATES["harness-selftest"] for arg in spec.argv],
+            "the harness lane runs the suite that holds the task DAG tests",
+        )
+
+        def rust_fails(name, root):
+            return run_tests.GateResult(name, name != "rust-test")
+
+        with mock.patch.object(run_tests, "run_gate", rust_fails), redirect_stdout(io.StringIO()):
+            self.assertEqual(run_tests.main([]), 1, "a failing gate makes the exit code non-zero")
 
     def test_unknown_group_is_rejected(self):
         self.assertEqual(run_tests.main(["--group", "nope"]), 2)
