@@ -16,8 +16,12 @@ Do not grant `BYPASSRLS` to either the runtime identity or `sitepulse_tenant`.
 Before serving, the backend verifies that forced row security is installed on
 `payment_entries` and that the runtime identity is safe. Production startup stops
 when either check fails. `/health` and `/api/v1/health` return HTTP 503 and expose a
-`tenant_rls` readiness object when the checks fail. `SITEPULSE_MIGRATIONS_ONLY=true`
-is for the privileged migration job and exits without starting the service.
+`tenant_rls` readiness object when the checks fail. In development, `/health` keeps
+its HTTP 200 liveness response while the top-level `readiness` is `NOT_READY` and
+`status` is `DEGRADED`; in production, the same failure returns HTTP 503. The service
+also logs the failed readiness check at error level outside production.
+`SITEPULSE_MIGRATIONS_ONLY=true` is for the privileged migration job and exits
+without starting the service.
 
 After migrations, provision or verify the runtime membership with an administrator:
 
