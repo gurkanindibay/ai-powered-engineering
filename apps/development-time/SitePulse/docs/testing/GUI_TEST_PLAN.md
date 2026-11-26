@@ -161,6 +161,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-09-05 | 09-06 | Manager | P2 | api:tenant pays capital with "Asansör Demirbaş" | Receipt says the tenant paid on behalf of the owner; the tenant's operational balance is unchanged | receipt ids | ◐ |
 | GUI-09-06 | 09-01 | Manager | P2 | api:payments | Debt aging buckets total the overdue sum | NEW:`aging_bucket_*` | ◐ |
 | GUI-09-07 | 09-01 | Manager | P2 | api:advance balance | Virman (advance → capital) action available and works from payment tracking | NEW:`btn_virman_*` | ✅ |
+| GUI-09-08 | 09-01 | Manager | P2 | ui:GUI-09-01 | Opening payment tracking from the dues view or the segment tab sends exactly one `GET /api/v1/payments/stream`; a superseded response never overwrites the newer one | `action_payment_tracking`, `segment_tab_1`, `payment_stream_loading` | ✅ |
 
 ### EPIC-10 Capital Expenditure & Fixture Dues
 | ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |

@@ -28,6 +28,16 @@ def _manifest(request) -> JourneyManifest:
     )
 
 
+def _backend_today(api) -> str:
+    """Today as the backend computes it.
+
+    A reference-state fixture (F4-F10) seeds its own frozen clock, which is not the run's
+    wall-clock date; effective dates in a journey must be derived from the backend clock or
+    they become "in the future" as the calendar moves past the seeded date.
+    """
+    return str(api.call("GET", "/__e2e/clock")["date"])
+
+
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.allow_server_errors
@@ -73,9 +83,8 @@ def test_payment_stream_distinguishes_loading_failure_and_recovery(
             else:
                 route.continue_()
 
-        # Opening the page requests the stream more than once (the button and the
-        # tab it mounts both fetch). A single answered copy ends the loading
-        # state, so no request may complete until loading has been observed.
+        # Opening the page requests the stream once: the stream tab is the single
+        # loader, so no request may complete until loading has been observed.
         page.route("**/api/v1/payments/stream*", control_payment_stream)
         by_id(page, "action_payment_tracking").click()
         by_id(page, "payment_stream_loading").wait_for(state="attached", timeout=5_000)
@@ -350,7 +359,7 @@ def test_stale_move_in_refreshes_to_the_first_managers_occupancy(
         payments_before = stack.sql(
             f"SELECT COUNT(*) FROM payment_entries WHERE unit_id = {int(unit_id)};"
         )
-        transition_date = (date.fromisoformat(stack.fixture_today) - timedelta(days=7)).isoformat()
+        transition_date = (date.fromisoformat(_backend_today(api)) - timedelta(days=7)).isoformat()
 
         def pin_transition_date(route: Route) -> None:
             payload = route.request.post_data_json
@@ -365,7 +374,7 @@ def test_stale_move_in_refreshes_to_the_first_managers_occupancy(
             by_id(page, "module_confirm_move_in_btn").click()
         response = first_response.value
         assert response.status == 200, (
-            f"move-in failed on fixture date {stack.fixture_today}: {response.status} {response.text()}"
+            f"move-in failed on backend date {_backend_today(api)}: {response.status} {response.text()}"
         )
         by_id(page, "module_confirm_move_in_btn").wait_for(state="detached", timeout=15_000)
         page.unroute("**/occupancy-transitions*", pin_transition_date)
