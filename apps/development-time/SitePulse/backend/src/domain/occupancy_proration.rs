@@ -65,9 +65,20 @@ pub fn split_monthly_dues(
     // start residing date (journey plan Q4): the days before it had a party to bill.
     // A tenant's first span keeps the days before it with the owner (Q9), so only an
     // owner span that opens the history moves the window.
-    if let Some(first) = spans.iter().min_by_key(|span| span.starts_on) {
-        if first.party == ResponsibleParty::Owner {
-            charge_start = charge_start.max(first.starts_on);
+    //
+    // A non-resident owner holds no span of their own, so their unit keeps charging
+    // from its creation date (or the period start); only an `OWNER` span moves it.
+    //
+    // An owner and a tenant span may start on the same day, and the window still
+    // opens there because no party existed before it. Deciding that by the earliest
+    // span alone would make the result depend on the order of `spans`, so the
+    // earliest date that has an owner span wins.
+    if let Some(earliest) = spans.iter().map(|span| span.starts_on).min() {
+        let owner_opens = spans
+            .iter()
+            .any(|span| span.starts_on == earliest && span.party == ResponsibleParty::Owner);
+        if owner_opens {
+            charge_start = charge_start.max(earliest);
         }
     }
     if charge_start > period_end {
@@ -301,6 +312,42 @@ mod tests {
                 amount: money("1450.00")
             }]
         );
+    }
+
+    #[test]
+    fn an_owner_and_a_tenant_starting_the_same_day_open_the_window_in_any_order() {
+        // A-1 gets its first owner and a tenant on the same day, so no party existed
+        // before it. Deciding the window from the earliest span alone made the day
+        // before depend on the order the two spans arrive in.
+        let day = date("2026-11-02");
+        let owner = OccupancySpan {
+            party: ResponsibleParty::Owner,
+            starts_on: day,
+            ends_before: None,
+        };
+        let tenant = OccupancySpan {
+            party: ResponsibleParty::Tenant,
+            starts_on: day,
+            ends_before: None,
+        };
+        for spans in [[owner, tenant], [tenant, owner]] {
+            let shares = split_monthly_dues(
+                money("1500.00"),
+                date("2026-11-01"),
+                None,
+                &spans,
+                true,
+                date("2026-11-10"),
+            )
+            .expect("valid amount");
+            let charged: Decimal = shares.iter().map(|share| share.amount).sum();
+            // 29 of 30 days, whichever party each of those days is attributed to.
+            assert_eq!(
+                charged,
+                money("1450.00"),
+                "span order must not change the window"
+            );
+        }
     }
 
     #[test]
