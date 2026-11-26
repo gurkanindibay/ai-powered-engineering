@@ -35,10 +35,11 @@ breaks), **partly proves** (some of the claimed scenarios have no assertion of t
 - 601 links, **0 link problems**: no whole-suite wrapper, no script declaration, no
   unattached (file-level) declaration, and no link to a test that does not execute in CI.
   The wrapper file `e2e/tests/test_linked_backend_suites.py` no longer carries links.
-- One divergence worth knowing: `load_links()` (used by the HTML report's `linked_tests` column)
-  names 560 of the 601 links and leaves 41 blank, because it scans a five-line window; the
-  evidence resolver (`test_strategy_scan.resolve_links`) resolves all 601. The 41 are not
-  coarse links, but the report cannot show their test name. Follow-up filed as #513.
+- One divergence was found and fixed in #513: `load_links()` (used by the HTML report's
+  `linked_tests` column) named 560 of the 601 links and left 41 blank, because it scans a
+  five-line window; the evidence resolver (`test_strategy_scan.resolve_links`) resolves all
+  601. The report now takes its names from that resolver (`Catalogue.resolved_links()`), so
+  all 601 links show their test and only a declaration with no test attached stays unnamed.
 
 ## Audited tests
 
@@ -89,6 +90,5 @@ All eight prove their rule. No correction was needed.
 
 - #512 — SC-13-13-02, SC-13-26-02, SC-13-25-02: the multi-site journey test needs an assertion
   for each, or the scenarios need their own tests.
-- #513 — `feature_traceability.load_links()` leaves 41 link names blank where
-  `test_strategy_scan.resolve_links()` resolves them; the HTML report should use the same
-  resolver.
+- #513 — fixed in this change: the HTML report now takes link names from
+  `test_strategy_scan.resolve_links()`, so the 41 previously blank rows name their test.
