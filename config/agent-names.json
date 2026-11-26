@@ -1,0 +1,15 @@
+{
+  "_comment": "Agent name roster. Every name belongs to exactly one model family and each family has at least five, so a name always identifies the model. The first pattern matching the lower-cased model id (spaces, dots, slashes and underscores turned into '-') wins, so pattern order matters. Concurrent agents on one family take its next free name, in list order. A model matching no pattern is refused: add a family here. Who currently holds which name is local state in .agents/local/agent-names.json (never committed).",
+  "models": [
+    {"pattern": "fable", "model": "Claude Fable", "rank": 1, "why": "the greatest conquerors and sovereigns: the strongest Claude model", "names": ["Fatih Sultan Mehmet", "Kanuni Sultan Süleyman", "Attila", "Timur", "Osman Gazi"]},
+    {"pattern": "opus", "model": "Claude Opus", "rank": 2, "why": "formidable rulers and master statesmen: planning and architecture", "names": ["Yavuz Sultan Selim", "Nizamülmülk", "Yıldırım Bayezid", "Murad Hüdavendigâr", "Orhan Gazi"]},
+    {"pattern": "sonnet", "model": "Claude Sonnet", "rank": 3, "why": "field commanders who win the main battles: development", "names": ["Alparslan", "Kılıç Arslan", "Sultan Sencer", "Çağrı Bey", "Süleyman Şah"]},
+    {"pattern": "haiku", "model": "Claude Haiku", "rank": 4, "why": "brave individuals with one clear mission: chores", "names": ["Ulubatlı Hasan", "Seyit Onbaşı", "Yahya Çavuş", "Nene Hatun", "Şahin Bey"]},
+    {"pattern": "gpt.*astra", "model": "GPT Astra", "rank": 2, "why": "grand strategists and state builders: design-heavy work", "names": ["Metehan", "Bilge Kağan", "Tonyukuk", "Kül Tigin", "İlteriş Kağan"]},
+    {"pattern": "gpt-?6-2(?![0-9]).*sol", "model": "GPT-6.2 Sol", "rank": 3, "why": "strong rulers and able viziers: routine implementation", "names": ["Melikşah", "Celaleddin Harezmşah", "Sokollu Mehmet Paşa", "Köprülü Fazıl Ahmed Paşa", "Gedik Ahmed Paşa"]},
+    {"pattern": "gpt.*sol", "model": "GPT Sol (other versions)", "rank": 3, "why": "founders who came before", "names": ["Tuğrul Bey", "Selçuk Bey", "Bumin Kağan", "İstemi Yabgu", "Ertuğrul Gazi"]},
+    {"pattern": "gemini.*pro", "model": "Gemini Pro", "rank": 2, "why": "hard-to-defeat commanders: heavy Gemini work", "names": ["Baybars", "Gazi Osman Paşa", "Fahrettin Paşa", "Turahan Bey", "Gazi Evrenos Bey"]},
+    {"pattern": "gemini.*flash", "model": "Gemini Flash", "rank": 4, "why": "fast, agile irregular fighters: routine edits and test runs", "names": ["Kuşçubaşı Eşref", "Kürşad", "Yörük Ali Efe", "Kara Fatma", "Sütçü İmam"]},
+    {"pattern": "deepseek", "model": "DeepSeek", "rank": 4, "why": "seafarers of the deep", "names": ["Piri Reis", "Seydi Ali Reis", "Kemal Reis", "Salih Reis", "Turgut Reis"]}
+  ]
+}

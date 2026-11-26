@@ -1,14 +1,19 @@
 import io
+import itertools
 import json
 import re
 import sys
+import tempfile
 import unittest
 import urllib.parse
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import agent_names  # noqa: E402
 import issue_claim as ic  # noqa: E402
+
+TITLE = "Show the held advance"
 
 
 class FakeGh:
@@ -19,6 +24,7 @@ class FakeGh:
         self.events = []
         self.repo_labels_deleted = []
         self.event_reads = 0
+        self.other_open = []  # label lists of other open in-progress issues
         self.lag = []  # per-read count of newest events hidden (API lag)
         self.add(list(labels))
 
@@ -32,6 +38,10 @@ class FakeGh:
         joined = " ".join(args)
         if args[0] == "repo":
             return "o/r\n"
+        if "issues?state=open" in joined:
+            return "\n".join(json.dumps(labels) for labels in self.other_open)
+        if args[-1] == ".title":
+            return TITLE + "\n"
         if "issues?state=all" in joined:
             return "0"
         if "/events" in joined:
@@ -70,10 +80,19 @@ class FakeRepo:
         return target(args)
 
 
-def run_cli(fake, *argv):
+STATE_DIR = tempfile.TemporaryDirectory()
+STATE_NUMBERS = itertools.count()
+
+
+def run_cli(fake, *argv, model="claude-sonnet-5-5", state=None):
+    if state is None:  # one throwaway reservation file per fake GitHub
+        if not hasattr(fake, "state_path"):  # not id(fake): ids are reused after GC
+            fake.state_path = Path(STATE_DIR.name) / f"{next(STATE_NUMBERS)}.json"
+        state = fake.state_path
+    env = {"AGENT_NAMES_STATE": str(state), **({"AGENT_MODEL": model} if model else {})}
     out = io.StringIO()
-    with redirect_stdout(out):
-        code = ic.main([*argv, "--json"], run=fake, env={})
+    with redirect_stdout(out), redirect_stderr(io.StringIO()):
+        code = ic.main([*argv, "--json"], run=fake, env=env)
     return code, json.loads(out.getvalue())
 
 
@@ -93,7 +112,7 @@ class IssueClaimTests(unittest.TestCase):
         fake = FakeGh()
         code, out = run_cli(fake, "claim", "7", "--harness", "Claude", "--session", "abc 123")
         self.assertEqual(code, 0)
-        self.assertEqual(sorted(fake.labels), ["claim:claude/abc-123", "in progress"])
+        self.assertEqual(sorted(fake.labels), ["agent:Alparslan", "claim:claude/abc-123", "in progress"])
         self.assertEqual(out["session"], "abc-123")
 
     def test_other_session_is_refused(self):
@@ -112,7 +131,7 @@ class IssueClaimTests(unittest.TestCase):
         self.assertEqual(run_cli(fake, "claim", "7", "--harness", "claude", "--session", "s1")[0], 0)
         code, _ = run_cli(fake, "claim", "7", "--harness", "codex", "--session", "s9", "--force")
         self.assertEqual(code, 0)
-        self.assertEqual(sorted(fake.labels), ["claim:codex/s9", "in progress"])
+        self.assertEqual(sorted(fake.labels), ["agent:Alparslan", "claim:codex/s9", "in progress"])
 
     def test_same_harness_race_loser_leaves_winner_intact(self):
         fake = FakeGh(["in progress", "claim:claude/a"])
@@ -219,7 +238,7 @@ class PullRequestLabelTests(unittest.TestCase):
         code, out = run_cli(repo, "claim", "10", "--harness", "claude", "--session", "abc", "--pr", "20")
         self.assertEqual(code, 0, out)
         for number in (10, 20):
-            self.assertEqual(sorted(repo.items[number].labels), ["claim:claude/abc", "in progress"])
+            self.assertEqual(sorted(repo.items[number].labels), ["agent:Alparslan", "claim:claude/abc", "in progress"])
 
     def test_release_with_pr_clears_both(self):
         both = ["in progress", "claim:claude/abc"]
@@ -235,6 +254,134 @@ class PullRequestLabelTests(unittest.TestCase):
         code, _ = run_cli(repo, "release", "10", "--harness", "claude", "--session", "abc", "--pr", "20")
         self.assertEqual(code, 1)
         self.assertEqual(len(repo.items[20].labels), 2)
+
+
+class AgentNameTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.state = Path(tmp.name) / "names.json"
+        self.roster = agent_names.load_roster()
+
+    def reserve(self, session, model="claude-sonnet-5-5", **kwargs):
+        return agent_names.reserve(self.state, "claude", session, model, **kwargs)["name"]
+
+    def first_name(self, model):
+        return agent_names.family_of(self.roster, model)["names"][0]
+
+    def test_each_model_has_its_bound_names(self):
+        expected = {
+            "claude-fable-5-2": "Fatih Sultan Mehmet", "claude-opus-5-5[1m]": "Yavuz Sultan Selim",
+            "Sonnet 5.5": "Alparslan", "claude-haiku-5-5": "Ulubatlı Hasan",
+            "gpt-6.2-astra": "Metehan", "GPT-6.2 Sol": "Melikşah", "gpt-6.1-sol": "Tuğrul Bey",
+            "gemini-3.1-pro": "Baybars", "Gemini 3.8 Flash": "Kuşçubaşı Eşref",
+            "deepseek/deepseek-chat": "Piri Reis",
+        }
+        self.assertEqual({m: self.first_name(m) for m in expected}, expected)
+
+    def test_later_gpt_version_does_not_inherit_the_6_2_names(self):
+        self.assertEqual(self.first_name("gpt-6.20-sol"), "Tuğrul Bey")
+
+    def test_model_spellings_share_one_name(self):
+        self.assertEqual([self.reserve("a", "sonnet"), self.reserve("a")], ["Alparslan", "Alparslan"])
+        self.assertEqual([e["model"] for e in agent_names.read_state(self.state)], ["claude-sonnet-5-5"])
+
+    def test_model_switch_moves_the_issue_to_the_new_name(self):
+        self.reserve("a", issue=1)
+        self.assertEqual(self.reserve("a", "opus", issue=1), "Yavuz Sultan Selim")
+        self.assertEqual([(e["name"], e["issues"]) for e in agent_names.read_state(self.state)],
+                         [("Yavuz Sultan Selim", [1])])
+
+    def test_lock_excludes_a_second_holder(self):
+        self.addCleanup(setattr, agent_names, "LOCK_TIMEOUT_SECONDS", agent_names.LOCK_TIMEOUT_SECONDS)
+        agent_names.LOCK_TIMEOUT_SECONDS = 0.1
+        with agent_names.locked(self.state):
+            with self.assertRaises(agent_names.RosterError):
+                self.reserve("a")
+        self.assertEqual(self.reserve("a"), "Alparslan")
+
+    def test_every_model_has_five_names_that_no_other_model_uses(self):
+        self.assertNotIn("pool", self.roster)
+        self.assertTrue(all(len(m["names"]) >= 5 for m in self.roster["models"]))
+        names = [n for m in self.roster["models"] for n in m["names"]]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertTrue(all(len(agent_names.label_for(f"{n} 99")) <= ic.MAX_LABEL for n in names))
+
+    def test_concurrent_agents_use_all_family_names_before_numbering(self):
+        got = [self.reserve(str(i)) for i in range(6)]
+        self.assertEqual(got, [*agent_names.family_of(self.roster, "sonnet")["names"], "Alparslan 2"])
+        self.assertEqual(self.reserve("0"), "Alparslan")
+
+    def test_unlisted_model_is_refused_before_github_is_touched(self):
+        fake = FakeGh()
+        with redirect_stderr(io.StringIO()), redirect_stdout(io.StringIO()):
+            code = ic.main(["claim", "7", "--harness", "claude", "--session", "a", "--model", "mystery-1"],
+                           run=fake, env={"AGENT_NAMES_STATE": str(self.state)})
+        self.assertEqual((code, fake.labels, agent_names.read_state(self.state)), (2, [], []))
+
+    def test_name_used_elsewhere_is_skipped(self):
+        self.assertEqual(self.reserve("b", taken_elsewhere={"Alparslan"}), "Kılıç Arslan")
+
+    def test_release_frees_name_only_after_last_issue(self):
+        self.reserve("a", issue=1)
+        self.reserve("a", issue=2)
+        self.assertEqual(agent_names.release(self.state, "claude", "a", issue=1), [])
+        self.assertEqual(agent_names.release(self.state, "claude", "a", issue=2), ["Alparslan"])
+        self.assertEqual(self.reserve("b"), "Alparslan")
+
+    def test_idle_reservation_expires_but_issue_holder_stays(self):
+        later = agent_names.now_utc() + agent_names.IDLE_TTL
+        self.reserve("idle")
+        self.reserve("busy", issue=1)
+        self.assertEqual(self.reserve("new", now=later), "Alparslan")
+
+    def test_corrupt_state_is_not_overwritten_and_github_is_untouched(self):
+        self.state.write_text("{broken")
+        fake = FakeGh()
+        out = io.StringIO()
+        with redirect_stderr(out), redirect_stdout(io.StringIO()):
+            code = ic.main(["claim", "7", "--harness", "claude", "--session", "a", "--model", "opus"],
+                           run=fake, env={"AGENT_NAMES_STATE": str(self.state)})
+        self.assertEqual((code, fake.labels, self.state.read_text()), (2, [], "{broken"))
+
+    def test_claim_requires_a_model(self):
+        fake = FakeGh()
+        with redirect_stderr(io.StringIO()):
+            code = ic.main(["claim", "7", "--harness", "claude", "--session", "a"],
+                           run=fake, env={"AGENT_NAMES_STATE": str(self.state)})
+        self.assertEqual((code, fake.labels), (2, []))
+
+    def test_claim_reports_title_and_avoids_names_on_other_open_issues(self):
+        fake = FakeGh()
+        fake.other_open = [["in progress", "claim:claude/other-machine", "agent:Alparslan"]]
+        code, out = run_cli(fake, "claim", "7", "--harness", "claude", "--session", "a", state=self.state)
+        self.assertEqual((code, out["agent"], out["session_title"]),
+                         (0, "Kılıç Arslan", f"[Kılıç Arslan] #7 {TITLE}"))
+        self.assertIn("agent:Kılıç Arslan", fake.labels)
+        run_cli(fake, "release", "7", "--harness", "claude", "--session", "a", state=self.state)
+        self.assertEqual((fake.labels, agent_names.read_state(self.state)), ([], []))
+
+    def test_refused_claim_reserves_nothing(self):
+        fake = FakeGh(["in progress", "claim:codex/x", "agent:Melikşah"])
+        code, _ = run_cli(fake, "claim", "7", "--harness", "claude", "--session", "a", state=self.state)
+        self.assertEqual((code, agent_names.read_state(self.state)), (1, []))
+
+    def test_force_takeover_replaces_label_and_frees_previous_name(self):
+        fake = FakeGh()
+        run_cli(fake, "claim", "7", "--harness", "claude", "--session", "a", state=self.state)
+        run_cli(fake, "claim", "7", "--harness", "codex", "--session", "b", "--force",
+                model="gpt-6.2-sol", state=self.state)
+        self.assertEqual(sorted(fake.labels), ["agent:Melikşah", "claim:codex/b", "in progress"])
+        self.assertEqual([e["name"] for e in agent_names.read_state(self.state)], ["Melikşah"])
+
+    def test_state_directory_ignores_itself(self):
+        state = self.state.parent / agent_names.STATE_RELATIVE
+        agent_names.reserve(state, "claude", "a", "opus")
+        self.assertEqual((state.parent / ".gitignore").read_text(), "*\n")
+
+    def test_long_session_title_is_truncated(self):
+        title = agent_names.session_title("Alparslan", 1, "x" * 200)
+        self.assertEqual(len(title), agent_names.TITLE_MAX)
 
 
 if __name__ == "__main__":
