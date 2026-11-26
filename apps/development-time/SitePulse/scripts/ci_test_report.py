@@ -544,7 +544,11 @@ def build(shards: Path, out: Path, task: str | None, history: Path,
     inventory_evidence_cases = _with_suite_provenance(inventory.get("cases"), inventory.get("suites"))
     evidence = scenario_evidence.build_evidence(
         snapshot["scenarios"], _evidence_cases(evidence_cases, inventory_evidence_cases),
-        scenario_evidence.named_links(catalogue), meta["run_id"], commit_override or meta["commit"])
+        scenario_evidence.named_links(catalogue), meta["run_id"], commit_override or meta["commit"],
+        attempt or os.environ.get("GITHUB_RUN_ATTEMPT", "1"),
+        (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+         f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{run_id or meta['run_id']}"
+         if os.environ.get("GITHUB_REPOSITORY") else ""))
     snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history(),
                                 inventory=inventory, evidence=evidence)
     feature_page = (out / "feature-report.html").read_text(encoding="utf-8")

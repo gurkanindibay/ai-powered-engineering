@@ -358,7 +358,10 @@ class CiTestReportTest(unittest.TestCase):
                     encoding="utf-8")
             out = tmp / "out"
             evidence = tmp / "actions-evidence"
-            summary = ctr.build(tmp / "shards", out, "demo task", history, evidence, "45054743421", "2")
+            with mock.patch.dict("os.environ", {"GITHUB_REPOSITORY": "owner/repo",
+                                                  "GITHUB_SERVER_URL": "https://github.com",
+                                                  "GITHUB_RUN_ATTEMPT": "2"}):
+                summary = ctr.build(tmp / "shards", out, "demo task", history, evidence, "45054743421", "2")
             self.assertEqual((summary["shards"], summary["executions"], summary["status"]), (2, 2, "FAIL"))
             self.assertEqual((summary["junit"]["tests"], summary["junit"]["passed"], summary["junit"]["failures"]),
                              (2, 1, 1))
@@ -376,6 +379,11 @@ class CiTestReportTest(unittest.TestCase):
             self.assertIn("SC-06-06-02", report)
             self.assertIn("Scenario evidence across CI lanes", report)
             self.assertIn("unresolved", json.loads((out / "scenario-evidence.json").read_text())["evidence_counts"])
+            evidence_report = json.loads((out / "scenario-evidence.json").read_text(encoding="utf-8"))
+            self.assertEqual((evidence_report["attempt"], evidence_report["workflow_run"]),
+                             ("2", "https://github.com/owner/repo/actions/runs/45054743421"))
+            self.assertEqual((status["attempt"], status["workflow_run"]),
+                             ("2", "https://github.com/owner/repo/actions/runs/45054743421"))
             self.assertIn("CI scenario evidence", (out / "feature-report.html").read_text(encoding="utf-8"))
             self.assertEqual(list((history / "runs").iterdir()), [])
             # The Actions consumer downloads this separate artifact and resolves the same

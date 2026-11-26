@@ -15,6 +15,28 @@ spec.loader.exec_module(pages)
 
 
 class PagesSiteTests(unittest.TestCase):
+    def test_public_snapshot_keeps_named_case_provenance_and_historical_status(self):
+        commit = "a" * 40
+        run_id = "20261126T103000Z-abcdef0"
+        workflow_run = "https://github.com/owner/repo/actions/runs/12345"
+        summary = pages.safe_summary({}, run_id, "2", commit=commit)
+        raw = {
+            "generated_at": "2026-11-26T10:30:00Z", "run_id": run_id, "commit": commit,
+            "attempt": "2", "workflow_run": workflow_run,
+            "scenarios": {"SC-01-01-01": {"state": "no_result", "name": "Named test",
+                "epic": "EPIC-01", "story": "STORY-01-01", "evidence_cases": [{
+                    "test_name": "test_example", "status": "historical", "test_status": "passing",
+                    "workflow_run": workflow_run, "attempt": "1", "tested_commit": "b" * 40,
+                    "failure": "must not be copied"}]}}
+        }
+        public = pages._safe_snapshot(raw, summary)
+
+        self.assertEqual((public["attempt"], public["workflow_run"]), ("2", workflow_run))
+        case = public["scenarios"]["SC-01-01-01"]["evidence_cases"][0]
+        self.assertEqual((case["test_name"], case["status"], case["tested_commit"]),
+                         ("test_example", "historical", "b" * 40))
+        self.assertNotIn("failure", case)
+
     def test_build_keeps_git_pointer_of_gh_pages_worktree(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
