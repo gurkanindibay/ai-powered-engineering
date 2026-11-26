@@ -278,6 +278,7 @@ mod tests {
         // Kasım 2026 is accrued afterwards. The day before had no responsible party.
         let spans = [OccupancySpan {
             party: ResponsibleParty::Owner,
+            person_id: None,
             starts_on: date("2026-11-02"),
             ends_before: None,
         }];
@@ -294,6 +295,7 @@ mod tests {
             shares,
             vec![ProratedShare {
                 party: ResponsibleParty::Owner,
+                person_id: None,
                 amount: money("1450.00")
             }]
         );
@@ -307,11 +309,13 @@ mod tests {
         let day = date("2026-11-02");
         let owner = OccupancySpan {
             party: ResponsibleParty::Owner,
+            person_id: None,
             starts_on: day,
             ends_before: None,
         };
         let tenant = OccupancySpan {
             party: ResponsibleParty::Tenant,
+            person_id: None,
             starts_on: day,
             ends_before: None,
         };
@@ -340,11 +344,13 @@ mod tests {
         let spans = [
             OccupancySpan {
                 party: ResponsibleParty::Owner,
+                person_id: None,
                 starts_on: date("2026-10-01"),
                 ends_before: Some(date("2026-10-11")),
             },
             OccupancySpan {
                 party: ResponsibleParty::Tenant,
+                person_id: None,
                 starts_on: date("2026-10-11"),
                 ends_before: None,
             },
@@ -363,10 +369,12 @@ mod tests {
             vec![
                 ProratedShare {
                     party: ResponsibleParty::Owner,
+                    person_id: None,
                     amount: money("483.87")
                 },
                 ProratedShare {
                     party: ResponsibleParty::Tenant,
+                    person_id: None,
                     amount: money("1016.13")
                 },
             ]
