@@ -848,8 +848,8 @@ def test_multi_site_journey_accruals_and_designated_payments(request, api, actor
             else:
                 return "Unpaid"
 
-        # SC-13-13-02: four periods were accrued, mixed receipts were posted, and the final
-        # matrix distinguishes paid, partial and unpaid for all five detailed units.
+        # SC-13-13-02: four periods were accrued, and April payments designated to April settle
+        # only that period, so the final matrix stays Paid -> Unpaid -> Unpaid -> Paid here.
         periods = ("Ocak 2027", "Şubat 2027", "Mart 2027", "Nisan 2027")
         assert [get_period_status(j.unit_a("A-03"), p) for p in periods] == ["Paid", "Unpaid", "Unpaid", "Paid"]
         assert [get_period_status(j.unit_b("B2-01"), p) for p in periods] == ["Paid", "Unpaid", "Unpaid", "Paid"]
@@ -1534,6 +1534,8 @@ def test_multi_site_journey_accruals_and_mixed_payments(request, api, actors, st
             else:
                 return "Unpaid"
 
+        # SC-13-13-02: four periods were accrued with mixed receipts, and the final matrix
+        # distinguishes paid, partial and unpaid for all five detailed units.
         periods = ("Ocak 2027", "Şubat 2027", "Mart 2027", "Nisan 2027")
 
         assert [get_period_status(j.unit_a("A-01"), p) for p in periods] == ["Paid", "Partial", "Paid", "Partial"]
