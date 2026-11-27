@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 import re
 from typing import Any
@@ -73,6 +73,23 @@ def get_provider_health_status(target: dict, health: dict | None) -> tuple[str, 
     if not isinstance(info, dict):
         return ("HEALTHY", None)
     return (str(info.get("status", "HEALTHY")).upper(), info.get("reset_at"))
+
+
+def earliest_iso_timestamp(timestamps: list[str]) -> str | None:
+    """Return the earliest ISO-8601 timestamp string, parsing offsets properly."""
+    if not timestamps:
+        return None
+    def _parse(ts: str) -> tuple[int, datetime | str]:
+        try:
+            dt = datetime.fromisoformat(ts.strip().replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return (0, dt)
+        except Exception:
+            return (1, ts)
+    return min(timestamps, key=_parse)
 
 
 def money(value: Any) -> Decimal:
@@ -174,6 +191,12 @@ def validate_capabilities(data: dict) -> list[dict]:
 
 
 def route(capabilities: dict, role: str, tier: str, preference: dict | None = None, *, health: dict | None = None) -> dict:
+    """Select the lowest-cost qualified target matching role, tier, and Track B provider health.
+
+    Priority-1 subscription pools (even if THROTTLED) are always exhausted before
+    spilling over to Priority-2 paid/overflow pools (even if HEALTHY). Within the
+    active priority tier, HEALTHY targets strictly beat THROTTLED ones.
+    """
     if role not in ROLES or tier not in TIERS:
         raise HarnessError("Unknown routing role or tier")
     preference = preference or {}
@@ -202,7 +225,7 @@ def route(capabilities: dict, role: str, tier: str, preference: dict | None = No
             healthy_or_throttled.append((t, p_status))
 
     if not healthy_or_throttled:
-        resume_after = min(exhausted_resets) if exhausted_resets else None
+        resume_after = earliest_iso_timestamp(exhausted_resets)
         raise QuotaParkedError(
             f"PARKED_AWAITING_QUOTA: All qualified targets for {role}/{tier} are exhausted ({sorted(set(exhausted_providers))})",
             resume_after=resume_after,

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "_comment": "Unified provider and T3 child-agent routing registry. canonical_provider maps T3 providerInstanceId to Track B provider health keys. priority=1 is subscription pools (Claude, Codex, Gemini); priority=2 is budget-capped DeepSeek overflow via Copilot CLI.",
+  "_comment": "Unified provider and T3 child-agent routing registry. canonical_provider maps T3 providerInstanceId to Track B provider health keys. priority=1 is subscription pools (Claude, Codex, Gemini); priority=2 is budget-capped DeepSeek overflow via Copilot CLI. Prices are relative cost units for budget ordering, not billed currency; replace them and benchmark_id after a held-out pilot.",
   "targets": [
     {
       "provider": "claudeAgent",

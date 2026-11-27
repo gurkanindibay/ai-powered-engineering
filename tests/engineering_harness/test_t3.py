@@ -230,6 +230,15 @@ class T3EngineTests(unittest.TestCase):
         self.assertTrue(res_parked["handover_required"])
         self.assertEqual(res_parked["resume_after"], "2026-11-28T01:00:00+00:00")
 
+    def test_empty_catalog_without_exhaustion_blocks_run(self):
+        registry = json.loads(t3.DEFAULT_REGISTRY.read_text())
+        empty_caps = t3.capabilities_from_catalog(registry, {"providers": []}, health=None)
+        self.assertFalse(empty_caps["handover_required"])
+        self.assertEqual(empty_caps["targets"], [])
+        res = self.engine.t3_dispatch(self.run_id, empty_caps)
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertEqual(self.store.run(self.run_id)["status"], "BLOCKED")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -69,7 +69,7 @@ The workspace centers on **SitePulse**, a residential site platform built using 
      - **High** for architecture, cross-component changes, and bugs with several plausible causes.
    - High is the maximum reasoning effort for workspace tasks, including critical work. Do not select `xhigh`, `max`, or `ultra` because of their cost.
    - For Antigravity and DeepSeek, use the thinking controls available for the selected model. If the harness offers only a toggle, use the default for routine work and enable deeper thinking when the task calls for high effort.
-   - For durable T3 harness runs, [the T3 registry](config/engineering-harness/t3-registry.json) defines eligible models by role and tier, and maps tiers to effort settings capped at High. The registry currently covers Claude Haiku, Sonnet, and Opus and Codex GPT-6.1 Sol. GPT-6.2 Sol, Astra, Gemini, and DeepSeek are interactive choices when available.
+   - For durable harness runs, [the T3/provider registry](config/engineering-harness/t3-registry.json) defines eligible models by role and tier, maps `canonical_provider` keys to Track B health, assigns quota priorities (`1` for subscription pools, `2` for budget-capped DeepSeek overflow), and maps tiers to effort settings capped at High. The registry covers Claude (Haiku, Sonnet, Opus), Codex (GPT-6.1 Sol, GPT-6.2 Sol, GPT-6.2 Astra), Gemini (Flash, Pro), and Copilot CLI (DeepSeek overflow).
    - The `.claude/settings.json` hook (`scripts/token_guard.py`) denies known-wasteful calls and warns on oversized output; follow its suggestion rather than working around it.
 
 10. **Issue Selection & Concurrent Agent Work**:

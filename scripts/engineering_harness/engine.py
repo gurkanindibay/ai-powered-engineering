@@ -180,7 +180,7 @@ class Engine:
         run, tasks, task = state
         if task is None:
             return {"run_id": run_id, "status": self.verify(run_id)}
-        if capabilities.get("handover_required") or not capabilities.get("targets"):
+        if capabilities.get("handover_required"):
             return {
                 "run_id": run_id,
                 "status": "HANDOVER_REQUIRED",

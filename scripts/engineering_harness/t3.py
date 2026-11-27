@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 
 from .contracts import canonical, digest, role_artifacts
-from .routing import TIERS, HarnessError, canonical_provider, get_provider_health_status, validate_capabilities
+from .routing import TIERS, HarnessError, canonical_provider, earliest_iso_timestamp, get_provider_health_status, validate_capabilities
 
 DEFAULT_REGISTRY = Path(__file__).resolve().parents[2] / "config" / "engineering-harness" / "t3-registry.json"
 RESULT_BEGIN = "<<<HARNESS_RESULT"
@@ -88,12 +88,12 @@ def capabilities_from_catalog(registry: dict, catalog: dict, health: dict | None
         "schema_version": 1,
         "targets": live,
         "catalog_hash": digest(catalog),
-        "handover_required": len(live) == 0,
+        "handover_required": bool(exhausted_providers) and len(live) == 0,
     }
     if exhausted_providers:
         out["exhausted_providers"] = sorted(set(exhausted_providers))
     if exhausted_resets:
-        out["resume_after"] = min(exhausted_resets)
+        out["resume_after"] = earliest_iso_timestamp(exhausted_resets)
     return out
 
 
