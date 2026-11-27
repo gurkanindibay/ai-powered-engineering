@@ -200,6 +200,30 @@ class TenantIsolationLintTests(unittest.TestCase):
         })
         self.assertEqual(rules, ["platform-marker-unbound"])
 
+    def test_pool_query_marker_without_a_bind_is_reported(self):
+        # A marker on a direct pool query claims a platform scope: without the
+        # platform bind the query fails closed at runtime, so the lint must say so.
+        rules = _run(tenant_lint, {
+            "migrations/V1__init.sql": "CREATE TABLE units (\n    id BIGINT,\n    site_id BIGINT\n);\n",
+            "migrations/V2__rls.sql": "SELECT sp_enable_tenant_rls('units', 'site_id = sp_tenant_site()');\n",
+            "src/db/marked.rs": (
+                "async fn marked(pool: &Pool) {\n"
+                "    // tenant-guard: platform - identity flow\n"
+                "    let client = pool.get().await?;\n"
+                "    client.query(\"SELECT id FROM units\", &[]).await?;\n"
+                "}\n"
+            ),
+            "src/db/bound.rs": (
+                "async fn bound(pool: &Pool) {\n"
+                "    // tenant-guard: platform - identity flow\n"
+                "    let mut conn = pool.get().await?;\n"
+                "    let tx = begin_platform_read(&mut conn).await?;\n"
+                "    tx.query(\"SELECT id FROM units\", &[]).await?;\n"
+                "}\n"
+            ),
+        })
+        self.assertEqual(rules, ["platform-marker-unbound"])
+
     def test_pool_acquisition_through_state_is_flagged(self):
         rules = _run(tenant_lint, {
             "migrations/V1__init.sql": "CREATE TABLE units (\n    id BIGINT,\n    site_id BIGINT\n);\n",

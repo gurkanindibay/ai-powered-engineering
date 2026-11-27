@@ -370,21 +370,22 @@ pub async fn recreate_db_schema_and_seed(
 
 pub async fn wipe_all_db_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // tenant-guard: platform — full schema wipe.
-    let client = pool.get().await?;
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
     info!(
         "Dropping all database tables to purge all sites, units, and residents for fresh start..."
     );
-    client
-        .batch_execute(
-            r#"
+    tx.batch_execute(
+        r#"
             -- Dropping the schema (not a hand-maintained table list) keeps this in sync
             -- with the migrations automatically; init_db() recreates everything from them.
             DROP SCHEMA IF EXISTS public CASCADE;
             CREATE SCHEMA public;
             GRANT USAGE ON SCHEMA public TO PUBLIC;
             "#,
-        )
-        .await?;
+    )
+    .await?;
+    tx.commit().await?;
     init_db(pool).await?;
     info!("All database tables recreated cleanly with zero sites, zero units, zero homeowners, and zero residents.");
     Ok(())

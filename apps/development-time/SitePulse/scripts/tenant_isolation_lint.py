@@ -30,7 +30,19 @@ rule encodes a leak class that was found in the codebase and fixed:
   unbound-tenant-transaction  A transaction opened in `src/services/` is not
                               bound to its tenant with `tx_bind_tenant` (row-
                               level security, V21). Platform-wide transactions
-                              opt out with a `// tenant-guard: platform` comment.
+                              opt in with `tx_bind_platform` and document it with
+                              a `// tenant-guard: platform` comment; the comment
+                              without that bind is itself a finding.
+  platform-marker-unbound     A `// tenant-guard: platform` comment claims a
+                              platform path without the `tx_bind_platform` or
+                              `begin_platform_read`/`begin_platform_tx` call that
+                              makes it one, so the query still fails closed at
+                              runtime. Bind the platform scope or drop the marker.
+  unbound-pool-query          A pooled connection queries a tenant table anywhere in
+                              `src/` without `begin_tenant_read`/`begin_tenant_tx`
+                              or an explicitly bound platform read: unbound reads
+                              return no rows and writes are rejected by row-level
+                              security.
   rls-coverage                A table with a tenant key column (`site_id`,
                               `unit_id`, `payment_entry_id`, `project_id`,
                               `budget_id`, or a parent key that resolves the
@@ -358,6 +370,14 @@ def lint_pool_queries(backend: Path, findings: list[Finding]) -> None:
             fn_start = max((s for s in fn_starts if s <= pos), default=0)
             fn_end = next((s for s in fn_starts if s > pos), len(code))
             fn_slice = code[fn_start:fn_end]
+            if PLATFORM_MARKER in fn_slice and not PLATFORM_BIND_RE.search(fn_slice):
+                # The comment claims a platform path, so the bind it justifies must be
+                # in the same function: an unbound one fails closed at runtime instead.
+                findings.append(Finding(
+                    "platform-marker-unbound", rel, _line_of(code, pos),
+                    f"`// {PLATFORM_MARKER}` without `begin_platform_read`/`begin_platform_tx`: "
+                    "either bind the platform query or drop the marker"))
+                continue
             if PLATFORM_MARKER in fn_slice:
                 continue
             after_get = code[pos:fn_end]

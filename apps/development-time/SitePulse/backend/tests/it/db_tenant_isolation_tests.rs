@@ -18,6 +18,7 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
 use deadpool_postgres::Pool;
+use sitepulse_backend::models::UnitInviteLinkResponse;
 use sitepulse_backend::{app::build_router, auth, db, state::AppState};
 use tower::ServiceExt;
 
@@ -1578,5 +1579,65 @@ async fn readiness_reports_tenant_rls_policy_and_runtime_role_safety() {
             StatusCode::SERVICE_UNAVAILABLE
         }
     );
+    t.drop_db().await;
+}
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn invitations_record_their_site_and_stay_in_their_tenant() {
+    let t = TestDb::create("invite_site").await;
+    let begonya = t.site_id("begonya-sitesi").await;
+    let kardelen = t.site_id("kardelen-rezidans").await;
+    let unit = t.unit_of(begonya).await;
+    let invite = UnitInviteLinkResponse {
+        invite_url: "https://app.sitepulse.test/invite/tenant-scoped".to_string(),
+        token: format!("invite-{}", uuid::Uuid::new_v4().simple()),
+        unit_id: unit.to_string(),
+        building: "A Blok".to_string(),
+        unit_number: "1".to_string(),
+        relationship: "TENANT".to_string(),
+        // A fixed instant: the invitation expiry never depends on the test clock.
+        expires_at: chrono::DateTime::<chrono::Utc>::from_timestamp(1_800_000_000, 0)
+            .expect("valid instant"),
+        security_notice: "Single use".to_string(),
+    };
+    db::save_invitation_token(&t.pool, &invite)
+        .await
+        .expect("store the invitation");
+
+    // The row carries its site, so the site policy and the site purge can see it.
+    let site_of_token = t
+        .scalar_text(&format!(
+            "SELECT COALESCE(site_id::text, '') FROM invitation_tokens WHERE token = '{}'",
+            invite.token
+        ))
+        .await;
+    assert_eq!(site_of_token, begonya.to_string());
+
+    // A tenant-bound read sees the invitation of its own site and nothing foreign.
+    let mut client = t.pool.get().await.expect("connection");
+    let tx = db::begin_tenant_read(&mut client, begonya).await.unwrap();
+    let own: i64 = tx
+        .query_one(
+            "SELECT count(*) FROM invitation_tokens WHERE token = $1",
+            &[&invite.token],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(own, 1, "the inviting site must see its own invitation");
+    tx.rollback().await.unwrap();
+    let tx = db::begin_tenant_read(&mut client, kardelen).await.unwrap();
+    let foreign: i64 = tx
+        .query_one(
+            "SELECT count(*) FROM invitation_tokens WHERE token = $1",
+            &[&invite.token],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(foreign, 0, "another tenant must not see the invitation");
+    tx.rollback().await.unwrap();
+    drop(client);
     t.drop_db().await;
 }
