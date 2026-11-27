@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Serenity Reports</title>
+
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon" sizes="57x57" href="apple-icon-57x57.png">
+<link rel="apple-touch-icon" sizes="60x60" href="apple-icon-60x60.png">
+<link rel="apple-touch-icon" sizes="72x72" href="apple-icon-72x72.png">
+<link rel="apple-touch-icon" sizes="76x76" href="apple-icon-76x76.png">
+<link rel="apple-touch-icon" sizes="114x114" href="apple-icon-114x114.png">
+<link rel="apple-touch-icon" sizes="120x120" href="apple-icon-120x120.png">
+<link rel="apple-touch-icon" sizes="144x144" href="apple-icon-144x144.png">
+<link rel="apple-touch-icon" sizes="152x152" href="apple-icon-152x152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-icon-180x180.png">
+<link rel="icon" type="image/png" sizes="192x192"  href="android-icon-192x192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<meta name="msapplication-TileColor" content="#ffffff">
+<meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="stylesheet" href="bootstrap-icons/bootstrap-icons.css">
+<!-- JQuery -->
+<script type="text/javascript" src="scripts/jquery-3.7.1.min.js"></script><!-- Required Stylesheets -->
+<link href="bootstrap-treeview/dist/bootstrap-treeview.min.css" rel="stylesheet">
+
+<!-- Required Javascript -->
+<script src="bootstrap-treeview/dist/bootstrap-treeview.min.js"></script><!-- DataTables -->
+<link type="text/css" href="datatables/2.3.1/datatables.min.css" rel="stylesheet" />
+<script type="text/javascript" src="datatables/2.3.1/datatables.min.js"></script>
+<script type="text/javascript" src="datatables/2.3.1/time-elapsed-dhms.js"></script>
+
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<script src="bootstrap/js/bootstrap.min.js"></script>
+
+
+<script>
+    jQuery.fn.dataTable.ext.type.order['time-elapsed-dhms-pre'] = function(data) {
+
+        var matches = data.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/i);
+        var multipliers = {
+            ms: 1,
+            s: 1000,
+            m: 60000,
+            h: 3600000,
+            d: 86400000
+        };
+
+        if (matches) {
+            var multiplier = multipliers[matches[2].toLowerCase()];
+            return parseFloat(matches[1]) * multiplier;
+        } else {
+            return -1;
+        };
+    };
+</script>
+<link rel="stylesheet" href="css/core.css"/>
+<link rel="stylesheet" href="css/link.css"/>
+<link type="text/css" media="screen" href="css/screen.css" rel="Stylesheet"/>
+<!--CHART.JS-->
+<script src="chartjs/chart.js"></script>
+<script src="chartjs/chartjs-plugin-datalabels@2.0.0.min.js"></script>
+<script src="chartjs/patternomaly.min.js"></script>
+<script>
+    // Register the plugin to all charts:
+    Chart.register(ChartDataLabels);
+</script>
+<!-- JQuery-UI -->
+<link type="text/css" href="jquery-ui-1.14.1/jquery-ui.css" rel="Stylesheet" />
+<script type="text/javascript" src="jquery-ui-1.14.1/jquery-ui.js"></script><!-- DataTables -->
+<link type="text/css" href="datatables/2.3.1/datatables.min.css" rel="stylesheet" />
+<script type="text/javascript" src="datatables/2.3.1/datatables.min.js"></script>
+<script type="text/javascript" src="datatables/2.3.1/time-elapsed-dhms.js"></script>
+
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<script src="bootstrap/js/bootstrap.min.js"></script>
+
+
+<script>
+    jQuery.fn.dataTable.ext.type.order['time-elapsed-dhms-pre'] = function(data) {
+
+        var matches = data.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/i);
+        var multipliers = {
+            ms: 1,
+            s: 1000,
+            m: 60000,
+            h: 3600000,
+            d: 86400000
+        };
+
+        if (matches) {
+            var multiplier = multipliers[matches[2].toLowerCase()];
+            return parseFloat(matches[1]) * multiplier;
+        } else {
+            return -1;
+        };
+    };
+</script>
+
+
+
+    <script class="code" type="text/javascript">$(document).ready(function () {
+
+
+            $.fn.dataTable.ext.type.order['test-result-pre'] = function(data) {
+                // Extract the text from the hidden span (SUCCESS, FAILURE, etc.)
+                var match = data.match(/<span[^>]*style="display:none"[^>]*>(.*?)<\/span>/);
+                var result = match ? match[1].trim() : '';
+
+                // Define sort priority (failures first when ascending)
+                var order = {
+                    'FAILURE': 1,
+                    'ERROR': 2,
+                    'BROKEN': 3,
+                    'COMPROMISED': 4,
+                    'PENDING': 5,
+                    'IGNORED': 6,
+                    'SKIPPED': 7,
+                    'ABORTED': 8,
+                    'SUCCESS': 9
+                };
+
+                return order[result] || 99;
+            };
+
+            // Then modify your DataTable initialization
+            $("#scenario-results").DataTable({
+                "order": [[0, "asc"], [1, "asc"], [2, "asc"]], // Keep your default sort order
+                "language": {
+                    searchPlaceholder: "Filter",
+                    search: ""
+                },
+                columnDefs: [
+                    {
+                        targets: 3, // Started column (Feature=0, Scenario=1, Steps=2, Started=3)
+                        visible: false
+                    },
+                    {
+                        type: 'time-elapsed-dhms',
+                        targets: 4 // Total Duration column
+                    },
+                    {
+                        type: 'test-result',
+                        targets: 5 // Result column
+                    }
+                ]
+            })
+            $("#manual-scenario-results").DataTable({
+                "order": [[0, "asc",], [1, "asc",]],
+                "language": {
+                    searchPlaceholder: "Filter",
+                    search: ""
+                },
+            })
+
+        // Results table
+        $('#test-results-table').DataTable({
+            "order": [[0, "asc",], [3, "asc",]],
+            "pageLength": 100,
+            "lengthMenu": [[25, 50, 100, 200, -1], [25, 50, 100, 200, "All"]]
+        });
+
+    })
+    ;
+    </script>
+</head>
+
+<body class="results-page">
+<div id="topheader">
+    <div id="topbanner">
+        <div id="logo"><a href="index.html"><img src="images/serenity-logo.png" border="0"/></a></div>
+        <div id="projectname-banner" style="float:right">
+            <span class="projectname">
+                <span class="projecttitle">Serenity BDD Report</span>
+                <span class="projectsubtitle"></span>
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="middlecontent">
+
+
+    <div id="contenttop">
+        <div class="middlebg">
+        <span class="breadcrumbs"><a href="index.html">Home</a>
+                > Feature 
+                > <span
+                    class="truncate-60">EPIC-13 Site Admin Journeys/STORY-13-02 Accrual Histories F4, F5 And F7 > Duration Under 1 Second</span>
+        </span>
+        </div>
+        <div class="rightbg"></div>
+    </div>
+
+    <div class="clr"></div>
+    <!--/* starts second table*/-->
+<div>
+    <ul class="nav nav-tabs" role="tablist">
+        <li class="active">
+            <a href="#"><i class="bi bi-journal-check"></i> Overall Test Results</a>
+        </li>
+        <li >
+            <a href="capabilities.html"><i class="bi bi-journal-text"></i> Requirements</a>
+        </li>
+    </ul>
+    <span class="date-and-time"><a href="build-info.html"><i class="bi bi-info-circle"></i></a> Report generated 27-11-2026 19:45:05</span>
+    <br style="clear:left"/>
+</div>
+    <div class="clr"></div>
+    <div id="beforetable"></div>
+    <div id="results-dashboard">
+        <div class="middlb">
+            <div class="table">
+
+                <h2><i class='bi bi-tags'></i> Feature: EPIC-13 Site Admin Journeys/STORY-13-02 Accrual Histories F4, F5 And F7 > Duration Under 1 Second</h2>
+                <table class='overview'>
+                    <tr>
+                        <td width="375px" valign="top">
+                            <div class="test-count-summary">
+                                <div>
+
+                                    12 tests
+
+                                     |
+                                        <a href="545011577fdb82ca39d6b79010089ce86ce54f5e8ff4ca2d24e1760fe38942b3.csv" title="Download CSV"> <i class="bi bi-cloud-arrow-down" title="Download CSV"></i></a>
+
+                                    <p class="report-info"><i class="bi bi-info-circle"></i> Note that results include
+                                        data-driven scenarios containing tests ,
+                                        which may also contain results other than tests .</p>
+
+
+
+                                </div>
+                            </div>
+
+                            <div>
+                                <ul class="nav nav-tabs">
+                                    <li class="active">
+                                        <a data-toggle="tab" href="#summary"><i class="bi bi-house-door"></i> Summary</a>
+                                    </li>
+                                    <li>
+                                        <a data-toggle="tab" href="#tests"><i class="bi bi-speedometer"></i> Test
+                                            Results</a>
+                                    </li>
+                                </ul>
+
+                                <div class="card border">
+                                    <div class="tab-content" id="pills-tabContent">
+                                        <div id="summary" class="tab-pane fade in active">
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                    <div class="col-sm-4">
+    <div>
+        <h3><i class="bi bi-speedometer2"></i> Key Statistics</h3>
+        <div>
+            <table class="table table-striped table-hover">
+                <tbody>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-card-checklist"></i> Number of Scenarios
+                    </td>
+                    <td>12</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-caret-right"></i> Total Number of Test Cases
+                    </td>
+                    <td>12</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-flag-fill"></i> Tests Started
+                    </td>
+                    <td>Nov 27, 2026 19:44:28</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stop-circle"></i> Tests
+                        Finished
+                    </td>
+                    <td></td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch"></i> Total
+                        Duration
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-trophy"></i> Fastest Test
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-skip-start"></i> Slowest
+                        Test
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch"></i> Average
+                        Execution Time
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch-fill"></i> Cumulative Test Time
+                        <br/><small class="text-muted">(sum of all individual test durations)</small>
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+                                                    </div>
+                                                    <div class="col-sm-4">
+                                                        <h4><i class="bi bi-check-square"></i> Test Outcomes</h4>
+                                                        <!-- Severity bar chart -->
+                                                        <div class="chart-container" style="position: relative; width:30vw">
+                                                            <canvas id="severityChart" width="300" height="300"></canvas>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-sm-4">
+                                                        <h4><i class="bi bi-graph-up"></i> Test Performance</h4>
+
+                                                        <!-- Duration bar chart -->
+                                                        <div class="chart-container" style="position: relative; width:30vw">
+                                                            <canvas id="durationChart" width="300" height="300"></canvas>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                </div>
+                                                    <div class="row">
+                                                        <div class="col-sm-12">
+                                                            <h3>Tags</h3>
+
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Capability</h5>
+                                                                        <div>
+                                                                                <a href="d9767899877b500501841c237bbd6d29f8a3ab1d0101b9f7d5ad217b348646c3.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-13 Site Admin Journeys&nbsp;&nbsp;&nbsp;12
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Evidence</h5>
+                                                                        <div>
+                                                                                <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Passing&nbsp;&nbsp;&nbsp;12
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Feature</h5>
+                                                                        <div>
+                                                                                <a href="74f6da91669586933256520a13262582b70256619c617fa570f850211cd8b766.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-13 Site Admin Journeys/STORY-13-02 Accrual Histories F4, F5 And F7&nbsp;&nbsp;&nbsp;12
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Layer</h5>
+                                                                        <div>
+                                                                                <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Gui&nbsp;&nbsp;&nbsp;3
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Backend&nbsp;&nbsp;&nbsp;9
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                        </div>
+                                                    </div>
+                                            </div>
+
+                                            <div class="container-fluid">
+
+                                            </div>
+                                            <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <h3>Tags</h3>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Capability</h5>
+                            <div>
+                                    <a href="d9767899877b500501841c237bbd6d29f8a3ab1d0101b9f7d5ad217b348646c3.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-13 Site Admin Journeys&nbsp;&nbsp;&nbsp;12
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Evidence</h5>
+                            <div>
+                                    <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Passing&nbsp;&nbsp;&nbsp;12
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Feature</h5>
+                            <div>
+                                    <a href="74f6da91669586933256520a13262582b70256619c617fa570f850211cd8b766.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-13 Site Admin Journeys/STORY-13-02 Accrual Histories F4, F5 And F7&nbsp;&nbsp;&nbsp;12
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Layer</h5>
+                            <div>
+                                    <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Gui&nbsp;&nbsp;&nbsp;3
+                                    </span>
+                                    </a>
+                                    <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Backend&nbsp;&nbsp;&nbsp;9
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+                                            </div>
+                                        </div>
+                                        <div id="tests" class="tab-pane fade in">
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                    <div class="col-sm-12">
+                                                        <h3><i class="bi bi-gear"></i> Automated Tests</h3>
+
+                                            <table class="scenario-result-table table" id="scenario-results">
+                                                <thead>
+                                                <tr>
+                                                    <th>Feature</th>
+                                                    <th class="test-name-column">Scenario</th>
+                                                    <th>Steps</th>
+                                                    <th>Started</th>
+                                                    <th>Total Duration</th>
+                                                    <th>Result</th>
+                                                </tr>
+                                                </thead>
+                                                <tbody>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="1abce675501d200e1c1352cd823e4bd94d494310d74a59e5da1afd8cc4398f03.html">SC-13-02-02 The resident sees exactly what the admin sees for the same unit</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="57af2347957429e0b374e1f52cc02ff76857edc9f4caf36c89ef8fbf75970b1d.html">SC-13-02-01 Residents with a single accrual period show one debt each on every screen</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="b402edb9210f61e0c2a6ed13fe02fa519a8bc5d0d8111e72b7931b78a960f529.html">SC-13-02-12 SQL setup restarts preserve the scenario clock</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="fd297844ce58dd98359653fe05875632f98120b33c5065f2f581d72db9c3a787.html">SC-13-02-08 An advance balance has already offset later periods</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="892eb76a1ad4034e51429907a84bf7ff59c793198fa9d8aae4c985a56dc26a3c.html">SC-13-02-04 Multiple periods with mixed debts add up per unit and per site</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="9bbcf727e954860b04387b7e086feee6bf7140b342fecadee4774874035e698d.html">SC-13-02-10 A closed period accepts no new accrual or edit but keeps its open debts</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="ab87464ccb799e5ab2911c478cab6c463b504e717f63bb92d17a88acff6b1ac0.html">SC-13-02-06 A single debt in the current month is the only one in the youngest bucket</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="866d5b25c8a670e2ee7bb294ea1241532d0f2c0b691b0bb0f0236981aaf0b752.html">SC-13-02-05 A single debt in a previous month stays attached to that month</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="8e23176f16e6c3f0faa9c47421a815c4986f69aebd09d3272a63f9d63d2a23e2.html">SC-13-02-03 The late fee follows the clock day by day</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="bff9ad167ef5e91d3a8ae3ba39c729389ea5b150b4cb20b025760f33fde756c3.html">SC-13-02-11 A payment toward a closed period is still allocated to its oldest debt</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="3c1b7e087ba7f67273cbfe2acb3bac76ae23fbf369309e2d41b134f398ba3a11.html">SC-13-02-07 Multiple debts across periods are listed oldest first with a fee each</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-02 Accrual histories F4, F5 and F7</a>
+                                                            </td>
+                                                            <td><a href="75cde56c9d06fb7bb324b17ecb6b0e3c262bef0cf6d792e659bfe0a579979f53.html">SC-13-02-09 A fourth accrual adds exactly one liability per responsible debtor</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:44:28</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                </tbody>
+                                            </table>
+
+                                                    </div>
+                                                </div>
+
+                                                <div class="row">
+                                                    <div class="col-sm-12">
+                                                        <h3><i class="bi bi-hand-index-thumb"></i> Manual Tests</h3>
+
+                                                No manual tests were recorded
+
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <h3>Tags</h3>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Capability</h5>
+                            <div>
+                                    <a href="d9767899877b500501841c237bbd6d29f8a3ab1d0101b9f7d5ad217b348646c3.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-13 Site Admin Journeys&nbsp;&nbsp;&nbsp;12
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Evidence</h5>
+                            <div>
+                                    <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Passing&nbsp;&nbsp;&nbsp;12
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Feature</h5>
+                            <div>
+                                    <a href="74f6da91669586933256520a13262582b70256619c617fa570f850211cd8b766.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-13 Site Admin Journeys/STORY-13-02 Accrual Histories F4, F5 And F7&nbsp;&nbsp;&nbsp;12
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Layer</h5>
+                            <div>
+                                    <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Gui&nbsp;&nbsp;&nbsp;3
+                                    </span>
+                                    </a>
+                                    <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Backend&nbsp;&nbsp;&nbsp;9
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="beforefooter"></div>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-sm-12">
+            <span class="version">Serenity BDD version 5.3.11</span>
+        </div>
+    </div>
+</div>
+
+<!-- Chart data -->
+    <!-- PIE CHART -->
+    <script>
+
+        // The results pie chart
+        const outcomeChartCtx = document.getElementById('resultChart');
+
+        // Options define for display value on top of bars
+        const outcomeDetailsReports = [
+            { title: 'Passing Test Cases', link: "d6910192a2a4fb83c18708e59003f2865460414dfd0ce8cea0ae99426469cd87.html" },
+            { title: 'Pending Test Cases', link: "b75c7acc814320cd34e31cdc3301e0bff32039bdd5441e25dbbf15ebeec07290.html" },
+            { title: 'Ignored Test Cases', link: "263a056379231a506655e2c33b44721f435540592018308af9ec7d6f2cb67278.html" },
+            { title: 'Skipped Test Cases', link: "90f49561f8b257a9a0a08b055df1e1d7e3a01a6f5c99809cedace8e14317ae00.html" },
+            { title: 'Aborted Test Cases',  link: "6b867dfe8ae9ba54c5e79d3a624a4eb3dcba7492ef80563dba620f39d0c2f9be.html"},
+            { title: 'Failed Test Cases', link: "cefca6c6e4c118cebb1fa9c2237c18c704ef7d05d542fd50cf2aaf99482cbbc1.html"  },
+            { title: 'Broken Test Cases', link: "21bc61a845d4891baadcf595a4b7090891d6c91100ca7d6b73c6185a0da242fe.html"    },
+            { title: 'Compromised Test Cases',  link: "dddbee2db8eb8e41a597f692d4f73f656d4546795420cfdd0df5be0362ec34ec.html" },
+        ]
+        const outcomeData = {
+            labels: ['Passing Test Cases', 'Pending Test Cases', 'Ignored Test Cases', 'Skipped Test Cases', 'Aborted Test Cases', 'Failed Test Cases', 'Broken Test Cases', 'Compromised Test Cases','Undefined Test Cases'],
+            datasets: [{
+                label: 'Test Results',
+                fill: false,
+                data: [{meta: 'Passing tests', value: 12}, {meta: 'Pending tests', value: 0}, {meta: 'Ignored tests', value: 0}, {meta: 'Skipped tests', value: 0}, {meta: 'Aborted tests', value: 0}, {meta: 'Failing tests', value: 0}, {meta: 'Broken tests', value: 0}, {meta: 'Compromised tests', value: 0}],
+                backgroundColor: ['rgba(153,204,51,0.5)','rgba(165, 199, 238, 0.5)','rgba(168, 168, 168, 0.5)','rgba(238, 224, 152, 0.75)','rgba(255, 153, 102, 0.5)','rgba(255, 22, 49, 0.5)','rgba(255, 97, 8, 0.5)','rgba(255, 104, 255, 0.5)','rgba(83, 50, 168, 0.5)'],
+                borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                borderWidth: 1,
+            }]
+        }
+        const outcomeOptions = {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom'
+                },
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        let sum = 0;
+                        let dataArr = ctx.chart.data.datasets[0].data;
+                        dataArr.map(data => {
+                            sum += data;
+                        });
+                        let percentage = (value * 100 / sum).toFixed(0) + "%";
+                        if (percentage === '0%' || percentage === 'NaN%') {
+                            return '';
+                        } else {
+                            return percentage;
+                        }
+                    },
+                },
+            }
+        }
+
+        const outcomeChart = new Chart(outcomeChartCtx, {
+            type: 'doughnut',
+            data: outcomeData,
+            options: outcomeOptions,
+            plugins: [
+                {
+                    id: 'text',
+                    beforeDraw: function (chart, a, b) {
+                        var width = chart.width,
+                            height = chart.height,
+                            ctx = chart.ctx;
+
+                        ctx.restore();
+                        var fontSize = (height / 200).toFixed(1);
+                        ctx.font = fontSize + "em sans-serif";
+                        ctx.textBaseline = "middle";
+
+                        var text = "100%"
+                        textX = 10 + Math.round((width - ctx.measureText(text).width) / 2);
+                        textY = (height / 2) - 40;
+
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+        });
+
+        function clickHandler(click) {
+            const points = outcomeChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(outcomeDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+        outcomeChartCtx.onclick = clickHandler;
+    </script>
+    <!-- END PIE CHART -->
+
+    <!-- SUMMARY BAR CHART -->
+    <script>
+
+        // The Severity bar chart
+        const severityChartCtx = document.getElementById('severityChart');
+
+        // Options define for display value on top of bars
+
+        const severityDetailsReports = [
+            { title: 'Passing Scenarios', link: "d6910192a2a4fb83c18708e59003f2865460414dfd0ce8cea0ae99426469cd87.html" },
+            { title: 'Pending Scenarios', link: "b75c7acc814320cd34e31cdc3301e0bff32039bdd5441e25dbbf15ebeec07290.html" },
+            { title: 'Ignored Scenarios', link: "263a056379231a506655e2c33b44721f435540592018308af9ec7d6f2cb67278.html" },
+            { title: 'Skipped Scenarios', link: "90f49561f8b257a9a0a08b055df1e1d7e3a01a6f5c99809cedace8e14317ae00.html" },
+            { title: 'Aborted Scenarios',  link: "6b867dfe8ae9ba54c5e79d3a624a4eb3dcba7492ef80563dba620f39d0c2f9be.html"},
+            { title: 'Failed Scenarios', link: "cefca6c6e4c118cebb1fa9c2237c18c704ef7d05d542fd50cf2aaf99482cbbc1.html"  },
+            { title: 'Broken Scenarios', link: "21bc61a845d4891baadcf595a4b7090891d6c91100ca7d6b73c6185a0da242fe.html"    },
+            { title: 'Compromised Scenarios',  link: "dddbee2db8eb8e41a597f692d4f73f656d4546795420cfdd0df5be0362ec34ec.html" },
+        ]
+        const severityData = {
+            labels: ['Passing', 'Pending', 'Ignored', 'Skipped', 'Aborted', 'Failed', 'Broken', 'Compromised'],
+            datasets: [
+                {
+                    label: 'Automated',
+                    data: [12,0,0,0,0,0,0,0],
+                    backgroundColor: ['rgba(153,204,51,0.5)','rgba(165, 199, 238, 0.5)','rgba(168, 168, 168, 0.5)','rgba(238, 224, 152, 0.75)','rgba(255, 153, 102, 0.5)','rgba(255, 22, 49, 0.5)','rgba(255, 97, 8, 0.5)','rgba(255, 104, 255, 0.5)','rgba(83, 50, 168, 0.5)'],
+                    borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                    borderWidth: 1
+                },
+                {
+                    label: 'Manual',
+                    data: [0,0,0,0,0,0,0,0],
+                    backgroundColor: ['rgba(153,204,51,0.25)','rgba(165, 199, 238, 0.25)','rgba(168, 168, 168, 0.25)','rgba(238, 224, 152, 0.375)','rgba(255, 153, 102, 0.25)','rgba(255, 22, 49, 0.25)','rgba(255, 97, 8, 0.25)','rgba(255, 104, 255, 0.25)','rgba(83, 50, 168, 0.25)'],
+                    borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                    borderWidth: 1
+                },
+
+            ]
+        }
+        const severityOptions = {
+            responsive: true,
+            skipNull: true,
+            scales: {
+                x: {
+                    stacked: true,
+                },
+                y: {
+                    stacked: true,
+                }
+            },
+            plugins: {
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        if (value === 0) {
+                            return '';
+                        } else {
+                            return value;
+                        }
+                    },
+                }
+            }
+        }
+        const severityChart = new Chart(severityChartCtx, {
+            type: 'bar',
+            data: severityData,
+            options: severityOptions
+        });
+
+        function clickHandler(click) {
+            const points = severityChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(severityDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+        severityChartCtx.onclick = clickHandler;
+    </script>
+    <!-- END SUMMARY CHART -->
+
+    <!-- DURATION CHART -->
+    <script>
+
+        // Options define for display value on top of bars
+        const durationDetailsReports = [
+                {title: "Under 1 second", link: "bc6b3bf1c7efd1ac42fcb299e44439568d25123effad2ff7829c1fcfbb9f4cec.html"},
+                {title: "1 to 10 seconds", link: "4465c705039c38d9c68035804be10e86b270b1063710e2674724102a34f181d1.html"},
+                {title: "10 to 30 seconds", link: "710c5e544c70023398311713b3b23335c2c16db0a6ddbacf5c1ede48168e6475.html"},
+                {title: "30 to 60 seconds", link: "451a7e238e0f8011131b1a76d1fd96a5a41600a19f2fc10d18698fb9d18f1ae3.html"},
+                {title: "1 to 2 minutes", link: "3d061b133e9b7accf61e0079fbb96c7cc3400c086ba13c5ea8d6e6abea4d0377.html"},
+                {title: "2 to 5 minutes", link: "cffcd00fa7e99d4a7916589c87963424b829bd7b098e4851d64394ea75e19251.html"},
+                {title: "5 to 10 minutes", link: "bf4bc3534dd79db293ef43468b2917b0fb369d771215b2bbda31edcc35b52879.html"},
+                {title: "10 minutes or over", link: "bb7143944354a3bf46443cc635da8eface02601103a29fab5fc225d95d1315b5.html"},
+        ]
+        // The Severity bar chart
+        const durationChartCtx = document.getElementById('durationChart');
+
+        // Options define for display value on top of bars
+
+        const durationData = {
+            labels: ['Under 1 second','1 to 10 seconds','10 to 30 seconds','30 to 60 seconds','1 to 2 minutes','2 to 5 minutes','5 to 10 minutes','10 minutes or over'],
+            datasets: [{
+                label: 'Number of tests per duration',
+                fill: false,
+                data: ['12','0','0','0','0','0','0','0'],
+                backgroundColor: 'rgba(83, 146, 255,0.5)',
+                borderColor: 'rgba(83, 146, 255, 1)',
+            }]
+        }
+        const durationOptions = {
+            responsive: true,
+            plugins: {
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        if (value > 0) {
+                            return value;
+                        } else {
+                            return '';
+                        }
+                    },
+                },
+                tooltip: {
+                    enabled: true,
+                    usePointStyle: true,
+                    callbacks: {
+                        label: (data) => {
+                            return data.parsed.y + ' tests'
+                        }
+                    },
+                },
+            },
+        }
+
+        const durationChart = new Chart(durationChartCtx, {
+            type: 'bar',
+            data: durationData,
+            options: durationOptions
+        });
+
+        function durationClickHandler(click) {
+            const points = durationChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(durationDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+
+        durationChartCtx.onclick = durationClickHandler;
+    </script>
+    <!-- END DURATION CHART -->
+
+
+</body>
+</html>

@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Serenity Reports</title>
+
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon" sizes="57x57" href="apple-icon-57x57.png">
+<link rel="apple-touch-icon" sizes="60x60" href="apple-icon-60x60.png">
+<link rel="apple-touch-icon" sizes="72x72" href="apple-icon-72x72.png">
+<link rel="apple-touch-icon" sizes="76x76" href="apple-icon-76x76.png">
+<link rel="apple-touch-icon" sizes="114x114" href="apple-icon-114x114.png">
+<link rel="apple-touch-icon" sizes="120x120" href="apple-icon-120x120.png">
+<link rel="apple-touch-icon" sizes="144x144" href="apple-icon-144x144.png">
+<link rel="apple-touch-icon" sizes="152x152" href="apple-icon-152x152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-icon-180x180.png">
+<link rel="icon" type="image/png" sizes="192x192"  href="android-icon-192x192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<meta name="msapplication-TileColor" content="#ffffff">
+<meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="stylesheet" href="bootstrap-icons/bootstrap-icons.css">
+<!-- JQuery -->
+<script type="text/javascript" src="scripts/jquery-3.7.1.min.js"></script><!-- Required Stylesheets -->
+<link href="bootstrap-treeview/dist/bootstrap-treeview.min.css" rel="stylesheet">
+
+<!-- Required Javascript -->
+<script src="bootstrap-treeview/dist/bootstrap-treeview.min.js"></script><!-- DataTables -->
+<link type="text/css" href="datatables/2.3.1/datatables.min.css" rel="stylesheet" />
+<script type="text/javascript" src="datatables/2.3.1/datatables.min.js"></script>
+<script type="text/javascript" src="datatables/2.3.1/time-elapsed-dhms.js"></script>
+
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<script src="bootstrap/js/bootstrap.min.js"></script>
+
+
+<script>
+    jQuery.fn.dataTable.ext.type.order['time-elapsed-dhms-pre'] = function(data) {
+
+        var matches = data.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/i);
+        var multipliers = {
+            ms: 1,
+            s: 1000,
+            m: 60000,
+            h: 3600000,
+            d: 86400000
+        };
+
+        if (matches) {
+            var multiplier = multipliers[matches[2].toLowerCase()];
+            return parseFloat(matches[1]) * multiplier;
+        } else {
+            return -1;
+        };
+    };
+</script>
+<link rel="stylesheet" href="css/core.css"/>
+<link rel="stylesheet" href="css/link.css"/>
+<link type="text/css" media="screen" href="css/screen.css" rel="Stylesheet"/>
+<!--CHART.JS-->
+<script src="chartjs/chart.js"></script>
+<script src="chartjs/chartjs-plugin-datalabels@2.0.0.min.js"></script>
+<script src="chartjs/patternomaly.min.js"></script>
+<script>
+    // Register the plugin to all charts:
+    Chart.register(ChartDataLabels);
+</script>
+<!-- JQuery-UI -->
+<link type="text/css" href="jquery-ui-1.14.1/jquery-ui.css" rel="Stylesheet" />
+<script type="text/javascript" src="jquery-ui-1.14.1/jquery-ui.js"></script><!-- DataTables -->
+<link type="text/css" href="datatables/2.3.1/datatables.min.css" rel="stylesheet" />
+<script type="text/javascript" src="datatables/2.3.1/datatables.min.js"></script>
+<script type="text/javascript" src="datatables/2.3.1/time-elapsed-dhms.js"></script>
+
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<script src="bootstrap/js/bootstrap.min.js"></script>
+
+
+<script>
+    jQuery.fn.dataTable.ext.type.order['time-elapsed-dhms-pre'] = function(data) {
+
+        var matches = data.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/i);
+        var multipliers = {
+            ms: 1,
+            s: 1000,
+            m: 60000,
+            h: 3600000,
+            d: 86400000
+        };
+
+        if (matches) {
+            var multiplier = multipliers[matches[2].toLowerCase()];
+            return parseFloat(matches[1]) * multiplier;
+        } else {
+            return -1;
+        };
+    };
+</script>
+
+
+
+    <script class="code" type="text/javascript">$(document).ready(function () {
+
+
+            $.fn.dataTable.ext.type.order['test-result-pre'] = function(data) {
+                // Extract the text from the hidden span (SUCCESS, FAILURE, etc.)
+                var match = data.match(/<span[^>]*style="display:none"[^>]*>(.*?)<\/span>/);
+                var result = match ? match[1].trim() : '';
+
+                // Define sort priority (failures first when ascending)
+                var order = {
+                    'FAILURE': 1,
+                    'ERROR': 2,
+                    'BROKEN': 3,
+                    'COMPROMISED': 4,
+                    'PENDING': 5,
+                    'IGNORED': 6,
+                    'SKIPPED': 7,
+                    'ABORTED': 8,
+                    'SUCCESS': 9
+                };
+
+                return order[result] || 99;
+            };
+
+            // Then modify your DataTable initialization
+            $("#scenario-results").DataTable({
+                "order": [[0, "asc"], [1, "asc"], [2, "asc"]], // Keep your default sort order
+                "language": {
+                    searchPlaceholder: "Filter",
+                    search: ""
+                },
+                columnDefs: [
+                    {
+                        targets: 3, // Started column (Feature=0, Scenario=1, Steps=2, Started=3)
+                        visible: false
+                    },
+                    {
+                        type: 'time-elapsed-dhms',
+                        targets: 4 // Total Duration column
+                    },
+                    {
+                        type: 'test-result',
+                        targets: 5 // Result column
+                    }
+                ]
+            })
+            $("#manual-scenario-results").DataTable({
+                "order": [[0, "asc",], [1, "asc",]],
+                "language": {
+                    searchPlaceholder: "Filter",
+                    search: ""
+                },
+            })
+
+        // Results table
+        $('#test-results-table').DataTable({
+            "order": [[0, "asc",], [3, "asc",]],
+            "pageLength": 100,
+            "lengthMenu": [[25, 50, 100, 200, -1], [25, 50, 100, 200, "All"]]
+        });
+
+    })
+    ;
+    </script>
+</head>
+
+<body class="results-page">
+<div id="topheader">
+    <div id="topbanner">
+        <div id="logo"><a href="index.html"><img src="images/serenity-logo.png" border="0"/></a></div>
+        <div id="projectname-banner" style="float:right">
+            <span class="projectname">
+                <span class="projecttitle">Serenity BDD Report</span>
+                <span class="projectsubtitle"></span>
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="middlecontent">
+
+
+    <div id="contenttop">
+        <div class="middlebg">
+        <span class="breadcrumbs"><a href="index.html">Home</a>
+                > Feature 
+                > <span
+                    class="truncate-60">EPIC-13 Site Admin Journeys/STORY-13-04 Paying, Allocation And Advance Across Periods > Duration Under 1 Second</span>
+        </span>
+        </div>
+        <div class="rightbg"></div>
+    </div>
+
+    <div class="clr"></div>
+    <!--/* starts second table*/-->
+<div>
+    <ul class="nav nav-tabs" role="tablist">
+        <li class="active">
+            <a href="#"><i class="bi bi-journal-check"></i> Overall Test Results</a>
+        </li>
+        <li >
+            <a href="capabilities.html"><i class="bi bi-journal-text"></i> Requirements</a>
+        </li>
+    </ul>
+    <span class="date-and-time"><a href="build-info.html"><i class="bi bi-info-circle"></i></a> Report generated 27-11-2026 20:47:52</span>
+    <br style="clear:left"/>
+</div>
+    <div class="clr"></div>
+    <div id="beforetable"></div>
+    <div id="results-dashboard">
+        <div class="middlb">
+            <div class="table">
+
+                <h2><i class='bi bi-tags'></i> Feature: EPIC-13 Site Admin Journeys/STORY-13-04 Paying, Allocation And Advance Across Periods > Duration Under 1 Second</h2>
+                <table class='overview'>
+                    <tr>
+                        <td width="375px" valign="top">
+                            <div class="test-count-summary">
+                                <div>
+
+                                    16 tests
+
+                                     |
+                                        <a href="ce760ef97ee37a8a88c69577bf2c6901cdec836ff434b4a70635953cd78d68a8.csv" title="Download CSV"> <i class="bi bi-cloud-arrow-down" title="Download CSV"></i></a>
+
+                                    <p class="report-info"><i class="bi bi-info-circle"></i> Note that results include
+                                        data-driven scenarios containing tests ,
+                                        which may also contain results other than tests .</p>
+
+
+
+                                </div>
+                            </div>
+
+                            <div>
+                                <ul class="nav nav-tabs">
+                                    <li class="active">
+                                        <a data-toggle="tab" href="#summary"><i class="bi bi-house-door"></i> Summary</a>
+                                    </li>
+                                    <li>
+                                        <a data-toggle="tab" href="#tests"><i class="bi bi-speedometer"></i> Test
+                                            Results</a>
+                                    </li>
+                                </ul>
+
+                                <div class="card border">
+                                    <div class="tab-content" id="pills-tabContent">
+                                        <div id="summary" class="tab-pane fade in active">
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                    <div class="col-sm-4">
+    <div>
+        <h3><i class="bi bi-speedometer2"></i> Key Statistics</h3>
+        <div>
+            <table class="table table-striped table-hover">
+                <tbody>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-card-checklist"></i> Number of Scenarios
+                    </td>
+                    <td>16</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-caret-right"></i> Total Number of Test Cases
+                    </td>
+                    <td>16</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-flag-fill"></i> Tests Started
+                    </td>
+                    <td>Nov 27, 2026 20:47:10</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stop-circle"></i> Tests
+                        Finished
+                    </td>
+                    <td></td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch"></i> Total
+                        Duration
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-trophy"></i> Fastest Test
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-skip-start"></i> Slowest
+                        Test
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch"></i> Average
+                        Execution Time
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch-fill"></i> Cumulative Test Time
+                        <br/><small class="text-muted">(sum of all individual test durations)</small>
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+                                                    </div>
+                                                    <div class="col-sm-4">
+                                                        <h4><i class="bi bi-check-square"></i> Test Outcomes</h4>
+                                                        <!-- Severity bar chart -->
+                                                        <div class="chart-container" style="position: relative; width:30vw">
+                                                            <canvas id="severityChart" width="300" height="300"></canvas>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-sm-4">
+                                                        <h4><i class="bi bi-graph-up"></i> Test Performance</h4>
+
+                                                        <!-- Duration bar chart -->
+                                                        <div class="chart-container" style="position: relative; width:30vw">
+                                                            <canvas id="durationChart" width="300" height="300"></canvas>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                </div>
+                                                    <div class="row">
+                                                        <div class="col-sm-12">
+                                                            <h3>Tags</h3>
+
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Capability</h5>
+                                                                        <div>
+                                                                                <a href="d9767899877b500501841c237bbd6d29f8a3ab1d0101b9f7d5ad217b348646c3.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-13 Site Admin Journeys&nbsp;&nbsp;&nbsp;16
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Evidence</h5>
+                                                                        <div>
+                                                                                <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Passing&nbsp;&nbsp;&nbsp;16
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Feature</h5>
+                                                                        <div>
+                                                                                <a href="3541326fba9b362999a3ce0140a19baf507063521ca96eae3937188835643396.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-13 Site Admin Journeys/STORY-13-04 Paying, Allocation And Advance Across Periods&nbsp;&nbsp;&nbsp;16
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Layer</h5>
+                                                                        <div>
+                                                                                <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Gui&nbsp;&nbsp;&nbsp;1
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Backend&nbsp;&nbsp;&nbsp;15
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                        </div>
+                                                    </div>
+                                            </div>
+
+                                            <div class="container-fluid">
+
+                                            </div>
+                                            <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <h3>Tags</h3>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Capability</h5>
+                            <div>
+                                    <a href="d9767899877b500501841c237bbd6d29f8a3ab1d0101b9f7d5ad217b348646c3.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-13 Site Admin Journeys&nbsp;&nbsp;&nbsp;16
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Evidence</h5>
+                            <div>
+                                    <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Passing&nbsp;&nbsp;&nbsp;16
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Feature</h5>
+                            <div>
+                                    <a href="3541326fba9b362999a3ce0140a19baf507063521ca96eae3937188835643396.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-13 Site Admin Journeys/STORY-13-04 Paying, Allocation And Advance Across Periods&nbsp;&nbsp;&nbsp;16
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Layer</h5>
+                            <div>
+                                    <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Gui&nbsp;&nbsp;&nbsp;1
+                                    </span>
+                                    </a>
+                                    <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Backend&nbsp;&nbsp;&nbsp;15
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+                                            </div>
+                                        </div>
+                                        <div id="tests" class="tab-pane fade in">
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                    <div class="col-sm-12">
+                                                        <h3><i class="bi bi-gear"></i> Automated Tests</h3>
+
+                                            <table class="scenario-result-table table" id="scenario-results">
+                                                <thead>
+                                                <tr>
+                                                    <th>Feature</th>
+                                                    <th class="test-name-column">Scenario</th>
+                                                    <th>Steps</th>
+                                                    <th>Started</th>
+                                                    <th>Total Duration</th>
+                                                    <th>Result</th>
+                                                </tr>
+                                                </thead>
+                                                <tbody>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="05a186d76bbd727c873f1987d329c44ca20219922e4006efc7360e3f8771093f.html">SC-13-04-02 Paying exactly the whole debt leaves zero and no advance</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="0ae564ef8dbc5b92d5e6cea8b54a55924f6b2ed2362dfa08eb8b38fd3b897528.html">SC-13-04-12 The requester of a correction cannot approve it</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="ee21faa2324c13e0bbc2f16c33813539ce0610d2a4daa9a56d555b69ce07292c.html">SC-13-04-01 A payment clears the oldest period first</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="1fee41e66db8237586537d1c5537ff9b072d27fb9871ac0764fe415eebb5e206.html">SC-13-04-09 A transfer matched to another site is applied only there</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="df2bc6f604b2c534c9da9d8d674cd06af9ff49487699d8cbe56eea41921ed95f.html">SC-13-04-16 A payment for a unit with no debt becomes the payer's advance</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="ee3aaae3259cba1fa9ad953509d81af8e75eb39b1c837367e36ad48c718129ff.html">SC-13-04-05 Invalid payment amounts are rejected without any side effect</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="e3785b64af7db0e5342b0219d3d664d3bc7980bafa5cc3e30043e5862ba9d2c6.html">SC-13-04-10 The grace boundary decides whether a late fee is charged</a>
+                                                            </td>
+                                                            <td>5</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="d7fdb629f9fd008db945fed32b2bfe8e4b87b5e6f5beee36122dab5dc53ad3db.html">SC-13-04-04 An overpayment becomes an advance that offsets the next accrual</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="1e680bf3546d0fa3e7ad63b8580a6018d33194190d45f22913e77aa8ae33784b.html">SC-13-04-03 One kuruş short leaves one kuruş open</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="783bac11ad36b3c3de328cabe17feaf8a8efa8e0eb0520bfb32cec0ac3260c27.html">SC-13-04-14 A payment reversal restores the debt it settled and the fee it stopped</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="f0181bc293c2d43ea4f0a5576eef6be633ad513e97e2d80c2d5fdba0af8a02be.html">SC-13-04-11 A correction after a partial payment moves the paid amount to the advance</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="1105217ecf72783ca0293974213329cc5c3835ff8cbd78ab2a1012b7e1afc0e4.html">SC-13-04-06 The bank webhook matches a transfer to the unit and allocates it</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="34cf213d7d4ad4676ff03eb2f44c03b50ec983affc0181f21a18736d57991f9b.html">SC-13-04-15 A unit-level transfer on a unit with several debtors waits for the manager</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="116f4e86e7edb75c7775d1023296b7f39b79bc4929b5a7520cc06c4a8c37303f.html">SC-13-04-13 A resident's confirmed payment appears in their statement and the admin view</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="28655f42cb74b3b5da157014c249a823c5bed15ae427b417819ecfc69c9253db.html">SC-13-04-07 The same bank transaction sent twice is applied once</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-13-04 Paying, allocation and advance across periods</a>
+                                                            </td>
+                                                            <td><a href="22db7d220e0cc13ede6f0a1b2fb214d9904c2a3d277b9b75c7fcbc6d908af2c4.html">SC-13-04-08 Two transfers for one unit at the same moment are both applied</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                </tbody>
+                                            </table>
+
+                                                    </div>
+                                                </div>
+
+                                                <div class="row">
+                                                    <div class="col-sm-12">
+                                                        <h3><i class="bi bi-hand-index-thumb"></i> Manual Tests</h3>
+
+                                                No manual tests were recorded
+
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <h3>Tags</h3>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Capability</h5>
+                            <div>
+                                    <a href="d9767899877b500501841c237bbd6d29f8a3ab1d0101b9f7d5ad217b348646c3.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-13 Site Admin Journeys&nbsp;&nbsp;&nbsp;16
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Evidence</h5>
+                            <div>
+                                    <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Passing&nbsp;&nbsp;&nbsp;16
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Feature</h5>
+                            <div>
+                                    <a href="3541326fba9b362999a3ce0140a19baf507063521ca96eae3937188835643396.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-13 Site Admin Journeys/STORY-13-04 Paying, Allocation And Advance Across Periods&nbsp;&nbsp;&nbsp;16
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Layer</h5>
+                            <div>
+                                    <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Gui&nbsp;&nbsp;&nbsp;1
+                                    </span>
+                                    </a>
+                                    <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Backend&nbsp;&nbsp;&nbsp;15
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="beforefooter"></div>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-sm-12">
+            <span class="version">Serenity BDD version 5.3.11</span>
+        </div>
+    </div>
+</div>
+
+<!-- Chart data -->
+    <!-- PIE CHART -->
+    <script>
+
+        // The results pie chart
+        const outcomeChartCtx = document.getElementById('resultChart');
+
+        // Options define for display value on top of bars
+        const outcomeDetailsReports = [
+            { title: 'Passing Test Cases', link: "95e7367ad56a59df03a173331901c7fa6ba228ffd2cc5730dc5648e47291763e.html" },
+            { title: 'Pending Test Cases', link: "cf153e87b36a714c66e8c0e74dd5bca9a863933255f83ca092eee84422622ee4.html" },
+            { title: 'Ignored Test Cases', link: "fcbecedc7a6055b19e07c56feffa0fd3e7e60a660868251ad2ecd4c784b2aa45.html" },
+            { title: 'Skipped Test Cases', link: "e52f94bb05043d825c5930ededb07507e74adc40e0a21f3666930db8881e2f09.html" },
+            { title: 'Aborted Test Cases',  link: "b9f9d39ff259db1d9e6e55610e64b2f0f1a79635b5a62cd2b8f33c3bca90dac8.html"},
+            { title: 'Failed Test Cases', link: "c6a580219ef1ad5e928efab1698dfa9020dc6490dc94e3f73ad8eb5c67740549.html"  },
+            { title: 'Broken Test Cases', link: "8ee4d0b45b4bb714268471ce7a3cb6c06ccf0a4b0680bdbafac7fcb530150349.html"    },
+            { title: 'Compromised Test Cases',  link: "2a82f31a49fb5c2ac6672bf90cd0977440ecf63e02393e9417be50bf3c1366dd.html" },
+        ]
+        const outcomeData = {
+            labels: ['Passing Test Cases', 'Pending Test Cases', 'Ignored Test Cases', 'Skipped Test Cases', 'Aborted Test Cases', 'Failed Test Cases', 'Broken Test Cases', 'Compromised Test Cases','Undefined Test Cases'],
+            datasets: [{
+                label: 'Test Results',
+                fill: false,
+                data: [{meta: 'Passing tests', value: 16}, {meta: 'Pending tests', value: 0}, {meta: 'Ignored tests', value: 0}, {meta: 'Skipped tests', value: 0}, {meta: 'Aborted tests', value: 0}, {meta: 'Failing tests', value: 0}, {meta: 'Broken tests', value: 0}, {meta: 'Compromised tests', value: 0}],
+                backgroundColor: ['rgba(153,204,51,0.5)','rgba(165, 199, 238, 0.5)','rgba(168, 168, 168, 0.5)','rgba(238, 224, 152, 0.75)','rgba(255, 153, 102, 0.5)','rgba(255, 22, 49, 0.5)','rgba(255, 97, 8, 0.5)','rgba(255, 104, 255, 0.5)','rgba(83, 50, 168, 0.5)'],
+                borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                borderWidth: 1,
+            }]
+        }
+        const outcomeOptions = {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom'
+                },
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        let sum = 0;
+                        let dataArr = ctx.chart.data.datasets[0].data;
+                        dataArr.map(data => {
+                            sum += data;
+                        });
+                        let percentage = (value * 100 / sum).toFixed(0) + "%";
+                        if (percentage === '0%' || percentage === 'NaN%') {
+                            return '';
+                        } else {
+                            return percentage;
+                        }
+                    },
+                },
+            }
+        }
+
+        const outcomeChart = new Chart(outcomeChartCtx, {
+            type: 'doughnut',
+            data: outcomeData,
+            options: outcomeOptions,
+            plugins: [
+                {
+                    id: 'text',
+                    beforeDraw: function (chart, a, b) {
+                        var width = chart.width,
+                            height = chart.height,
+                            ctx = chart.ctx;
+
+                        ctx.restore();
+                        var fontSize = (height / 200).toFixed(1);
+                        ctx.font = fontSize + "em sans-serif";
+                        ctx.textBaseline = "middle";
+
+                        var text = "100%"
+                        textX = 10 + Math.round((width - ctx.measureText(text).width) / 2);
+                        textY = (height / 2) - 40;
+
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+        });
+
+        function clickHandler(click) {
+            const points = outcomeChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(outcomeDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+        outcomeChartCtx.onclick = clickHandler;
+    </script>
+    <!-- END PIE CHART -->
+
+    <!-- SUMMARY BAR CHART -->
+    <script>
+
+        // The Severity bar chart
+        const severityChartCtx = document.getElementById('severityChart');
+
+        // Options define for display value on top of bars
+
+        const severityDetailsReports = [
+            { title: 'Passing Scenarios', link: "95e7367ad56a59df03a173331901c7fa6ba228ffd2cc5730dc5648e47291763e.html" },
+            { title: 'Pending Scenarios', link: "cf153e87b36a714c66e8c0e74dd5bca9a863933255f83ca092eee84422622ee4.html" },
+            { title: 'Ignored Scenarios', link: "fcbecedc7a6055b19e07c56feffa0fd3e7e60a660868251ad2ecd4c784b2aa45.html" },
+            { title: 'Skipped Scenarios', link: "e52f94bb05043d825c5930ededb07507e74adc40e0a21f3666930db8881e2f09.html" },
+            { title: 'Aborted Scenarios',  link: "b9f9d39ff259db1d9e6e55610e64b2f0f1a79635b5a62cd2b8f33c3bca90dac8.html"},
+            { title: 'Failed Scenarios', link: "c6a580219ef1ad5e928efab1698dfa9020dc6490dc94e3f73ad8eb5c67740549.html"  },
+            { title: 'Broken Scenarios', link: "8ee4d0b45b4bb714268471ce7a3cb6c06ccf0a4b0680bdbafac7fcb530150349.html"    },
+            { title: 'Compromised Scenarios',  link: "2a82f31a49fb5c2ac6672bf90cd0977440ecf63e02393e9417be50bf3c1366dd.html" },
+        ]
+        const severityData = {
+            labels: ['Passing', 'Pending', 'Ignored', 'Skipped', 'Aborted', 'Failed', 'Broken', 'Compromised'],
+            datasets: [
+                {
+                    label: 'Automated',
+                    data: [16,0,0,0,0,0,0,0],
+                    backgroundColor: ['rgba(153,204,51,0.5)','rgba(165, 199, 238, 0.5)','rgba(168, 168, 168, 0.5)','rgba(238, 224, 152, 0.75)','rgba(255, 153, 102, 0.5)','rgba(255, 22, 49, 0.5)','rgba(255, 97, 8, 0.5)','rgba(255, 104, 255, 0.5)','rgba(83, 50, 168, 0.5)'],
+                    borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                    borderWidth: 1
+                },
+                {
+                    label: 'Manual',
+                    data: [0,0,0,0,0,0,0,0],
+                    backgroundColor: ['rgba(153,204,51,0.25)','rgba(165, 199, 238, 0.25)','rgba(168, 168, 168, 0.25)','rgba(238, 224, 152, 0.375)','rgba(255, 153, 102, 0.25)','rgba(255, 22, 49, 0.25)','rgba(255, 97, 8, 0.25)','rgba(255, 104, 255, 0.25)','rgba(83, 50, 168, 0.25)'],
+                    borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                    borderWidth: 1
+                },
+
+            ]
+        }
+        const severityOptions = {
+            responsive: true,
+            skipNull: true,
+            scales: {
+                x: {
+                    stacked: true,
+                },
+                y: {
+                    stacked: true,
+                }
+            },
+            plugins: {
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        if (value === 0) {
+                            return '';
+                        } else {
+                            return value;
+                        }
+                    },
+                }
+            }
+        }
+        const severityChart = new Chart(severityChartCtx, {
+            type: 'bar',
+            data: severityData,
+            options: severityOptions
+        });
+
+        function clickHandler(click) {
+            const points = severityChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(severityDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+        severityChartCtx.onclick = clickHandler;
+    </script>
+    <!-- END SUMMARY CHART -->
+
+    <!-- DURATION CHART -->
+    <script>
+
+        // Options define for display value on top of bars
+        const durationDetailsReports = [
+                {title: "Under 1 second", link: "7cf8cc544db34487bcf8de824b2459f528c2c3a64a5adbe85f2d4ae1f5d59fca.html"},
+                {title: "1 to 10 seconds", link: "57c9cc44c363ee63c220deccdb9ced798bb0a29cddd7a5c3cacf259ed2750bb4.html"},
+                {title: "10 to 30 seconds", link: "794e7cbf1341e34c21c5726bacf397299a6bc4e6ab0ddb6341d961eb02fa38d9.html"},
+                {title: "30 to 60 seconds", link: "06ece22d58439f13b5d0ac76793027958cbc7516feaebfea31bd03bf35455688.html"},
+                {title: "1 to 2 minutes", link: "0d1d0cfafd70d2f5b8082ee0b76d0a8636f6698f509339076c37bf1c36410a2f.html"},
+                {title: "2 to 5 minutes", link: "2c59e5c48235a8f05160bc08723705c3fffdfc3932a4ba1a4f87e372d42d040a.html"},
+                {title: "5 to 10 minutes", link: "78779d08a55dde6f93de6cef48f990d03045eb78ed56a1f90bb1f5de6d919824.html"},
+                {title: "10 minutes or over", link: "08bc3d03729c3fde21c8c9013bed66c13ee183bacb63254ed46268902c34064b.html"},
+        ]
+        // The Severity bar chart
+        const durationChartCtx = document.getElementById('durationChart');
+
+        // Options define for display value on top of bars
+
+        const durationData = {
+            labels: ['Under 1 second','1 to 10 seconds','10 to 30 seconds','30 to 60 seconds','1 to 2 minutes','2 to 5 minutes','5 to 10 minutes','10 minutes or over'],
+            datasets: [{
+                label: 'Number of tests per duration',
+                fill: false,
+                data: ['16','0','0','0','0','0','0','0'],
+                backgroundColor: 'rgba(83, 146, 255,0.5)',
+                borderColor: 'rgba(83, 146, 255, 1)',
+            }]
+        }
+        const durationOptions = {
+            responsive: true,
+            plugins: {
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        if (value > 0) {
+                            return value;
+                        } else {
+                            return '';
+                        }
+                    },
+                },
+                tooltip: {
+                    enabled: true,
+                    usePointStyle: true,
+                    callbacks: {
+                        label: (data) => {
+                            return data.parsed.y + ' tests'
+                        }
+                    },
+                },
+            },
+        }
+
+        const durationChart = new Chart(durationChartCtx, {
+            type: 'bar',
+            data: durationData,
+            options: durationOptions
+        });
+
+        function durationClickHandler(click) {
+            const points = durationChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(durationDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+
+        durationChartCtx.onclick = durationClickHandler;
+    </script>
+    <!-- END DURATION CHART -->
+
+
+</body>
+</html>

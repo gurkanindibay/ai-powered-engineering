@@ -1,0 +1,1741 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Serenity Reports</title>
+
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon" sizes="57x57" href="apple-icon-57x57.png">
+<link rel="apple-touch-icon" sizes="60x60" href="apple-icon-60x60.png">
+<link rel="apple-touch-icon" sizes="72x72" href="apple-icon-72x72.png">
+<link rel="apple-touch-icon" sizes="76x76" href="apple-icon-76x76.png">
+<link rel="apple-touch-icon" sizes="114x114" href="apple-icon-114x114.png">
+<link rel="apple-touch-icon" sizes="120x120" href="apple-icon-120x120.png">
+<link rel="apple-touch-icon" sizes="144x144" href="apple-icon-144x144.png">
+<link rel="apple-touch-icon" sizes="152x152" href="apple-icon-152x152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-icon-180x180.png">
+<link rel="icon" type="image/png" sizes="192x192"  href="android-icon-192x192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<meta name="msapplication-TileColor" content="#ffffff">
+<meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="stylesheet" href="bootstrap-icons/bootstrap-icons.css">
+<!-- JQuery -->
+<script type="text/javascript" src="scripts/jquery-3.7.1.min.js"></script><!-- Required Stylesheets -->
+<link href="bootstrap-treeview/dist/bootstrap-treeview.min.css" rel="stylesheet">
+
+<!-- Required Javascript -->
+<script src="bootstrap-treeview/dist/bootstrap-treeview.min.js"></script><!-- DataTables -->
+<link type="text/css" href="datatables/2.3.1/datatables.min.css" rel="stylesheet" />
+<script type="text/javascript" src="datatables/2.3.1/datatables.min.js"></script>
+<script type="text/javascript" src="datatables/2.3.1/time-elapsed-dhms.js"></script>
+
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<script src="bootstrap/js/bootstrap.min.js"></script>
+
+
+<script>
+    jQuery.fn.dataTable.ext.type.order['time-elapsed-dhms-pre'] = function(data) {
+
+        var matches = data.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/i);
+        var multipliers = {
+            ms: 1,
+            s: 1000,
+            m: 60000,
+            h: 3600000,
+            d: 86400000
+        };
+
+        if (matches) {
+            var multiplier = multipliers[matches[2].toLowerCase()];
+            return parseFloat(matches[1]) * multiplier;
+        } else {
+            return -1;
+        };
+    };
+</script>
+<link rel="stylesheet" href="css/core.css"/>
+<link rel="stylesheet" href="css/link.css"/>
+<link type="text/css" media="screen" href="css/screen.css" rel="Stylesheet"/>
+<!--CHART.JS-->
+<script src="chartjs/chart.js"></script>
+<script src="chartjs/chartjs-plugin-datalabels@2.0.0.min.js"></script>
+<script src="chartjs/patternomaly.min.js"></script>
+<script>
+    // Register the plugin to all charts:
+    Chart.register(ChartDataLabels);
+</script>
+<!-- JQuery-UI -->
+<link type="text/css" href="jquery-ui-1.14.1/jquery-ui.css" rel="Stylesheet" />
+<script type="text/javascript" src="jquery-ui-1.14.1/jquery-ui.js"></script><!-- DataTables -->
+<link type="text/css" href="datatables/2.3.1/datatables.min.css" rel="stylesheet" />
+<script type="text/javascript" src="datatables/2.3.1/datatables.min.js"></script>
+<script type="text/javascript" src="datatables/2.3.1/time-elapsed-dhms.js"></script>
+
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<script src="bootstrap/js/bootstrap.min.js"></script>
+
+
+<script>
+    jQuery.fn.dataTable.ext.type.order['time-elapsed-dhms-pre'] = function(data) {
+
+        var matches = data.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/i);
+        var multipliers = {
+            ms: 1,
+            s: 1000,
+            m: 60000,
+            h: 3600000,
+            d: 86400000
+        };
+
+        if (matches) {
+            var multiplier = multipliers[matches[2].toLowerCase()];
+            return parseFloat(matches[1]) * multiplier;
+        } else {
+            return -1;
+        };
+    };
+</script>
+
+
+
+    <script class="code" type="text/javascript">$(document).ready(function () {
+
+
+            $.fn.dataTable.ext.type.order['test-result-pre'] = function(data) {
+                // Extract the text from the hidden span (SUCCESS, FAILURE, etc.)
+                var match = data.match(/<span[^>]*style="display:none"[^>]*>(.*?)<\/span>/);
+                var result = match ? match[1].trim() : '';
+
+                // Define sort priority (failures first when ascending)
+                var order = {
+                    'FAILURE': 1,
+                    'ERROR': 2,
+                    'BROKEN': 3,
+                    'COMPROMISED': 4,
+                    'PENDING': 5,
+                    'IGNORED': 6,
+                    'SKIPPED': 7,
+                    'ABORTED': 8,
+                    'SUCCESS': 9
+                };
+
+                return order[result] || 99;
+            };
+
+            // Then modify your DataTable initialization
+            $("#scenario-results").DataTable({
+                "order": [[0, "asc"], [1, "asc"], [2, "asc"]], // Keep your default sort order
+                "language": {
+                    searchPlaceholder: "Filter",
+                    search: ""
+                },
+                columnDefs: [
+                    {
+                        targets: 3, // Started column (Feature=0, Scenario=1, Steps=2, Started=3)
+                        visible: false
+                    },
+                    {
+                        type: 'time-elapsed-dhms',
+                        targets: 4 // Total Duration column
+                    },
+                    {
+                        type: 'test-result',
+                        targets: 5 // Result column
+                    }
+                ]
+            })
+            $("#manual-scenario-results").DataTable({
+                "order": [[0, "asc",], [1, "asc",]],
+                "language": {
+                    searchPlaceholder: "Filter",
+                    search: ""
+                },
+            })
+
+        // Results table
+        $('#test-results-table').DataTable({
+            "order": [[0, "asc",], [3, "asc",]],
+            "pageLength": 100,
+            "lengthMenu": [[25, 50, 100, 200, -1], [25, 50, 100, 200, "All"]]
+        });
+
+    })
+    ;
+    </script>
+</head>
+
+<body class="results-page">
+<div id="topheader">
+    <div id="topbanner">
+        <div id="logo"><a href="index.html"><img src="images/serenity-logo.png" border="0"/></a></div>
+        <div id="projectname-banner" style="float:right">
+            <span class="projectname">
+                <span class="projecttitle">Serenity BDD Report</span>
+                <span class="projectsubtitle"></span>
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="middlecontent">
+
+    <div id="contenttop">
+        <div class="middlebg">
+        <span class="breadcrumbs"><a href="index.html">Home</a>
+                > Capability 
+        </span>
+        </div>
+        <div class="rightbg"></div>
+    </div>
+
+    <div class="clr"></div>
+    <!--/* starts second table*/-->
+<div>
+    <ul class="nav nav-tabs" role="tablist">
+        <li class="active">
+            <a href="#"><i class="bi bi-journal-check"></i> Overall Test Results</a>
+        </li>
+        <li >
+            <a href="capabilities.html"><i class="bi bi-journal-text"></i> Requirements</a>
+        </li>
+    </ul>
+    <span class="date-and-time"><a href="build-info.html"><i class="bi bi-info-circle"></i></a> Report generated 27-11-2026 19:18:52</span>
+    <br style="clear:left"/>
+</div>
+    <div class="clr"></div>
+    <div id="beforetable"></div>
+    <div id="results-dashboard">
+        <div class="middlb">
+            <div class="table">
+
+                <h2>Test Results: All Tests</h2>
+                <table class='overview'>
+                    <tr>
+                        <td width="375px" valign="top">
+                            <div class="test-count-summary">
+                                <div>
+
+                                    60 tests
+
+                                     |
+                                        <a href="4160f03df2a2ee686534f1188918d4976451d604681a29c28069020c5c726f9d.csv" title="Download CSV"> <i class="bi bi-cloud-arrow-down" title="Download CSV"></i></a>
+
+                                    <p class="report-info"><i class="bi bi-info-circle"></i> Note that results include
+                                        data-driven scenarios containing tests ,
+                                        which may also contain results other than tests .</p>
+
+
+
+                                </div>
+                            </div>
+
+                            <div>
+                                <ul class="nav nav-tabs">
+                                    <li class="active">
+                                        <a data-toggle="tab" href="#summary"><i class="bi bi-house-door"></i> Summary</a>
+                                    </li>
+                                    <li>
+                                        <a data-toggle="tab" href="#tests"><i class="bi bi-speedometer"></i> Test
+                                            Results</a>
+                                    </li>
+                                </ul>
+
+                                <div class="card border">
+                                    <div class="tab-content" id="pills-tabContent">
+                                        <div id="summary" class="tab-pane fade in active">
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                    <div class="col-sm-4">
+    <div>
+        <h3><i class="bi bi-speedometer2"></i> Key Statistics</h3>
+        <div>
+            <table class="table table-striped table-hover">
+                <tbody>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-card-checklist"></i> Number of Scenarios
+                    </td>
+                    <td>60</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-caret-right"></i> Total Number of Test Cases
+                    </td>
+                    <td>60</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-flag-fill"></i> Tests Started
+                    </td>
+                    <td>Nov 27, 2026 19:18:03</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stop-circle"></i> Tests
+                        Finished
+                    </td>
+                    <td></td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch"></i> Total
+                        Duration
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-trophy"></i> Fastest Test
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-skip-start"></i> Slowest
+                        Test
+                    </td>
+                    <td>10s</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch"></i> Average
+                        Execution Time
+                    </td>
+                    <td>177ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch-fill"></i> Cumulative Test Time
+                        <br/><small class="text-muted">(sum of all individual test durations)</small>
+                    </td>
+                    <td>10s</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+                                                    </div>
+                                                    <div class="col-sm-4">
+                                                        <h4><i class="bi bi-check-square"></i> Test Outcomes</h4>
+                                                        <!-- Severity bar chart -->
+                                                        <div class="chart-container" style="position: relative; width:30vw">
+                                                            <canvas id="severityChart" width="300" height="300"></canvas>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-sm-4">
+                                                        <h4><i class="bi bi-graph-up"></i> Test Performance</h4>
+
+                                                        <!-- Duration bar chart -->
+                                                        <div class="chart-container" style="position: relative; width:30vw">
+                                                            <canvas id="durationChart" width="300" height="300"></canvas>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                </div>
+                                                    <div class="row">
+                                                        <div class="col-sm-12">
+                                                            <h3>Tags</h3>
+
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Capability</h5>
+                                                                        <div>
+                                                                                <a href="03ba5bbacbd2f54ba09d482046ac01ea0da856c893950db032a5770dc3b261a3.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual&nbsp;&nbsp;&nbsp;60
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Evidence</h5>
+                                                                        <div>
+                                                                                <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Passing&nbsp;&nbsp;&nbsp;60
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Feature</h5>
+                                                                        <div>
+                                                                                <a href="9c0d25b97765dfa1239e43d0a2dcb0b7426d6c1652ed5a14b9accb834c3c10f2.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-05 Advance Payment Allocation, Dynamic Surplus Balance & Auto-Offset&nbsp;&nbsp;&nbsp;2
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="1856693329679c735c6f813b4be3dbe35e22989d2f740bceca24354c9ef75cc5.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-03 Real-Time Bank Webhook & Payment Notification Listener&nbsp;&nbsp;&nbsp;4
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="68c792c3fab529468c39a0964a379f59b4c7372440481ce59e3912c39f47e2e9.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-09 Occupancy-Aware Accrual & Proration&nbsp;&nbsp;&nbsp;10
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="ead91d70b1e5bd45dc934c6bb3b887d865cb3c9975ef8b1a7fce5c44c0e2ac2f.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-01 Flat-Specific Virtual IBAN (sanal IBAN) Allocation&nbsp;&nbsp;&nbsp;2
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="b8e488451f30e39a6fc15800c96d9c6d572342a95334ae26a4d02fd8be6fa2eb.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-11 Accrual Corrections (cancel, Re-Issue, Credit Note)&nbsp;&nbsp;&nbsp;5
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="02cb76f052a863f859df816cdad44021967db55d7b62a9fe5b1235d7a26b7112.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-02 Zero-Approval Bank Statement (excel / CSV / MT940) Parser&nbsp;&nbsp;&nbsp;5
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="e45d2f2c62fa2c5c92a81da2d3f503e247d4903a46356fdc0cf9df31a53ee7ec.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-07 Monthly Dues Periodic Accrual & Duplicate Prevention (tokio Batch Scheduler & Manager UI Action)&nbsp;&nbsp;&nbsp;4
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="b35f3a18331ff724f70c5276b84ff94ea2f4148ecc3e0cac917950fe113f9dcc.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-06 Site Bank Account Configuration & Statement Format Enforcement&nbsp;&nbsp;&nbsp;4
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="fc2608fed733d334b0f3a653176bbb7c3b28d61c4ea950c0bf838eb54f5b197a.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-12 Billing Period Lifecycle & Close&nbsp;&nbsp;&nbsp;7
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="9b4423107feb80e856907de6ac9ab96ef759003fee0c3a8495d88c02df068d37.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-10 Accrual Schedule, Catch-Up & Grace Period&nbsp;&nbsp;&nbsp;7
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="f04a6cfe4f563e7c3c41d72ee2f9c53c2433409ba3f595386b760c877b4b3561.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-13 One Late-Fee Figure Across Dashboard, Statement & Ledger&nbsp;&nbsp;&nbsp;4
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="8bb94b06afe1bc692941ac32b30c5d29f49328a6cdb6cd4a243c3d345ec68b45.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-04 User-Friendly Virtual IBAN & FAST Payment Resident Experience&nbsp;&nbsp;&nbsp;2
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="d92658a41b9679ff09c05a2b77eb67f1b78c9634983f742233e32ea94c38bb7b.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-08 Canonical Billing Period & Atomic Accrual Batch&nbsp;&nbsp;&nbsp;4
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Layer</h5>
+                                                                        <div>
+                                                                                <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Gui&nbsp;&nbsp;&nbsp;25
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Backend&nbsp;&nbsp;&nbsp;35
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                        </div>
+                                                    </div>
+                                            </div>
+
+                                            <div class="container-fluid">
+
+                                            </div>
+                                            <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <h3>Tags</h3>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Capability</h5>
+                            <div>
+                                    <a href="03ba5bbacbd2f54ba09d482046ac01ea0da856c893950db032a5770dc3b261a3.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual&nbsp;&nbsp;&nbsp;60
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Evidence</h5>
+                            <div>
+                                    <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Passing&nbsp;&nbsp;&nbsp;60
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Feature</h5>
+                            <div>
+                                    <a href="9c0d25b97765dfa1239e43d0a2dcb0b7426d6c1652ed5a14b9accb834c3c10f2.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-05 Advance Payment Allocation, Dynamic Surplus Balance & Auto-Offset&nbsp;&nbsp;&nbsp;2
+                                    </span>
+                                    </a>
+                                    <a href="1856693329679c735c6f813b4be3dbe35e22989d2f740bceca24354c9ef75cc5.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-03 Real-Time Bank Webhook & Payment Notification Listener&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="68c792c3fab529468c39a0964a379f59b4c7372440481ce59e3912c39f47e2e9.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-09 Occupancy-Aware Accrual & Proration&nbsp;&nbsp;&nbsp;10
+                                    </span>
+                                    </a>
+                                    <a href="ead91d70b1e5bd45dc934c6bb3b887d865cb3c9975ef8b1a7fce5c44c0e2ac2f.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-01 Flat-Specific Virtual IBAN (sanal IBAN) Allocation&nbsp;&nbsp;&nbsp;2
+                                    </span>
+                                    </a>
+                                    <a href="b8e488451f30e39a6fc15800c96d9c6d572342a95334ae26a4d02fd8be6fa2eb.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-11 Accrual Corrections (cancel, Re-Issue, Credit Note)&nbsp;&nbsp;&nbsp;5
+                                    </span>
+                                    </a>
+                                    <a href="02cb76f052a863f859df816cdad44021967db55d7b62a9fe5b1235d7a26b7112.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-02 Zero-Approval Bank Statement (excel / CSV / MT940) Parser&nbsp;&nbsp;&nbsp;5
+                                    </span>
+                                    </a>
+                                    <a href="e45d2f2c62fa2c5c92a81da2d3f503e247d4903a46356fdc0cf9df31a53ee7ec.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-07 Monthly Dues Periodic Accrual & Duplicate Prevention (tokio Batch Scheduler & Manager UI Action)&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="b35f3a18331ff724f70c5276b84ff94ea2f4148ecc3e0cac917950fe113f9dcc.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-06 Site Bank Account Configuration & Statement Format Enforcement&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="fc2608fed733d334b0f3a653176bbb7c3b28d61c4ea950c0bf838eb54f5b197a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-12 Billing Period Lifecycle & Close&nbsp;&nbsp;&nbsp;7
+                                    </span>
+                                    </a>
+                                    <a href="9b4423107feb80e856907de6ac9ab96ef759003fee0c3a8495d88c02df068d37.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-10 Accrual Schedule, Catch-Up & Grace Period&nbsp;&nbsp;&nbsp;7
+                                    </span>
+                                    </a>
+                                    <a href="f04a6cfe4f563e7c3c41d72ee2f9c53c2433409ba3f595386b760c877b4b3561.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-13 One Late-Fee Figure Across Dashboard, Statement & Ledger&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="8bb94b06afe1bc692941ac32b30c5d29f49328a6cdb6cd4a243c3d345ec68b45.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-04 User-Friendly Virtual IBAN & FAST Payment Resident Experience&nbsp;&nbsp;&nbsp;2
+                                    </span>
+                                    </a>
+                                    <a href="d92658a41b9679ff09c05a2b77eb67f1b78c9634983f742233e32ea94c38bb7b.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-08 Canonical Billing Period & Atomic Accrual Batch&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Layer</h5>
+                            <div>
+                                    <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Gui&nbsp;&nbsp;&nbsp;25
+                                    </span>
+                                    </a>
+                                    <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Backend&nbsp;&nbsp;&nbsp;35
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+                                            </div>
+                                        </div>
+                                        <div id="tests" class="tab-pane fade in">
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                    <div class="col-sm-12">
+                                                        <h3><i class="bi bi-gear"></i> Automated Tests</h3>
+
+                                            <table class="scenario-result-table table" id="scenario-results">
+                                                <thead>
+                                                <tr>
+                                                    <th>Feature</th>
+                                                    <th class="test-name-column">Scenario</th>
+                                                    <th>Steps</th>
+                                                    <th>Started</th>
+                                                    <th>Total Duration</th>
+                                                    <th>Result</th>
+                                                </tr>
+                                                </thead>
+                                                <tbody>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-01 Flat-Specific Virtual IBAN (Sanal IBAN) Allocation</a>
+                                                            </td>
+                                                            <td><a href="3efb314e303b3c2ec57453afff41fbb6003bcdb80c031bdc796eaf1427c6e1d1.html">SC-07-01-01 Automated allocation of a virtual IBAN upon unit setup</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-01 Flat-Specific Virtual IBAN (Sanal IBAN) Allocation</a>
+                                                            </td>
+                                                            <td><a href="45d4b36a84946b533a19d7f1784d3573edc24eabd6d6faedc87c4fa9e4bf27c3.html">SC-07-01-02 Resident dashboard includes the allocated virtual IBAN</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-02 Zero-Approval Bank Statement (Excel / CSV / MT940) Parser</a>
+                                                            </td>
+                                                            <td><a href="dbcf437659e5fff40a2e6215d72ac6c77198b20987f28f59736a238e9ad7b622.html">SC-07-02-02 Approving a matched row clears the resident's balance</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-02 Zero-Approval Bank Statement (Excel / CSV / MT940) Parser</a>
+                                                            </td>
+                                                            <td><a href="429ca4ca255e426e3518cfe5d083fa9eada132b1c39df936d3e09926a39ab9e6.html">SC-07-02-01 Site manager uploads a bank statement Excel file</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-02 Zero-Approval Bank Statement (Excel / CSV / MT940) Parser</a>
+                                                            </td>
+                                                            <td><a href="f1e1a7ebed094ebc2093c17e05c0acbd7bca0af79fa0d006864b2b11fce59276.html">SC-07-02-05 A stored payer-name alias auto-matches a re-uploaded row</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-02 Zero-Approval Bank Statement (Excel / CSV / MT940) Parser</a>
+                                                            </td>
+                                                            <td><a href="822b7fa3362f0c63272ed0f0b558bf6bd660d1d9f50890ca9f27aae2b22bb1ea.html">SC-07-02-03 MT940 statement transactions are extracted and matched to dues</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-02 Zero-Approval Bank Statement (Excel / CSV / MT940) Parser</a>
+                                                            </td>
+                                                            <td><a href="1e5cb264597eb7b5a194e928b7538337e789cd9a75237b8671f25709481952f7.html">SC-07-02-04 An unmatched row is assigned to a unit by hand</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-03 Real-Time Bank Webhook & Payment Notification Listener</a>
+                                                            </td>
+                                                            <td><a href="9279cda7e1403b392f1c1348ef5d2500ac6bc91f1c4b648e0123a7b86eb779a8.html">SC-07-03-01 Real-time incoming transfer clears dues once</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-03 Real-Time Bank Webhook & Payment Notification Listener</a>
+                                                            </td>
+                                                            <td><a href="457d2bbad67863ab1958b02cc1250053e382954aba8053b65c0be112972ff9c3.html">SC-07-03-04 A repeated delivery of a held transfer adds no queue item</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-03 Real-Time Bank Webhook & Payment Notification Listener</a>
+                                                            </td>
+                                                            <td><a href="1703e0d13fb84a3d626adc6b7b6874f248805a586be0c3308370d005f1b65ea4.html">SC-07-03-03 A transfer to a unit with several open debtors waits for the manager</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-03 Real-Time Bank Webhook & Payment Notification Listener</a>
+                                                            </td>
+                                                            <td><a href="454b4db2119b51d45fdb4480bf3916b601e7bce7c7e3e7799212444f9ceb9e4b.html">SC-07-03-02 A statement row containing the virtual IBAN matches the flat with full confidence</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-04 User-Friendly Virtual IBAN & FAST Payment Resident Experience</a>
+                                                            </td>
+                                                            <td><a href="1dd5d3e10b4b4f90fd54f6843cbab564941ec98a1f051485653dc643e1e79fa8.html">SC-07-04-02 Copy button puts the unspaced IBAN on the clipboard</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-04 User-Friendly Virtual IBAN & FAST Payment Resident Experience</a>
+                                                            </td>
+                                                            <td><a href="4f7681d7b9e96378999b51a51ac21fd985336be9756aab6f26d5b7aac758e298.html">SC-07-04-01 Resident chooses the FAST transfer payment method</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-05 Advance Payment Allocation, Dynamic Surplus Balance & Auto-Offset</a>
+                                                            </td>
+                                                            <td><a href="da25672ad9117754ae46ffc2f17b064f4c5b557dd01cf909985519ac26724d45.html">SC-07-05-01 Surplus transfer is allocated to the resident advance balance</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-05 Advance Payment Allocation, Dynamic Surplus Balance & Auto-Offset</a>
+                                                            </td>
+                                                            <td><a href="d1cab0cd6b7f1a9f3f9b80ac4da6245c97a052ddb39e55367f94b2f265e0101d.html">SC-07-05-02 A newly accrued period is offset by the advance balance</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-06 Site Bank Account Configuration & Statement Format Enforcement</a>
+                                                            </td>
+                                                            <td><a href="ddd9524c1feabc725e6946ce306bbdcd014794751441cc923177b17cc8bd5cde.html">SC-07-06-04 Excel sample options exclude banks without an Excel format</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-06 Site Bank Account Configuration & Statement Format Enforcement</a>
+                                                            </td>
+                                                            <td><a href="960c92393cadef3348a56a0d3cd8ef78976be6c44d6ce3d4dc1861b5b1c34806.html">SC-07-06-01 Configuring the bank account sets the statement format automatically</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-06 Site Bank Account Configuration & Statement Format Enforcement</a>
+                                                            </td>
+                                                            <td><a href="61c321bc29da2c3e56986a51c59fb03d081d59b887221cfa74c43e234b331897.html">SC-07-06-03 Excel upload offers a sample for each catalogued Excel bank</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td>10s 673ms</td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-06 Site Bank Account Configuration & Statement Format Enforcement</a>
+                                                            </td>
+                                                            <td><a href="91f79841f333b65f0bae6de4ed5c9945d934fbd8b248b3ea1124520581a0daf5.html">SC-07-06-02 Wrong statement format is rejected and the matching format is accepted</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-07 Monthly Dues Periodic Accrual & Duplicate Prevention (Tokio Batch Scheduler & Manager UI Action)</a>
+                                                            </td>
+                                                            <td><a href="f42d535fc6e874e462c53612f8645ad4b43a186581595ce2495a07e441d00996.html">SC-07-07-01 Manager accrues a period once and the duplicate is blocked</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-07 Monthly Dues Periodic Accrual & Duplicate Prevention (Tokio Batch Scheduler & Manager UI Action)</a>
+                                                            </td>
+                                                            <td><a href="ca4880f62b24821c828f32e9271de94da0a413c1f2ec1c540bab393fec18af62.html">SC-07-07-03 Accrual confirmation dialog shows the duplicate prevention note</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-07 Monthly Dues Periodic Accrual & Duplicate Prevention (Tokio Batch Scheduler & Manager UI Action)</a>
+                                                            </td>
+                                                            <td><a href="06dfbf2c85d5881f93730fe3f6aedc09d3c29923040d77ac3c9cf323f63ad36b.html">SC-07-07-02 Scheduler batch accrues and prevents duplicate accrual</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-07 Monthly Dues Periodic Accrual & Duplicate Prevention (Tokio Batch Scheduler & Manager UI Action)</a>
+                                                            </td>
+                                                            <td><a href="aa1dea2b73cff725d590d5086df7bf0be927d36f313a21ae7c752cfabe5c5c3a.html">SC-07-07-04 Manual accrual charges each unit its tariff, not a fixed amount</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-08 Canonical Billing Period & Atomic Accrual Batch</a>
+                                                            </td>
+                                                            <td><a href="ecadf0b605b69e3e26e205828c9c1e3ab1030f75d00b1f16ee95b054af6426c5.html">SC-07-08-02 A due date outside the period is rejected</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-08 Canonical Billing Period & Atomic Accrual Batch</a>
+                                                            </td>
+                                                            <td><a href="756ad341ba4789f5a106660606a72f2241fca3881024b3b9092220c55371281f.html">SC-07-08-01 Another spelling of an accrued month is a duplicate</a>
+                                                            </td>
+                                                            <td>4</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-08 Canonical Billing Period & Atomic Accrual Batch</a>
+                                                            </td>
+                                                            <td><a href="4361bd1137da67eb3573fdcb7adfef2b1fc4b72ad6ea2bf50a4a96549c910192.html">SC-07-08-03 A failure partway through a batch writes nothing</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-08 Canonical Billing Period & Atomic Accrual Batch</a>
+                                                            </td>
+                                                            <td><a href="057d8bf2995d622ac9df8d26892914753f66913293ef3b8850de24b21c4ec75e.html">SC-07-08-04 Skipped units are reported with their reason</a>
+                                                            </td>
+                                                            <td>3</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="81c2cc2886023d53f2c2caeab568d52de640c27d7dc880fbcb3a1f331becc289.html">SC-07-09-09 Days already billed to someone are not charged again</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="a0a41c6c203bb2af25fa87273f1a64b4a371e3e35ea3247a1ceeee4708d3cf44.html">SC-07-09-10 FIFO settles the charge that refers to the oldest month first</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="a5aab8e911a5b69e4a8c2b65c083b9a0cb6fca1806c8559fcbb8b509ac6540da.html">SC-07-09-08 A back-dated start date in a closed month posts supplementary charges in the open period</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="3dc2cd6284f4a75050d6a0500dfbb4ba3d841b09fd98a995bf829552895bae92.html">SC-07-09-02 A unit created mid-month is charged from its creation date</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="f53c3e4d1cc95a01b1ba6f2897c985137cf6d041826f33be64e5b13c955bdbae.html">SC-07-09-01 A mid-month move-in splits the month between owner and tenant</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="cb6742582f0d8797720d43f59d7d9b5b35259439bd2ba9ced7d5054f4bca6ea2.html">SC-07-09-05 A scheduler retry after move-in does not add another monthly liability</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="617ca4277015f30da91d802ed78acac538597c88b307a3351292052b0fc4bd67.html">SC-07-09-06 A manual accrual retry after move-in does not add another monthly liability</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="459ba3e4301620655caf3dff2269f2deb47d75c83e02894707150eff11102a21.html">SC-07-09-03 A move-out recorded after accrual re-splits the open liability</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="0d7e55d19a10745f7bb2738f6a909b9db298c18c6e5162d894305573e9ff0958.html">SC-07-09-07 A back-dated start date in an open accrued month posts a supplementary charge there</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-09 Occupancy-Aware Accrual & Proration</a>
+                                                            </td>
+                                                            <td><a href="d8dfb15afba514b05fcd7ec70bc5b5d2bcfa8643619c2588c592a41e3b105382.html">SC-07-09-04 With proration switched off the occupant on the accrual date owes the whole month</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-10 Accrual Schedule, Catch-Up & Grace Period</a>
+                                                            </td>
+                                                            <td><a href="0d3fef1ea581365d8d0bc56046f9a657d71019cccffe5dd2baea5a3414e9d894.html">SC-07-10-07 A charge created after its period due date owes no fee for days before it existed</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-10 Accrual Schedule, Catch-Up & Grace Period</a>
+                                                            </td>
+                                                            <td><a href="a1d34e9c65b8518f9468bdbace32ad1f02dfe4f3169e8e46d2fba7f25d0befd9.html">SC-07-10-02 A due day beyond the end of the month falls on its last day</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-10 Accrual Schedule, Catch-Up & Grace Period</a>
+                                                            </td>
+                                                            <td><a href="5b34356f5459af90c902954e07eb3fc8ba5d6d86bbbe612babfb70dbff3ba12e.html">SC-07-10-04 Catch-up stops at the configured limit</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-10 Accrual Schedule, Catch-Up & Grace Period</a>
+                                                            </td>
+                                                            <td><a href="23b74086fcfb176b6d82c085bae5cd6c2d4a5fa0516a44dd394a8d5abd1d22fb.html">SC-07-10-05 A payment inside the grace period carries no late fee</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-10 Accrual Schedule, Catch-Up & Grace Period</a>
+                                                            </td>
+                                                            <td><a href="b4d6932ca4d1c550f26d52bb25499f8d85e9ec2b7136a2cacb7be8f3ffb5456c.html">SC-07-10-01 The site's due day is used for every accrued liability</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-10 Accrual Schedule, Catch-Up & Grace Period</a>
+                                                            </td>
+                                                            <td><a href="06cf3cf01120937fe9037659683f24b93994145dce2f8d9b579493cb9f250671.html">SC-07-10-03 The scheduler catches up months it missed</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-10 Accrual Schedule, Catch-Up & Grace Period</a>
+                                                            </td>
+                                                            <td><a href="9c978af1db238fcde018b227bc5f2316067a39ff6ce7308835ab6c7afc410c90.html">SC-07-10-06 After the grace period the late fee runs from the due date</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-11 Accrual Corrections (Cancel, Re-issue, Credit Note)</a>
+                                                            </td>
+                                                            <td><a href="942e12f1a654a4a2c2875005e1a54ca98803c4b1c7079422e6be087c9196ff4c.html">SC-07-11-01 A cancelled liability moves its payment to the advance balance</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-11 Accrual Corrections (Cancel, Re-issue, Credit Note)</a>
+                                                            </td>
+                                                            <td><a href="944792dbdf073a583113e407c2f03e378baa8761c8856f0ffdc646859a7fb69c.html">SC-07-11-05 The resident statement shows the correction</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-11 Accrual Corrections (Cancel, Re-issue, Credit Note)</a>
+                                                            </td>
+                                                            <td><a href="ca59d06b2cf14c875d5bdd62e8d66de0d891512e291e5a31dca5f1e13cbd0a9b.html">SC-07-11-02 A re-issue replaces the amount and links to the original</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-11 Accrual Corrections (Cancel, Re-issue, Credit Note)</a>
+                                                            </td>
+                                                            <td><a href="cd4c071810e81915845454d8d24ec788a2b9c9064c7ff2964e4a3755ecac0e4b.html">SC-07-11-03 A credit note reduces the amount and its late fee in proportion</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-11 Accrual Corrections (Cancel, Re-issue, Credit Note)</a>
+                                                            </td>
+                                                            <td><a href="0730b770d350c027a80f6431564f61fa66ca6967a4d387eaae2e8f9d03a0debb.html">SC-07-11-04 The requester cannot approve their own correction</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-12 Billing Period Lifecycle & Close</a>
+                                                            </td>
+                                                            <td><a href="11c3624bc2416a6622f1111379fee52ce9b0e0a388522ce95ca3ed1397e89d3e.html">SC-07-12-06 Late-fee catch-up after close is booked in the open period</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-12 Billing Period Lifecycle & Close</a>
+                                                            </td>
+                                                            <td><a href="b15cb5a3cf521f8e24f5f2413d96ba64bb9da056bf53164ea9605c393540c9de.html">SC-07-12-01 Closing a period shows its summary and stores a snapshot</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-12 Billing Period Lifecycle & Close</a>
+                                                            </td>
+                                                            <td><a href="211fad942b5f2bc7929a6e9435226c8ea296b8f4fcfc3f9299f86e2a861788cf.html">SC-07-12-02 A closed period still accepts payments</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-12 Billing Period Lifecycle & Close</a>
+                                                            </td>
+                                                            <td><a href="a15b93105b4a65cd0402b17e07a0580d9230d1f9e664df3fb752d7c8aba6a983.html">SC-07-12-03 A correction to a closed period is booked in the open period</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-12 Billing Period Lifecycle & Close</a>
+                                                            </td>
+                                                            <td><a href="cadbc6cf4eb8165b5457941a796c70c85bed865dfa86e5fc98be3b454e7e7242.html">SC-07-12-05 Reopening a period needs a second approver</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-12 Billing Period Lifecycle & Close</a>
+                                                            </td>
+                                                            <td><a href="1dbe708e9ba537d9652a617c02f29138f730bc670a3e2550aa4bd873fbd8b0bf.html">SC-07-12-04 Accrual into a closed period is refused</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-12 Billing Period Lifecycle & Close</a>
+                                                            </td>
+                                                            <td><a href="3a75309c48a223c10575ec5a1dce3e6a11dcb6a84976d5a8ccd843e9048ad019.html">SC-07-12-07 Backdated-payment penalty reevaluation is booked in the open period</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-13 One Late-Fee Figure Across Dashboard, Statement & Ledger</a>
+                                                            </td>
+                                                            <td><a href="b8eb37474772786048496dd3ddecdc9a87e0129eecfa1c43a79831fb8a18f307.html">SC-07-13-03 Penalty revenue is booked in the month it accrued</a>
+                                                            </td>
+                                                            <td>4</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-13 One Late-Fee Figure Across Dashboard, Statement & Ledger</a>
+                                                            </td>
+                                                            <td><a href="93b32ab5c91941382252b5f08c0a89d2a8f437d3a307647f17873ca80d3f6966.html">SC-07-13-02 The daily late-fee job is idempotent</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-13 One Late-Fee Figure Across Dashboard, Statement & Ledger</a>
+                                                            </td>
+                                                            <td><a href="29cbe686ecf5964acd91a03135f540d01d044a0508619b42a273146f8682a8c5.html">SC-07-13-04 The reconciliation check reports a mismatch</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-07-13 One Late-Fee Figure Across Dashboard, Statement & Ledger</a>
+                                                            </td>
+                                                            <td><a href="82f4343e0a63e09054fcd4e7f5589b2cf7abb95378a0dcc4954c79b88a460006.html">SC-07-13-01 Dashboard, statement, aging and trial balance agree on an overdue unit</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>19:18:03</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                </tbody>
+                                            </table>
+
+                                                    </div>
+                                                </div>
+
+                                                <div class="row">
+                                                    <div class="col-sm-12">
+                                                        <h3><i class="bi bi-hand-index-thumb"></i> Manual Tests</h3>
+
+                                                No manual tests were recorded
+
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <h3>Tags</h3>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Capability</h5>
+                            <div>
+                                    <a href="03ba5bbacbd2f54ba09d482046ac01ea0da856c893950db032a5770dc3b261a3.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual&nbsp;&nbsp;&nbsp;60
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Evidence</h5>
+                            <div>
+                                    <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Passing&nbsp;&nbsp;&nbsp;60
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Feature</h5>
+                            <div>
+                                    <a href="9c0d25b97765dfa1239e43d0a2dcb0b7426d6c1652ed5a14b9accb834c3c10f2.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-05 Advance Payment Allocation, Dynamic Surplus Balance & Auto-Offset&nbsp;&nbsp;&nbsp;2
+                                    </span>
+                                    </a>
+                                    <a href="1856693329679c735c6f813b4be3dbe35e22989d2f740bceca24354c9ef75cc5.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-03 Real-Time Bank Webhook & Payment Notification Listener&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="68c792c3fab529468c39a0964a379f59b4c7372440481ce59e3912c39f47e2e9.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-09 Occupancy-Aware Accrual & Proration&nbsp;&nbsp;&nbsp;10
+                                    </span>
+                                    </a>
+                                    <a href="ead91d70b1e5bd45dc934c6bb3b887d865cb3c9975ef8b1a7fce5c44c0e2ac2f.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-01 Flat-Specific Virtual IBAN (sanal IBAN) Allocation&nbsp;&nbsp;&nbsp;2
+                                    </span>
+                                    </a>
+                                    <a href="b8e488451f30e39a6fc15800c96d9c6d572342a95334ae26a4d02fd8be6fa2eb.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-11 Accrual Corrections (cancel, Re-Issue, Credit Note)&nbsp;&nbsp;&nbsp;5
+                                    </span>
+                                    </a>
+                                    <a href="02cb76f052a863f859df816cdad44021967db55d7b62a9fe5b1235d7a26b7112.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-02 Zero-Approval Bank Statement (excel / CSV / MT940) Parser&nbsp;&nbsp;&nbsp;5
+                                    </span>
+                                    </a>
+                                    <a href="e45d2f2c62fa2c5c92a81da2d3f503e247d4903a46356fdc0cf9df31a53ee7ec.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-07 Monthly Dues Periodic Accrual & Duplicate Prevention (tokio Batch Scheduler & Manager UI Action)&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="b35f3a18331ff724f70c5276b84ff94ea2f4148ecc3e0cac917950fe113f9dcc.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-06 Site Bank Account Configuration & Statement Format Enforcement&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="fc2608fed733d334b0f3a653176bbb7c3b28d61c4ea950c0bf838eb54f5b197a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-12 Billing Period Lifecycle & Close&nbsp;&nbsp;&nbsp;7
+                                    </span>
+                                    </a>
+                                    <a href="9b4423107feb80e856907de6ac9ab96ef759003fee0c3a8495d88c02df068d37.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-10 Accrual Schedule, Catch-Up & Grace Period&nbsp;&nbsp;&nbsp;7
+                                    </span>
+                                    </a>
+                                    <a href="f04a6cfe4f563e7c3c41d72ee2f9c53c2433409ba3f595386b760c877b4b3561.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-13 One Late-Fee Figure Across Dashboard, Statement & Ledger&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="8bb94b06afe1bc692941ac32b30c5d29f49328a6cdb6cd4a243c3d345ec68b45.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-04 User-Friendly Virtual IBAN & FAST Payment Resident Experience&nbsp;&nbsp;&nbsp;2
+                                    </span>
+                                    </a>
+                                    <a href="d92658a41b9679ff09c05a2b77eb67f1b78c9634983f742233e32ea94c38bb7b.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-07 Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual/STORY-07-08 Canonical Billing Period & Atomic Accrual Batch&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Layer</h5>
+                            <div>
+                                    <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Gui&nbsp;&nbsp;&nbsp;25
+                                    </span>
+                                    </a>
+                                    <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Backend&nbsp;&nbsp;&nbsp;35
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="beforefooter"></div>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-sm-12">
+            <span class="version">Serenity BDD version 5.3.11</span>
+        </div>
+    </div>
+</div>
+
+<!-- Chart data -->
+    <!-- PIE CHART -->
+    <script>
+
+        // The results pie chart
+        const outcomeChartCtx = document.getElementById('resultChart');
+
+        // Options define for display value on top of bars
+        const outcomeDetailsReports = [
+            { title: 'Passing Test Cases', link: "2f57ad4a0a3698bb31a80e5325208cbf69b422ef032afecd8e4a39d41ed771e0.html" },
+            { title: 'Pending Test Cases', link: "11c5b27484e5e9bfa1fb310380b2ddc6f21a680595856478f881e49cdf8d000b.html" },
+            { title: 'Ignored Test Cases', link: "147d49c28f4902afb89630c4b797786017a1c2de09e93c0d141c7f809b29ea12.html" },
+            { title: 'Skipped Test Cases', link: "5f36c6a397d3c40e7dfc0c3d045f970badbe7e1bc2afddc74fe9248b309f82f0.html" },
+            { title: 'Aborted Test Cases',  link: "554e16beb1688bc864558a847f40988c9dd49b7fe9a4e3b963c74f840680c145.html"},
+            { title: 'Failed Test Cases', link: "a19e9f16af3c596f1803112b7f262aba2b4fa7748e1f8a6248e2d267e85cc490.html"  },
+            { title: 'Broken Test Cases', link: "e9fe12f920e04651d45443c30040d24316f556afe814d86feeb5f45aaade7eda.html"    },
+            { title: 'Compromised Test Cases',  link: "3d5016ce7332d10078caa630dbafd903ab4abcb53bbbd98cdfa970d91dbea385.html" },
+        ]
+        const outcomeData = {
+            labels: ['Passing Test Cases', 'Pending Test Cases', 'Ignored Test Cases', 'Skipped Test Cases', 'Aborted Test Cases', 'Failed Test Cases', 'Broken Test Cases', 'Compromised Test Cases','Undefined Test Cases'],
+            datasets: [{
+                label: 'Test Results',
+                fill: false,
+                data: [{meta: 'Passing tests', value: 60}, {meta: 'Pending tests', value: 0}, {meta: 'Ignored tests', value: 0}, {meta: 'Skipped tests', value: 0}, {meta: 'Aborted tests', value: 0}, {meta: 'Failing tests', value: 0}, {meta: 'Broken tests', value: 0}, {meta: 'Compromised tests', value: 0}],
+                backgroundColor: ['rgba(153,204,51,0.5)','rgba(165, 199, 238, 0.5)','rgba(168, 168, 168, 0.5)','rgba(238, 224, 152, 0.75)','rgba(255, 153, 102, 0.5)','rgba(255, 22, 49, 0.5)','rgba(255, 97, 8, 0.5)','rgba(255, 104, 255, 0.5)','rgba(83, 50, 168, 0.5)'],
+                borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                borderWidth: 1,
+            }]
+        }
+        const outcomeOptions = {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom'
+                },
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        let sum = 0;
+                        let dataArr = ctx.chart.data.datasets[0].data;
+                        dataArr.map(data => {
+                            sum += data;
+                        });
+                        let percentage = (value * 100 / sum).toFixed(0) + "%";
+                        if (percentage === '0%' || percentage === 'NaN%') {
+                            return '';
+                        } else {
+                            return percentage;
+                        }
+                    },
+                },
+            }
+        }
+
+        const outcomeChart = new Chart(outcomeChartCtx, {
+            type: 'doughnut',
+            data: outcomeData,
+            options: outcomeOptions,
+            plugins: [
+                {
+                    id: 'text',
+                    beforeDraw: function (chart, a, b) {
+                        var width = chart.width,
+                            height = chart.height,
+                            ctx = chart.ctx;
+
+                        ctx.restore();
+                        var fontSize = (height / 200).toFixed(1);
+                        ctx.font = fontSize + "em sans-serif";
+                        ctx.textBaseline = "middle";
+
+                        var text = "100%"
+                        textX = 10 + Math.round((width - ctx.measureText(text).width) / 2);
+                        textY = (height / 2) - 40;
+
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+        });
+
+        function clickHandler(click) {
+            const points = outcomeChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(outcomeDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+        outcomeChartCtx.onclick = clickHandler;
+    </script>
+    <!-- END PIE CHART -->
+
+    <!-- SUMMARY BAR CHART -->
+    <script>
+
+        // The Severity bar chart
+        const severityChartCtx = document.getElementById('severityChart');
+
+        // Options define for display value on top of bars
+
+        const severityDetailsReports = [
+            { title: 'Passing Scenarios', link: "2f57ad4a0a3698bb31a80e5325208cbf69b422ef032afecd8e4a39d41ed771e0.html" },
+            { title: 'Pending Scenarios', link: "11c5b27484e5e9bfa1fb310380b2ddc6f21a680595856478f881e49cdf8d000b.html" },
+            { title: 'Ignored Scenarios', link: "147d49c28f4902afb89630c4b797786017a1c2de09e93c0d141c7f809b29ea12.html" },
+            { title: 'Skipped Scenarios', link: "5f36c6a397d3c40e7dfc0c3d045f970badbe7e1bc2afddc74fe9248b309f82f0.html" },
+            { title: 'Aborted Scenarios',  link: "554e16beb1688bc864558a847f40988c9dd49b7fe9a4e3b963c74f840680c145.html"},
+            { title: 'Failed Scenarios', link: "a19e9f16af3c596f1803112b7f262aba2b4fa7748e1f8a6248e2d267e85cc490.html"  },
+            { title: 'Broken Scenarios', link: "e9fe12f920e04651d45443c30040d24316f556afe814d86feeb5f45aaade7eda.html"    },
+            { title: 'Compromised Scenarios',  link: "3d5016ce7332d10078caa630dbafd903ab4abcb53bbbd98cdfa970d91dbea385.html" },
+        ]
+        const severityData = {
+            labels: ['Passing', 'Pending', 'Ignored', 'Skipped', 'Aborted', 'Failed', 'Broken', 'Compromised'],
+            datasets: [
+                {
+                    label: 'Automated',
+                    data: [60,0,0,0,0,0,0,0],
+                    backgroundColor: ['rgba(153,204,51,0.5)','rgba(165, 199, 238, 0.5)','rgba(168, 168, 168, 0.5)','rgba(238, 224, 152, 0.75)','rgba(255, 153, 102, 0.5)','rgba(255, 22, 49, 0.5)','rgba(255, 97, 8, 0.5)','rgba(255, 104, 255, 0.5)','rgba(83, 50, 168, 0.5)'],
+                    borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                    borderWidth: 1
+                },
+                {
+                    label: 'Manual',
+                    data: [0,0,0,0,0,0,0,0],
+                    backgroundColor: ['rgba(153,204,51,0.25)','rgba(165, 199, 238, 0.25)','rgba(168, 168, 168, 0.25)','rgba(238, 224, 152, 0.375)','rgba(255, 153, 102, 0.25)','rgba(255, 22, 49, 0.25)','rgba(255, 97, 8, 0.25)','rgba(255, 104, 255, 0.25)','rgba(83, 50, 168, 0.25)'],
+                    borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                    borderWidth: 1
+                },
+
+            ]
+        }
+        const severityOptions = {
+            responsive: true,
+            skipNull: true,
+            scales: {
+                x: {
+                    stacked: true,
+                },
+                y: {
+                    stacked: true,
+                }
+            },
+            plugins: {
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        if (value === 0) {
+                            return '';
+                        } else {
+                            return value;
+                        }
+                    },
+                }
+            }
+        }
+        const severityChart = new Chart(severityChartCtx, {
+            type: 'bar',
+            data: severityData,
+            options: severityOptions
+        });
+
+        function clickHandler(click) {
+            const points = severityChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(severityDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+        severityChartCtx.onclick = clickHandler;
+    </script>
+    <!-- END SUMMARY CHART -->
+
+    <!-- DURATION CHART -->
+    <script>
+
+        // Options define for display value on top of bars
+        const durationDetailsReports = [
+                {title: "Under 1 second", link: "9909b477db4848445a40115b19d995ff9b3b865705b8ef2008e17fd4fe09fb44.html"},
+                {title: "1 to 10 seconds", link: "e4853260455ac0ce20ebab24ab09e88c7cf79b9a50a9eef545a99d21674039fb.html"},
+                {title: "10 to 30 seconds", link: "1299b708eb82f320159c01925973bf4de37f35f07b23d41d7c3fb6e3651945db.html"},
+                {title: "30 to 60 seconds", link: "e09c0ce7c95006dd538a9ca6afb6124e98f3241e25b4fee0db1efc64d62a9287.html"},
+                {title: "1 to 2 minutes", link: "24e7cceade34868c43455defba1f2bd049fd4f72250418c443c6a49da775b81b.html"},
+                {title: "2 to 5 minutes", link: "a68fcea0465a480ba22bd0d48033904ff596b1f4ba86fe68464845a1818db59c.html"},
+                {title: "5 to 10 minutes", link: "6e47367ee47da188b58c0fd28ccfc0d24507a44354974953401445aae4cef6c5.html"},
+                {title: "10 minutes or over", link: "38f038f4c53c524c659650fd0f63cfa31449934ad3458202210a9d15c8a893a9.html"},
+        ]
+        // The Severity bar chart
+        const durationChartCtx = document.getElementById('durationChart');
+
+        // Options define for display value on top of bars
+
+        const durationData = {
+            labels: ['Under 1 second','1 to 10 seconds','10 to 30 seconds','30 to 60 seconds','1 to 2 minutes','2 to 5 minutes','5 to 10 minutes','10 minutes or over'],
+            datasets: [{
+                label: 'Number of tests per duration',
+                fill: false,
+                data: ['59','0','1','0','0','0','0','0'],
+                backgroundColor: 'rgba(83, 146, 255,0.5)',
+                borderColor: 'rgba(83, 146, 255, 1)',
+            }]
+        }
+        const durationOptions = {
+            responsive: true,
+            plugins: {
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        if (value > 0) {
+                            return value;
+                        } else {
+                            return '';
+                        }
+                    },
+                },
+                tooltip: {
+                    enabled: true,
+                    usePointStyle: true,
+                    callbacks: {
+                        label: (data) => {
+                            return data.parsed.y + ' tests'
+                        }
+                    },
+                },
+            },
+        }
+
+        const durationChart = new Chart(durationChartCtx, {
+            type: 'bar',
+            data: durationData,
+            options: durationOptions
+        });
+
+        function durationClickHandler(click) {
+            const points = durationChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(durationDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+
+        durationChartCtx.onclick = durationClickHandler;
+    </script>
+    <!-- END DURATION CHART -->
+
+
+</body>
+</html>

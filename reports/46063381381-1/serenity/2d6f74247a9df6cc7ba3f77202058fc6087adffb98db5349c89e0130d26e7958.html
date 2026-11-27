@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Serenity Reports</title>
+
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon" sizes="57x57" href="apple-icon-57x57.png">
+<link rel="apple-touch-icon" sizes="60x60" href="apple-icon-60x60.png">
+<link rel="apple-touch-icon" sizes="72x72" href="apple-icon-72x72.png">
+<link rel="apple-touch-icon" sizes="76x76" href="apple-icon-76x76.png">
+<link rel="apple-touch-icon" sizes="114x114" href="apple-icon-114x114.png">
+<link rel="apple-touch-icon" sizes="120x120" href="apple-icon-120x120.png">
+<link rel="apple-touch-icon" sizes="144x144" href="apple-icon-144x144.png">
+<link rel="apple-touch-icon" sizes="152x152" href="apple-icon-152x152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-icon-180x180.png">
+<link rel="icon" type="image/png" sizes="192x192"  href="android-icon-192x192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<meta name="msapplication-TileColor" content="#ffffff">
+<meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
+<meta name="theme-color" content="#ffffff">
+<link rel="stylesheet" href="bootstrap-icons/bootstrap-icons.css">
+<!-- JQuery -->
+<script type="text/javascript" src="scripts/jquery-3.7.1.min.js"></script><!-- Required Stylesheets -->
+<link href="bootstrap-treeview/dist/bootstrap-treeview.min.css" rel="stylesheet">
+
+<!-- Required Javascript -->
+<script src="bootstrap-treeview/dist/bootstrap-treeview.min.js"></script><!-- DataTables -->
+<link type="text/css" href="datatables/2.3.1/datatables.min.css" rel="stylesheet" />
+<script type="text/javascript" src="datatables/2.3.1/datatables.min.js"></script>
+<script type="text/javascript" src="datatables/2.3.1/time-elapsed-dhms.js"></script>
+
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<script src="bootstrap/js/bootstrap.min.js"></script>
+
+
+<script>
+    jQuery.fn.dataTable.ext.type.order['time-elapsed-dhms-pre'] = function(data) {
+
+        var matches = data.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/i);
+        var multipliers = {
+            ms: 1,
+            s: 1000,
+            m: 60000,
+            h: 3600000,
+            d: 86400000
+        };
+
+        if (matches) {
+            var multiplier = multipliers[matches[2].toLowerCase()];
+            return parseFloat(matches[1]) * multiplier;
+        } else {
+            return -1;
+        };
+    };
+</script>
+<link rel="stylesheet" href="css/core.css"/>
+<link rel="stylesheet" href="css/link.css"/>
+<link type="text/css" media="screen" href="css/screen.css" rel="Stylesheet"/>
+<!--CHART.JS-->
+<script src="chartjs/chart.js"></script>
+<script src="chartjs/chartjs-plugin-datalabels@2.0.0.min.js"></script>
+<script src="chartjs/patternomaly.min.js"></script>
+<script>
+    // Register the plugin to all charts:
+    Chart.register(ChartDataLabels);
+</script>
+<!-- JQuery-UI -->
+<link type="text/css" href="jquery-ui-1.14.1/jquery-ui.css" rel="Stylesheet" />
+<script type="text/javascript" src="jquery-ui-1.14.1/jquery-ui.js"></script><!-- DataTables -->
+<link type="text/css" href="datatables/2.3.1/datatables.min.css" rel="stylesheet" />
+<script type="text/javascript" src="datatables/2.3.1/datatables.min.js"></script>
+<script type="text/javascript" src="datatables/2.3.1/time-elapsed-dhms.js"></script>
+
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<script src="bootstrap/js/bootstrap.min.js"></script>
+
+
+<script>
+    jQuery.fn.dataTable.ext.type.order['time-elapsed-dhms-pre'] = function(data) {
+
+        var matches = data.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/i);
+        var multipliers = {
+            ms: 1,
+            s: 1000,
+            m: 60000,
+            h: 3600000,
+            d: 86400000
+        };
+
+        if (matches) {
+            var multiplier = multipliers[matches[2].toLowerCase()];
+            return parseFloat(matches[1]) * multiplier;
+        } else {
+            return -1;
+        };
+    };
+</script>
+
+
+
+    <script class="code" type="text/javascript">$(document).ready(function () {
+
+
+            $.fn.dataTable.ext.type.order['test-result-pre'] = function(data) {
+                // Extract the text from the hidden span (SUCCESS, FAILURE, etc.)
+                var match = data.match(/<span[^>]*style="display:none"[^>]*>(.*?)<\/span>/);
+                var result = match ? match[1].trim() : '';
+
+                // Define sort priority (failures first when ascending)
+                var order = {
+                    'FAILURE': 1,
+                    'ERROR': 2,
+                    'BROKEN': 3,
+                    'COMPROMISED': 4,
+                    'PENDING': 5,
+                    'IGNORED': 6,
+                    'SKIPPED': 7,
+                    'ABORTED': 8,
+                    'SUCCESS': 9
+                };
+
+                return order[result] || 99;
+            };
+
+            // Then modify your DataTable initialization
+            $("#scenario-results").DataTable({
+                "order": [[0, "asc"], [1, "asc"], [2, "asc"]], // Keep your default sort order
+                "language": {
+                    searchPlaceholder: "Filter",
+                    search: ""
+                },
+                columnDefs: [
+                    {
+                        targets: 3, // Started column (Feature=0, Scenario=1, Steps=2, Started=3)
+                        visible: false
+                    },
+                    {
+                        type: 'time-elapsed-dhms',
+                        targets: 4 // Total Duration column
+                    },
+                    {
+                        type: 'test-result',
+                        targets: 5 // Result column
+                    }
+                ]
+            })
+            $("#manual-scenario-results").DataTable({
+                "order": [[0, "asc",], [1, "asc",]],
+                "language": {
+                    searchPlaceholder: "Filter",
+                    search: ""
+                },
+            })
+
+        // Results table
+        $('#test-results-table').DataTable({
+            "order": [[0, "asc",], [3, "asc",]],
+            "pageLength": 100,
+            "lengthMenu": [[25, 50, 100, 200, -1], [25, 50, 100, 200, "All"]]
+        });
+
+    })
+    ;
+    </script>
+</head>
+
+<body class="results-page">
+<div id="topheader">
+    <div id="topbanner">
+        <div id="logo"><a href="index.html"><img src="images/serenity-logo.png" border="0"/></a></div>
+        <div id="projectname-banner" style="float:right">
+            <span class="projectname">
+                <span class="projecttitle">Serenity BDD Report</span>
+                <span class="projectsubtitle"></span>
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="middlecontent">
+
+    <div id="contenttop">
+        <div class="middlebg">
+        <span class="breadcrumbs"><a href="index.html">Home</a>
+                > Capability 
+        </span>
+        </div>
+        <div class="rightbg"></div>
+    </div>
+
+    <div class="clr"></div>
+    <!--/* starts second table*/-->
+<div>
+    <ul class="nav nav-tabs" role="tablist">
+        <li class="active">
+            <a href="#"><i class="bi bi-journal-check"></i> Overall Test Results</a>
+        </li>
+        <li >
+            <a href="capabilities.html"><i class="bi bi-journal-text"></i> Requirements</a>
+        </li>
+    </ul>
+    <span class="date-and-time"><a href="build-info.html"><i class="bi bi-info-circle"></i></a> Report generated 27-11-2026 20:47:51</span>
+    <br style="clear:left"/>
+</div>
+    <div class="clr"></div>
+    <div id="beforetable"></div>
+    <div id="results-dashboard">
+        <div class="middlb">
+            <div class="table">
+
+                <h2>Test Results: All Tests</h2>
+                <table class='overview'>
+                    <tr>
+                        <td width="375px" valign="top">
+                            <div class="test-count-summary">
+                                <div>
+
+                                    25 tests
+
+                                     |
+                                        <a href="9eb089629397785768f177e0aedd25a3e03c0fe7f2b473d8c2531dfb17052252.csv" title="Download CSV"> <i class="bi bi-cloud-arrow-down" title="Download CSV"></i></a>
+
+                                    <p class="report-info"><i class="bi bi-info-circle"></i> Note that results include
+                                        data-driven scenarios containing tests ,
+                                        which may also contain results other than tests .</p>
+
+
+
+                                </div>
+                            </div>
+
+                            <div>
+                                <ul class="nav nav-tabs">
+                                    <li class="active">
+                                        <a data-toggle="tab" href="#summary"><i class="bi bi-house-door"></i> Summary</a>
+                                    </li>
+                                    <li>
+                                        <a data-toggle="tab" href="#tests"><i class="bi bi-speedometer"></i> Test
+                                            Results</a>
+                                    </li>
+                                </ul>
+
+                                <div class="card border">
+                                    <div class="tab-content" id="pills-tabContent">
+                                        <div id="summary" class="tab-pane fade in active">
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                    <div class="col-sm-4">
+    <div>
+        <h3><i class="bi bi-speedometer2"></i> Key Statistics</h3>
+        <div>
+            <table class="table table-striped table-hover">
+                <tbody>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-card-checklist"></i> Number of Scenarios
+                    </td>
+                    <td>25</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-caret-right"></i> Total Number of Test Cases
+                    </td>
+                    <td>25</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-flag-fill"></i> Tests Started
+                    </td>
+                    <td>Nov 27, 2026 20:47:10</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stop-circle"></i> Tests
+                        Finished
+                    </td>
+                    <td></td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch"></i> Total
+                        Duration
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-trophy"></i> Fastest Test
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-skip-start"></i> Slowest
+                        Test
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch"></i> Average
+                        Execution Time
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                <tr scope="row">
+                    <td>
+                        <i class="bi bi-stopwatch-fill"></i> Cumulative Test Time
+                        <br/><small class="text-muted">(sum of all individual test durations)</small>
+                    </td>
+                    <td>0ms</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+                                                    </div>
+                                                    <div class="col-sm-4">
+                                                        <h4><i class="bi bi-check-square"></i> Test Outcomes</h4>
+                                                        <!-- Severity bar chart -->
+                                                        <div class="chart-container" style="position: relative; width:30vw">
+                                                            <canvas id="severityChart" width="300" height="300"></canvas>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-sm-4">
+                                                        <h4><i class="bi bi-graph-up"></i> Test Performance</h4>
+
+                                                        <!-- Duration bar chart -->
+                                                        <div class="chart-container" style="position: relative; width:30vw">
+                                                            <canvas id="durationChart" width="300" height="300"></canvas>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                </div>
+                                                    <div class="row">
+                                                        <div class="col-sm-12">
+                                                            <h3>Tags</h3>
+
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Capability</h5>
+                                                                        <div>
+                                                                                <a href="064ea5068f9dac2c6549aa3e2b7975311f181d9396d9e1b4584ceee265203ff7.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-06 Identity, Authentication & Scoped Permission Model&nbsp;&nbsp;&nbsp;25
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Evidence</h5>
+                                                                        <div>
+                                                                                <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Passing&nbsp;&nbsp;&nbsp;25
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Feature</h5>
+                                                                        <div>
+                                                                                <a href="9eb0dabd82ec0ef0c973560e8bf326ada3006990b4646636246846cc7973b8e1.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-02 Email & Password Registration & Secure Authentication&nbsp;&nbsp;&nbsp;6
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="9d6274746867dea482f85b96c9e1d0576e460c707a83b9b7ac029ea478830225.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-03 Google Oauth2 / ID Token Authentication & Account Linking&nbsp;&nbsp;&nbsp;2
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="95b04e2ed379523542e38d49160aff49ff73744f6972c9ffcb1cfa72f02c0571.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-05 Cross-Platform Flutter Multi-Method Login & Registration Experience&nbsp;&nbsp;&nbsp;4
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="5fe0fd82edaa1edb1444436818ec310fbb8724b162abc10a615593410437c660.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-01 Multi-Role Scoped Permission Matrix (RBAC & Unit Isolation)&nbsp;&nbsp;&nbsp;1
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="dc9676bb8cb29b0ef5a605a4ff621101c7768a1dc23aed3e66dbd31ad8534430.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-06 Forced Password Change Gate Before Any Operation&nbsp;&nbsp;&nbsp;6
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="364344474ce2a5198ef805c739d3b9c190ef82c0d80ab7182bfc71163ead62cf.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-04 JWT Token Minting & Claim-Based Authorization&nbsp;&nbsp;&nbsp;6
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card">
+                                                                    <div class="card-body">
+                                                                            <h5 class="card-title">Layer</h5>
+                                                                        <div>
+                                                                                <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Gui&nbsp;&nbsp;&nbsp;21
+                                                                                    </span>
+                                                                                </a>
+                                                                                <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                                                                    <span class="badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                                                                        <i class="bi bi-tag"></i> Backend&nbsp;&nbsp;&nbsp;4
+                                                                                    </span>
+                                                                                </a>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                        </div>
+                                                    </div>
+                                            </div>
+
+                                            <div class="container-fluid">
+
+                                            </div>
+                                            <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <h3>Tags</h3>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Capability</h5>
+                            <div>
+                                    <a href="064ea5068f9dac2c6549aa3e2b7975311f181d9396d9e1b4584ceee265203ff7.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model&nbsp;&nbsp;&nbsp;25
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Evidence</h5>
+                            <div>
+                                    <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Passing&nbsp;&nbsp;&nbsp;25
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Feature</h5>
+                            <div>
+                                    <a href="9eb0dabd82ec0ef0c973560e8bf326ada3006990b4646636246846cc7973b8e1.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-02 Email & Password Registration & Secure Authentication&nbsp;&nbsp;&nbsp;6
+                                    </span>
+                                    </a>
+                                    <a href="9d6274746867dea482f85b96c9e1d0576e460c707a83b9b7ac029ea478830225.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-03 Google Oauth2 / ID Token Authentication & Account Linking&nbsp;&nbsp;&nbsp;2
+                                    </span>
+                                    </a>
+                                    <a href="95b04e2ed379523542e38d49160aff49ff73744f6972c9ffcb1cfa72f02c0571.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-05 Cross-Platform Flutter Multi-Method Login & Registration Experience&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="5fe0fd82edaa1edb1444436818ec310fbb8724b162abc10a615593410437c660.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-01 Multi-Role Scoped Permission Matrix (RBAC & Unit Isolation)&nbsp;&nbsp;&nbsp;1
+                                    </span>
+                                    </a>
+                                    <a href="dc9676bb8cb29b0ef5a605a4ff621101c7768a1dc23aed3e66dbd31ad8534430.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-06 Forced Password Change Gate Before Any Operation&nbsp;&nbsp;&nbsp;6
+                                    </span>
+                                    </a>
+                                    <a href="364344474ce2a5198ef805c739d3b9c190ef82c0d80ab7182bfc71163ead62cf.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-04 JWT Token Minting & Claim-Based Authorization&nbsp;&nbsp;&nbsp;6
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Layer</h5>
+                            <div>
+                                    <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Gui&nbsp;&nbsp;&nbsp;21
+                                    </span>
+                                    </a>
+                                    <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Backend&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+                                            </div>
+                                        </div>
+                                        <div id="tests" class="tab-pane fade in">
+                                            <div class="container-fluid">
+                                                <div class="row">
+                                                    <div class="col-sm-12">
+                                                        <h3><i class="bi bi-gear"></i> Automated Tests</h3>
+
+                                            <table class="scenario-result-table table" id="scenario-results">
+                                                <thead>
+                                                <tr>
+                                                    <th>Feature</th>
+                                                    <th class="test-name-column">Scenario</th>
+                                                    <th>Steps</th>
+                                                    <th>Started</th>
+                                                    <th>Total Duration</th>
+                                                    <th>Result</th>
+                                                </tr>
+                                                </thead>
+                                                <tbody>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-01 Multi-Role Scoped Permission Matrix (RBAC & Unit Isolation)</a>
+                                                            </td>
+                                                            <td><a href="874597874f0177cf55624ef975db072d4fc0e988e61c7d3c266361991a941e74.html">SC-06-01-01 Home resident is restricted from site-wide management</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-02 Email & Password Registration & Secure Authentication</a>
+                                                            </td>
+                                                            <td><a href="e4977555d33bbffd6fe2a3e3b6e1f55511af1eae9d905d2d39007b98bc830e9d.html">SC-06-02-05 Clearing the login cache empties the credential fields</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-02 Email & Password Registration & Secure Authentication</a>
+                                                            </td>
+                                                            <td><a href="8e08490d4e07609b5bf09facdcc5d81c3132a9d86c86a902b479e77f9adb43d1.html">SC-06-02-02 Site manager signs in and reaches the cockpit</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-02 Email & Password Registration & Secure Authentication</a>
+                                                            </td>
+                                                            <td><a href="9e5bb886163904117eb32c3d0fc090f93ca9588573869ed34e34cdad6dcbf771.html">SC-06-02-03 Home owner signs in and reaches the resident dashboard</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-02 Email & Password Registration & Secure Authentication</a>
+                                                            </td>
+                                                            <td><a href="979c50981a5f09993a1f8adba6ee01e9bef0ff5cac0e8a5778657b78249527c0.html">SC-06-02-06 Empty password is rejected without a request</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-02 Email & Password Registration & Secure Authentication</a>
+                                                            </td>
+                                                            <td><a href="f75b2593cfe40b46bb6e5967b5852e0b5b8b7712af270aa7c3f29bcbf8c36d7b.html">SC-06-02-01 User registers and authenticates with password</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-02 Email & Password Registration & Secure Authentication</a>
+                                                            </td>
+                                                            <td><a href="b824524b31a7c435b6b4d0828294ddae67bfb8f40399eb2e827dc112b628b719.html">SC-06-02-04 Wrong password shows an error and stays on the login screen</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-03 Google OAuth2 / ID Token Authentication & Account Linking</a>
+                                                            </td>
+                                                            <td><a href="f36bfef4e7e50d2da87ac80bff8b2550b46c15f5e7dc9a93c6c84d833d8332f6.html">SC-06-03-01 Sign in with Google links existing account</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-03 Google OAuth2 / ID Token Authentication & Account Linking</a>
+                                                            </td>
+                                                            <td><a href="81093ab4b7cdcb53e18d2ca1af3d03a217c11ad597f38e813de022359629f002.html">SC-06-03-02 Google sign-in button starts the provider flow</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-04 JWT Token Minting & Claim-Based Authorization</a>
+                                                            </td>
+                                                            <td><a href="add1684564dd41dc0e694ead8f86e58c18ae1c87101a0c9a3b0062abf644bc29.html">SC-06-04-02 Home owner changes the password from the profile and signs in again</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-04 JWT Token Minting & Claim-Based Authorization</a>
+                                                            </td>
+                                                            <td><a href="c7f0f984d0bbe92ae0659142454ccabc0077c068a8735a0c0e9df830b35bd3df.html">SC-06-04-04 Browser back after logout does not re-enter the session</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-04 JWT Token Minting & Claim-Based Authorization</a>
+                                                            </td>
+                                                            <td><a href="0c542a3141ebf5f1e6b9b933c4b60bcf8d00a6a0781e2ce5b71e140275f16a35.html">SC-06-04-01 User inspects their active profile and permissions</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-04 JWT Token Minting & Claim-Based Authorization</a>
+                                                            </td>
+                                                            <td><a href="3da58c30bc9d159f9723d8c0d9d1032847eb712b196dde236f5b6ce2d9e68298.html">SC-06-04-05 Manager switches between the cockpit and the own flat</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-04 JWT Token Minting & Claim-Based Authorization</a>
+                                                            </td>
+                                                            <td><a href="b23ffb9c15e383508b1b96ab2e23d2b87e50e0e7e9b9178dd29779d42b163a8d.html">SC-06-04-06 Cancelling the logout confirmation keeps the session</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-04 JWT Token Minting & Claim-Based Authorization</a>
+                                                            </td>
+                                                            <td><a href="87eb7d986ede7b1e66cf615f4945f607f12576c4cbce7bbae16738cf7b0e0a55.html">SC-06-04-03 Logout returns to the login screen</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-05 Cross-Platform Flutter Multi-Method Login & Registration Experience</a>
+                                                            </td>
+                                                            <td><a href="efbde71ea7c02e5bd5fe3d2cdb00a451eba294ad5b92cc99c5f7bab662ee33da.html">SC-06-05-04 Sign-in role choices have accessible names</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-05 Cross-Platform Flutter Multi-Method Login & Registration Experience</a>
+                                                            </td>
+                                                            <td><a href="b5c848efbf5c1d3e46f27a05a81b188b98652a007ce34b251badad5b50c952a9.html">SC-06-05-02 Google sign-in completes and the dashboard shows the Google profile</a>
+                                                            </td>
+                                                            <td>2</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-05 Cross-Platform Flutter Multi-Method Login & Registration Experience</a>
+                                                            </td>
+                                                            <td><a href="d3951facdf0b570e89f8d33560ef6faa3d885c4adbe407b27ce8dae60597b032.html">SC-06-05-01 Google sign-in option is offered on the login screen</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-05 Cross-Platform Flutter Multi-Method Login & Registration Experience</a>
+                                                            </td>
+                                                            <td><a href="b0bd85fac670659c95460c73b47b1457da7598b96c572b00e5f9760a8560a17b.html">SC-06-05-03 Email and password sign-in opens the role dashboard</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-06 Forced Password Change Gate Before Any Operation</a>
+                                                            </td>
+                                                            <td><a href="7b079e299799cde0d75a934dd2c27626c10fda217031b342bcca53e75372edc8.html">SC-06-06-04 Home resident with a temporary password is held at the password change screen</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-06 Forced Password Change Gate Before Any Operation</a>
+                                                            </td>
+                                                            <td><a href="f0f79d217c84992bcbd8d1a291305672b449c24bae672790e446ad8f7ec5e759.html">SC-06-06-03 Home owner with a temporary password is held at the password change screen</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-06 Forced Password Change Gate Before Any Operation</a>
+                                                            </td>
+                                                            <td><a href="6ffd5bc7eb2ac1ce4257277c91d341092e51a9ba9418627ad5168b1cbf8288c7.html">SC-06-06-06 Server blocks operations before the password is changed</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-06 Forced Password Change Gate Before Any Operation</a>
+                                                            </td>
+                                                            <td><a href="c0d455b14830f68ba4271427705a142ec2a022baeb0a5e9ddea373e9e59ed0bc.html">SC-06-06-01 SaaS admin with a temporary password is held at the password change screen</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-06 Forced Password Change Gate Before Any Operation</a>
+                                                            </td>
+                                                            <td><a href="951032583a04ec4274d51564dd96b56669c68947b08955005c005d3714902e12.html">SC-06-06-02 Site manager with a temporary password is held at the password change screen</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="scenario-result SUCCESS">
+                                                            <td>
+                                                                    <a href="#">STORY-06-06 Forced Password Change Gate Before Any Operation</a>
+                                                            </td>
+                                                            <td><a href="81b207520c6c8b8b9543a586c84c9ae55b9ac474357358836c39488766c2f53b.html">SC-06-06-05 Auditor with a temporary password is held at the password change screen</a>
+                                                            </td>
+                                                            <td>1</td>
+                                                            <td>20:47:10</td>
+                                                            <td></td>
+                                                            <td class="test-result-cell"><span style="display:none">SUCCESS</span> <a href='##beforetable'><i class='bi bi-check-circle-fill success-icon ' title='SUCCESS'></i></a>
+                                                            </td>
+                                                        </tr>
+                                                </tbody>
+                                            </table>
+
+                                                    </div>
+                                                </div>
+
+                                                <div class="row">
+                                                    <div class="col-sm-12">
+                                                        <h3><i class="bi bi-hand-index-thumb"></i> Manual Tests</h3>
+
+                                                No manual tests were recorded
+
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <h3>Tags</h3>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Capability</h5>
+                            <div>
+                                    <a href="064ea5068f9dac2c6549aa3e2b7975311f181d9396d9e1b4584ceee265203ff7.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model&nbsp;&nbsp;&nbsp;25
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Evidence</h5>
+                            <div>
+                                    <a href="c70443866467aff754aa55d481892352bd56c62816943a28fdf0fb6981c8e85a.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Passing&nbsp;&nbsp;&nbsp;25
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Feature</h5>
+                            <div>
+                                    <a href="9eb0dabd82ec0ef0c973560e8bf326ada3006990b4646636246846cc7973b8e1.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-02 Email & Password Registration & Secure Authentication&nbsp;&nbsp;&nbsp;6
+                                    </span>
+                                    </a>
+                                    <a href="9d6274746867dea482f85b96c9e1d0576e460c707a83b9b7ac029ea478830225.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-03 Google Oauth2 / ID Token Authentication & Account Linking&nbsp;&nbsp;&nbsp;2
+                                    </span>
+                                    </a>
+                                    <a href="95b04e2ed379523542e38d49160aff49ff73744f6972c9ffcb1cfa72f02c0571.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-05 Cross-Platform Flutter Multi-Method Login & Registration Experience&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                                    <a href="5fe0fd82edaa1edb1444436818ec310fbb8724b162abc10a615593410437c660.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-01 Multi-Role Scoped Permission Matrix (RBAC & Unit Isolation)&nbsp;&nbsp;&nbsp;1
+                                    </span>
+                                    </a>
+                                    <a href="dc9676bb8cb29b0ef5a605a4ff621101c7768a1dc23aed3e66dbd31ad8534430.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-06 Forced Password Change Gate Before Any Operation&nbsp;&nbsp;&nbsp;6
+                                    </span>
+                                    </a>
+                                    <a href="364344474ce2a5198ef805c739d3b9c190ef82c0d80ab7182bfc71163ead62cf.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> EPIC-06 Identity, Authentication & Scoped Permission Model/STORY-06-04 JWT Token Minting & Claim-Based Authorization&nbsp;&nbsp;&nbsp;6
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                                <h5 class="card-title">Layer</h5>
+                            <div>
+                                    <a href="67a9f6ac60801b58dc2a691a13c2c34fd8feb55e23075ed1a7fc33cd39cfadee.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Gui&nbsp;&nbsp;&nbsp;21
+                                    </span>
+                                    </a>
+                                    <a href="f4fab5a14e6702a8e6be2de61c07900c32a24863e7931329e900dd6ae3158a98.html">
+                                    <span class="tag-badge badge" style="background-color:#b0cf73; margin:1em;padding:4px;">
+                                        <i class="bi bi-tag-fill"></i> Backend&nbsp;&nbsp;&nbsp;4
+                                    </span>
+                                    </a>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="beforefooter"></div>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-sm-12">
+            <span class="version">Serenity BDD version 5.3.11</span>
+        </div>
+    </div>
+</div>
+
+<!-- Chart data -->
+    <!-- PIE CHART -->
+    <script>
+
+        // The results pie chart
+        const outcomeChartCtx = document.getElementById('resultChart');
+
+        // Options define for display value on top of bars
+        const outcomeDetailsReports = [
+            { title: 'Passing Test Cases', link: "2d6f74247a9df6cc7ba3f77202058fc6087adffb98db5349c89e0130d26e7958.html" },
+            { title: 'Pending Test Cases', link: "eb0ae8095e8589b8366bdbeb495155367adfef6259e2837c9257479e4070f686.html" },
+            { title: 'Ignored Test Cases', link: "8dfc4277b239767a84864384384848843713d28f023be1b3a9fb59d63e8b786f.html" },
+            { title: 'Skipped Test Cases', link: "bf7a94f08fbb314199e5b822335d7a6edfa39ce3274a0a21812c8f1bcfd7e1eb.html" },
+            { title: 'Aborted Test Cases',  link: "dccaca9af3550d7ab5c28f74f0ae5ee8a9c6662d3ed4b006c225a205e383cc05.html"},
+            { title: 'Failed Test Cases', link: "c827baa844ba983cbcd8a082b5ed8391b639732c008d02ea700164e1a71aeed7.html"  },
+            { title: 'Broken Test Cases', link: "b0237a08639dd63cd3e54d284cf17a31fc1cd01c3b53c5984be5e42a3e4f610a.html"    },
+            { title: 'Compromised Test Cases',  link: "82c16fbbb15ab1b967e828071442e184a0f2520fd8f53c9b7d45419400cbd468.html" },
+        ]
+        const outcomeData = {
+            labels: ['Passing Test Cases', 'Pending Test Cases', 'Ignored Test Cases', 'Skipped Test Cases', 'Aborted Test Cases', 'Failed Test Cases', 'Broken Test Cases', 'Compromised Test Cases','Undefined Test Cases'],
+            datasets: [{
+                label: 'Test Results',
+                fill: false,
+                data: [{meta: 'Passing tests', value: 25}, {meta: 'Pending tests', value: 0}, {meta: 'Ignored tests', value: 0}, {meta: 'Skipped tests', value: 0}, {meta: 'Aborted tests', value: 0}, {meta: 'Failing tests', value: 0}, {meta: 'Broken tests', value: 0}, {meta: 'Compromised tests', value: 0}],
+                backgroundColor: ['rgba(153,204,51,0.5)','rgba(165, 199, 238, 0.5)','rgba(168, 168, 168, 0.5)','rgba(238, 224, 152, 0.75)','rgba(255, 153, 102, 0.5)','rgba(255, 22, 49, 0.5)','rgba(255, 97, 8, 0.5)','rgba(255, 104, 255, 0.5)','rgba(83, 50, 168, 0.5)'],
+                borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                borderWidth: 1,
+            }]
+        }
+        const outcomeOptions = {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom'
+                },
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        let sum = 0;
+                        let dataArr = ctx.chart.data.datasets[0].data;
+                        dataArr.map(data => {
+                            sum += data;
+                        });
+                        let percentage = (value * 100 / sum).toFixed(0) + "%";
+                        if (percentage === '0%' || percentage === 'NaN%') {
+                            return '';
+                        } else {
+                            return percentage;
+                        }
+                    },
+                },
+            }
+        }
+
+        const outcomeChart = new Chart(outcomeChartCtx, {
+            type: 'doughnut',
+            data: outcomeData,
+            options: outcomeOptions,
+            plugins: [
+                {
+                    id: 'text',
+                    beforeDraw: function (chart, a, b) {
+                        var width = chart.width,
+                            height = chart.height,
+                            ctx = chart.ctx;
+
+                        ctx.restore();
+                        var fontSize = (height / 200).toFixed(1);
+                        ctx.font = fontSize + "em sans-serif";
+                        ctx.textBaseline = "middle";
+
+                        var text = "100%"
+                        textX = 10 + Math.round((width - ctx.measureText(text).width) / 2);
+                        textY = (height / 2) - 40;
+
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+        });
+
+        function clickHandler(click) {
+            const points = outcomeChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(outcomeDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+        outcomeChartCtx.onclick = clickHandler;
+    </script>
+    <!-- END PIE CHART -->
+
+    <!-- SUMMARY BAR CHART -->
+    <script>
+
+        // The Severity bar chart
+        const severityChartCtx = document.getElementById('severityChart');
+
+        // Options define for display value on top of bars
+
+        const severityDetailsReports = [
+            { title: 'Passing Scenarios', link: "2d6f74247a9df6cc7ba3f77202058fc6087adffb98db5349c89e0130d26e7958.html" },
+            { title: 'Pending Scenarios', link: "eb0ae8095e8589b8366bdbeb495155367adfef6259e2837c9257479e4070f686.html" },
+            { title: 'Ignored Scenarios', link: "8dfc4277b239767a84864384384848843713d28f023be1b3a9fb59d63e8b786f.html" },
+            { title: 'Skipped Scenarios', link: "bf7a94f08fbb314199e5b822335d7a6edfa39ce3274a0a21812c8f1bcfd7e1eb.html" },
+            { title: 'Aborted Scenarios',  link: "dccaca9af3550d7ab5c28f74f0ae5ee8a9c6662d3ed4b006c225a205e383cc05.html"},
+            { title: 'Failed Scenarios', link: "c827baa844ba983cbcd8a082b5ed8391b639732c008d02ea700164e1a71aeed7.html"  },
+            { title: 'Broken Scenarios', link: "b0237a08639dd63cd3e54d284cf17a31fc1cd01c3b53c5984be5e42a3e4f610a.html"    },
+            { title: 'Compromised Scenarios',  link: "82c16fbbb15ab1b967e828071442e184a0f2520fd8f53c9b7d45419400cbd468.html" },
+        ]
+        const severityData = {
+            labels: ['Passing', 'Pending', 'Ignored', 'Skipped', 'Aborted', 'Failed', 'Broken', 'Compromised'],
+            datasets: [
+                {
+                    label: 'Automated',
+                    data: [25,0,0,0,0,0,0,0],
+                    backgroundColor: ['rgba(153,204,51,0.5)','rgba(165, 199, 238, 0.5)','rgba(168, 168, 168, 0.5)','rgba(238, 224, 152, 0.75)','rgba(255, 153, 102, 0.5)','rgba(255, 22, 49, 0.5)','rgba(255, 97, 8, 0.5)','rgba(255, 104, 255, 0.5)','rgba(83, 50, 168, 0.5)'],
+                    borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                    borderWidth: 1
+                },
+                {
+                    label: 'Manual',
+                    data: [0,0,0,0,0,0,0,0],
+                    backgroundColor: ['rgba(153,204,51,0.25)','rgba(165, 199, 238, 0.25)','rgba(168, 168, 168, 0.25)','rgba(238, 224, 152, 0.375)','rgba(255, 153, 102, 0.25)','rgba(255, 22, 49, 0.25)','rgba(255, 97, 8, 0.25)','rgba(255, 104, 255, 0.25)','rgba(83, 50, 168, 0.25)'],
+                    borderColor: ['rgba(153,204,51,1)','rgba(165, 199, 238, 1)','rgba(168, 168, 168, 1)','rgba(238, 224, 152, 1)','rgba(255, 153, 102, 1)','rgba(255, 22, 49, 1)','rgba(255, 97, 8, 1)','rgba(255, 104, 255, 1)','rgba(83, 50, 168, 1)'],
+                    borderWidth: 1
+                },
+
+            ]
+        }
+        const severityOptions = {
+            responsive: true,
+            skipNull: true,
+            scales: {
+                x: {
+                    stacked: true,
+                },
+                y: {
+                    stacked: true,
+                }
+            },
+            plugins: {
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        if (value === 0) {
+                            return '';
+                        } else {
+                            return value;
+                        }
+                    },
+                }
+            }
+        }
+        const severityChart = new Chart(severityChartCtx, {
+            type: 'bar',
+            data: severityData,
+            options: severityOptions
+        });
+
+        function clickHandler(click) {
+            const points = severityChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(severityDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+        severityChartCtx.onclick = clickHandler;
+    </script>
+    <!-- END SUMMARY CHART -->
+
+    <!-- DURATION CHART -->
+    <script>
+
+        // Options define for display value on top of bars
+        const durationDetailsReports = [
+                {title: "Under 1 second", link: "fc027b88ebc3c9fe0952a488b94676bfda94afa3e0de4feaf584f2ff1de85c3b.html"},
+                {title: "1 to 10 seconds", link: "6c5ff913ef1b2a26a52998e3b324d3b88c1b8ec7e429a41732e2b488079b8d13.html"},
+                {title: "10 to 30 seconds", link: "a4c74951d9e5798150495d22f8ff9f36ecb940681104ebbefa25aa144b1947d4.html"},
+                {title: "30 to 60 seconds", link: "c84e234d9a5a994e5eb2fc13d65a6399162c24ad76487d401da291ac8aa0b684.html"},
+                {title: "1 to 2 minutes", link: "69ba1d8996841c474d48cb8f2fa035ac0d7b9a16a24f51479fb7f29b7978dc66.html"},
+                {title: "2 to 5 minutes", link: "1a20b137636483dd765318d7a44090611725cca191113e025da7a8d173899e94.html"},
+                {title: "5 to 10 minutes", link: "2f89acb2cf2a5443769ed3131d9937e468d8b9053cd3c30abe29f35e2091045a.html"},
+                {title: "10 minutes or over", link: "66a868ab2c36feb603ec1443a77b2c7002f2d5fa233220a88485b0d118e27f42.html"},
+        ]
+        // The Severity bar chart
+        const durationChartCtx = document.getElementById('durationChart');
+
+        // Options define for display value on top of bars
+
+        const durationData = {
+            labels: ['Under 1 second','1 to 10 seconds','10 to 30 seconds','30 to 60 seconds','1 to 2 minutes','2 to 5 minutes','5 to 10 minutes','10 minutes or over'],
+            datasets: [{
+                label: 'Number of tests per duration',
+                fill: false,
+                data: ['25','0','0','0','0','0','0','0'],
+                backgroundColor: 'rgba(83, 146, 255,0.5)',
+                borderColor: 'rgba(83, 146, 255, 1)',
+            }]
+        }
+        const durationOptions = {
+            responsive: true,
+            plugins: {
+                // Change options for ALL labels of THIS CHART
+                datalabels: {
+                    color: '#444444',
+                    'font.weight': 'bold',
+                    formatter: (value, ctx) => {
+                        if (value > 0) {
+                            return value;
+                        } else {
+                            return '';
+                        }
+                    },
+                },
+                tooltip: {
+                    enabled: true,
+                    usePointStyle: true,
+                    callbacks: {
+                        label: (data) => {
+                            return data.parsed.y + ' tests'
+                        }
+                    },
+                },
+            },
+        }
+
+        const durationChart = new Chart(durationChartCtx, {
+            type: 'bar',
+            data: durationData,
+            options: durationOptions
+        });
+
+        function durationClickHandler(click) {
+            const points = durationChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                window.open(durationDetailsReports[firstPoint.index].link, "_self")
+
+            }
+        }
+
+        durationChartCtx.onclick = durationClickHandler;
+    </script>
+    <!-- END DURATION CHART -->
+
+
+</body>
+</html>
