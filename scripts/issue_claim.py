@@ -313,7 +313,11 @@ def sync_pr(run: Runner, repo: str, issue: int, pr: int, force: bool = False) ->
 
 
 def handover_count(labels: list[str]) -> int:
-    """Number of handovers recorded by `handover:count-N` labels (highest wins)."""
+    """Number of handovers recorded by `handover:count-N` labels (highest wins).
+
+    A soft, label-based cap: removing the label by hand resets the counter, which
+    is acceptable (a human deliberately restarting the task), so this is advisory.
+    """
     counts = [int(l[len(HANDOVER_COUNT_PREFIX):]) for l in labels
               if l.startswith(HANDOVER_COUNT_PREFIX) and l[len(HANDOVER_COUNT_PREFIX):].isdigit()]
     return max(counts, default=0)
@@ -326,7 +330,8 @@ def transfer(run: Runner, repo: str, number: int, harness: str, session: str,
 
     The new `claim:` label is added before the old one is removed, so the issue
     is never unclaimed and a third idle agent cannot take it mid-handover.
-    Records `handover:count-N` and `handover:pending`; refuses at MAX_HANDOVERS.
+    Records `handover:count-N` and `handover:pending`; refuses at MAX_HANDOVERS,
+    which is a soft label-based cap (removing the label resets it by hand).
     Returns (ok, message, new_count).
     """
     labels = read_labels(run, repo, number)
@@ -337,6 +342,7 @@ def transfer(run: Runner, repo: str, number: int, harness: str, session: str,
         return False, f"#{number} has no claim label to transfer; claim it first", 0
     if not force and not (owner.harness == harness and owner.session == session):
         return False, f"#{number} is owned by {owner.harness}/{owner.session}, not {harness}/{session}", 0
+    source = f"{owner.harness}/{owner.session}" if owner.owned else "unclaimed"
     if old_label == new_label:
         return False, "transfer target is the current owner", handover_count(labels)
     count = handover_count(labels)
@@ -356,7 +362,8 @@ def transfer(run: Runner, repo: str, number: int, harness: str, session: str,
             if stale_claim or stale_count:
                 remove_label(run, repo, target, label)
     drop_unused_claim_label(run, repo, old_label)
-    return True, f"#{number} transferred {harness}/{session} -> {to_harness}/{to_session} (handover {new_count}/{MAX_HANDOVERS})", new_count
+    return True, (f"#{number} transferred {source} -> {to_harness}/{to_session} "
+                  f"(handover {new_count}/{MAX_HANDOVERS})"), new_count
 
 
 def accept(run: Runner, repo: str, number: int, harness: str, session: str, pr: int | None = None) -> tuple[bool, str]:

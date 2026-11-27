@@ -87,6 +87,17 @@ class HandoverTest(unittest.TestCase):
         self.assertFalse(any(".env" in pointer for pointer in envelope["key_pointers"]))
         self.assertEqual(ho.validate_envelope(envelope), [])
 
+    def test_pre_staged_protected_file_is_never_committed(self):
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "app.py").write_text("VALUE = 1\n")
+        (self.repo / ".env").write_text("SECRET=1\n")
+        git(self.repo, "add", ".env")  # the normal crash state after `git add -A`
+        result = self.capture()
+        self.assertTrue(result["wip"].committed)
+        committed = git(self.repo, "show", "--pretty=format:", "--name-only", "HEAD").stdout.split()
+        self.assertEqual(committed, ["src/app.py"])
+        self.assertIn("A  .env", git(self.repo, "status", "--porcelain").stdout)
+
     def test_failed_commit_falls_back_to_a_patch(self):
         (self.repo / "src").mkdir()
         (self.repo / "src" / "app.py").write_text("VALUE = 1\n")
@@ -236,6 +247,17 @@ class ExportT3Test(unittest.TestCase):
         # The temporary export worktree is gone again.
         worktrees = git(self.repo, "worktree", "list", "--porcelain").stdout
         self.assertEqual(worktrees.count("worktree "), 1)
+
+    def test_export_refuses_candidate_history_with_protected_paths(self):
+        before = git(self.repo, "rev-parse", "feature/handover").stdout.strip()
+        (self.candidate / ".env").write_text("SECRET=1\n")
+        git(self.candidate, "add", "-A")
+        git(self.candidate, "commit", "--quiet", "-m", "leak a credential")
+        with self.assertRaises(ho.HandoverError) as caught:
+            self.export()
+        self.assertIn(".env", str(caught.exception))
+        self.assertEqual(git(self.repo, "rev-parse", "feature/handover").stdout.strip(), before)
+        self.assertFalse(self.envelopes.exists())
 
     def test_local_export_updates_the_branch_without_pushing(self):
         result = self.export(push=False)

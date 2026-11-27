@@ -184,6 +184,14 @@ def branch_name(worktree: Path) -> str:
     return "" if name == "HEAD" else name
 
 
+def root_commit(worktree: Path) -> str:
+    """The candidate snapshot commit a T3 workspace starts from."""
+    roots = _text(worktree, "rev-list", "--max-parents=0", "HEAD").splitlines()
+    if not roots:
+        raise HandoverError("git has no root commit to use as a handover base")
+    return roots[-1]
+
+
 def default_base(worktree: Path) -> str:
     """Merge base with the default branch, or the repository root commit."""
     for candidate in ("origin/master", "origin/main", "master", "main"):
@@ -192,10 +200,7 @@ def default_base(worktree: Path) -> str:
             merge_base = _git(worktree, "merge-base", "HEAD", candidate, check=False)
             if merge_base.returncode == 0:
                 return merge_base.stdout.decode().strip()
-    roots = _text(worktree, "rev-list", "--max-parents=0", "HEAD").splitlines()
-    if not roots:
-        raise HandoverError("git has no root commit to use as a handover base")
-    return roots[-1]
+    return root_commit(worktree)
 
 
 def changed_paths(worktree: Path) -> list[str]:
@@ -281,11 +286,13 @@ def commit_wip(worktree: Path, handover_root: Path, handover_id: str, seq: int, 
     staged = _git(worktree, "add", "--", *paths, check=False)
     commit = None
     if staged.returncode == 0:
-        commit = _git(worktree, "commit", "--quiet", "-m",
+        # --only commits exactly these paths (index included), so a protected file that was
+        # already staged before capture is never recorded in the WIP commit or pushed.
+        commit = _git(worktree, "commit", "--quiet", "--only", "-m",
                       f"{prefix}: {reason} checkpoint",
                       "-m", f"Deterministic handover capture {handover_id}; "
                             "squash or drop this commit when the incoming session finishes.",
-                      check=False)
+                      "--", *paths, check=False)
     if commit is None or commit.returncode:
         patch_path = handover_root / f"{handover_id}.patch"
         patch_path.parent.mkdir(parents=True, exist_ok=True)
@@ -652,7 +659,7 @@ def export_t3(options: ExportOptions) -> dict:
     handover_root = (options.root or repo / DEFAULT_ROOT).resolve()
     seq = options.seq or next_seq(handover_root, options.issue)
     handover_id = f"ho-{options.issue}-{seq:03d}"
-    source = options.base or default_base(candidate)
+    source = options.base or root_commit(candidate)  # the snapshot the T3 workspace started from
     candidate_paths = changed_paths(candidate)
     safe, protected = split_paths(candidate_paths)
     wip = commit_wip(candidate, handover_root, handover_id, seq, "manual", safe,
@@ -661,8 +668,18 @@ def export_t3(options: ExportOptions) -> dict:
         raise HandoverError(f"T3 candidate could not be committed ({wip.detail}); inspect the patch")
     candidate_head = head_sha(candidate)
 
-    # 2. Turn the candidate work into one patch relative to its source revision.
-    patch = _git(candidate, "diff", "--binary", f"{source}..{candidate_head}").stdout
+    # 2. Turn the candidate work into one patch relative to its source revision. The diff is
+    #    filtered by the same credential boundary as capture: a protected file the child
+    #    committed itself must never reach the PR branch.
+    diff_paths = [path for path in _text(candidate, "diff", "--name-only",
+                                         f"{source}..{candidate_head}").splitlines() if path]
+    leaked = [path for path in diff_paths if is_protected(path)]
+    if leaked:
+        raise HandoverError("T3 candidate history contains protected paths and cannot be exported: "
+                            + ", ".join(leaked))
+    safe_diff = [path for path in diff_paths if not is_protected(path)]
+    patch = (_git(candidate, "diff", "--binary", f"{source}..{candidate_head}", "--",
+                  *safe_diff).stdout if safe_diff else b"")
     if safe and not patch:
         raise HandoverError("T3 candidate has changes but the diff is empty")
 
@@ -757,7 +774,8 @@ def post_comment(runner: Runner, pr: int, body: str) -> str:
     return runner(["pr", "comment", str(pr), "--body-file", "-"], body)
 
 
-def _add_capture_arguments(parser: argparse.ArgumentParser) -> None:
+def _add_capture_arguments(parser: argparse.ArgumentParser,
+                           base_help: str = "base revision (default: merge base with the default branch)") -> None:
     parser.add_argument("--issue", type=int, required=True, help="issue number this handover belongs to")
     parser.add_argument("--pr", type=int, help="draft PR that carries the branch")
     parser.add_argument("--reason", default="manual", choices=REASONS)
@@ -776,7 +794,7 @@ def _add_capture_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--verify-command", help="last verification command")
     parser.add_argument("--verify-status", choices=VERIFICATION_STATUSES)
     parser.add_argument("--verify-summary", help="last verification summary")
-    parser.add_argument("--base", help="base revision (default: merge base with the default branch)")
+    parser.add_argument("--base", help=base_help)
     parser.add_argument("--seq", type=int, help="handover sequence (default: next free for the issue)")
     parser.add_argument("--root", type=Path, help="envelope directory (default: .agents/local/handovers)")
     parser.add_argument("--no-push", action="store_true", help="do not push the WIP commit")
@@ -815,7 +833,13 @@ def build_parser() -> argparse.ArgumentParser:
     render_parser.add_argument("--post-pr", type=int, help="post the summary to this draft PR (gh)")
     render_parser.add_argument("--json", action="store_true", help="machine-readable output")
 
-    export_parser = subparsers.add_parser("export-t3", help="export a cancelled T3 candidate onto a PR branch")
+    export_parser = subparsers.add_parser(
+        "export-t3", help="export a cancelled T3 candidate onto a PR branch",
+        description="Export a cancelled T3 candidate checkout onto a PR branch. The candidate is "
+                    "committed deterministically first, then exported as one patch relative to "
+                    "--base and pushed. Re-exporting the same candidate onto a branch that already "
+                    "holds it fails (git apply refuses the duplicate); rebase or reset the branch "
+                    "first. Protected paths in the candidate history are refused.")
     export_parser.add_argument("--json", action="store_true", help="machine-readable output")
     export_parser.add_argument("--candidate", type=Path, required=True, help="T3 candidate checkout")
     export_parser.add_argument("--branch", required=True, help="PR branch that receives the export")
@@ -824,7 +848,8 @@ def build_parser() -> argparse.ArgumentParser:
                                help="confirms task_cancel terminated the outgoing child (required)")
     export_parser.add_argument("--thread-id", help="T3 thread id of the outgoing child")
     export_parser.add_argument("--child-id", help="T3 child session id of the outgoing child")
-    _add_capture_arguments(export_parser)
+    _add_capture_arguments(export_parser, base_help="base revision of the candidate (default: its root "
+                                                    "snapshot commit)")
     return parser
 
 

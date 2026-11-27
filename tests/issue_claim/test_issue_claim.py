@@ -428,6 +428,14 @@ class HandoverTransferTests(unittest.TestCase):
         self.assertIn("claim:claude/other", fake.labels)
         self.assertNotIn("claim:codex/c9", fake.labels)
 
+    def test_forced_transfer_reports_the_displaced_owner(self):
+        fake = self.owned(session="other")
+        code, out = self.transfer(fake, "--force")
+        self.assertEqual(code, 0, out)
+        self.assertIn("transferred claude/other -> codex/c9", out["message"])
+        self.assertIn("claim:codex/c9", fake.labels)
+        self.assertNotIn("claim:claude/other", fake.labels)
+
     def test_unclaimed_issue_cannot_be_transferred(self):
         self.assertEqual(self.transfer(FakeGh())[0], 1)
 
