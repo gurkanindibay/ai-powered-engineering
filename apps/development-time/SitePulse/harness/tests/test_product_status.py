@@ -114,6 +114,37 @@ class SnapshotTest(unittest.TestCase):
         page = ps.render_html([snap], {"detail": "feature-report.html", "history": "history.html"})
         self.assertIn("test_named_scenario", page)
         self.assertIn("commit <code>aaaaaaaaaaaa</code>", page)
+        self.assertIn("evidence-exceptions", page)
+        self.assertIn("commit <code>bbbbbbbbbbbb</code>", page)
+        self.assertIn("Browse all 2 scenarios across 1 epic", page)
+
+    def test_named_evidence_collapses_duplicate_parameterized_cases_and_omits_repeated_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_catalogue(root)
+            commit = "c" * 40
+            run_url = "https://github.com/owner/repo/actions/runs/456"
+            repeated = [
+                {"test_name": "test_param_case", "status": "passing", "workflow_run": run_url,
+                 "attempt": "1", "tested_commit": commit}
+                for _ in range(12)
+            ]
+            evidence = {
+                "attempt": "1", "workflow_run": run_url,
+                "scenarios": {
+                    "SC-01-01-01": {"evidence": "passing", "cases": repeated},
+                    "SC-01-01-02": {"evidence": "passing", "cases": [{
+                        "test_name": "test_second_case", "status": "passing", "workflow_run": run_url,
+                        "attempt": "1", "tested_commit": commit}]},
+                },
+            }
+            snap = ps.build_snapshot(ft.load_catalogue(root), [], evidence=evidence)
+        page = ps.render_html([snap])
+        self.assertIn("×12", page)
+        self.assertEqual(page.count("test_param_case"), 1)
+        self.assertEqual(page.count("commit <code>cccccccccccc</code>"), 1)
+        self.assertNotIn('<details class="evidence-exceptions"', page)
+        self.assertIn('<details class="evidence-browser">', page)
 
     def test_summary_fallback_reads_the_time_from_the_run_id(self):
         snap = ps.snapshot_from_summary({"run_id": "20261115T203425Z-c3318fa", "status": "PASS", "junit": {"tests": 3}})
