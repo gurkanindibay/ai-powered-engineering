@@ -27,9 +27,9 @@ class TestTranscriptPrivacy(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_zero_message_content_leakage(self):
-        secret_prompt = "TOP_SECRET_PROMPT_12345_NEVER_LOG"
-        secret_code = "SECRET_SOURCE_CODE_DEF_FOO_BAR"
-        secret_tool_output = "API_KEY_sk-ant-api03-abcdefg987654321"
+        canary_prompt = "CANARY_PROMPT_12345_VERIFY_ABSENT"
+        canary_code = "CANARY_SOURCE_CODE_DEF_FOO_BAR"
+        canary_tool_output = "CANARY_OUTPUT_FRAGMENT_987654321"
 
         # 1. Claude log with sensitive text in message content & tool outputs
         claude_dir = self.root / "claude"
@@ -43,8 +43,8 @@ class TestTranscriptPrivacy(unittest.TestCase):
                 "timestamp": "2026-11-27T10:00:00Z",
                 "message": {
                     "model": "claude-sonnet-5-5",
-                    "content": [{"type": "text", "text": secret_prompt}],
-                    "tool_use": {"name": "run_command", "input": {"CommandLine": secret_code}},
+                    "content": [{"type": "text", "text": canary_prompt}],
+                    "tool_use": {"name": "run_command", "input": {"CommandLine": canary_code}},
                     "usage": {"input_tokens": 100, "output_tokens": 50}
                 }
             }) + "\n")
@@ -61,8 +61,8 @@ class TestTranscriptPrivacy(unittest.TestCase):
                 "payload": {
                     "session_id": "sess-priv-2",
                     "response_id": "resp-priv-1",
-                    "prompt_text": secret_prompt,
-                    "code_patch": secret_code,
+                    "prompt_text": canary_prompt,
+                    "code_patch": canary_code,
                     "usage": {"input_tokens": 200, "output_tokens": 75}
                 }
             }) + "\n")
@@ -78,9 +78,9 @@ class TestTranscriptPrivacy(unittest.TestCase):
                 "created_at": "2026-11-27T10:02:00Z",
                 "input_tokens": 300,
                 "output_tokens": 120,
-                "content": secret_prompt,
-                "thinking": secret_code,
-                "tool_calls": [{"name": "eval", "result": secret_tool_output}],
+                "content": canary_prompt,
+                "thinking": canary_code,
+                "tool_calls": [{"name": "eval", "result": canary_tool_output}],
             }) + "\n")
 
         # Collect all
@@ -96,15 +96,15 @@ class TestTranscriptPrivacy(unittest.TestCase):
             row_dict = dict(r)
             for k, val in row_dict.items():
                 val_str = str(val)
-                self.assertNotIn(secret_prompt, val_str, f"Found secret prompt in column {k}!")
-                self.assertNotIn(secret_code, val_str, f"Found secret code in column {k}!")
-                self.assertNotIn(secret_tool_output, val_str, f"Found secret tool output in column {k}!")
+                self.assertNotIn(canary_prompt, val_str, f"Found canary prompt in column {k}!")
+                self.assertNotIn(canary_code, val_str, f"Found canary code in column {k}!")
+                self.assertNotIn(canary_tool_output, val_str, f"Found canary tool output in column {k}!")
 
         # Also search raw database binary content
         db_raw = self.db_path.read_bytes()
-        self.assertNotIn(secret_prompt.encode("utf-8"), db_raw)
-        self.assertNotIn(secret_code.encode("utf-8"), db_raw)
-        self.assertNotIn(secret_tool_output.encode("utf-8"), db_raw)
+        self.assertNotIn(canary_prompt.encode("utf-8"), db_raw)
+        self.assertNotIn(canary_code.encode("utf-8"), db_raw)
+        self.assertNotIn(canary_tool_output.encode("utf-8"), db_raw)
 
 
 if __name__ == "__main__":
