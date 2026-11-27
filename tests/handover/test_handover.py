@@ -118,7 +118,7 @@ class HandoverTest(unittest.TestCase):
         self.assertLess(len(envelope["progress"]["remaining"]), len(remaining))
         self.assertEqual(ho.validate_envelope(envelope), [])
 
-    def test_validation_catches_tampering_and_missing_fields(self):
+    def test_validation_catches_tampering_missing_fields_and_oversized_files(self):
         result = self.capture()
         tampered = json.loads(json.dumps(result["envelope"]))
         tampered["progress"]["completed"].append("trust me")
@@ -126,6 +126,9 @@ class HandoverTest(unittest.TestCase):
         missing = json.loads(json.dumps(result["envelope"]))
         del missing["reason"]
         self.assertIn("missing fields", ho.validate_envelope(missing)[0])
+        oversize = Path(result["path"])
+        oversize.write_text(oversize.read_text() + " " * (ho.MAX_ENVELOPE_BYTES + 1))
+        self.assertIn("cap", ho.validate_file(oversize)[1][0])
 
     def test_render_escapes_content_and_refuses_invalid_envelopes(self):
         result = self.capture()

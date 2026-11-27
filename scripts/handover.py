@@ -234,6 +234,12 @@ def next_seq(root: Path, issue: int) -> int:
     return seq
 
 
+def envelope_text(envelope: dict) -> str:
+    """Readable JSON, compact canonical JSON when pretty printing would break the cap."""
+    pretty = json.dumps(envelope, indent=2, sort_keys=True) + "\n"
+    return pretty if len(pretty.encode()) <= MAX_ENVELOPE_BYTES else canonical(envelope) + "\n"
+
+
 def _write_private(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -433,7 +439,7 @@ def capture(worktree: Path, options: CaptureOptions) -> dict:
     errors = validate_envelope(envelope)
     if errors:
         raise HandoverError("; ".join(errors))
-    _write_private(target, json.dumps(envelope, indent=2, sort_keys=True) + "\n")
+    _write_private(target, envelope_text(envelope))
     return {"envelope": envelope, "path": str(target), "seq": seq, "wip": wip,
             "protected": protected}
 
@@ -537,10 +543,17 @@ def validate_envelope(envelope: dict) -> list[str]:
 
 def validate_file(path: Path) -> tuple[dict | None, list[str]]:
     try:
-        envelope = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
         return None, [f"cannot read envelope: {exc}"]
-    return envelope, validate_envelope(envelope)
+    try:
+        envelope = json.loads(text)
+    except ValueError as exc:
+        return None, [f"envelope is not valid JSON: {exc}"]
+    errors = validate_envelope(envelope)
+    if len(text.encode()) > MAX_ENVELOPE_BYTES:
+        errors.append(f"envelope file exceeds the {MAX_ENVELOPE_BYTES // 1024} KiB cap")
+    return envelope, errors
 
 
 # -------------------------------------------------------------------- render
@@ -721,7 +734,7 @@ def export_t3(options: ExportOptions) -> dict:
     if errors:
         raise HandoverError("; ".join(errors))
     target = handover_root / f"{options.issue}-{seq:03d}.json"
-    _write_private(target, json.dumps(envelope, indent=2, sort_keys=True) + "\n")
+    _write_private(target, envelope_text(envelope))
     return {"envelope": envelope, "path": str(target), "branch": options.branch,
             "head_sha": exported_head, "pushed": pushed, "protected": protected}
 
