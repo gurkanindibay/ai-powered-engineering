@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "_comment": "Headless CLI argv templates used by scripts/harness_coordinator.py. {prompt}, {model} and {effort} are substituted; the prompt is always the rendered handover envelope. Operators may adapt these to a local wrapper, but they must stay non-interactive and must not be shell-evaluated (argv only).",
+  "launchers": {
+    "claude": {
+      "transport": "cli",
+      "argv": ["claude", "-p", "--output-format", "json", "--model", "{model}", "{prompt}"]
+    },
+    "codex": {
+      "transport": "cli",
+      "argv": ["codex", "exec", "--json", "--model", "{model}", "{prompt}"]
+    },
+    "gemini": {
+      "transport": "cli",
+      "argv": ["gemini", "-p", "{prompt}", "--model", "{model}"]
+    },
+    "copilot": {
+      "transport": "copilot_cli",
+      "argv": ["copilot", "-p", "{prompt}", "--model", "{model}"]
+    }
+  }
+}

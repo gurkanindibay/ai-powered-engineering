@@ -16,6 +16,11 @@ on:
       - 'tests/issue_claim/**'
       - 'scripts/handover.py'
       - 'tests/handover/**'
+      - 'scripts/harness_coordinator.py'
+      - 'scripts/token_guard.py'
+      - 'tests/harness_coordinator/**'
+      - 'tests/token_guard/**'
+      - 'config/engineering-harness/**'
       - 'scripts/cleanup_unused_worktrees.py'
       - 'tests/cleanup_unused_worktrees/**'
       - 'scripts/cargo_target_pool.py'
@@ -27,7 +32,6 @@ on:
       - 'tests/token_tracker/**'
       - 'config/provider-quotas.json'
       - 'tests/engineering_harness/**'
-      - 'config/engineering-harness/**'
       - '.github/workflows/engineering-harness-ci.yml'
   push:
     branches: [master]
@@ -39,6 +43,11 @@ on:
       - 'tests/pr_review_watch/**'
       - 'scripts/handover.py'
       - 'tests/handover/**'
+      - 'scripts/harness_coordinator.py'
+      - 'scripts/token_guard.py'
+      - 'tests/harness_coordinator/**'
+      - 'tests/token_guard/**'
+      - 'config/engineering-harness/**'
       - 'scripts/engineering_harness/**'
       - 'scripts/development_harness.py'
       - 'scripts/team_orchestrator.py'
@@ -55,7 +64,6 @@ on:
       - 'tests/token_tracker/**'
       - 'config/provider-quotas.json'
       - 'tests/engineering_harness/**'
-      - 'config/engineering-harness/**'
       - '.github/workflows/engineering-harness-ci.yml'
 # Least privilege: the jobs only read the repository.
 permissions:
@@ -80,6 +88,12 @@ jobs:
         run: python3 -m unittest discover -s tests/issue_claim -v
       - name: Handover protocol tests
         run: python3 -m unittest discover -s tests/handover -v
+      - name: Harness coordinator and watchdog tests
+        run: python3 -m unittest discover -s tests/harness_coordinator -v
+      - name: Token guard checkpoint gate tests
+        run: python3 -m unittest discover -s tests/token_guard -v
+      - name: Phase 4 failover simulation (synthetic 429, context ceiling, thrash)
+        run: python3 scripts/harness_coordinator.py simulate --cases config/engineering-harness/coordinator-scenarios.json
       - name: Cargo target pool tests
         run: python3 -m unittest discover -s tests/cargo_target_pool -v
       - name: Unused worktree cleanup tests

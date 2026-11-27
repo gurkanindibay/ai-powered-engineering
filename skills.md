@@ -417,7 +417,7 @@ DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser su
 ## 5c-2. Token Guard Hook (`token_guard.py`)
 
 - **Executable Script:** [scripts/token_guard.py](file:///scripts/token_guard.py), wired in [.claude/settings.json](file:///.claude/settings.json) as a `PreToolUse`/`PostToolUse` hook.
-- **Purpose:** Keeps agent context small, because every tool result is re-sent on each later step. It denies `cat` of files over 50 KB, `ls -R`, unfiltered `find`, `Read` of files over 50 KB without offset/limit, and browser screenshots without `scale` <= 0.5 (including inside `browser_batch`). Each denial suggests a cheaper alternative. Bash results over 30K characters get a non-blocking reminder. Set `TOKEN_GUARD=off` to disable it.
+- **Purpose:** Keeps agent context small, because every tool result is re-sent on each later step. It denies `cat` of files over 50 KB, `ls -R`, unfiltered `find`, `Read` of files over 50 KB without offset/limit, and browser screenshots without `scale` <= 0.5 (including inside `browser_batch`). Each denial suggests a cheaper alternative. Bash results over 30K characters get a non-blocking reminder. **Phase 4 checkpoint gate:** at context >= 80% or quota >= 85% (from the session lease written by `harness_coordinator.py heartbeat`, then `$HARNESS_CONTEXT_PCT`/`$HARNESS_QUOTA_PCT`, then `--context-pct`/`--quota-pct`), new edits and wide reads are denied and only checkpointing stays allowed (`git status/diff/commit/push`, `handover.py capture`, `harness_coordinator.py heartbeat|status|handover`, `issue_claim.py status|accept`, `token_tracker.py health|budget-check|record`). `TOKEN_GUARD_CHECKPOINT=off` disables only that gate; `TOKEN_GUARD=off` disables the hook.
 
 ```bash
 echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls -R"}}' | python3 scripts/token_guard.py --json
@@ -454,6 +454,26 @@ python3 scripts/handover.py render .agents/local/handovers/548-001.json --post-p
 python3 scripts/handover.py export-t3 --candidate /tmp/candidate --branch feature/x \
     --issue 548 --pr 553 --child-cancelled --json
 python3 -m unittest discover -s tests/handover
+```
+
+## 5c-3d. Harness Coordinator (`harness_coordinator.py`)
+
+- **Executable Script:** [scripts/harness_coordinator.py](file:///scripts/harness_coordinator.py), core [scripts/engineering_harness/coordinator.py](file:///scripts/engineering_harness/coordinator.py), leases [scripts/engineering_harness/leases.py](file:///scripts/engineering_harness/leases.py); contract: [token-aware-harness-and-handover-analysis.md §4.1–4.6](file:///apps/development-time/SitePulse/docs/engineering-process/token-aware-harness-and-handover-analysis.md)
+- **Purpose:** Phase 4 Tier 1: routine handovers run with **0 LLM tokens**. `handover` captures or reuses a validated envelope, reads the `handover:count-N` label, selects the next qualified healthy provider from the registry (T3 first, then a headless CLI twin, then DeepSeek overflow; the risk floor is never downgraded), transfers the claim through `issue_claim.py transfer --to-model ...`, and dispatches over one of three transports: `t3` (a `t3-dispatch` payload that requires `task_cancel` of the outgoing child), `cli` (`claude -p`, `codex exec --json`, `gemini -p`, Copilot CLI from [launchers.json](file:///config/engineering-harness/launchers.json) in a fresh detached worktree, wrapped by deterministic capture on 429/crash) or `pickup` (a ready-to-paste brief under `.agents/local/handovers/pickup/`). `serve` is the daemon loop: it runs the watchdog, then dispatches every pending envelope; it also watches open issues labeled `handover:pending`, and a label without a local envelope escalates instead of guessing. `recover` is the Layer-3 watchdog: an expired session lease (twice its TTL) with a dirty worktree is snapshotted by `handover.py capture` and its worktree is **never** removed; an expired T3 attempt escalates because `task_cancel` must happen before candidate export. `heartbeat` writes the shared session lease (`.agents/local/sessions/`, visible to the `token_guard.py` checkpoint gate). Escalations are written to `.agents/local/coordinator/escalations/` only for invalid checkpoints, 2+ handovers or 2+ failed repairs (thrash), the `MAX_HANDOVERS = 3` cap, and no healthy qualified provider; the reviewer is never woken for routine dispatching. `simulate` replays the synthetic 429/context/thrash cases in [coordinator-scenarios.json](file:///config/engineering-harness/coordinator-scenarios.json) and fails on a routing regression. Every command supports `--help` and `--json`; `--dry-run` writes nothing and spawns nothing.
+
+```bash
+python3 scripts/harness_coordinator.py heartbeat --harness t3 --session "$AGENT_SESSION_ID" \
+    --model deepseek-flash --issue 549 --worktree "$PWD" --context-pct 62 --json
+python3 scripts/harness_coordinator.py status --json
+python3 scripts/harness_coordinator.py handover --issue 549 --reason context_ceiling \
+    --from-harness t3 --from-session "$AGENT_SESSION_ID" --from-provider claudeAgent \
+    --envelope .agents/local/handovers/549-001.json --dry-run --json
+python3 scripts/harness_coordinator.py provider-failed --provider claude --status EXHAUSTED \
+    --reset-at 2026-11-28T02:00:00Z
+python3 scripts/harness_coordinator.py recover --dry-run --t3-db .agents/local/runs.sqlite3 --json
+python3 scripts/harness_coordinator.py serve --once --json   # daemon loop; --passes/--interval for long runs
+python3 scripts/harness_coordinator.py simulate --cases config/engineering-harness/coordinator-scenarios.json
+python3 -m unittest discover -s tests/harness_coordinator
 ```
 
 ## 5c-3a. Agent Names (`agent_names.py`)

@@ -105,6 +105,23 @@ python3 scripts/development_harness.py --json t3-submit RUN_ID ATTEMPT_ID --outp
 
 Limits of this transport: T3 children run with the orchestrator's T3 permissions rather than in the Docker sandbox, so path rules are enforced when the result is integrated, not by mounts. Edits a child makes outside the candidate checkout are not detected. T3 exposes no per-child token usage, so each attempt charges its full reservation (`min(attempt_tokens, max_tokens)` tokens). Gates still need the digest-pinned Docker image from the policy; `image`, `network` and `limits` apply to them, and `bridge` is ignored by T3 dispatch.
 
+### Reviewer-coordinated auto-handover (Phase 4)
+
+Routine handovers do not need an LLM. `scripts/harness_coordinator.py` validates the checkpoint, chooses the next qualified healthy provider, transfers the claim atomically and dispatches:
+
+```bash
+python3 scripts/harness_coordinator.py heartbeat --harness t3 --session "$AGENT_SESSION_ID" \
+    --model deepseek-flash --issue 412 --worktree "$PWD" --context-pct 62
+python3 scripts/harness_coordinator.py handover --issue 412 --reason provider_quota_exhausted \
+    --from-harness t3 --from-session "$AGENT_SESSION_ID" --from-provider claudeAgent \
+    --envelope .agents/local/handovers/412-002.json --json
+python3 scripts/harness_coordinator.py recover --t3-db .agents/local/runs.sqlite3 --json
+python3 scripts/harness_coordinator.py serve --once --json
+python3 scripts/harness_coordinator.py simulate --cases config/engineering-harness/coordinator-scenarios.json
+```
+
+The three transports are a T3 `delegate_task` payload (`.agents/local/dispatch/t3/<handover>.json`, requiring `task_cancel` of the outgoing child first), a headless CLI in a fresh detached worktree (`config/engineering-harness/launchers.json`), or an IDE pickup brief (`.agents/local/handovers/pickup/`). `serve --once` (or `--passes`/`--interval`) is the daemon loop: it runs the watchdog, dispatches every pending envelope, and watches open issues labeled `handover:pending` (a label with no local envelope escalates rather than guessing). A failed CLI run is captured deterministically by `handover.py capture`, so a 429 or crash still checkpoints. The watchdog (`recover`) snapshots dirty expired sessions and **never removes, resets or force-cleans their worktrees**; an expired T3 attempt only escalates, because `task_cancel` must precede candidate export. The coordinator writes escalation records for invalid checkpoints, thrashing (2+ handovers or 2+ failed repairs), the `MAX_HANDOVERS = 3` cap and missing healthy providers; it never posts a review or merges. The context/quota checkpoint gate lives in `scripts/token_guard.py` (80% context, 85% quota).
+
 ## Create and run
 
 ```bash
