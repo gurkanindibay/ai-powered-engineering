@@ -651,7 +651,7 @@ def export_t3(options: ExportOptions) -> dict:
     candidate = options.candidate.resolve()
     repo = (options.repo or Path.cwd()).resolve()
     repo = Path(_text(repo, "rev-parse", "--show-toplevel"))
-    source_commit = _resolve_branch(repo, options.branch)
+    source_commit = _text(repo, "rev-parse", _resolve_branch(repo, options.branch))
     if candidate == repo:
         raise HandoverError("the T3 candidate must be a separate checkout, not the PR repository")
 
@@ -728,21 +728,28 @@ def export_t3(options: ExportOptions) -> dict:
             _git(repo, "worktree", "remove", "--force", str(worktree), check=False)
             _git(repo, "worktree", "prune", check=False)
 
+    # The envelope describes the PR branch, not the candidate: its base is the branch
+    # commit the export applied onto. Using the candidate's root here would make
+    # git log/diff run against a commit the PR repository does not contain.
+    completed = options.completed or [
+        f"Exported the T3 candidate snapshot {candidate_head[:7]} onto {options.branch}"]
+    pointers = options.key_pointers or [
+        f"{path} (exported from T3 candidate)" for path in safe_diff[:10]
+    ] or ["No file changed in this export"]
     capture_options = CaptureOptions(
         issue=options.issue, pr=options.pr, reason="manual", provider=options.provider,
         harness=options.harness, model=options.model, agent_name=options.agent_name,
         session_id=options.session_id, risk_tier=options.risk_tier, role=options.role,
         excluded_providers=options.excluded_providers,
-        completed=options.completed or complete_commits(candidate, source),
-        remaining=options.remaining, decisions=options.decisions,
-        key_pointers=options.key_pointers or _derived_pointers(candidate, source),
-        base=source, seq=seq, push=False, root=handover_root,
+        completed=completed, remaining=options.remaining, decisions=options.decisions,
+        key_pointers=pointers, base=source_commit, seq=seq, push=False, root=handover_root,
         t3_context={"thread_id": options.thread_id, "child_id": options.child_id,
                     "candidate": str(candidate), "exported_head": exported_head,
                     "child_cancelled": True})
     wip = WipCapture(committed=exported_head != source_commit, sha=exported_head,
                      pushed=pushed, detail="exported" if pushed else "exported locally")
-    envelope = build_envelope(repo, capture_options, wip, bool(candidate_paths), protected, seq, source)
+    envelope = build_envelope(repo, capture_options, wip, bool(candidate_paths), protected, seq,
+                              source_commit)
     envelope["git_state"].update({"branch": options.branch, "head_sha": exported_head})
     envelope["checksum_sha256"] = checksum(envelope)
     fit_envelope(envelope)
