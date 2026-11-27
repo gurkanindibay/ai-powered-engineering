@@ -271,6 +271,19 @@ sequenceDiagram
    - Never force-remove a dirty worktree. If the outgoing agent crashed with dirty edits, `handover.py` commits them to a `wip/handover-<seq>` commit on the PR branch (squashed on final merge) before releasing the worktree.
 5. **No Silent Risk-Floor Downgrade**: Enforced identically to `routing.py` and `t3.capabilities_from_catalog()`.
 
+### 4.6 WIP Commit & Zero-Data-Loss Assurance (3-Layer Defense)
+
+An LLM cannot be trusted on its own to commit before hard exhaustion: once a provider returns an abrupt HTTP 429, hits a hard usage cap, or crashes mid-turn, the agent can no longer invoke another tool call. The design therefore guarantees work preservation through **three defense-in-depth layers**:
+
+| Layer | Trigger / Timing | Who Executes | Guarantee |
+|---|---|---|---|
+| **1. Proactive Soft-Gate (Before the Wall)** | Context `> 80%` (`RED`) or quota `> 85%` | Outgoing agent + pre-tool hook (`token_guard.py` / planned `token_tracker.py budget-check`) | Leaves ~15–20% runway before hard exhaustion. Once triggered, the hook blocks new feature edits and wide reads, allowing only checkpointing (`git commit` + handover summary). Combined with incremental sub-step commits, minimal work is ever uncommitted. |
+| **2. Deterministic Supervisor Wrapper / T3 Controller (0 LLM Tokens)** | Hard 429, quota cutoff, timeout, or non-zero exit | Planned `scripts/handover.py capture` wrapper (for headless CLIs) or `development_harness.py` controller (for T3 after `task_cancel` / `t3-submit`) | Because file-write tools persist edits to disk immediately inside the isolated worktree or T3 candidate checkout, the wrapper captures them deterministically with **zero LLM calls**: checks `git status --porcelain`, filters out ignored/protected/credential-looking paths, commits a `wip/handover-<seq>` commit to the Draft PR branch (or saves a `.patch` in `.agents/local/handovers/` if the index is conflicted), pushes, and synthesizes a fallback Canonical Handover Envelope from `git diff --stat`, recent commits, and the last test log. *(Note: T3 children are already forbidden from running `git commit` in `t3.py`; the controller always owns candidate commits/exports.)* |
+| **3. Watchdog Lease-Expiry Recovery** | Stalled or killed interactive IDE session (missed heartbeat `> TTL`) | 0-token Coordinator Daemon | For interactive IDE sessions (e.g., Antigravity IDE) that do not run inside a parent CLI wrapper, the Coordinator monitors the session's heartbeat lease and recorded worktree path. On TTL expiry with dirty edits, it never force-deletes the worktree (Rule 11); it snapshots the uncommitted diff into `.agents/local/handovers/` (or a `wip/handover-<seq>` commit on the Draft PR branch) and wakes the Reviewer/Operator before transferring the claim. |
+
+> [!NOTE]
+> **Mid-Edit Integrity:** If a deterministic capture triggers mid-edit on non-compiling code, the `wip/handover-<seq>` commit still preserves the raw changes safely on the Draft PR branch with `last_verification.status = "unverified"` (never falsely marked passing). The incoming worker immediately sees the exact diff, completes or cleans up the partial edit, and `wip/*` commits are squashed on final merge.
+
 ---
 
 ## 5. Track B (Separate Requirement): Cross-Provider Token Consumption Tracker
