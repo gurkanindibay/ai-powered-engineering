@@ -37,6 +37,46 @@ class PagesSiteTests(unittest.TestCase):
                          ("test_example", "historical", "b" * 40))
         self.assertNotIn("failure", case)
 
+    def test_public_snapshot_preserves_commas_unicode_and_punctuation_in_titles(self):
+        commit = "a" * 40
+        run_id = "20261126T103000Z-abcdef0"
+        summary = pages.safe_summary({}, run_id, "1", commit=commit)
+        epic_title = "Capital Expenditure, Persistence & Fixture Dues (Demirbaş & Yatırım Projeleri)"
+        story_title = "Official Digital Payment Receipt (`#TAH-2026-XXXX`) & Unified Runner (`run-tests.sh`)"
+        scenario_name = "One kuruş short, leaves one kuruş open"
+        raw = {
+            "generated_at": "2026-11-26T10:30:00Z", "run_id": run_id, "commit": commit,
+            "epics": [{
+                "id": "EPIC-10", "title": epic_title, "health": "verified",
+                "story_details": [{
+                    "id": "STORY-10-01", "title": story_title, "state": "passing",
+                    "scenarios": [{"id": "SC-10-01-01", "name": scenario_name, "state": "passing"}],
+                }],
+            }, {
+                "id": "EPIC-99", "title": "<script>alert(1)</script>", "health": "not_specified",
+                "story_details": [],
+            }],
+            "scenarios": {
+                "SC-10-01-01": {
+                    "state": "passing", "name": scenario_name, "epic": "EPIC-10", "story": "STORY-10-01",
+                    "evidence_cases": [{
+                        "test_name": "DashboardController Unit & Integration Tests when login with Google, then authenticates as homeOwner with Google provider",
+                        "status": "passing", "test_status": "passing",
+                    }],
+                },
+            },
+        }
+        public = pages._safe_snapshot(raw, summary)
+        self.assertEqual(public["epics"][0]["title"], epic_title)
+        self.assertEqual(public["epics"][0]["story_details"][0]["title"], story_title)
+        self.assertEqual(public["epics"][0]["story_details"][0]["scenarios"][0]["name"], scenario_name)
+        self.assertEqual(public["scenarios"]["SC-10-01-01"]["name"], scenario_name)
+        self.assertEqual(
+            public["scenarios"]["SC-10-01-01"]["evidence_cases"][0]["test_name"],
+            "DashboardController Unit & Integration Tests when login with Google, then authenticates as homeOwner with Google provider",
+        )
+        self.assertEqual(public["epics"][1]["title"], "EPIC-99")
+
     def test_build_keeps_git_pointer_of_gh_pages_worktree(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

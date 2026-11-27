@@ -19,7 +19,8 @@ import feature_traceability as ft
 
 CASE_STATUSES = {"passed": "passing", "failed": "failing", "error": "failing",
                  "skipped": "skipped", "cancelled": "skipped", "not-run": "skipped"}
-PUBLIC_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/()'&+-]{0,119}$")
+PUBLIC_LABEL = re.compile(r"^[^\W_](?:[^\W_]|[ ._:/()'&+,#`-]){0,119}$")
+PUBLIC_TITLE = re.compile(r"^[^\W_](?:[^\W_]|[ ._:/()'&+,#`-]){0,239}$")
 WORKFLOW_RUN_URL = re.compile(r"^https://[A-Za-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/\d+$")
 DART_INTERPOLATION = re.compile(r"(?<!\\)\$(?:\{[^{}]*\}|[A-Za-z_]\w*)")
 # An interpolated title needs this much literal text to identify its cases.
@@ -28,6 +29,10 @@ MIN_TEMPLATE_LITERAL = 12
 
 def safe_public_label(value: object, fallback: str = "") -> str:
     return value if isinstance(value, str) and PUBLIC_LABEL.fullmatch(value) else fallback
+
+
+def safe_public_title(value: object, fallback: str = "") -> str:
+    return value if isinstance(value, str) and PUBLIC_TITLE.fullmatch(value) else fallback
 
 
 def safe_workflow_run(value: object) -> str:
@@ -199,7 +204,7 @@ def build_evidence(scenarios: dict, cases: list[dict], links: dict[str, list[dic
                 "producer": safe_public_label(case.get("producer"), "unknown"),
                 "suite": safe_public_label(case.get("suite"), "unknown"),
                 "native_id": safe_static_case_name(native_id),
-                "test_name": safe_public_label(native_name, "test case"),
+                "test_name": safe_public_title(native_name, "test case"),
                 "status": "historical" if historical else test_status,
                 "test_status": test_status,
                 "workflow_run": safe_workflow_run(workflow_run),

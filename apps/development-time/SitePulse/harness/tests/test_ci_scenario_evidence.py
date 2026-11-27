@@ -48,6 +48,31 @@ class ScenarioEvidenceTest(unittest.TestCase):
         self.assertEqual(passed["attempt"], "2")
         self.assertEqual(passed["tested_commit"], commit)
 
+    def test_safe_public_label_preserves_commas_and_unicode_while_blocking_markup(self):
+        self.assertEqual(
+            cse.safe_public_label("when login with Google, then authenticates as homeOwner", "test case"),
+            "when login with Google, then authenticates as homeOwner",
+        )
+        self.assertEqual(
+            cse.safe_public_label("Toplu Aidat Tahakkuku kuruş precision", "test case"),
+            "Toplu Aidat Tahakkuku kuruş precision",
+        )
+        self.assertEqual(cse.safe_public_label("<script>bad</script>", "test case"), "test case")
+
+    def test_long_flutter_group_test_name_is_preserved_in_evidence(self):
+        long_title = (
+            "DashboardController Unit & Integration Tests "
+            "when login with Google, then authenticates as homeOwner with Google provider"
+        )
+        self.assertGreater(len(long_title), 120)
+        scenarios = {"SC-06-05-02": {"state": "no_result"}}
+        links = {"SC-06-05-02": [{"file": "flutter/test/dashboard_controller_test.dart",
+                                  "test": "when login with Google, then authenticates as homeOwner with Google provider"}]}
+        cases = [{"producer": "flutter", "suite": "flutter-test",
+                  "native_id": f"flutter/test/dashboard_controller_test.dart::{long_title}", "status": "passed"}]
+        report = cse.build_evidence(scenarios, cases, links)
+        self.assertEqual(report["scenarios"]["SC-06-05-02"]["cases"][0]["test_name"], long_title)
+
 
 if __name__ == "__main__":
     unittest.main()

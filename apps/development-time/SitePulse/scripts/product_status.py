@@ -422,7 +422,7 @@ def _epic_row(row: dict) -> str:
     counts = " · ".join(f"{row[state]} {STATE_LABELS[state].split(' ')[0].lower().rstrip(',')}"
                              for state in STATES if row[state]) or "no scenarios"
     health = row["health"]
-    story_details = row.get("story_details", [])
+    story_details = row.get("story_details") or []
     story_rows = ""
     for story in story_details:
         scenario_rows = "".join(
@@ -587,7 +587,16 @@ def _evidence_table_html(entries: list[dict], primary_prov: tuple[str, str, str]
 
 
 def _named_evidence_html(latest: dict) -> str:
-    epic_titles = {e["id"]: e.get("title", e["id"]) for e in latest.get("epics", []) if isinstance(e, dict) and e.get("id")}
+    epic_titles: dict[str, str] = {}
+    story_titles: dict[str, str] = {}
+    for epic_obj in latest.get("epics", []):
+        if not isinstance(epic_obj, dict) or not epic_obj.get("id"):
+            continue
+        epic_titles[epic_obj["id"]] = epic_obj.get("title", epic_obj["id"])
+        for story_obj in epic_obj.get("story_details") or []:
+            if isinstance(story_obj, dict) and story_obj.get("id"):
+                story_titles[story_obj["id"]] = story_obj.get("title", story_obj["id"])
+
     entries: list[dict] = []
     prov_counts: dict[tuple[str, str, str], int] = defaultdict(int)
     current_prov_counts: dict[tuple[str, str, str], int] = defaultdict(int)
@@ -623,14 +632,18 @@ def _named_evidence_html(latest: dict) -> str:
                 current_prov_counts[prov] += 1
         dedup_cases = list(grouped.values())
         unique_case_total += len(dedup_cases)
+        parts = scenario_id.split("-")
         epic_id = str(scenario.get("epic") or "")
         if not epic_id:
-            parts = scenario_id.split("-")
             epic_id = f"EPIC-{parts[1]}" if len(parts) >= 2 and parts[0] == "SC" else "Other"
+        story_id = str(scenario.get("story") or "")
+        if not story_id:
+            story_id = f"STORY-{parts[1]}-{parts[2]}" if len(parts) >= 3 and parts[0] == "SC" else "Other"
         entries.append({
             "id": scenario_id,
             "name": str(scenario.get("name") or ""),
             "epic": epic_id,
+            "story": story_id,
             "status": _scenario_evidence_status([c["status"] for c in dedup_cases]),
             "cases": dedup_cases,
             "unique_tests": len({c["test_name"] for c in dedup_cases}),
@@ -694,23 +707,49 @@ def _named_evidence_html(latest: dict) -> str:
         epic_issues = sum(1 for e in epic_entries if e["status"] != "passing")
         issue_chip = (f'<span class="chip bad">{epic_issues} non-passing</span>'
                       if epic_issues else '<span class="chip good">all passing</span>')
-        table_html = _evidence_table_html(
-            epic_entries, primary_prov, f"ne-cap-{epic_id}",
-            f"{epic_id} {epic_title or 'named scenario evidence'}")
+        by_story: dict[str, list[dict]] = defaultdict(list)
+        for entry in epic_entries:
+            by_story[entry["story"]].append(entry)
+        story_blocks = []
+        for story_id in sorted(by_story):
+            story_entries = by_story[story_id]
+            story_title = story_titles.get(story_id, "")
+            story_title_html = (f' <span class="story-title">{_esc(story_title)}</span>'
+                                if story_title and story_title != story_id else "")
+            story_tests = sum(e["unique_tests"] for e in story_entries)
+            story_issues = sum(1 for e in story_entries if e["status"] != "passing")
+            story_issue_chip = (f'<span class="chip bad">{story_issues} non-passing</span>'
+                                if story_issues else '<span class="chip good">all passing</span>')
+            sc_word = "scenario" if len(story_entries) == 1 else "scenarios"
+            table_html = _evidence_table_html(
+                story_entries, primary_prov, f"ne-cap-{epic_id}-{story_id}",
+                f"{story_id} {story_title or 'named scenario evidence'}")
+            story_blocks.append(
+                f'<details class="evidence-story" data-story="{_esc(story_id)}" data-total="{len(story_entries)}">'
+                f'<summary><span class="story-summary-main"><span class="epic-id">{_esc(story_id)}</span>'
+                f'{story_title_html}</span>'
+                f'<span class="chips"><span class="chip" data-ne-story-count>{len(story_entries)} {sc_word}</span>'
+                f'<span class="chip">{story_tests} test{"s" if story_tests != 1 else ""}</span>'
+                f'{story_issue_chip}</span></summary>'
+                f'{table_html}</details>'
+            )
+        story_word = "story" if len(by_story) == 1 else "stories"
+        epic_sc_word = "scenario" if len(epic_entries) == 1 else "scenarios"
         epic_blocks.append(
             f'<details class="evidence-epic" data-epic="{_esc(epic_id)}" data-total="{len(epic_entries)}">'
             f'<summary><span class="epic-summary-main"><span class="epic-id">{_esc(epic_id)}</span>{title_html}</span>'
-            f'<span class="chips"><span class="chip" data-ne-epic-count>{len(epic_entries)} scenarios</span>'
+            f'<span class="chips"><span class="chip">{len(by_story)} {story_word}</span>'
+            f'<span class="chip" data-ne-epic-count>{len(epic_entries)} {epic_sc_word}</span>'
             f'<span class="chip">{epic_tests} test{"s" if epic_tests != 1 else ""}</span>{issue_chip}</span></summary>'
-            f'{table_html}</details>'
+            f'<div class="evidence-epic-body">{"".join(story_blocks)}</div></details>'
         )
 
     controls_html = (
         '<search role="search" class="evidence-controls">'
         '<div class="evidence-search-field"><label for="ne-filter">Filter all scenarios or tests</label>'
-        '<input id="ne-filter" type="search" placeholder="Scenario ID, title, or test name" autocomplete="off"></div>'
+        '<input id="ne-filter" type="search" placeholder="Scenario ID, story, title, or test name" autocomplete="off"></div>'
         f'<div class="evidence-filter-row" role="group" aria-label="Filter by status">{"".join(filter_buttons)}'
-        '<button type="button" class="chip-btn" id="ne-toggle-all" aria-expanded="false">Expand all epics</button></div>'
+        '<button type="button" class="chip-btn" id="ne-toggle-all" aria-expanded="false">Expand all</button></div>'
         f'<output id="ne-count" for="ne-filter" aria-live="polite">Showing {len(entries)} of {len(entries)} scenarios</output>'
         '</search>'
     )
@@ -947,11 +986,11 @@ tbody tr:last-child td,tfoot td{border-bottom:0}tfoot td{border-top:1px solid va
 .evidence-prov{font-size:13px;color:var(--text-2)}
 .evidence-exceptions,.evidence-browser,.evidence-epic{background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:10px 14px;margin-top:10px}
 .evidence-exceptions{border-left:4px solid var(--bad)}
-.evidence-exceptions>summary,.evidence-browser>summary,.evidence-epic>summary{cursor:pointer;font-size:14px;min-block-size:28px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;list-style:none}
-.evidence-exceptions>summary::-webkit-details-marker,.evidence-browser>summary::-webkit-details-marker,.evidence-epic>summary::-webkit-details-marker{display:none}
-.evidence-exceptions>summary::before,.evidence-browser>summary::before,.evidence-epic>summary::before{content:"▸";color:var(--text-2);font-size:12px;flex:0 0 auto}
-.evidence-exceptions[open]>summary::before,.evidence-browser[open]>summary::before,.evidence-epic[open]>summary::before{content:"▾"}
-.evidence-epic>summary .chips{margin-left:auto}
+.evidence-exceptions>summary,.evidence-browser>summary,.evidence-epic>summary,.evidence-story>summary{cursor:pointer;font-size:14px;min-block-size:28px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;list-style:none}
+.evidence-exceptions>summary::-webkit-details-marker,.evidence-browser>summary::-webkit-details-marker,.evidence-epic>summary::-webkit-details-marker,.evidence-story>summary::-webkit-details-marker{display:none}
+.evidence-exceptions>summary::before,.evidence-browser>summary::before,.evidence-epic>summary::before,.evidence-story>summary::before{content:"▸";color:var(--text-2);font-size:12px;flex:0 0 auto}
+.evidence-exceptions[open]>summary::before,.evidence-browser[open]>summary::before,.evidence-epic[open]>summary::before,.evidence-story[open]>summary::before{content:"▾"}
+.evidence-epic>summary .chips,.evidence-story>summary .chips{margin-left:auto}
 .evidence-browser>summary{font-weight:600}
 .evidence-browser-body{margin-top:12px}
 .evidence-controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--grid)}
@@ -963,8 +1002,11 @@ tbody tr:last-child td,tfoot td{border-bottom:0}tfoot td{border-top:1px solid va
 .chip-btn[aria-pressed="true"]{background:var(--text);color:var(--page);border-color:var(--text);font-weight:600}
 #ne-count{font-size:13px;color:var(--text-2);margin-left:auto;align-self:center}
 .evidence-epic{border-radius:10px;padding:8px 12px;margin-top:8px}
-.epic-summary-main{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:4px}
-.epic-title{font-weight:600}
+.evidence-epic-body{margin-top:8px;padding-left:10px;border-left:2px solid var(--grid);display:flex;flex-direction:column;gap:6px}
+.evidence-story{background:var(--page);border:1px solid var(--grid);border-radius:8px;padding:6px 10px}
+.evidence-story>summary{font-size:13px;min-block-size:26px}
+.epic-summary-main,.story-summary-main{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:4px;min-width:0;flex:1 1 240px}
+.epic-title,.story-title{font-weight:600}
 .chip.good{color:var(--good-text);border-color:var(--good)}.chip.bad{color:var(--bad);border-color:var(--bad)}
 .evidence-table-wrap{margin-top:10px;max-block-size:460px;overflow:auto;container-type:inline-size;border:1px solid var(--grid);border-radius:10px}
 .evidence-table{border:0;border-radius:0;border-collapse:separate;border-spacing:0;--label-2:"Test cases";--label-3:"Result";--label-4:"Provenance"}
@@ -1088,23 +1130,35 @@ draw();matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw)
   const section=document.getElementById('named-evidence');if(!section)return;
   const input=document.getElementById('ne-filter'),countEl=document.getElementById('ne-count'),
     toggleAll=document.getElementById('ne-toggle-all'),epics=[...section.querySelectorAll('.evidence-epic')],
+    stories=[...section.querySelectorAll('.evidence-story')],
     statusBtns=[...section.querySelectorAll('[data-ne-status]')];
   if(!input||!epics.length)return;
-  const rows=epics.flatMap(d=>[...d.querySelectorAll('tbody tr')].map(r=>({
-    row:r,epic:d,status:r.dataset.status||'',text:(d.dataset.epic+' '+r.textContent).toLowerCase()})));
+  const rows=epics.flatMap(d=>[...d.querySelectorAll('tbody tr')].map(r=>{
+    const s=r.closest('.evidence-story');
+    const epicLabel=d.querySelector('.epic-summary-main')?.textContent||d.dataset.epic||'';
+    const storyLabel=s?(s.querySelector('.story-summary-main')?.textContent||s.dataset.story||''):'';
+    return {row:r,epic:d,story:s,status:r.dataset.status||'',text:(epicLabel+' '+storyLabel+' '+r.textContent).toLowerCase()};
+  }));
   let activeStatus='all',wasFiltering=false;const preFilterOpen=new Map();
+  const scLabel=(m,total,filtering)=>filtering?`${m} of ${total} ${total==='1'?'scenario':'scenarios'}`:`${total} ${total==='1'?'scenario':'scenarios'}`;
   const apply=()=>{
     const q=input.value.trim().toLowerCase(),filtering=Boolean(q)||activeStatus!=='all';
-    if(filtering&&!wasFiltering)epics.forEach(d=>preFilterOpen.set(d,d.open));
-    let shown=0;const perEpic=new Map();
+    if(filtering&&!wasFiltering){epics.forEach(d=>preFilterOpen.set(d,d.open));stories.forEach(s=>preFilterOpen.set(s,s.open))}
+    let shown=0;const perEpic=new Map(),perStory=new Map();
     for(const item of rows){
       const ok=(activeStatus==='all'||item.status===activeStatus)&&(!q||item.text.includes(q));
       item.row.hidden=!ok;
-      if(ok){shown++;perEpic.set(item.epic,(perEpic.get(item.epic)||0)+1)}
+      if(ok){shown++;perEpic.set(item.epic,(perEpic.get(item.epic)||0)+1);if(item.story)perStory.set(item.story,(perStory.get(item.story)||0)+1)}
+    }
+    for(const s of stories){
+      const m=perStory.get(s)||0,total=String(s.dataset.total||m),badge=s.querySelector('[data-ne-story-count]');
+      if(badge)badge.textContent=scLabel(m,total,filtering);
+      s.hidden=filtering&&m===0;
+      if(filtering&&m>0)s.open=true;else if(!filtering&&wasFiltering)s.open=Boolean(preFilterOpen.get(s));
     }
     for(const d of epics){
-      const m=perEpic.get(d)||0,total=d.dataset.total||m,badge=d.querySelector('[data-ne-epic-count]');
-      if(badge)badge.textContent=filtering?`${m} of ${total} scenarios`:`${total} scenarios`;
+      const m=perEpic.get(d)||0,total=String(d.dataset.total||m),badge=d.querySelector('[data-ne-epic-count]');
+      if(badge)badge.textContent=scLabel(m,total,filtering);
       d.hidden=filtering&&m===0;
       if(filtering&&m>0)d.open=true;else if(!filtering&&wasFiltering)d.open=Boolean(preFilterOpen.get(d));
     }
@@ -1121,8 +1175,9 @@ draw();matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw)
     toggleAll.addEventListener('click',()=>{
       const openAll=toggleAll.getAttribute('aria-expanded')!=='true';
       epics.forEach(d=>{if(!d.hidden)d.open=openAll});
+      stories.forEach(s=>{if(!s.hidden)s.open=openAll});
       toggleAll.setAttribute('aria-expanded',String(openAll));
-      toggleAll.textContent=openAll?'Collapse all epics':'Expand all epics';
+      toggleAll.textContent=openAll?'Collapse all':'Expand all';
     });
   }
 })();
