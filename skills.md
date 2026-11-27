@@ -662,7 +662,7 @@ python3 apps/development-time/SitePulse/scripts/webkit_load_soak.py --web <built
 
 ---
 
-## 6. Cross-Provider Token Consumption Tracker (`token_tracker.py`)
+## 7. Cross-Provider Token Consumption Tracker (`token_tracker.py`)
 
 - **Executable Script:** [scripts/token_tracker.py](file:///scripts/token_tracker.py)
 - **Configuration:** [config/provider-quotas.json](file:///config/provider-quotas.json)

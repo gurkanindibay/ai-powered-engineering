@@ -36,6 +36,24 @@ class CodexCollector(BaseCollector):
                 current_model = "gpt-6-2-sol"
                 session_id = file_path.stem
 
+                # If resuming from offset, scan header lines to recover session context
+                if offset > 0:
+                    with open(file_path, "r", encoding="utf-8", errors="replace") as pre_f:
+                        for _ in range(50):
+                            pre_line = pre_f.readline()
+                            if not pre_line or pre_f.tell() > offset:
+                                break
+                            try:
+                                pre_data = json.loads(pre_line.strip())
+                                if pre_data.get("type") in ("session_meta", "turn_context"):
+                                    p = pre_data.get("payload") if isinstance(pre_data.get("payload"), dict) else {}
+                                    if "model" in p:
+                                        current_model = p["model"]
+                                    if "session_id" in p:
+                                        session_id = p["session_id"]
+                            except Exception:
+                                pass
+
                 last_valid_offset = offset
                 with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                     f.seek(offset)
@@ -107,10 +125,22 @@ class CodexCollector(BaseCollector):
                             rate_limits = info.get("rate_limits")
                             if isinstance(rate_limits, dict) and "utilization_pct" in rate_limits:
                                 obs = str(data.get("timestamp") or "").strip() or datetime.now(timezone.utc).isoformat()
+                                try:
+                                    util_val = self.ledger.config.resolve_model_family(current_model)
+                                    from decimal import Decimal
+                                    util_dec = Decimal(str(rate_limits.get("utilization_pct", 0)))
+                                    if util_dec >= Decimal("100"):
+                                        status = "EXHAUSTED"
+                                    elif util_dec >= Decimal("85"):
+                                        status = "THROTTLED"
+                                    else:
+                                        status = "HEALTHY"
+                                except Exception:
+                                    status = "HEALTHY"
                                 self.ledger.record_quota_snapshot(
                                     provider="codex",
-                                    model_family=current_model,
-                                    status="HEALTHY" if float(rate_limits.get("utilization_pct", 0)) < 85 else "THROTTLED",
+                                    model_family=self.ledger.config.resolve_model_family(current_model),
+                                    status=status,
                                     utilization_pct=str(rate_limits["utilization_pct"]),
                                     reset_at=rate_limits.get("reset_at"),
                                     source="codex_rollout",

@@ -70,8 +70,22 @@ class HarnessCollector(BaseCollector):
                 except Exception:
                     envelope = {}
 
-                provider = envelope.get("provider", "claude")
-                model = envelope.get("model", "claude-sonnet-5-5")
+                target = envelope.get("target") if isinstance(envelope.get("target"), dict) else {}
+                raw_prov = target.get("provider") or envelope.get("provider", "claude")
+                raw_prov_str = str(raw_prov).lower()
+                if raw_prov_str.startswith("claude"):
+                    provider = "claude"
+                elif "codex" in raw_prov_str:
+                    provider = "codex"
+                elif "gemini" in raw_prov_str:
+                    provider = "gemini"
+                elif "copilot" in raw_prov_str:
+                    provider = "copilot"
+                else:
+                    provider = raw_prov_str
+
+                model = target.get("model") or envelope.get("model", "claude-sonnet-5-5")
+                transport = str(envelope.get("transport") or "t3")
                 role = envelope.get("role", att["task_id"])
                 candidate = att["candidate"]
                 reserved_tokens = int(att["reserved_tokens"] or 0)
@@ -87,32 +101,60 @@ class HarnessCollector(BaseCollector):
                 claim_ts = ev_row[0] if ev_row else att["run_created"]
                 dt_iso = datetime.fromtimestamp(claim_ts, tz=timezone.utc).isoformat()
 
+                # Discover candidate session IDs from project directories
+                cand_session_ids = set()
+                if candidate:
+                    try:
+                        cand_path = Path(candidate).resolve()
+                        cand_slug = "-" + str(cand_path).strip("/").replace("/", "-")
+                        claude_dir = Path.home() / ".claude" / "projects" / cand_slug
+                        if claude_dir.exists():
+                            for f in claude_dir.glob("*.jsonl"):
+                                cand_session_ids.add(f.stem)
+                    except Exception:
+                        pass
+
                 # Check if underlying child sessions already exist in ledger
-                correlated_rows = self.ledger.db.execute("""
+                where_clauses = ["(harness_attempt_id = ? OR session_id = ?)"]
+                params = [attempt_id, attempt_id]
+                if cand_session_ids:
+                    placeholders = ",".join("?" for _ in cand_session_ids)
+                    where_clauses.append(f"(session_id IN ({placeholders}) AND recorded_at >= ?)")
+                    params.extend(list(cand_session_ids))
+                    params.append(dt_iso)
+
+                query = f"""
                     SELECT id, input_tokens, output_tokens
                     FROM usage_events
-                    WHERE (harness_attempt_id = ? OR session_id = ?)
+                    WHERE ({" OR ".join(where_clauses)})
                       AND source_event_key != ?
-                """, (attempt_id, attempt_id, source_key)).fetchall()
+                """
+                params.append(source_key)
+                correlated_rows = self.ledger.db.execute(query, tuple(params)).fetchall()
 
                 if correlated_rows:
                     # Child events already record exact usage in usage_events.
                     # Remove any placeholder reservation row to avoid double counting,
                     # and ensure child rows are tagged with harness_run_id and harness_attempt_id.
+                    row_ids = [r["id"] for r in correlated_rows]
+                    placeholders = ",".join("?" for _ in row_ids)
                     with self.ledger.transaction():
                         self.ledger.db.execute("DELETE FROM usage_events WHERE source_event_key=?", (source_key,))
-                        self.ledger.db.execute("""
+                        self.ledger.db.execute(
+                            f"""
                             UPDATE usage_events
                             SET harness_run_id=?, harness_attempt_id=?
-                            WHERE (harness_attempt_id=? OR session_id=?) AND source_event_key != ?
-                        """, (run_id, attempt_id, attempt_id, attempt_id, source_key))
+                            WHERE id IN ({placeholders})
+                            """,
+                            (run_id, attempt_id, *row_ids)
+                        )
                 else:
                     # Uncorrelated: record baseline reserved estimated ceiling
                     inserted = self.ledger.record_usage_event(
                         source_event_key=source_key,
                         recorded_at=dt_iso,
                         provider=provider,
-                        harness="t3",
+                        harness=transport,
                         model=model,
                         session_id=attempt_id,
                         harness_run_id=run_id,

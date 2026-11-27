@@ -36,6 +36,22 @@ def default_ledger_path() -> Path:
     return find_main_checkout() / DEFAULT_LEDGER_RELATIVE
 
 
+def normalize_iso_utc(ts: Optional[str]) -> str:
+    """Normalize any timestamp string to standard ISO UTC with timezone offset."""
+    if not ts:
+        return datetime.now(timezone.utc).isoformat()
+    try:
+        clean = ts.strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(clean)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt.isoformat()
+    except Exception:
+        return ts
+
+
 class TokenLedger:
     def __init__(self, db_path: Optional[Path] = None, quota_config: Optional[QuotaConfig] = None):
         self.path = Path(db_path or default_ledger_path()).resolve()
@@ -179,6 +195,7 @@ class TokenLedger:
             estimated_cost_usd = decimal_str(money(estimated_cost_usd))
 
         premium_requests_str = decimal_str(money(premium_requests), places=2)
+        norm_recorded_at = normalize_iso_utc(recorded_at)
 
         try:
             with self.transaction():
@@ -193,7 +210,7 @@ class TokenLedger:
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        source_event_key, recorded_at, provider.lower(), harness.lower(), model,
+                        source_event_key, norm_recorded_at, provider.lower(), harness.lower(), model,
                         session_id, agent_name, issue_number, pr_number,
                         harness_run_id, harness_attempt_id, input_tokens, output_tokens,
                         cache_read_tokens, cache_write_tokens, reasoning_tokens,
@@ -216,7 +233,8 @@ class TokenLedger:
         source: str = "rate_limit_header",
         observed_at: Optional[str] = None,
     ) -> int:
-        observed_at = observed_at or datetime.now(timezone.utc).isoformat()
+        norm_observed_at = normalize_iso_utc(observed_at)
+        norm_reset_at = normalize_iso_utc(reset_at) if reset_at else None
         pct_str = decimal_str(money(utilization_pct), places=2) if utilization_pct is not None else None
         with self.transaction():
             cur = self.db.execute(
@@ -227,8 +245,8 @@ class TokenLedger:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    observed_at, provider.lower(), model_family, window_type,
-                    pct_str, status.upper(), reset_at, source
+                    norm_observed_at, provider.lower(), model_family, window_type,
+                    pct_str, status.upper(), norm_reset_at, source
                 )
             )
             return cur.lastrowid
@@ -260,14 +278,25 @@ class TokenLedger:
     def get_health(self, provider_filter: Optional[str] = None) -> Dict[str, Any]:
         """Compute provider health status contract consumed by Track A."""
         now = datetime.now(timezone.utc)
-        providers_to_check = [provider_filter.lower()] if provider_filter else ["claude", "codex", "gemini", "copilot"]
+        valid_providers = set(self.config.data.get("quotas", {}).keys()) | {"claude", "codex", "gemini", "copilot"}
+        if provider_filter:
+            p_low = provider_filter.lower()
+            if p_low not in valid_providers:
+                return {
+                    "status": "HEALTHY",
+                    "checked_at": normalize_iso_utc(now.isoformat()),
+                    "providers": {}
+                }
+            providers_to_check = [p_low]
+        else:
+            providers_to_check = ["claude", "codex", "gemini", "copilot"]
         provider_results: Dict[str, Any] = {}
         overall_status = "HEALTHY"
 
         for p in providers_to_check:
             quota_cfg = self.config.get_quota(p)
             window_hours = quota_cfg.get("window_hours", 168)
-            since_time = (now - timedelta(hours=window_hours)).isoformat()
+            since_time = normalize_iso_utc((now - timedelta(hours=window_hours)).isoformat())
 
             # 1. Check recent active 429 / cooldown snapshots
             active_snapshot = self.db.execute(
@@ -346,13 +375,23 @@ class TokenLedger:
 
             elif quota_cfg.get("type") == "monetary_budget":
                 budget_usd = money(quota_cfg.get("budget_usd", "25.00"))
-                util_dec = (total_cost / budget_usd) * Decimal("100") if budget_usd > 0 else Decimal("0")
+                if p == "copilot":
+                    # Monetary budget for Copilot scopes to DeepSeek API overflow
+                    api_rows = self.db.execute(
+                        "SELECT estimated_cost_usd FROM usage_events WHERE provider=? AND billing_mode='api' AND recorded_at >= ?",
+                        (p, since_time)
+                    ).fetchall()
+                    effective_cost = sum((money(r["estimated_cost_usd"]) for r in api_rows), Decimal("0"))
+                else:
+                    effective_cost = total_cost
+
+                util_dec = (effective_cost / budget_usd) * Decimal("100") if budget_usd > 0 else Decimal("0")
                 utilization_pct = decimal_str(util_dec, places=2)
                 warn_pct = money(quota_cfg.get("warning_threshold_pct", "85.00"))
                 exh_pct = money(quota_cfg.get("exhaustion_threshold_pct", "100.00"))
 
                 if p_status == "HEALTHY":
-                    if total_cost >= budget_usd or util_dec >= exh_pct:
+                    if effective_cost >= budget_usd or util_dec >= exh_pct:
                         p_status = "EXHAUSTED"
                     elif util_dec >= warn_pct:
                         p_status = "THROTTLED"
@@ -390,7 +429,7 @@ class TokenLedger:
         """Aggregate usage events grouped by dimension."""
         now = datetime.now(timezone.utc)
         since_dt = self._parse_since(since, now)
-        since_iso = since_dt.isoformat()
+        since_iso = normalize_iso_utc(since_dt.isoformat())
 
         valid_dims = {
             "provider": "provider",

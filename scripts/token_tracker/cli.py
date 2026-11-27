@@ -142,14 +142,14 @@ def cmd_record(args: argparse.Namespace, ledger: TokenLedger) -> int:
     ev_type = args.event.lower()
 
     snapshot_id = None
-    if ev_type in ("429", "throttle", "exhausted") or args.status in ("THROTTLED", "EXHAUSTED"):
+    if args.status or ev_type in ("429", "throttle", "exhausted"):
         status = args.status or ("EXHAUSTED" if ev_type in ("429", "exhausted") else "THROTTLED")
         snapshot_id = ledger.record_quota_snapshot(
             provider=args.provider,
             model_family=ledger.config.resolve_model_family(args.model),
             status=status,
             reset_at=args.reset_at,
-            source="429_event" if ev_type == "429" else "manual_cap",
+            source="manual_status" if args.status else ("429_event" if ev_type == "429" else "manual_cap"),
             observed_at=now_iso,
         )
 
@@ -216,11 +216,11 @@ def cmd_report(args: argparse.Namespace, ledger: TokenLedger) -> int:
         print(f"{'Key':<20} {'Events':<7} {'Tokens':<12} {'CacheHit':<9} {'Reqs':<6} {'Cost ($)':<12} {'Accuracy'}")
         print("-" * 80)
         for g in report_data["groups"]:
-            acc_str = f"E:{g['accuracy_breakdown']['exact']} R:{g['accuracy_breakdown']['request_metered']} Est:{g['accuracy_breakdown']['estimated']}"
+            acc_str = f"E:{g['accuracy_breakdown']['exact']} R:{g['accuracy_breakdown']['request_metered']} Est:{g['accuracy_breakdown']['estimated']} Res:{g['accuracy_breakdown'].get('reserved_estimated', 0)}"
             print(f"{g['key']:<20} {g['events']:<7} {g['total_tokens']:<12} {g['cache_hit_rate_pct']}%{'':<3} {g['premium_requests']:<6} ${g['estimated_cost_usd']:<11} {acc_str}")
         print("-" * 80)
         tot = report_data["total"]
-        acc_tot = f"E:{tot['accuracy_breakdown']['exact']} R:{tot['accuracy_breakdown']['request_metered']} Est:{tot['accuracy_breakdown']['estimated']}"
+        acc_tot = f"E:{tot['accuracy_breakdown']['exact']} R:{tot['accuracy_breakdown']['request_metered']} Est:{tot['accuracy_breakdown']['estimated']} Res:{tot['accuracy_breakdown'].get('reserved_estimated', 0)}"
         print(f"{'TOTAL':<20} {tot['events']:<7} {tot['total_tokens']:<12} {tot['cache_hit_rate_pct']}%{'':<3} {tot['premium_requests']:<6} ${tot['estimated_cost_usd']:<11} {acc_tot}")
     return 0
 

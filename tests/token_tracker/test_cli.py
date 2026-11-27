@@ -83,6 +83,38 @@ class TestTokenTrackerCLI(unittest.TestCase):
         res = json.loads(out)
         self.assertEqual(res["status"], "EXHAUSTED")
 
+        # Unknown provider -> exits 20
+        code, out = self.run_cli([
+            "budget-check",
+            "--provider", "nonexistent_provider",
+            "--model", "any-model",
+            "--json"
+        ])
+        self.assertEqual(code, 20)
+        res = json.loads(out)
+        self.assertEqual(res["reason"], "Unknown provider")
+
+        # Reset status back to HEALTHY via record --status HEALTHY
+        code, out = self.run_cli([
+            "record",
+            "--provider", "claude",
+            "--model", "claude-sonnet-5-5",
+            "--status", "HEALTHY",
+            "--json"
+        ])
+        self.assertEqual(code, 0)
+
+        # Budget check returns to 0 (HEALTHY)
+        code, out = self.run_cli([
+            "budget-check",
+            "--provider", "claude",
+            "--model", "claude-sonnet-5-5",
+            "--json"
+        ])
+        self.assertEqual(code, 0)
+        res = json.loads(out)
+        self.assertEqual(res["status"], "HEALTHY")
+
     def test_report_dimensions_and_json(self):
         # Record events across providers and models
         self.run_cli([

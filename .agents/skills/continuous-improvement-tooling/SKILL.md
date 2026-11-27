@@ -156,6 +156,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `webkit_load_soak.py` | `apps/development-time/SitePulse/scripts/webkit_load_soak.py` | Loads the web bundle hundreds of times in Playwright WebKit and counts CanvasKit errors and renderer deaths (`--web DIR --docker`, `--env KEY=VAL`, `--json`); re-check the WebKit launch workarounds on Playwright or Flutter upgrades |
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
 | `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |
+| `token_tracker.py` | `scripts/token_tracker.py` | Cross-provider token & quota consumption tracker (Claude, Codex, Gemini, Copilot, T3) with SQLite WAL ledger, Decimal money, rolling-window health, reports, and budget gates (`ingest`, `record`, `health`, `report`, `budget-check`; `--help`, `--json`) |
 
 
 ## Registered workspace orchestration tool
