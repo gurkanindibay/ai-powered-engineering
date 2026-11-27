@@ -146,6 +146,53 @@ class SnapshotTest(unittest.TestCase):
         self.assertNotIn('<details class="evidence-exceptions"', page)
         self.assertIn('<details class="evidence-browser">', page)
 
+    def test_named_evidence_groups_scenarios_under_stories_and_shows_epic_and_story_titles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            epic_doc = (
+                "# Epic: Backend Persistence, REST APIs & Verification Harness\n\n"
+                "### STORY-05-01: PostgreSQL Schema & Migrations\n\n"
+                "### STORY-05-02: Rust Domain Models & Decimals\n"
+            )
+            feature_1 = (
+                "@EPIC-05 @STORY-05-01\nFeature: PostgreSQL Schema & Migrations\n\n"
+                "  @SC-05-01-01 @linked\n  Scenario: Schema migration applies cleanly\n    Given a database\n"
+            )
+            feature_2 = (
+                "@EPIC-05 @STORY-05-02\nFeature: Rust Domain Models & Decimals\n\n"
+                "  @SC-05-02-01 @linked\n  Scenario: Decimal apportionment preserves kuruş\n    Given amounts\n"
+            )
+            (root / ".specify" / "requirements").mkdir(parents=True, exist_ok=True)
+            (root / ".specify" / "features" / "EPIC-05").mkdir(parents=True, exist_ok=True)
+            (root / ".specify" / "requirements" / "EPIC-05-backend.md").write_text(epic_doc, encoding="utf-8")
+            (root / ".specify" / "features" / "EPIC-05" / "STORY-05-01-schema.feature").write_text(
+                feature_1, encoding="utf-8")
+            (root / ".specify" / "features" / "EPIC-05" / "STORY-05-02-decimals.feature").write_text(
+                feature_2, encoding="utf-8")
+            commit = "d" * 40
+            run_url = "https://github.com/owner/repo/actions/runs/789"
+            evidence = {
+                "attempt": "1", "workflow_run": run_url,
+                "scenarios": {
+                    "SC-05-01-01": {"evidence": "passing", "cases": [{
+                        "test_name": "test_schema_migration", "status": "passing",
+                        "workflow_run": run_url, "attempt": "1", "tested_commit": commit}]},
+                    "SC-05-02-01": {"evidence": "passing", "cases": [{
+                        "test_name": "test_decimal_apportion", "status": "passing",
+                        "workflow_run": run_url, "attempt": "1", "tested_commit": commit}]},
+                },
+            }
+            snap = ps.build_snapshot(ft.load_catalogue(root), [], evidence=evidence)
+        page = ps.render_html([snap])
+        self.assertIn("Backend Persistence, REST APIs &amp; Verification Harness", page)
+        self.assertIn("2 stories", page)
+        self.assertIn('class="evidence-story" data-story="STORY-05-01"', page)
+        self.assertIn('class="evidence-story" data-story="STORY-05-02"', page)
+        self.assertIn("PostgreSQL Schema &amp; Migrations", page)
+        self.assertIn("Rust Domain Models &amp; Decimals", page)
+        self.assertIn("Decimal apportionment preserves kuruş", page)
+        self.assertIn('data-ne-story-count>1 scenario', page)
+
     def test_summary_fallback_reads_the_time_from_the_run_id(self):
         snap = ps.snapshot_from_summary({"run_id": "20261115T203425Z-c3318fa", "status": "PASS", "junit": {"tests": 3}})
         self.assertEqual((snap["generated_at"], snap["junit"]["tests"]), ("2026-11-15T20:34:25Z", 3))

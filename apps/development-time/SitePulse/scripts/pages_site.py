@@ -30,7 +30,8 @@ RUN_DIRECTORY = re.compile(r"^(\d+)-(\d+)$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DATE_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 SCENARIO_ID = re.compile(r"^SC-\d{2}-\d{2}-\d{2,}$")
-SAFE_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/()'&+-]{0,119}$")
+SAFE_LABEL = re.compile(r"^[^\W_](?:[^\W_]|[ ._:/()'&+,#`-]){0,119}$")
+SAFE_TITLE = re.compile(r"^[^\W_](?:[^\W_]|[ ._:/()'&+,#`-]){0,239}$")
 WORKFLOW_RUN_URL = re.compile(r"^https://[A-Za-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/\d+$")
 STATES = {"PASS", "FAIL", "SKIPPED", "ERROR", "NOT RUN", "INCOMPLETE", "UNKNOWN"}
 SNAPSHOT_STATES = {"passing", "failing", "no_result", "planned"}
@@ -57,6 +58,12 @@ def _nonnegative_number(value: object) -> int | float | None:
 def _safe_label(value: object, fallback: str = "") -> str:
     text = str(value) if isinstance(value, str) else ""
     return text if SAFE_LABEL.fullmatch(text) else fallback
+
+
+def _safe_title(value: object, fallback: str = "") -> str:
+    """Allow longer human-readable epic, story, and scenario titles while blocking markup and control chars."""
+    text = str(value) if isinstance(value, str) else ""
+    return text if SAFE_TITLE.fullmatch(text) else fallback
 
 
 def safe_summary(raw: object, run_id: str, attempt: str, run_number: int | None = None,
@@ -116,7 +123,7 @@ def _safe_snapshot(raw: object, summary: dict) -> dict | None:
         for epic in epics:
             if not isinstance(epic, dict) or not re.fullmatch(r"EPIC-\d{2}", str(epic.get("id", ""))):
                 continue
-            row = {"id": epic["id"], "title": _safe_label(epic.get("title"), epic["id"]),
+            row = {"id": epic["id"], "title": _safe_title(epic.get("title"), epic["id"]),
                    "health": epic.get("health") if isinstance(epic.get("health"), str) and epic.get("health") in HEALTH
                    else "not_specified"}
             row.update({key: int(value) for key in EPIC_NUMBERS
@@ -131,9 +138,9 @@ def _safe_snapshot(raw: object, summary: dict) -> dict | None:
                     if not isinstance(scenario, dict) or not SCENARIO_ID.fullmatch(str(scenario.get("id", ""))):
                         continue
                     scenario_state = scenario.get("state") if scenario.get("state") in SNAPSHOT_STATES else "no_result"
-                    scenarios.append({"id": scenario["id"], "name": _safe_label(scenario.get("name"), scenario["id"]),
+                    scenarios.append({"id": scenario["id"], "name": _safe_title(scenario.get("name"), scenario["id"]),
                                       "state": scenario_state})
-                story_details.append({"id": story["id"], "title": _safe_label(story.get("title"), story["id"]),
+                story_details.append({"id": story["id"], "title": _safe_title(story.get("title"), story["id"]),
                                       "state": state, "scenarios": scenarios})
             row["story_details"] = story_details
             safe_epics.append(row)
@@ -148,7 +155,7 @@ def _safe_snapshot(raw: object, summary: dict) -> dict | None:
             if not isinstance(state, str) or state not in SNAPSHOT_STATES:
                 continue
             safe_scenarios[identifier] = {
-                "state": state, "name": _safe_label(scenario.get("name"), identifier),
+                "state": state, "name": _safe_title(scenario.get("name"), identifier),
                 "epic": _safe_label(scenario.get("epic"), ""),
                 "story": _safe_label(scenario.get("story"), ""),
             }

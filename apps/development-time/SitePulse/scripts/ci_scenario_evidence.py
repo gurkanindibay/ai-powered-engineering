@@ -19,7 +19,7 @@ import feature_traceability as ft
 
 CASE_STATUSES = {"passed": "passing", "failed": "failing", "error": "failing",
                  "skipped": "skipped", "cancelled": "skipped", "not-run": "skipped"}
-PUBLIC_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/()'&+-]{0,119}$")
+PUBLIC_LABEL = re.compile(r"^[^\W_](?:[^\W_]|[ ._:/()'&+,#`-]){0,119}$")
 WORKFLOW_RUN_URL = re.compile(r"^https://[A-Za-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/\d+$")
 DART_INTERPOLATION = re.compile(r"(?<!\\)\$(?:\{[^{}]*\}|[A-Za-z_]\w*)")
 # An interpolated title needs this much literal text to identify its cases.

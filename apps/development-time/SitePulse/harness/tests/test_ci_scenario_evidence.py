@@ -48,6 +48,17 @@ class ScenarioEvidenceTest(unittest.TestCase):
         self.assertEqual(passed["attempt"], "2")
         self.assertEqual(passed["tested_commit"], commit)
 
+    def test_safe_public_label_preserves_commas_and_unicode_while_blocking_markup(self):
+        self.assertEqual(
+            cse.safe_public_label("when login with Google, then authenticates as homeOwner", "test case"),
+            "when login with Google, then authenticates as homeOwner",
+        )
+        self.assertEqual(
+            cse.safe_public_label("Toplu Aidat Tahakkuku kuruş precision", "test case"),
+            "Toplu Aidat Tahakkuku kuruş precision",
+        )
+        self.assertEqual(cse.safe_public_label("<script>bad</script>", "test case"), "test case")
+
 
 if __name__ == "__main__":
     unittest.main()
