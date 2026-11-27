@@ -57,7 +57,7 @@ SHELL_CONTROL = re.compile(r"[|;&<>`]|\$\(")
 SCREENSHOT_TOOLS = ("mcp__Claude_Browser__computer", "mcp__claude-in-chrome__computer")
 BATCH_TOOLS = ("mcp__Claude_Browser__browser_batch", "mcp__claude-in-chrome__browser_batch")
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch"}
-GIT_CHECKPOINT = {"status", "diff", "log", "show", "rev-parse", "branch", "add", "commit", "push", "stash"}
+GIT_CHECKPOINT = {"status", "diff", "log", "show", "rev-parse", "branch", "add", "commit", "push"}
 CHECKPOINT_SCRIPTS = {
     "handover.py": {"capture", "validate", "render"},
     "harness_coordinator.py": {"heartbeat", "status", "handover"},
@@ -154,17 +154,27 @@ def _decimal(value: Any):
     return parsed if parsed.is_finite() and parsed >= 0 else None
 
 
+_SESSIONS_DIRS: dict[tuple[str, str | None], Path] = {}
+
+
 def sessions_dir(cwd: str) -> Path:
-    """The main checkout's lease directory, shared by every worktree."""
+    """The main checkout's lease directory, shared by every worktree (cached per process)."""
     override = os.environ.get("HARNESS_SESSIONS_DIR")
+    key = (os.path.abspath(cwd), override)
+    if key in _SESSIONS_DIRS:
+        return _SESSIONS_DIRS[key]
     if override:
-        return Path(override)
-    done = subprocess.run(["git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                          capture_output=True, text=True, check=False)
-    if done.returncode == 0 and done.stdout.strip():
-        common = Path(done.stdout.strip())
-        return (common.parent if common.name == ".git" else common) / ".agents" / "local" / "sessions"
-    return Path(cwd) / ".agents" / "local" / "sessions"
+        directory = Path(override)
+    else:
+        done = subprocess.run(["git", "-C", cwd, "rev-parse", "--path-format=absolute",
+                               "--git-common-dir"], capture_output=True, text=True, check=False)
+        if done.returncode == 0 and done.stdout.strip():
+            common = Path(done.stdout.strip())
+            directory = (common.parent if common.name == ".git" else common) / ".agents" / "local" / "sessions"
+        else:
+            directory = Path(cwd) / ".agents" / "local" / "sessions"
+    _SESSIONS_DIRS[key] = directory
+    return directory
 
 
 def lease_percentages(cwd: str, session: str | None):
@@ -204,7 +214,14 @@ def _checkpoint_bash(command: str) -> bool:
     rest = argv[1:]
     if program == "git":
         sub = next((part for part in rest if not part.startswith("-")), "")
-        return sub in GIT_CHECKPOINT
+        if sub not in GIT_CHECKPOINT:
+            return False
+        if sub == "branch" and any(part in {"-d", "-D", "--delete"} or part.startswith(("-D", "-d"))
+                                   for part in rest):
+            return False  # never let the gate delete or rewrite branches
+        if sub == "push" and any(part.startswith(("--force", "-f")) for part in rest):
+            return False  # force-push is not checkpointing
+        return True
     if program in ("python", "python3", "py"):
         for index, part in enumerate(rest):
             script = Path(part).name

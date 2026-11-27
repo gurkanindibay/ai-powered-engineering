@@ -233,11 +233,10 @@ def execute(signal: coordinator.Signal, envelope: dict, path: Path | None,
         record["status"] = "parked"
     else:
         record["status"] = "dry_run" if args.dry_run else "dispatched"
-        if decision.transport in ("cli", "copilot_cli") and not args.dry_run:
-            options.worktree = incoming_worktree(args, envelope, local)
-            record["incoming_worktree"] = str(options.worktree)
+        identity = coordinator.incoming_identity(decision, envelope["handover_id"], options)
+        # Transfer before creating a worktree: a failed transfer must not leave a
+        # coordinator-owned worktree behind for the retry to trip over.
         if not args.dry_run and not args.no_transfer:
-            identity = coordinator.incoming_identity(decision, envelope["handover_id"], options)
             transfer_args = ["transfer", str(signal.issue), "--harness", signal.from_harness,
                              "--session", signal.from_session, "--to-harness", identity["harness"],
                              "--to-session", identity["session"], "--to-model", identity["model"]]
@@ -247,11 +246,28 @@ def execute(signal: coordinator.Signal, envelope: dict, path: Path | None,
             record["transfer"] = transferred
             if not transferred.get("ok"):
                 record["status"] = "transfer_failed"
+        if record["status"] in ("dispatched", "dry_run") and decision.transport in ("cli", "copilot_cli") \
+                and not args.dry_run:
+            options.worktree = incoming_worktree(args, envelope, local)
+            record["incoming_worktree"] = str(options.worktree)
         if record["status"] in ("dispatched", "dry_run") and (
                 not args.dry_run or bool(envelope.get("checksum_sha256"))):
             record["dispatch"] = coordinator.dispatch(decision, envelope, options)
             if record["dispatch"].get("status") == "failed":
                 record["status"] = "failed"
+                detail = (
+                    f"{envelope['handover_id']} was transferred to {identity['harness']}/"
+                    f"{identity['session']} but the {decision.transport} dispatch failed; the claim is "
+                    "now held by a session that never ran. Re-run with a working transport, or release "
+                    f"it: `python3 scripts/issue_claim.py release {signal.issue} --harness "
+                    f"{identity['harness']} --session {identity['session']}"
+                    + (f" --pr {signal.pr}" if signal.pr else "") + "`.")
+                escalation = coordinator.escalation(coordinator.DISPATCH_FAILED, detail,
+                                                    issue=signal.issue, pr=signal.pr,
+                                                    handover_id=envelope["handover_id"])
+                record["escalation"] = escalation
+                if not args.dry_run:
+                    coordinator.write_escalation(local, escalation, key=envelope["handover_id"])
     if decision.escalation is not None and not args.dry_run:
         key = decision.escalation.get("handover_id") or f"issue-{signal.issue}"
         coordinator.write_escalation(local, decision.escalation, key=str(key))
@@ -265,15 +281,35 @@ def claim_tool_handover_count(labels: list[str]) -> int:
 
 
 def incoming_worktree(args: argparse.Namespace, envelope: dict, local: Path) -> Path:
-    """The isolated worktree an auto-spawned CLI worker runs in."""
+    """The isolated worktree an auto-spawned CLI worker runs in.
+
+    Idempotent across daemon passes: a worktree this coordinator created for the
+    handover is reused only when it is clean and still at the branch tip.
+    """
     if args.incoming_worktree:
         return Path(args.incoming_worktree).resolve()
     branch = args.branch or envelope["git_state"]["branch"]
     if not branch or branch == "(detached)":
         raise coordinator.CoordinatorError(
             "a CLI dispatch needs --branch (or a branch in the envelope) for its fresh worktree")
+    repo = Path(args.repo).resolve()
     path = local / "coordinator" / "worktrees" / envelope["handover_id"]
-    return coordinator.prepare_worktree(Path(args.repo).resolve(), branch, path)
+    if path.exists():
+        def git(*argv: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(["git", "-C", str(path), *argv], capture_output=True, text=True,
+                                  check=False)
+
+        head = git("rev-parse", "HEAD")
+        tip = subprocess.run(["git", "-C", str(repo), "rev-parse", branch],
+                             capture_output=True, text=True, check=False)
+        dirty = git("status", "--porcelain")
+        if head.returncode == 0 and tip.returncode == 0 and dirty.returncode == 0 \
+                and head.stdout.strip() == tip.stdout.strip() and not dirty.stdout.strip():
+            return path
+        raise coordinator.CoordinatorError(
+            f"coordinator worktree {path} exists but is not clean at {branch}; refusing to reuse it "
+            "(inspect or remove it by hand after preserving any work)")
+    return coordinator.prepare_worktree(repo, branch, path)
 
 
 def pending_signal(envelope: dict) -> coordinator.Signal:
@@ -292,6 +328,50 @@ def pending_label_issues() -> list[int]:
     out = gh_runner(["issue", "list", "--label", "handover:pending", "--state", "open",
                      "--json", "number", "--limit", "50"])
     return [int(item["number"]) for item in json.loads(out or "[]") if isinstance(item, dict)]
+
+
+def handle_pending(item: dict, *, args: argparse.Namespace, local: Path, repo: Path,
+                   registry: dict, launchers: dict, health: dict,
+                   catalog: dict | None) -> tuple[dict, int]:
+    """Decide and dispatch one pending envelope; returns (record, escalation count)."""
+    from scripts import handover as handover_tool
+
+    if item.get("errors") or "handover_id" not in item:
+        return {"envelope": item.get("handover_id"), "status": "invalid_checkpoint"}, 1
+    envelope, errors = handover_tool.validate_file(Path(item["path"]))
+    if envelope is None or errors:
+        escalation = coordinator.escalation(
+            coordinator.INVALID_CHECKPOINT,
+            f"{item.get('handover_id')} failed envelope validation: {'; '.join(errors)}")
+        if not args.dry_run:
+            coordinator.write_escalation(local, escalation, key=str(item.get("handover_id")))
+        return {"envelope": item.get("handover_id"), "status": "invalid_checkpoint",
+                "escalation": escalation}, 1
+    signal = pending_signal(envelope)
+    if signal.from_session == "unknown":
+        escalation = coordinator.escalation(
+            coordinator.INVALID_CHECKPOINT,
+            f"{envelope['handover_id']} records no outgoing session, so the claim cannot be "
+            "transferred safely; a human or the outgoing session must supply it.")
+        if not args.dry_run:
+            coordinator.write_escalation(local, escalation, key=envelope["handover_id"])
+        return {"envelope": envelope["handover_id"], "status": "invalid_checkpoint",
+                "escalation": escalation}, 1
+    labels: list[str] = []
+    if not args.offline:
+        from scripts import issue_claim as claim_tool
+
+        labels = claim_tool.read_labels(gh_runner, repo_slug(), signal.issue)
+    count = claim_tool_handover_count(labels) if labels else 0
+    decision = coordinator.decide(
+        signal, targets=coordinator.targets_from_registry(registry, catalog, health, launchers),
+        health=health, handover_count=count, transport="auto",
+        available_t3=(None if catalog is None else
+                      {p.get("providerInstanceId") for p in catalog.get("providers", [])
+                       if p.get("canRunChildTask")}))
+    record = execute(signal, envelope, Path(item["path"]), decision, args, local, repo)
+    escalate = decision.action == "park" or record["status"] in ("transfer_failed", "failed")
+    return record, int(escalate)
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -334,41 +414,23 @@ def cmd_serve(args: argparse.Namespace) -> int:
             except coordinator.CoordinatorError:
                 handled.append({"status": "labels_unavailable"})
         for item in local_pending:
-            if item.get("errors") or "handover_id" not in item:
-                escalated += 1
-                continue
-            envelope, errors = handover_tool.validate_file(Path(item["path"]))
-            if envelope is None or errors:
-                escalated += 1
-                continue
-            signal = pending_signal(envelope)
-            if signal.from_session == "unknown":
+            try:
+                record, count_escalations = handle_pending(
+                    item, args=args, local=local, repo=repo, registry=registry,
+                    launchers=launchers, health=health, catalog=catalog)
+            except (coordinator.CoordinatorError, HarnessError, leases.LeaseError, OSError) as exc:
+                handover_id = str(item.get("handover_id") or Path(item.get("path", "")).stem)
                 escalation = coordinator.escalation(
                     coordinator.INVALID_CHECKPOINT,
-                    f"{envelope['handover_id']} records no outgoing session, so the claim cannot be "
-                    "transferred safely; a human or the outgoing session must supply it.")
+                    f"{handover_id} could not be dispatched: {exc}. The daemon continues with the "
+                    "remaining handovers; fix the cause and re-run.")
                 if not args.dry_run:
-                    coordinator.write_escalation(local, escalation, key=envelope["handover_id"])
-                handled.append({"envelope": envelope["handover_id"], "status": "invalid_checkpoint",
-                                "escalation": escalation})
-                escalated += 1
-                continue
-            labels: list[str] = []
-            if not args.offline:
-                from scripts import issue_claim as claim_tool
-
-                labels = claim_tool.read_labels(gh_runner, repo_slug(), signal.issue)
-            count = claim_tool_handover_count(labels) if labels else 0
-            decision = coordinator.decide(
-                signal, targets=coordinator.targets_from_registry(registry, catalog, health, launchers),
-                health=health, handover_count=count, transport="auto",
-                available_t3=(None if catalog is None else
-                              {p.get("providerInstanceId") for p in catalog.get("providers", [])
-                               if p.get("canRunChildTask")}))
-            record = execute(signal, envelope, Path(item["path"]), decision, args, local, repo)
+                    coordinator.write_escalation(local, escalation, key=handover_id)
+                record = {"envelope": handover_id, "status": "error", "error": str(exc),
+                          "escalation": escalation}
+                count_escalations = 1
             handled.append(record)
-            if decision.action == "park" or record["status"] in ("transfer_failed", "failed"):
-                escalated += 1
+            escalated += count_escalations
         if args.json:
             print(json.dumps({"schema_version": 1, "pass": completed, "recover": report,
                               "handled": handled}, indent=2, sort_keys=True))

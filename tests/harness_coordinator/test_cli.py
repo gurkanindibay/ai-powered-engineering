@@ -3,6 +3,7 @@ from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -36,6 +37,16 @@ def call(arguments: list[str]) -> tuple[int, str, str]:
     with redirect_stdout(out), redirect_stderr(err):
         code = cli.main(arguments)
     return code, out.getvalue(), err.getvalue()
+
+
+def git_repo(path: Path, branch: str) -> Path:
+    path.mkdir(parents=True)
+    for argv in (["init", "--quiet", "-b", "main"],):
+        subprocess.run(["git", "-C", str(path), *argv], check=True)
+    subprocess.run(["git", "-C", str(path), "-c", "user.name=T", "-c", "user.email=t@example.com",
+                    "commit", "--quiet", "--allow-empty", "-m", "base"], check=True)
+    subprocess.run(["git", "-C", str(path), "checkout", "--quiet", "-b", branch], check=True)
+    return path
 
 
 class CliTests(unittest.TestCase):
@@ -131,6 +142,47 @@ class CliTests(unittest.TestCase):
         payload = json.loads(out)
         self.assertEqual(payload["handled"][0]["status"], "invalid_checkpoint")
         self.assertTrue((self.state / "coordinator" / "escalations" / "issue-999.json").is_file())
+
+    def test_serve_survives_a_failed_transfer_and_reuses_its_worktree(self):
+        from scripts import handover
+
+        repo = git_repo(Path(self.tmp.name) / "repo", "feature/issue-549")
+        data = envelope()
+        data["git_state"]["branch"] = "feature/issue-549"
+        data["checksum_sha256"] = handover.checksum(data)
+        handovers = self.state / "handovers"
+        handovers.mkdir(parents=True)
+        (handovers / "549-001.json").write_text(json.dumps(data))
+        catalog = Path(self.tmp.name) / "catalog.json"
+        catalog.write_text(json.dumps({"providers": []}))
+        calls = {"transfer": 0}
+
+        def transfer(args, path):
+            calls["transfer"] += 1
+            return {"ok": calls["transfer"] > 1, "message": "simulated"}
+
+        dispatched = []
+
+        def fake_dispatch(decision, env, options):
+            dispatched.append(options.worktree)
+            return {"status": "queued", "payload_path": "unused"}
+
+        arguments = ["serve", "--once", "--offline", "--no-recover", "--t3-catalog", str(catalog),
+                     "--repo", str(repo), "--state-root", str(self.state), "--json"]
+        with mock.patch.object(cli, "run_issue_claim", transfer), \
+                mock.patch.object(cli.coordinator, "dispatch", fake_dispatch), \
+                mock.patch.object(cli.coordinator, "prepare_worktree",
+                                  wraps=cli.coordinator.prepare_worktree) as prepare:
+            first, _, _ = call(arguments)
+            self.assertEqual(first, 1)
+            self.assertFalse((self.state / "coordinator" / "worktrees" / "ho-549-001").exists())
+            second, out, _ = call(arguments)
+            self.assertEqual(second, 0)
+            third, _, _ = call(arguments)
+            self.assertEqual(third, 0)
+        self.assertEqual(prepare.call_count, 1)
+        self.assertEqual(len(dispatched), 2)
+        self.assertEqual(dispatched[0], self.state / "coordinator" / "worktrees" / "ho-549-001")
 
     def test_serve_once_dispatches_a_pending_checkpoint_and_is_idempotent(self):
         handovers = self.state / "handovers"

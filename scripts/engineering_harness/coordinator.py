@@ -56,9 +56,10 @@ NO_QUALIFIED_PROVIDER = "no_qualified_provider"
 DIRTY_WORKTREE_PRESERVED = "dirty_worktree_preserved"
 STALE_LEASE = "stale_lease"
 T3_LEASE_EXPIRED = "t3_lease_expired"
+DISPATCH_FAILED = "dispatch_failed"
 ESCALATION_REASONS = (INVALID_CHECKPOINT, THRASH, HANDOVER_CAP, NO_HEALTHY_PROVIDER,
                       NO_QUALIFIED_PROVIDER, DIRTY_WORKTREE_PRESERVED, STALE_LEASE,
-                      T3_LEASE_EXPIRED)
+                      T3_LEASE_EXPIRED, DISPATCH_FAILED)
 PLACEHOLDERS = ("{model}", "{prompt}", "{effort}")
 _RATE_LIMIT = re.compile(r"\b(429|rate[ _-]?limit|quota|usage limit|too many requests)\b", re.IGNORECASE)
 

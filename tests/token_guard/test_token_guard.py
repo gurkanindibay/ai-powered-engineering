@@ -100,8 +100,12 @@ class CheckpointGateTests(unittest.TestCase):
                         "git push", "python3 scripts/handover.py capture --issue 549 "
                         "--reason context_ceiling", "python3 scripts/harness_coordinator.py status"):
             self.assertIsNone(self.gate("Bash", {"command": command}, context_pct="90"), command)
-        for command in ("python3 scripts/run_tests.py", "rg TODO src", "git checkout main"):
+        for command in ("python3 scripts/run_tests.py", "rg TODO src", "git checkout main",
+                        "git stash", "git branch -D old-branch", "git push --force",
+                        "git push -f origin main"):
             self.assertIsNotNone(self.gate("Bash", {"command": command}, context_pct="90"), command)
+        self.assertIsNone(self.gate("Bash", {"command": "git push origin HEAD"}, context_pct="90"))
+        self.assertIsNone(self.gate("Bash", {"command": "git branch new-branch"}, context_pct="90"))
         self.assertIsNotNone(self.gate("Bash", {"command": "git status && rm -rf src"}, context_pct="90"))
 
     def test_wide_reads_are_blocked_but_ranged_and_handover_reads_are_allowed(self):

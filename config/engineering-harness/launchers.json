@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "_comment": "Headless CLI argv templates used by scripts/harness_coordinator.py. {prompt}, {model} and {effort} are substituted; the prompt is always the rendered handover envelope. Operators may adapt these to a local wrapper, but they must stay non-interactive and must not be shell-evaluated (argv only).",
+  "_comment": "Headless CLI argv templates used by scripts/harness_coordinator.py. {prompt}, {model} and {effort} are substituted; the prompt is always the rendered handover envelope. Operators may adapt these to a local wrapper, but they must stay non-interactive and must not be shell-evaluated (argv only). These are the safe read-only/non-interactive defaults: `claude -p` and `codex exec` will not edit files without their own permission flags, so an operator who wants unattended edits must add those flags deliberately (for example Claude's --permission-mode or Codex's sandbox/approval options) after reviewing the isolation; the coordinator never adds a bypass flag itself.",
   "launchers": {
     "claude": {
       "transport": "cli",
