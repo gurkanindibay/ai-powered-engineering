@@ -1,0 +1,112 @@
+{
+  "_comment": "Cross-provider pricing and subscription quotas. Quota max_tokens and budget_usd are configurable baseline defaults for local tracking and budget enforcement.",
+  "version": 1,
+  "pricing": {
+    "claude-opus": {
+      "input_per_million": "15.00",
+      "output_per_million": "75.00",
+      "cache_read_per_million": "1.50",
+      "cache_write_per_million": "18.75"
+    },
+    "claude-sonnet": {
+      "input_per_million": "3.00",
+      "output_per_million": "15.00",
+      "cache_read_per_million": "0.30",
+      "cache_write_per_million": "3.75"
+    },
+    "claude-haiku": {
+      "input_per_million": "0.80",
+      "output_per_million": "4.00",
+      "cache_read_per_million": "0.08",
+      "cache_write_per_million": "1.00"
+    },
+    "gpt-sol": {
+      "input_per_million": "2.50",
+      "output_per_million": "10.00",
+      "cache_read_per_million": "1.25",
+      "cache_write_per_million": "2.50"
+    },
+    "gpt-astra": {
+      "input_per_million": "10.00",
+      "output_per_million": "30.00",
+      "cache_read_per_million": "5.00",
+      "cache_write_per_million": "10.00"
+    },
+    "gemini-flash": {
+      "input_per_million": "0.10",
+      "output_per_million": "0.40",
+      "cache_read_per_million": "0.025",
+      "cache_write_per_million": "0.10"
+    },
+    "gemini-pro": {
+      "input_per_million": "1.25",
+      "output_per_million": "5.00",
+      "cache_read_per_million": "0.3125",
+      "cache_write_per_million": "1.25"
+    },
+    "gemini-ultra": {
+      "input_per_million": "5.00",
+      "output_per_million": "20.00",
+      "cache_read_per_million": "1.25",
+      "cache_write_per_million": "5.00"
+    },
+    "deepseek": {
+      "input_per_million": "0.14",
+      "output_per_million": "0.28",
+      "cache_read_per_million": "0.014",
+      "cache_write_per_million": "0.14"
+    },
+    "default": {
+      "input_per_million": "3.00",
+      "output_per_million": "15.00",
+      "cache_read_per_million": "0.30",
+      "cache_write_per_million": "3.75"
+    }
+  },
+  "quotas": {
+    "claude": {
+      "type": "rolling_window",
+      "window_hours": 168,
+      "max_tokens": 10000000,
+      "warning_threshold_pct": "85.00",
+      "exhaustion_threshold_pct": "100.00"
+    },
+    "codex": {
+      "type": "rolling_window",
+      "window_hours": 168,
+      "max_tokens": 10000000,
+      "warning_threshold_pct": "85.00",
+      "exhaustion_threshold_pct": "100.00"
+    },
+    "gemini": {
+      "type": "rolling_window",
+      "window_hours": 168,
+      "max_tokens": 15000000,
+      "warning_threshold_pct": "85.00",
+      "exhaustion_threshold_pct": "100.00"
+    },
+    "copilot": {
+      "type": "monetary_budget",
+      "budget_usd": "25.00",
+      "warning_threshold_pct": "85.00",
+      "exhaustion_threshold_pct": "100.00",
+      "deepseek_overflow": {
+        "budget_usd": "25.00",
+        "pricing": {
+          "input_per_million": "0.14",
+          "output_per_million": "0.28"
+        }
+      },
+      "premium_request_multipliers": {
+        "gpt-4o": "1.0",
+        "claude-3.5-sonnet": "1.0",
+        "claude-3-7-sonnet": "1.0",
+        "o1": "3.0",
+        "o1-preview": "3.0",
+        "o1-mini": "0.33",
+        "deepseek": "0.0",
+        "default": "1.0"
+      }
+    }
+  }
+}

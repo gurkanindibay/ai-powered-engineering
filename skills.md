@@ -660,3 +660,36 @@ python3 apps/development-time/SitePulse/scripts/webkit_load_soak.py --web <built
 
 `--env KEY=VALUE` overrides a launch variable, `--json` prints the counts. Exit 0 means every load was clean.
 
+---
+
+## 7. Cross-Provider Token Consumption Tracker (`token_tracker.py`)
+
+- **Executable Script:** [scripts/token_tracker.py](file:///scripts/token_tracker.py)
+- **Configuration:** [config/provider-quotas.json](file:///config/provider-quotas.json)
+- **Database Ledger:** `.agents/local/token_ledger.sqlite3` (SQLite WAL mode `0600`)
+- **Purpose:** Standalone, independently verifiable local token and quota tracker providing unified visibility across Claude, Codex, Gemini, Copilot (DeepSeek overflow), and T3 Code child sessions. Implements Track B of the Token-Aware Harness & Handover architecture, exposing the read-only `provider_health` contract consumed by Track A.
+
+### Subcommands & Capabilities:
+- `ingest [--provider all|claude|codex|gemini|copilot|harness] [--json]`: Incrementally parses new log lines and `runs.sqlite3` attempts since last cursor; idempotent via `source_event_key`.
+- `record --provider ... --model ... --input N --output N [--event 429 --reset-at ...]`: Direct push endpoint for hooks, gateway bridge, or 429/exhaustion events.
+- `health [--json]`: Outputs `HEALTHY | THROTTLED | EXHAUSTED`, rolling window burn, and `reset_at`. Single read-only contract consumed by Track A (`routing.py`, `t3.py`, and Coordinator).
+- `report --by provider|model|issue|pr|agent|run --since 7d [--json]`: Summarizes tokens, cache hit rate, Copilot premium requests, and `Decimal` estimated cost, explicitly tagging accuracy (`exact`, `request_metered`, `estimated`, `reserved_estimated`).
+- `budget-check --provider ... --model ... [--json]`: Fast exit-code gate (`0` OK, `10` WARN/THROTTLED, `20` EXHAUSTED) for hooks, `t3-dispatch`, and pre-dispatch checks.
+
+### Quick Usage Examples:
+```bash
+# Check provider health and quota burn
+python3 scripts/token_tracker.py health
+python3 scripts/token_tracker.py health --json
+
+# Run pre-dispatch budget gate
+python3 scripts/token_tracker.py budget-check --provider claude --model claude-sonnet-5-5
+
+# Ingest new local logs
+python3 scripts/token_tracker.py ingest --provider all
+
+# Generate consumption report
+python3 scripts/token_tracker.py report --by provider --since 7d
+python3 scripts/token_tracker.py report --by issue --since 7d --json
+```
+

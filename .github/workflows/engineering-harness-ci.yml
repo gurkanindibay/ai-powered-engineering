@@ -20,6 +20,10 @@ on:
       - 'tests/cargo_target_pool/**'
       - 'scripts/review_bot.py'
       - 'tests/review_bot/**'
+      - 'scripts/token_tracker.py'
+      - 'scripts/token_tracker/**'
+      - 'tests/token_tracker/**'
+      - 'config/provider-quotas.json'
       - 'tests/engineering_harness/**'
       - 'config/engineering-harness/**'
       - '.github/workflows/engineering-harness-ci.yml'
@@ -42,6 +46,10 @@ on:
       - 'tests/cargo_target_pool/**'
       - 'scripts/review_bot.py'
       - 'tests/review_bot/**'
+      - 'scripts/token_tracker.py'
+      - 'scripts/token_tracker/**'
+      - 'tests/token_tracker/**'
+      - 'config/provider-quotas.json'
       - 'tests/engineering_harness/**'
       - 'config/engineering-harness/**'
       - '.github/workflows/engineering-harness-ci.yml'
@@ -76,5 +84,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests/pr_review_queue -v
           python3 -m unittest discover -s tests/pr_review_watch -v
+      - name: Token tracker tests
+        run: python3 -m unittest discover -s tests/token_tracker -v
       - name: Existing SitePulse harness regression tests
         run: python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests
