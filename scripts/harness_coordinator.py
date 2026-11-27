@@ -561,6 +561,7 @@ def cmd_heartbeat(args: argparse.Namespace) -> int:
         branch=args.branch, transport=args.transport,
         context_pct=args.context_pct, quota_pct=args.quota_pct,
         ttl_seconds=args.ttl, pid=args.pid if args.pid is not None else None,
+        pid_start_ticks=leases.process_start_ticks(args.pid) if args.pid is not None else None,
     ).validate()
     path = leases.LeaseStore(args.sessions_dir or local_root(args.state_root) / "sessions").write(lease)
     payload = {"ok": True, "path": str(path), "lease": lease.to_dict()}

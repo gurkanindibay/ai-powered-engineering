@@ -10,6 +10,13 @@ loopback enforcement (per issue #550: strictly loopback-only ``127.0.0.1``):
     CORS preflight that this server never approves).
   - Never exposes provider API keys, GitHub App keys, or raw Track B
     transcript message content.
+
+Threat model assumption:
+  - Designed for a single-user local developer workstation. Like
+    ``pm_workbench_web.py``, loopback POST endpoints enforce browser-level
+    same-origin / CSRF protections without per-user bearer authentication, so
+    any local process running as the user (or another user on a shared host)
+    that can connect to loopback TCP can submit commands.
 """
 from __future__ import annotations
 
