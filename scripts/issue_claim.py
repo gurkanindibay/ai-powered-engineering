@@ -30,6 +30,15 @@ owner too: `sync <issue> --pr <pr>` copies them (run it when the PR is opened),
 `claim ... --pr <pr>` claims and syncs in one step, and `release ... --pr <pr>`
 removes the claim from both. A PR already owned by another session is refused.
 
+Handover (docs/engineering-process/token-aware-harness-and-handover-analysis.md 4.5):
+`transfer <n> --harness <old> --session <id> --to-harness <new> --to-session <id>
+--to-model <model>` swaps `claim:<old>` -> `claim:<new>` and `agent:<old>` ->
+`agent:<new>` with no unclaimed gap (the new label lands before the old one is
+removed), and records `handover:count-N` plus `handover:pending`. It refuses at
+MAX_HANDOVERS (3) so a task cannot ping-pong forever. The incoming owner runs
+`accept <n> --harness <new> --session <id>` to clear `handover:pending`.
+`release` clears all `handover:*` labels.
+
 Session id resolution: --session, then $AGENT_SESSION_ID, then the harness
 variable ($CLAUDE_SESSION_ID, $CODEX_SESSION_ID, $ANTIGRAVITY_SESSION_ID),
 then a generated id that is printed. Keep it: `release` needs the same id
@@ -62,6 +71,11 @@ CLAIM_PREFIX = "claim:"
 KNOWN_HARNESSES = ("codex", "claude", "antigravity")
 AGENT_PREFIX = agent_names.LABEL_PREFIX
 AGENT_COLOR = "0e8a16"
+HANDOVER_PREFIX = "handover:"
+HANDOVER_PENDING = f"{HANDOVER_PREFIX}pending"
+HANDOVER_COUNT_PREFIX = f"{HANDOVER_PREFIX}count-"
+MAX_HANDOVERS = 3  # anti-thrash cap: a task handed over this often parks for the reviewer/human
+HANDOVER_COLOR = "d93f0b"
 LABEL_COLORS = {IN_PROGRESS: "fbca04", CLAIM_PREFIX: "5319e7"}
 MAX_LABEL = 50  # GitHub label name limit
 _SLUG = re.compile(r"[^a-z0-9._-]+")
@@ -140,8 +154,12 @@ def read_labels(run: Runner, repo: str, number: int) -> list[str]:
 
 
 def ensure_label(run: Runner, repo: str, name: str) -> None:
-    color = AGENT_COLOR if name.startswith(AGENT_PREFIX) else LABEL_COLORS[
-        IN_PROGRESS if name == IN_PROGRESS else CLAIM_PREFIX]
+    if name.startswith(AGENT_PREFIX):
+        color = AGENT_COLOR
+    elif name.startswith(HANDOVER_PREFIX):
+        color = HANDOVER_COLOR
+    else:
+        color = LABEL_COLORS[IN_PROGRESS if name == IN_PROGRESS else CLAIM_PREFIX]
     try:
         run(["api", "-X", "POST", f"repos/{repo}/labels", "-f", f"name={name}", "-f", f"color={color}"])
     except ClaimError as exc:
@@ -294,6 +312,71 @@ def sync_pr(run: Runner, repo: str, issue: int, pr: int, force: bool = False) ->
     return True, f"PR #{pr} labeled like #{issue} ({', '.join(claims)})"
 
 
+def handover_count(labels: list[str]) -> int:
+    """Number of handovers recorded by `handover:count-N` labels (highest wins).
+
+    A soft, label-based cap: removing the label by hand resets the counter, which
+    is acceptable (a human deliberately restarting the task), so this is advisory.
+    """
+    counts = [int(l[len(HANDOVER_COUNT_PREFIX):]) for l in labels
+              if l.startswith(HANDOVER_COUNT_PREFIX) and l[len(HANDOVER_COUNT_PREFIX):].isdigit()]
+    return max(counts, default=0)
+
+
+def transfer(run: Runner, repo: str, number: int, harness: str, session: str,
+             to_harness: str, to_session: str, force: bool = False,
+             pr: int | None = None) -> tuple[bool, str, int]:
+    """Swap the claim from one harness identity to another without a gap.
+
+    The new `claim:` label is added before the old one is removed, so the issue
+    is never unclaimed and a third idle agent cannot take it mid-handover.
+    Records `handover:count-N` and `handover:pending`; refuses at MAX_HANDOVERS,
+    which is a soft label-based cap (removing the label resets it by hand).
+    Returns (ok, message, new_count).
+    """
+    labels = read_labels(run, repo, number)
+    owner = parse_owner(labels)
+    old_label = claim_label(harness, session)
+    new_label = claim_label(to_harness, to_session)
+    if not owner.owned:
+        return False, f"#{number} has no claim label to transfer; claim it first", 0
+    if not force and not (owner.harness == harness and owner.session == session):
+        return False, f"#{number} is owned by {owner.harness}/{owner.session}, not {harness}/{session}", 0
+    source = f"{owner.harness}/{owner.session}" if owner.owned else "unclaimed"
+    if old_label == new_label:
+        return False, "transfer target is the current owner", handover_count(labels)
+    count = handover_count(labels)
+    if count >= MAX_HANDOVERS:
+        return False, (f"#{number} already had {count} handovers (MAX_HANDOVERS={MAX_HANDOVERS}); "
+                       "park it and wake the reviewer or a human"), count
+    new_count = count + 1
+    new_count_label = f"{HANDOVER_COUNT_PREFIX}{new_count}"
+    targets = [number] + ([pr] if pr is not None else [])
+    for target in targets:
+        current = labels if target == number else read_labels(run, repo, target)
+        add_labels(run, repo, target, [l for l in (IN_PROGRESS, new_label, new_count_label, HANDOVER_PENDING)
+                                       if l not in current])
+        for label in current:  # only after the new claim is in place
+            stale_claim = label.startswith(CLAIM_PREFIX) and label != new_label
+            stale_count = label.startswith(HANDOVER_COUNT_PREFIX) and label != new_count_label
+            if stale_claim or stale_count:
+                remove_label(run, repo, target, label)
+    drop_unused_claim_label(run, repo, old_label)
+    return True, (f"#{number} transferred {source} -> {to_harness}/{to_session} "
+                  f"(handover {new_count}/{MAX_HANDOVERS})"), new_count
+
+
+def accept(run: Runner, repo: str, number: int, harness: str, session: str, pr: int | None = None) -> tuple[bool, str]:
+    """The incoming owner confirms the handover: clears `handover:pending`."""
+    labels = read_labels(run, repo, number)
+    owner = parse_owner(labels)
+    if not (owner.harness == harness and owner.session == session):
+        return False, f"#{number} is owned by {owner.harness}/{owner.session}, not {harness}/{session}"
+    for target in [number] + ([pr] if pr is not None else []):
+        remove_label(run, repo, target, HANDOVER_PENDING)
+    return True, f"#{number} handover accepted by {harness}/{session}"
+
+
 def release(run: Runner, repo: str, number: int, harness: str, session: str, force: bool,
             pr: int | None = None) -> tuple[bool, str]:
     labels = read_labels(run, repo, number)
@@ -301,7 +384,7 @@ def release(run: Runner, repo: str, number: int, harness: str, session: str, for
     if owner.in_progress and not force and not (owner.harness == harness and owner.session == session):
         return False, f"#{number} is owned by {owner.harness}/{owner.session}, not {harness}/{session}"
     pr_labels = read_labels(run, repo, pr) if pr is not None else []
-    owned_prefixes = (CLAIM_PREFIX, AGENT_PREFIX)
+    owned_prefixes = (CLAIM_PREFIX, AGENT_PREFIX, HANDOVER_PREFIX)
     for label in dict.fromkeys([IN_PROGRESS, *(l for l in labels + pr_labels if l.startswith(owned_prefixes))]):
         if pr is not None:
             remove_label(run, repo, pr, label)  # PR first: the repo label is dropped once unused
@@ -312,12 +395,15 @@ def release(run: Runner, repo: str, number: int, harness: str, session: str, for
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("action", choices=["claim", "status", "release", "sync"])
+    parser.add_argument("action", choices=["claim", "status", "release", "sync", "transfer", "accept"])
     parser.add_argument("number", type=int, help="issue or PR number")
     parser.add_argument("--harness", help=f"harness name, e.g. {', '.join(KNOWN_HARNESSES)}")
     parser.add_argument("--session", help="harness session id (default: env or generated)")
     parser.add_argument("--model", help="model id, e.g. claude-sonnet-5-5; picks the agent name (claim; default: $AGENT_MODEL)")
     parser.add_argument("--pr", type=int, help="PR delivering the issue: labeled like the issue (claim/sync) or cleared (release)")
+    parser.add_argument("--to-harness", help="transfer: harness of the incoming owner")
+    parser.add_argument("--to-session", help="transfer: session id of the incoming owner")
+    parser.add_argument("--to-model", help="transfer: model id of the incoming owner (picks its agent name)")
     parser.add_argument("--repo", help="owner/name (default: current repo)")
     parser.add_argument("--force", action="store_true", help="take over / release another owner's claim")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
@@ -346,7 +432,32 @@ def main(argv: list[str] | None = None, run: Runner = gh, env: dict[str, str] | 
         harness = slug(args.harness)
         session = resolve_session(harness, args.session, env)
         extra: dict[str, str] = {}
-        if args.action == "release":
+        if args.action == "accept":
+            ok, message = accept(run, repo, args.number, harness, session, args.pr)
+        elif args.action == "transfer":
+            if not (args.to_harness and args.to_session):
+                raise ClaimError("--to-harness and --to-session are required for transfer")
+            model = args.to_model or env.get("AGENT_MODEL")
+            if not model:
+                raise ClaimError("--to-model (or $AGENT_MODEL) is required for transfer: it picks the incoming agent name")
+            state = agent_names.default_state_path(env)
+            agent_names.read_state(state)
+            agent_names.require_family(agent_names.load_roster(), model)
+            to_harness = slug(args.to_harness)
+            to_session = resolve_session(to_harness, args.to_session, env)
+            ok, message, count = transfer(run, repo, args.number, harness, session, to_harness, to_session,
+                                          args.force, args.pr)
+            if ok:
+                agent_names.release(state, harness, session, issue=args.number)
+                title = assign_name(run, repo, args.number, to_harness, to_session, model, state)
+                if args.pr is not None:
+                    sync_pr(run, repo, args.number, args.pr, True)
+                extra = {"agent": title[1:title.index("]")], "session_title": title,
+                         "handover_count": count, "to_harness": to_harness, "to_session": to_session}
+                message = f"{message}; incoming agent {extra['agent']}"
+            else:
+                extra = {"handover_count": count}
+        elif args.action == "release":
             owners = claims_in(read_labels(run, repo, args.number)) or [(harness, session)]
             ok, message = release(run, repo, args.number, harness, session, args.force, args.pr)
             if ok:
@@ -375,7 +486,7 @@ def main(argv: list[str] | None = None, run: Runner = gh, env: dict[str, str] | 
                 message = f"{message}; {pr_message}"
         payload = {"ok": ok, "message": message, "harness": harness, "session": session, **extra}
         text = f"{message} (session id: {session})"
-        if extra:
+        if "session_title" in extra:
             text += f"\nset your harness session title to: {extra['session_title']}"
         print(json.dumps(payload) if args.json else text)
         return 0 if ok else 1

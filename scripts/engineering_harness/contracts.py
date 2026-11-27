@@ -142,7 +142,8 @@ def validate_result(result: dict, envelope: dict) -> dict:
             raise HarnessError(f"Worker result has stale or mismatched {key}")
     if result["input_hash"] != digest(envelope):
         raise HarnessError("Worker result references a different input envelope")
-    if result["status"] not in ("completed", "code_defect", "blocked", "infrastructure_error"):
+    if result["status"] not in ("completed", "code_defect", "blocked", "handover_requested",
+                                "infrastructure_error"):
         raise HarnessError("Unknown worker result status")
     if not isinstance(result["summary"], str) or not result["summary"].strip():
         raise HarnessError("Worker result requires a summary")

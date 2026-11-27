@@ -157,6 +157,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
 | `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |
 | `token_tracker.py` | `scripts/token_tracker.py` | Cross-provider token & quota consumption tracker (Claude, Codex, Gemini, Copilot, T3) with SQLite WAL ledger, Decimal money, rolling-window health, reports, and budget gates (`ingest`, `record`, `health`, `report`, `budget-check`; `--help`, `--json`) |
+| `handover.py` | `scripts/handover.py` | Canonical provider-neutral handover envelopes (`<= 64 KiB`, checksum, protected-path exclusion) plus deterministic 0-token WIP capture: `capture`, `validate`, `render` (collapsed PR comment) and `export-t3` (candidate export after `task_cancel`); pairs with `issue_claim.py transfer` and `t3.py`'s `handover_requested` status |
 
 
 ## Registered workspace orchestration tool
