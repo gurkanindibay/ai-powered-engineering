@@ -513,33 +513,221 @@ def _trend_table(days: list[dict]) -> str:
             f'</thead><tbody>{rows}</tbody></table></div></details>')
 
 
+_EVIDENCE_STATUS_ORDER = ("failing", "historical", "unresolved", "skipped", "passing")
+_EVIDENCE_ICONS = {"passing": "✓", "failing": "✕", "historical": "↺", "skipped": "○", "unresolved": "?"}
+
+
+def _format_provenance(workflow_run: str, attempt: str, commit: str) -> str:
+    run_label = f'<a href="{_esc(workflow_run)}">run</a>' if workflow_run else "run unavailable"
+    return f'{run_label} · attempt {_esc(attempt)} · commit <code>{_esc(commit)}</code>'
+
+
+def _scenario_evidence_status(statuses: list[str]) -> str:
+    for candidate in _EVIDENCE_STATUS_ORDER:
+        if candidate in statuses:
+            return candidate
+    return statuses[0] if statuses else "unresolved"
+
+
+def _evidence_row_html(entry: dict, primary_prov: tuple[str, str, str], show_prov_col: bool) -> str:
+    status = entry["status"]
+    icon = _EVIDENCE_ICONS.get(status, "·")
+    cases = entry["cases"]
+    if len(cases) == 1:
+        c = cases[0]
+        count_badge = f' <span class="run-count">×{c["count"]}</span>' if c["count"] > 1 else ""
+        tests_html = f'<code class="test-name">{_esc(c["test_name"])}</code>{count_badge}'
+    else:
+        items = []
+        for c in cases:
+            count_badge = f' <span class="run-count">×{c["count"]}</span>' if c["count"] > 1 else ""
+            case_status = (f' <span class="health {_esc(c["status"])}">{_esc(c["status"])}</span>'
+                           if c["status"] != status or status != "passing" else "")
+            items.append(f'<li><code class="test-name">{_esc(c["test_name"])}</code>{count_badge}{case_status}</li>')
+        tests_html = f'<ul class="test-list">{"".join(items)}</ul>'
+    sc_name = f'<span class="sc-name">{_esc(entry["name"])}</span>' if entry["name"] else ""
+    prov_cell = ""
+    if show_prov_col:
+        provs: list[tuple[str, str, str]] = []
+        for c in cases:
+            prov = (c["workflow_run"], c["attempt"], c["tested_commit"])
+            if prov not in provs:
+                provs.append(prov)
+        if provs == [primary_prov]:
+            prov_cell = '<td class="prov-cell"><span class="muted">Primary run</span></td>'
+        else:
+            prov_html = "<br>".join(_format_provenance(*p) for p in provs)
+            prov_cell = f'<td class="prov-cell">{prov_html}</td>'
+    return (
+        f'<tr data-status="{_esc(status)}">'
+        f'<th scope="row" class="sc-cell"><code>{_esc(entry["id"])}</code>{sc_name}</th>'
+        f'<td class="tests-cell">{tests_html}</td>'
+        f'<td class="result-cell"><span class="health {_esc(status)}"><span aria-hidden="true">{icon}</span> '
+        f'{_esc(status)}</span></td>'
+        f'{prov_cell}</tr>'
+    )
+
+
+def _evidence_table_html(entries: list[dict], primary_prov: tuple[str, str, str],
+                         caption_id: str, caption_text: str, force_prov_col: bool = False) -> str:
+    show_prov = force_prov_col or any(
+        (c["workflow_run"], c["attempt"], c["tested_commit"]) != primary_prov
+        for e in entries for c in e["cases"]
+    )
+    prov_th = '<th scope="col">Provenance</th>' if show_prov else ""
+    rows = "".join(_evidence_row_html(e, primary_prov, show_prov) for e in entries)
+    table_cls = "evidence-table has-prov" if show_prov else "evidence-table"
+    return (
+        f'<div class="scroll evidence-table-wrap" tabindex="0" role="region" aria-labelledby="{_esc(caption_id)}">'
+        f'<table class="{table_cls}"><caption id="{_esc(caption_id)}" class="visually-hidden">{_esc(caption_text)}</caption>'
+        f'<thead><tr><th scope="col">Scenario</th><th scope="col">Test cases</th>'
+        f'<th scope="col">Result</th>{prov_th}</tr></thead>'
+        f'<tbody>{rows}</tbody></table></div>'
+    )
+
+
 def _named_evidence_html(latest: dict) -> str:
-    rows = []
+    epic_titles = {e["id"]: e.get("title", e["id"]) for e in latest.get("epics", []) if isinstance(e, dict) and e.get("id")}
+    entries: list[dict] = []
+    prov_counts: dict[tuple[str, str, str], int] = defaultdict(int)
+    current_prov_counts: dict[tuple[str, str, str], int] = defaultdict(int)
+    raw_case_total = 0
+    unique_case_total = 0
+
     for scenario_id, scenario in sorted(latest.get("scenarios", {}).items()):
         if not isinstance(scenario, dict):
             continue
-        for case in scenario.get("evidence_cases", []):
-            if not isinstance(case, dict):
-                continue
+        raw_cases = [c for c in scenario.get("evidence_cases", []) if isinstance(c, dict)]
+        if not raw_cases:
+            continue
+        grouped: dict[tuple[str, str, str, str, str], dict] = {}
+        for case in raw_cases:
+            raw_case_total += 1
             workflow_run = case.get("workflow_run", "")
-            if isinstance(workflow_run, str) and WORKFLOW_RUN_URL.fullmatch(workflow_run):
-                run_label = f'<a href="{_esc(workflow_run)}">run</a>'
-            else:
-                run_label = "run unavailable"
+            safe_run = workflow_run if isinstance(workflow_run, str) and WORKFLOW_RUN_URL.fullmatch(workflow_run) else ""
+            attempt = str(case.get("attempt") or "unknown")
+            tested_commit = str(case.get("tested_commit") or "")[:12] or "unknown"
             result = case.get("test_status") if case.get("status") == "historical" else case.get("status")
             status_label = "historical" if case.get("status") == "historical" else str(result or "unresolved")
-            rows.append(
-                f'<tr><td><code>{_esc(scenario_id)}</code></td><td>{_esc(case.get("test_name", "test case"))}</td>'
-                f'<td><span class="health {_esc(status_label)}">{_esc(status_label)}</span></td>'
-                f'<td>{run_label} · attempt {_esc(case.get("attempt", "unknown"))} · '
-                f'commit <code>{_esc(str(case.get("tested_commit", ""))[:12] or "unknown")}</code></td></tr>')
-    if not rows:
+            test_name = str(case.get("test_name") or "test case")
+            key = (test_name, status_label, safe_run, attempt, tested_commit)
+            if key not in grouped:
+                grouped[key] = {
+                    "test_name": test_name, "status": status_label,
+                    "workflow_run": safe_run, "attempt": attempt, "tested_commit": tested_commit, "count": 0,
+                }
+            grouped[key]["count"] += 1
+            prov = (safe_run, attempt, tested_commit)
+            prov_counts[prov] += 1
+            if status_label != "historical":
+                current_prov_counts[prov] += 1
+        dedup_cases = list(grouped.values())
+        unique_case_total += len(dedup_cases)
+        epic_id = str(scenario.get("epic") or "")
+        if not epic_id:
+            parts = scenario_id.split("-")
+            epic_id = f"EPIC-{parts[1]}" if len(parts) >= 2 and parts[0] == "SC" else "Other"
+        entries.append({
+            "id": scenario_id,
+            "name": str(scenario.get("name") or ""),
+            "epic": epic_id,
+            "status": _scenario_evidence_status([c["status"] for c in dedup_cases]),
+            "cases": dedup_cases,
+            "unique_tests": len({c["test_name"] for c in dedup_cases}),
+        })
+
+    if not entries:
         return ""
-    return ('<section id="named-evidence"><h2>Named scenario evidence</h2>'
-            '<p class="lede">Test outcomes include the workflow attempt and exact tested commit. '
-            'Historical results do not verify the current commit.</p><div class="scroll"><table><thead><tr>'
-            '<th>Scenario</th><th>Test</th><th>Result</th><th>Provenance</th></tr></thead>'
-            f'<tbody>{"".join(rows)}</tbody></table></div></section>')
+
+    primary_prov = max(current_prov_counts or prov_counts, key=(current_prov_counts or prov_counts).__getitem__)
+    status_counts: dict[str, int] = defaultdict(int)
+    by_epic: dict[str, list[dict]] = defaultdict(list)
+    for entry in entries:
+        status_counts[entry["status"]] += 1
+        by_epic[entry["epic"]].append(entry)
+
+    status_pills = "".join(
+        f'<span class="health {_esc(st)}"><span aria-hidden="true">{_EVIDENCE_ICONS.get(st, "·")}</span> '
+        f'{status_counts[st]} {_esc(st)}</span>'
+        for st in _EVIDENCE_STATUS_ORDER if status_counts.get(st)
+    )
+    exec_note = f" ({raw_case_total} executions)" if raw_case_total != unique_case_total else ""
+    summary_bar = (
+        '<div class="evidence-summary">'
+        f'<div class="evidence-metrics"><span><b>{len(entries)}</b> scenarios · '
+        f'<b>{unique_case_total}</b> unique test{"s" if unique_case_total != 1 else ""}{exec_note}</span>'
+        f'<span class="evidence-pills">{status_pills}</span></div>'
+        f'<div class="evidence-prov">Primary run: {_format_provenance(*primary_prov)}</div>'
+        '</div>'
+    )
+
+    exceptions = [e for e in entries if e["status"] != "passing"]
+    exceptions_html = ""
+    if exceptions:
+        exc_table = _evidence_table_html(
+            exceptions, primary_prov, "ne-cap-exceptions",
+            "Non-passing named scenario evidence", force_prov_col=True)
+        exceptions_html = (
+            f'<details class="evidence-exceptions" open>'
+            f'<summary><strong>{len(exceptions)} non-passing scenario{"s" if len(exceptions) != 1 else ""}</strong> '
+            f'<span class="muted">(failing, historical, skipped, or unresolved)</span></summary>'
+            f'{exc_table}</details>'
+        )
+
+    filter_buttons = [
+        f'<button type="button" class="chip-btn" data-ne-status="all" aria-pressed="true">All ({len(entries)})</button>'
+    ]
+    present_statuses = [st for st in _EVIDENCE_STATUS_ORDER if status_counts.get(st)]
+    if len(present_statuses) > 1:
+        for st in present_statuses:
+            filter_buttons.append(
+                f'<button type="button" class="chip-btn" data-ne-status="{_esc(st)}" aria-pressed="false">'
+                f'{_esc(st.capitalize())} ({status_counts[st]})</button>'
+            )
+
+    epic_blocks = []
+    for epic_id in sorted(by_epic):
+        epic_entries = by_epic[epic_id]
+        epic_title = epic_titles.get(epic_id, "")
+        title_html = f' <span class="epic-title">{_esc(epic_title)}</span>' if epic_title and epic_title != epic_id else ""
+        epic_tests = sum(e["unique_tests"] for e in epic_entries)
+        epic_issues = sum(1 for e in epic_entries if e["status"] != "passing")
+        issue_chip = (f'<span class="chip bad">{epic_issues} non-passing</span>'
+                      if epic_issues else '<span class="chip good">all passing</span>')
+        table_html = _evidence_table_html(
+            epic_entries, primary_prov, f"ne-cap-{epic_id}",
+            f"{epic_id} {epic_title or 'named scenario evidence'}")
+        epic_blocks.append(
+            f'<details class="evidence-epic" data-epic="{_esc(epic_id)}" data-total="{len(epic_entries)}">'
+            f'<summary><span class="epic-summary-main"><span class="epic-id">{_esc(epic_id)}</span>{title_html}</span>'
+            f'<span class="chips"><span class="chip" data-ne-epic-count>{len(epic_entries)} scenarios</span>'
+            f'<span class="chip">{epic_tests} test{"s" if epic_tests != 1 else ""}</span>{issue_chip}</span></summary>'
+            f'{table_html}</details>'
+        )
+
+    controls_html = (
+        '<search class="evidence-controls">'
+        '<div class="evidence-search-field"><label for="ne-filter">Filter scenarios or tests</label>'
+        '<input id="ne-filter" type="search" placeholder="Scenario ID, title, or test name" autocomplete="off"></div>'
+        f'<div class="evidence-filter-row" role="group" aria-label="Filter by status">{"".join(filter_buttons)}'
+        '<button type="button" class="chip-btn" id="ne-toggle-all" aria-expanded="false">Expand all epics</button></div>'
+        f'<output id="ne-count" for="ne-filter" aria-live="polite">Showing {len(entries)} of {len(entries)} scenarios</output>'
+        '</search>'
+    )
+    epic_word = "epic" if len(by_epic) == 1 else "epics"
+    browser_html = (
+        f'<details class="evidence-browser">'
+        f'<summary>Browse all {len(entries)} scenarios across {len(by_epic)} {epic_word}</summary>'
+        f'<div class="evidence-browser-body">{controls_html}{"".join(epic_blocks)}</div>'
+        '</details>'
+    )
+
+    return (
+        '<section id="named-evidence"><h2>Named scenario evidence</h2>'
+        '<p class="lede">Named CI test cases linked to acceptance scenarios. '
+        'Historical results do not verify the current commit.</p>'
+        f'{summary_bar}{exceptions_html}{browser_html}</section>'
+    )
 
 
 def _inventory_html(latest: dict) -> str:
@@ -716,10 +904,10 @@ report on, such as Rust or Flutter unit tests, or were skipped. They count as au
 
 CSS = """
 :root{--page:#f9f9f7;--surface:#fcfcfb;--text:#0b0b0b;--text-2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;
---good:#0ca30c;--good-text:#006300;--bad:#d03b3b;--warn:#fab219;--neutral:#c3c2b7;
+--good:#0ca30c;--good-text:#006300;--bad:#d03b3b;--warn:#fab219;--warn-text:#855800;--neutral:#c3c2b7;
 --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--link:#1c5cab}
 @media (prefers-color-scheme:dark){:root{--page:#0d0d0d;--surface:#1a1a19;--text:#f0efec;--text-2:#c3c2b7;--grid:#2c2c2a;
---axis:#383835;--good-text:#0ca30c;--neutral:#52514e;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--link:#86b6ef}}
+--axis:#383835;--good-text:#0ca30c;--warn-text:#f5b83d;--neutral:#52514e;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--link:#86b6ef}}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--text);
 font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:1120px;margin:0 auto;padding:28px 16px 72px}
@@ -748,8 +936,55 @@ tbody tr:last-child td,tfoot td{border-bottom:0}tfoot td{border-top:1px solid va
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--text-2);margin:0 0 10px}
 .key{display:inline-flex;align-items:center;gap:6px}.key i{width:12px;height:12px}.key i.line{height:3px;border-radius:2px}
 .health{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;white-space:nowrap}
-.health.verified{color:var(--good-text)}.health.failing{color:var(--bad)}.health.in_progress{color:var(--text)}
-.health.not_automated,.health.not_specified{color:var(--text-2)}
+.health.verified,.health.passing{color:var(--good-text)}.health.failing{color:var(--bad)}.health.in_progress{color:var(--text)}
+.health.historical,.health.skipped,.health.no_result{color:var(--warn-text)}
+.health.not_automated,.health.not_specified,.health.unresolved,.health.planned{color:var(--text-2)}
+.visually-hidden{position:absolute!important;clip-path:inset(50%)!important;overflow:hidden!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;white-space:nowrap!important}
+:where(a:any-link,button,summary,input):focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.evidence-summary{background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:space-between;align-items:center;margin-bottom:10px}
+.evidence-metrics{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:14px}
+.evidence-pills{display:inline-flex;flex-wrap:wrap;gap:6px 12px}
+.evidence-prov{font-size:13px;color:var(--text-2)}
+.evidence-exceptions,.evidence-browser,.evidence-epic{background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:10px 14px;margin-top:10px}
+.evidence-exceptions{border-left:4px solid var(--bad)}
+.evidence-exceptions>summary,.evidence-browser>summary,.evidence-epic>summary{cursor:pointer;font-size:14px;min-block-size:28px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;list-style:none}
+.evidence-exceptions>summary::-webkit-details-marker,.evidence-browser>summary::-webkit-details-marker,.evidence-epic>summary::-webkit-details-marker{display:none}
+.evidence-exceptions>summary::before,.evidence-browser>summary::before,.evidence-epic>summary::before{content:"▸";color:var(--text-2);font-size:12px;flex:0 0 auto}
+.evidence-exceptions[open]>summary::before,.evidence-browser[open]>summary::before,.evidence-epic[open]>summary::before{content:"▾"}
+.evidence-epic>summary .chips{margin-left:auto}
+.evidence-browser>summary{font-weight:600}
+.evidence-browser-body{margin-top:12px}
+.evidence-controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--grid)}
+.evidence-search-field{display:flex;flex-direction:column;gap:4px;flex:1 1 240px}
+.evidence-search-field label{font-size:12px;font-weight:600;color:var(--text-2)}
+.evidence-search-field input{font:inherit;font-size:14px;min-block-size:36px;padding:6px 10px;border:1px solid var(--axis);border-radius:8px;background:var(--page);color:var(--text)}
+.evidence-filter-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip-btn{font:inherit;font-size:13px;min-block-size:36px;padding:4px 12px;border:1px solid var(--axis);border-radius:999px;background:var(--page);color:var(--text-2);cursor:pointer}
+.chip-btn[aria-pressed="true"]{background:var(--text);color:var(--page);border-color:var(--text);font-weight:600}
+#ne-count{font-size:13px;color:var(--text-2);margin-left:auto;align-self:center}
+.evidence-epic{border-radius:10px;padding:8px 12px;margin-top:8px}
+.epic-summary-main{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:4px}
+.epic-title{font-weight:600}
+.chip.good{color:var(--good-text);border-color:var(--good)}.chip.bad{color:var(--bad);border-color:var(--bad)}
+.evidence-table-wrap{margin-top:10px;max-block-size:460px;overflow:auto;container-type:inline-size;border:1px solid var(--grid);border-radius:10px}
+.evidence-table{border:0;border-radius:0;border-collapse:separate;border-spacing:0;--label-2:"Test cases";--label-3:"Result";--label-4:"Provenance"}
+.evidence-table thead{position:sticky;inset-block-start:0;z-index:1;background:var(--surface)}
+.evidence-table tbody th{font-weight:500;font-size:14px;color:var(--text);white-space:normal;text-align:left;vertical-align:top}
+.sc-cell{min-width:200px;max-width:340px}.sc-name{display:block;font-size:13px;color:var(--text-2);margin-top:2px}
+.tests-cell{min-width:220px;vertical-align:top}.test-name{font-size:12px;overflow-wrap:anywhere}
+.test-list{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:3px}
+.run-count{font-size:11px;font-weight:600;color:var(--text-2);border:1px solid var(--axis);border-radius:999px;padding:0 6px;margin-left:4px;white-space:nowrap}
+.result-cell,.prov-cell{vertical-align:top;white-space:nowrap;font-size:13px}
+@container (width < 600px){
+  .evidence-table,.evidence-table thead,.evidence-table tbody,.evidence-table tr,.evidence-table th,.evidence-table td{display:block}
+  .evidence-table thead{display:none}
+  .evidence-table tbody tr{border-bottom:1px solid var(--grid);padding:8px 10px}
+  .evidence-table tbody tr:last-child{border-bottom:0}
+  .evidence-table th,.evidence-table td{border:0;padding:3px 0;max-width:none;white-space:normal}
+  .evidence-table td:nth-of-type(1)::before{content:var(--label-2) ": ";font-weight:600;color:var(--text-2);font-size:12px}
+  .evidence-table td:nth-of-type(2)::before{content:var(--label-3) ": ";font-weight:600;color:var(--text-2);font-size:12px}
+  .evidence-table td:nth-of-type(3)::before{content:var(--label-4) ": ";font-weight:600;color:var(--text-2);font-size:12px}
+}
 .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
 .note{background:var(--surface);border:1px solid var(--grid);border-left:4px solid var(--axis);border-radius:10px;padding:12px 14px}
 .note.good{border-left-color:var(--good)}.note.bad{border-left-color:var(--bad)}
@@ -849,6 +1084,47 @@ function draw(){
     {key:'stories_with_scenarios',label:'With acceptance scenarios',color:'--s2'}]);
   runChart('chart-runs','legend-runs',DATA.runs)}
 draw();matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw);
+(function(){
+  const section=document.getElementById('named-evidence');if(!section)return;
+  const input=document.getElementById('ne-filter'),countEl=document.getElementById('ne-count'),
+    toggleAll=document.getElementById('ne-toggle-all'),epics=[...section.querySelectorAll('.evidence-epic')],
+    statusBtns=[...section.querySelectorAll('[data-ne-status]')];
+  if(!input||!epics.length)return;
+  const rows=epics.flatMap(d=>[...d.querySelectorAll('tbody tr')].map(r=>({
+    row:r,epic:d,status:r.dataset.status||'',text:(d.dataset.epic+' '+r.textContent).toLowerCase()})));
+  let activeStatus='all';
+  const apply=()=>{
+    const q=input.value.trim().toLowerCase(),filtering=Boolean(q)||activeStatus!=='all';
+    let shown=0;const perEpic=new Map();
+    for(const item of rows){
+      const ok=(activeStatus==='all'||item.status===activeStatus)&&(!q||item.text.includes(q));
+      item.row.hidden=!ok;
+      if(ok){shown++;perEpic.set(item.epic,(perEpic.get(item.epic)||0)+1)}
+    }
+    const expandAll=toggleAll&&toggleAll.getAttribute('aria-expanded')==='true';
+    for(const d of epics){
+      const m=perEpic.get(d)||0,total=d.dataset.total||m,badge=d.querySelector('[data-ne-epic-count]');
+      if(badge)badge.textContent=filtering?`${m} of ${total} scenarios`:`${total} scenarios`;
+      d.hidden=filtering&&m===0;
+      if(filtering&&m>0)d.open=true;else if(!filtering)d.open=expandAll;
+    }
+    if(countEl)countEl.textContent=`Showing ${shown} of ${rows.length} scenarios`;
+  };
+  input.addEventListener('input',apply);
+  statusBtns.forEach(btn=>btn.addEventListener('click',()=>{
+    activeStatus=btn.dataset.neStatus||'all';
+    statusBtns.forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));
+    apply();
+  }));
+  if(toggleAll){
+    toggleAll.addEventListener('click',()=>{
+      const openAll=toggleAll.getAttribute('aria-expanded')!=='true';
+      epics.forEach(d=>{if(!d.hidden)d.open=openAll});
+      toggleAll.setAttribute('aria-expanded',String(openAll));
+      toggleAll.textContent=openAll?'Collapse all epics':'Expand all epics';
+    });
+  }
+})();
 """
 
 
