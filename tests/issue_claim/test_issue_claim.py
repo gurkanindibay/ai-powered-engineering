@@ -274,6 +274,9 @@ class AgentNameTests(unittest.TestCase):
             "claude-fable-5-2": "Fatih Sultan Mehmet", "claude-opus-5-5[1m]": "Yavuz Sultan Selim",
             "Sonnet 5.5": "Alparslan", "claude-haiku-5-5": "Ulubatlı Hasan",
             "gpt-6.2-astra": "Metehan", "GPT-6.2 Sol": "Melikşah", "gpt-6.1-sol": "Tuğrul Bey",
+            "gemini-ultra": "Gazneli Mahmud", "gemini-4-neon": "Çelebi Mehmet",
+            "gemini-4-carbon": "Danişmend Gazi", "gemini-4-argon": "Cezzar Ahmed Paşa",
+            "gemini-4-hydrogen": "Mihaloğlu Ali Bey", "gemini-nano": "Çete Emir Ayşe",
             "gemini-3.1-pro": "Baybars", "Gemini 3.8 Flash": "Kuşçubaşı Eşref",
             "deepseek/deepseek-chat": "Piri Reis",
         }
