@@ -706,8 +706,8 @@ def _named_evidence_html(latest: dict) -> str:
         )
 
     controls_html = (
-        '<search class="evidence-controls">'
-        '<div class="evidence-search-field"><label for="ne-filter">Filter scenarios or tests</label>'
+        '<search role="search" class="evidence-controls">'
+        '<div class="evidence-search-field"><label for="ne-filter">Filter all scenarios or tests</label>'
         '<input id="ne-filter" type="search" placeholder="Scenario ID, title, or test name" autocomplete="off"></div>'
         f'<div class="evidence-filter-row" role="group" aria-label="Filter by status">{"".join(filter_buttons)}'
         '<button type="button" class="chip-btn" id="ne-toggle-all" aria-expanded="false">Expand all epics</button></div>'
@@ -1092,22 +1092,23 @@ draw();matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw)
   if(!input||!epics.length)return;
   const rows=epics.flatMap(d=>[...d.querySelectorAll('tbody tr')].map(r=>({
     row:r,epic:d,status:r.dataset.status||'',text:(d.dataset.epic+' '+r.textContent).toLowerCase()})));
-  let activeStatus='all';
+  let activeStatus='all',wasFiltering=false;const preFilterOpen=new Map();
   const apply=()=>{
     const q=input.value.trim().toLowerCase(),filtering=Boolean(q)||activeStatus!=='all';
+    if(filtering&&!wasFiltering)epics.forEach(d=>preFilterOpen.set(d,d.open));
     let shown=0;const perEpic=new Map();
     for(const item of rows){
       const ok=(activeStatus==='all'||item.status===activeStatus)&&(!q||item.text.includes(q));
       item.row.hidden=!ok;
       if(ok){shown++;perEpic.set(item.epic,(perEpic.get(item.epic)||0)+1)}
     }
-    const expandAll=toggleAll&&toggleAll.getAttribute('aria-expanded')==='true';
     for(const d of epics){
       const m=perEpic.get(d)||0,total=d.dataset.total||m,badge=d.querySelector('[data-ne-epic-count]');
       if(badge)badge.textContent=filtering?`${m} of ${total} scenarios`:`${total} scenarios`;
       d.hidden=filtering&&m===0;
-      if(filtering&&m>0)d.open=true;else if(!filtering)d.open=expandAll;
+      if(filtering&&m>0)d.open=true;else if(!filtering&&wasFiltering)d.open=Boolean(preFilterOpen.get(d));
     }
+    wasFiltering=filtering;
     if(countEl)countEl.textContent=`Showing ${shown} of ${rows.length} scenarios`;
   };
   input.addEventListener('input',apply);
