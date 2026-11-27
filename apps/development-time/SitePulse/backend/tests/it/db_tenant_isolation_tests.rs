@@ -18,6 +18,7 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
 use deadpool_postgres::Pool;
+use sitepulse_backend::models::UnitInviteLinkResponse;
 use sitepulse_backend::{app::build_router, auth, db, state::AppState};
 use tower::ServiceExt;
 
@@ -1579,4 +1580,146 @@ async fn readiness_reports_tenant_rls_policy_and_runtime_role_safety() {
         }
     );
     t.drop_db().await;
+}
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn invitations_record_their_site_and_stay_in_their_tenant() {
+    let t = TestDb::create("invite_site").await;
+    let begonya = t.site_id("begonya-sitesi").await;
+    let kardelen = t.site_id("kardelen-rezidans").await;
+    let unit = t.unit_of(begonya).await;
+    let invite = UnitInviteLinkResponse {
+        invite_url: "https://app.sitepulse.test/invite/tenant-scoped".to_string(),
+        token: format!("invite-{}", uuid::Uuid::new_v4().simple()),
+        unit_id: unit.to_string(),
+        building: "A Blok".to_string(),
+        unit_number: "1".to_string(),
+        relationship: "TENANT".to_string(),
+        // A fixed instant: the invitation expiry never depends on the test clock.
+        expires_at: chrono::DateTime::<chrono::Utc>::from_timestamp(1_800_000_000, 0)
+            .expect("valid instant"),
+        security_notice: "Single use".to_string(),
+    };
+    db::save_invitation_token(&t.pool, &invite)
+        .await
+        .expect("store the invitation");
+
+    // The row carries its site, so the site policy and the site purge can see it.
+    let site_of_token = t
+        .scalar_text(&format!(
+            "SELECT COALESCE(site_id::text, '') FROM invitation_tokens WHERE token = '{}'",
+            invite.token
+        ))
+        .await;
+    assert_eq!(site_of_token, begonya.to_string());
+
+    // A tenant-bound read sees the invitation of its own site and nothing foreign.
+    let mut client = t.pool.get().await.expect("connection");
+    let tx = db::begin_tenant_read(&mut client, begonya).await.unwrap();
+    let own: i64 = tx
+        .query_one(
+            "SELECT count(*) FROM invitation_tokens WHERE token = $1",
+            &[&invite.token],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(own, 1, "the inviting site must see its own invitation");
+    tx.rollback().await.unwrap();
+    let tx = db::begin_tenant_read(&mut client, kardelen).await.unwrap();
+    let foreign: i64 = tx
+        .query_one(
+            "SELECT count(*) FROM invitation_tokens WHERE token = $1",
+            &[&invite.token],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(foreign, 0, "another tenant must not see the invitation");
+    tx.rollback().await.unwrap();
+    drop(client);
+    t.drop_db().await;
+}
+
+/// V57's backfill must see the rows it changes. The policies are FORCEd, so they
+/// apply to a schema owner that is not a superuser too: without an explicit platform
+/// transaction the `UPDATE ... FROM units` matches nothing and commits as applied.
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn the_invitation_backfill_updates_rows_for_a_non_superuser_owner() {
+    let t = TestDb::create("invite_backfill").await;
+    let admin = t.admin.clone();
+    let site = t.site_id("begonya-sitesi").await;
+    let unit = t.unit_of(site).await;
+    t.exec(&format!(
+        "INSERT INTO invitation_tokens (token, token_type, unit_id, invite_url, expires_at) \
+         VALUES ('legacy-backfill', 'UNIT', {unit}, 'https://app.sitepulse.test/legacy', \
+                 now() + interval '1 day');"
+    ))
+    .await;
+    // A login-less role that owns the two tables the backfill reads and writes.
+    let probe = format!("sp_v57_probe_{}", uuid::Uuid::new_v4().simple());
+    // The audit trigger reads `sites` and appends to `audit_events`; a real migration
+    // identity owns those too, so grant what ownership would imply.
+    t.exec(&format!(
+        "CREATE ROLE {probe} NOLOGIN; \
+         ALTER TABLE invitation_tokens OWNER TO {probe}; \
+         ALTER TABLE units OWNER TO {probe}; \
+         GRANT SELECT ON sites TO {probe}; \
+         GRANT INSERT ON audit_events TO {probe};"
+    ))
+    .await;
+    let mut client = t.pool.get().await.expect("connection");
+    let runtime: String = client
+        .query_one("SELECT current_user", &[])
+        .await
+        .expect("runtime identity")
+        .get(0);
+    t.exec(&format!("GRANT {probe} TO {runtime};")).await;
+    let backfill = include_str!("../../migrations/V57__invitation_token_site.sql");
+
+    let tx = client.transaction().await.expect("transaction");
+    tx.batch_execute(&format!("SET LOCAL ROLE {probe}"))
+        .await
+        .expect("act as the schema owner");
+    tx.batch_execute(backfill)
+        .await
+        .expect("run the backfill unbound");
+    tx.commit().await.expect("commit");
+    let unbound_site = t.scalar_text(
+        "SELECT COALESCE(site_id::text, '') FROM invitation_tokens WHERE token = 'legacy-backfill'",
+    );
+    let unbound_site = unbound_site.await;
+    assert_eq!(
+        unbound_site, "",
+        "an unbound backfill must be the no-op the platform bind prevents"
+    );
+
+    let tx = client.transaction().await.expect("transaction");
+    tx.batch_execute(&format!("SET LOCAL ROLE {probe}"))
+        .await
+        .expect("act as the schema owner");
+    db::tx_bind_platform(&tx).await.expect("bind platform");
+    tx.batch_execute(backfill)
+        .await
+        .expect("run the bound backfill");
+    tx.commit().await.expect("commit");
+    drop(client);
+    let bound_site = t
+        .scalar_text(
+            "SELECT COALESCE(site_id::text, '') FROM invitation_tokens WHERE token = 'legacy-backfill'",
+        )
+        .await;
+    assert_eq!(
+        bound_site,
+        site.to_string(),
+        "the platform bind backfills it"
+    );
+
+    t.drop_db().await;
+    let cleanup = admin.get().await.expect("admin connection");
+    let _ = cleanup
+        .batch_execute(&format!("DROP ROLE IF EXISTS {probe};"))
+        .await;
 }

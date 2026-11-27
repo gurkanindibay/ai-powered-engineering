@@ -88,6 +88,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(54, "V54__tenant_rls_fail_closed.sql"),
     migration!(55, "V55__system_reference_tables.sql"),
     migration!(56, "V56__tenant_rls_platform_guard.sql"),
+    migration!(57, "V57__invitation_token_site.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.
@@ -158,6 +159,11 @@ async fn apply_pending(client: &mut deadpool_postgres::Object) -> crate::db::DbR
         }
         // tenant-guard: platform — DDL migration runner.
         let tx = client.transaction().await?;
+        // Data migrations touch tenant tables whose policies also apply to the owner
+        // (FORCE ROW LEVEL SECURITY), so the run is an explicit platform transaction.
+        // The GUC only takes effect once `sp_is_platform()` exists (V54); before that
+        // the policies are still permissive, so binding early is harmless.
+        crate::db::tenant_guard::tx_bind_platform(&tx).await?;
         tx.batch_execute(m.sql).await.map_err(|e| {
             let detail = e
                 .as_db_error()

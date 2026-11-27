@@ -159,16 +159,30 @@ pub async fn save_invitation_token(
     } else {
         parse_id_to_i64(&invite.unit_id)
     };
+    // The token carries its site: the tenant policy, the site purge and the
+    // start-up load all key on `site_id`, so a NULL row is unreachable to its tenant.
+    let site_id_num = match unit_id_num {
+        Some(unit) => tx
+            .query_opt(
+                "SELECT site_id FROM units WHERE id = $1 AND deleted_at IS NULL",
+                &[&unit],
+            )
+            .await?
+            .and_then(|row| row.get::<_, Option<i64>>(0)),
+        None => None,
+    };
     tx
         .execute(
             r#"
-            INSERT INTO invitation_tokens (token, token_type, unit_id, building, unit_number, relationship, invite_url, security_notice, expires_at)
-            VALUES ($1, 'UNIT', $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO invitation_tokens (token, token_type, site_id, unit_id, building, unit_number, relationship, invite_url, security_notice, expires_at)
+            VALUES ($1, 'UNIT', $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (token) DO UPDATE SET
+                site_id = EXCLUDED.site_id,
                 expires_at = EXCLUDED.expires_at
             "#,
             &[
                 &invite.token,
+                &site_id_num,
                 &unit_id_num,
                 &invite.building,
                 &invite.unit_number,

@@ -150,7 +150,16 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install psql client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+        # `apt-get update` intermittently gets a 403 from the runner image's
+        # packages.microsoft.com source and fails the whole shard before a test runs;
+        # the client itself comes from the Ubuntu archive, so retry instead.
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y postgresql-client; then exit 0; fi
+            echo "apt-get failed (attempt ${attempt}); retrying in 15s" >&2
+            sleep 15
+          done
+          exit 1
       - name: Provision the runtime role
         env:
           PGPASSWORD: ${{ env.DB_ADMIN_PASS }}
@@ -379,7 +388,16 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install psql client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+        # `apt-get update` intermittently gets a 403 from the runner image's
+        # packages.microsoft.com source and fails the whole shard before a test runs;
+        # the client itself comes from the Ubuntu archive, so retry instead.
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y postgresql-client; then exit 0; fi
+            echo "apt-get failed (attempt ${attempt}); retrying in 15s" >&2
+            sleep 15
+          done
+          exit 1
       - name: Browser end-to-end suite
         env:
           SITEPULSE_E2E_PREBUILT_DIR: ${{ runner.temp }}/sitepulse-e2e
@@ -753,7 +771,16 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install psql client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+        # `apt-get update` intermittently gets a 403 from the runner image's
+        # packages.microsoft.com source and fails the whole shard before a test runs;
+        # the client itself comes from the Ubuntu archive, so retry instead.
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y postgresql-client; then exit 0; fi
+            echo "apt-get failed (attempt ${attempt}); retrying in 15s" >&2
+            sleep 15
+          done
+          exit 1
       - name: Install cargo-nextest
         uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
