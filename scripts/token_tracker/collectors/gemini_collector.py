@@ -1,6 +1,7 @@
 """Collector for Gemini CLI telemetry (~/.gemini/tmp/) and Antigravity transcripts."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -42,7 +43,6 @@ class GeminiCollector(BaseCollector):
                     if offset > file_size:
                         offset = 0
 
-                    # Extract session_id from brain directory if available
                     session_id = file_path.stem
                     parts = file_path.parts
                     if "brain" in parts:
@@ -50,27 +50,36 @@ class GeminiCollector(BaseCollector):
                         if idx + 1 < len(parts):
                             session_id = parts[idx + 1]
 
+                    last_valid_offset = offset
                     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                         f.seek(offset)
                         line_no = 0
                         while True:
+                            line_start = f.tell()
                             line = f.readline()
                             if not line:
                                 break
+                            if not line.endswith("\n"):
+                                # Unterminated line; stop here and resume on next run
+                                f.seek(line_start)
+                                break
+                            last_valid_offset = f.tell()
                             line_no += 1
-                            line = line.strip()
-                            if not line:
+                            line_str = line.strip()
+                            if not line_str:
                                 continue
 
                             try:
-                                data = json.loads(line)
+                                data = json.loads(line_str)
                             except json.JSONDecodeError:
                                 continue
 
-                            # Check for exact usage metadata (API/Antigravity/OTel)
                             has_exact = "input_tokens" in data or "usageMetadata" in data or "usage" in data
                             step_idx = data.get("step_index", line_no)
-                            timestamp = str(data.get("created_at") or data.get("timestamp") or "")
+                            timestamp = str(data.get("created_at") or data.get("timestamp") or "").strip()
+                            if not timestamp:
+                                timestamp = datetime.now(timezone.utc).isoformat()
+
                             model = str(data.get("model") or "gemini-3-8-flash")
                             source_key = f"gemini:{session_id}:{step_idx}"
 
@@ -97,12 +106,10 @@ class GeminiCollector(BaseCollector):
                                     new_events += 1
 
                             elif data.get("source") in ("MODEL", "PLANNER_RESPONSE") or data.get("type") in ("PLANNER_RESPONSE", "MODEL"):
-                                # Estimated tokens fallback from character lengths
                                 content = str(data.get("content") or "")
                                 thinking = str(data.get("thinking") or "")
-                                # Estimation rule: ~4 chars per token
                                 est_output = (len(content) + len(thinking)) // 4
-                                est_input = 1000  # Conservative estimate for turn context if missing
+                                est_input = 1000
 
                                 inserted = self.ledger.record_usage_event(
                                     source_event_key=source_key,
@@ -119,7 +126,7 @@ class GeminiCollector(BaseCollector):
                                 if inserted:
                                     new_events += 1
 
-                        self.set_cursor(str_path, f.tell())
+                        self.set_cursor(str_path, last_valid_offset)
                 except OSError:
                     continue
 

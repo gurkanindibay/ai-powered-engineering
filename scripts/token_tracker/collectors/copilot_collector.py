@@ -1,6 +1,7 @@
 """Collector for local GitHub Copilot CLI logs and premium request multipliers."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -44,37 +45,45 @@ class CopilotCollector(BaseCollector):
                     if offset > file_size:
                         offset = 0
 
+                    last_valid_offset = offset
                     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                         f.seek(offset)
                         line_no = 0
                         while True:
+                            line_start = f.tell()
                             line = f.readline()
                             if not line:
                                 break
+                            if not line.endswith("\n"):
+                                # Unterminated line; stop here and resume on next run
+                                f.seek(line_start)
+                                break
+                            last_valid_offset = f.tell()
                             line_no += 1
-                            line = line.strip()
-                            if not line:
+                            line_str = line.strip()
+                            if not line_str:
                                 continue
 
                             try:
-                                data = json.loads(line)
+                                data = json.loads(line_str)
                             except json.JSONDecodeError:
                                 continue
 
-                            # Copilot log events: event_id, timestamp, model, request_type
                             if not isinstance(data, dict):
                                 continue
 
-                            event_id = str(data.get("id") or data.get("event_id") or f"line_{line_no}_{f.tell()}")
+                            event_id = str(data.get("id") or data.get("event_id") or f"line_{line_no}_{line_start}")
                             session_id = str(data.get("session_id") or file_path.stem)
                             source_key = f"copilot:{session_id}:{event_id}"
-                            timestamp = str(data.get("timestamp") or data.get("created_at") or "")
+                            timestamp = str(data.get("timestamp") or data.get("created_at") or "").strip()
+                            if not timestamp:
+                                timestamp = datetime.now(timezone.utc).isoformat()
+
                             model = str(data.get("model") or "gpt-4o")
 
                             is_deepseek = "deepseek" in model.lower()
                             billing_mode = "api" if is_deepseek else "subscription"
 
-                            # Calculate premium requests based on multiplier
                             multiplier = self.ledger.config.get_copilot_multiplier(model)
                             count_requests = int(data.get("request_count", 1))
                             premium_reqs = multiplier * count_requests
@@ -83,7 +92,6 @@ class CopilotCollector(BaseCollector):
                             output_tokens = int(data.get("output_tokens") or data.get("completion_tokens") or 0)
                             accuracy = "request_metered" if (input_tokens == 0 and output_tokens == 0) else "exact"
 
-                            # If tokens are completely 0 in request_metered mode, provide estimation if prompt length exists
                             if input_tokens == 0 and "prompt_length" in data:
                                 input_tokens = int(data["prompt_length"]) // 4
                                 accuracy = "request_metered"
@@ -104,7 +112,7 @@ class CopilotCollector(BaseCollector):
                             if inserted:
                                 new_events += 1
 
-                        self.set_cursor(str_path, f.tell())
+                        self.set_cursor(str_path, last_valid_offset)
                 except OSError:
                     continue
 

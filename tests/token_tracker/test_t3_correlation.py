@@ -1,4 +1,4 @@
-"""Unit tests for T3 Code child session correlation and reservation refunding."""
+"""Unit tests for T3 Code child session correlation, zero double-counting, and refunding."""
 from __future__ import annotations
 
 import json
@@ -87,12 +87,22 @@ class TestT3Correlation(unittest.TestCase):
         self.assertEqual(row["input_tokens"], 50000)
         self.assertEqual(row["estimated_cost_usd"], "1.500000")
 
-    def test_correlated_session_updates_to_exact_and_refunds_reservation(self):
+        # Verify report totals reflect reservation
+        report = self.ledger.get_report(by="provider")
+        self.assertEqual(report["total"]["events"], 1)
+        self.assertEqual(report["total"]["input_tokens"], 50000)
+
+    def test_correlated_session_updates_to_exact_and_refunds_reservation_with_zero_double_counting(self):
         # 1. Ingest baseline reservation
         collector = HarnessCollector(self.ledger)
         collector.collect(source_override=self.runs_db_path)
 
-        # 2. Simulate underlying Claude session that correlated with att-001
+        # Baseline report shows 1 event, 50k tokens
+        report_before = self.ledger.get_report(by="provider")
+        self.assertEqual(report_before["total"]["events"], 1)
+        self.assertEqual(report_before["total"]["input_tokens"], 50000)
+
+        # 2. Ingest underlying Claude session correlated with att-001
         self.ledger.record_usage_event(
             source_event_key="claude:sess-t3-child:msg-1",
             recorded_at="2026-11-27T10:00:00Z",
@@ -100,8 +110,6 @@ class TestT3Correlation(unittest.TestCase):
             harness="claude_code",
             model="claude-sonnet-5-5",
             session_id="att-001",
-            harness_run_id="run-001",
-            harness_attempt_id="att-001",
             input_tokens=12000,
             output_tokens=3000,
             cache_read_tokens=1000,
@@ -109,19 +117,32 @@ class TestT3Correlation(unittest.TestCase):
             accuracy="exact",
         )
 
-        # 3. Ingest harness again -> should correlate and update reservation to exact
+        # 3. Ingest harness again -> correlates, removes reservation row, tags child row
+        collector.collect(source_override=self.runs_db_path)
+        # Ingesting twice should remain idempotent and never duplicate
         collector.collect(source_override=self.runs_db_path)
 
-        row = self.ledger.db.execute(
-            "SELECT * FROM usage_events WHERE source_event_key='t3:run-001:att-001'"
+        # Assert zero double counting in report totals:
+        report_after = self.ledger.get_report(by="provider")
+        self.assertEqual(report_after["total"]["events"], 1)
+        self.assertEqual(report_after["total"]["input_tokens"], 12000)
+        self.assertEqual(report_after["total"]["output_tokens"], 3000)
+        self.assertEqual(report_after["total"]["cache_read_tokens"], 1000)
+        self.assertEqual(report_after["total"]["cache_write_tokens"], 500)
+
+        # Health burn totals must also be exact with zero double-counting
+        health = self.ledger.get_health("claude")
+        burn = health["providers"]["claude"]["burn"]
+        self.assertEqual(burn["event_count"], 1)
+        self.assertEqual(burn["input_tokens"], 12000)
+        self.assertEqual(burn["output_tokens"], 3000)
+
+        # Correlated child row has harness_run_id and harness_attempt_id populated
+        child_row = self.ledger.db.execute(
+            "SELECT * FROM usage_events WHERE source_event_key='claude:sess-t3-child:msg-1'"
         ).fetchone()
-        self.assertIsNotNone(row)
-        self.assertEqual(row["accuracy"], "exact")
-        self.assertEqual(row["input_tokens"], 12000)
-        self.assertEqual(row["output_tokens"], 3000)
-        self.assertEqual(row["cache_read_tokens"], 1000)
-        self.assertEqual(row["cache_write_tokens"], 500)
-        # Unused tokens (50000 - 12000 = 38000) are refunded from the reservation record
+        self.assertEqual(child_row["harness_run_id"], "run-001")
+        self.assertEqual(child_row["harness_attempt_id"], "att-001")
 
 
 if __name__ == "__main__":

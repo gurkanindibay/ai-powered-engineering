@@ -1,6 +1,7 @@
 """Collector for Codex rollout JSONL logs (~/.codex/sessions/YYYY/MM/DD/*.jsonl)."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -35,20 +36,27 @@ class CodexCollector(BaseCollector):
                 current_model = "gpt-6-2-sol"
                 session_id = file_path.stem
 
+                last_valid_offset = offset
                 with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                     f.seek(offset)
                     line_no = 0
                     while True:
+                        line_start = f.tell()
                         line = f.readline()
                         if not line:
                             break
+                        if not line.endswith("\n"):
+                            # Unterminated line; stop here and resume on next run
+                            f.seek(line_start)
+                            break
+                        last_valid_offset = f.tell()
                         line_no += 1
-                        line = line.strip()
-                        if not line:
+                        line_str = line.strip()
+                        if not line_str:
                             continue
 
                         try:
-                            data = json.loads(line)
+                            data = json.loads(line_str)
                         except json.JSONDecodeError:
                             continue
 
@@ -68,7 +76,9 @@ class CodexCollector(BaseCollector):
                             resp_id = payload.get("response_id") or payload.get("turn_id") or f"line_{line_no}"
                             ordinal = data.get("ordinal", line_no)
                             source_key = f"codex:{sess}:{resp_id}:{ordinal}"
-                            timestamp = str(data.get("timestamp") or "")
+                            timestamp = str(data.get("timestamp") or "").strip()
+                            if not timestamp:
+                                timestamp = datetime.now(timezone.utc).isoformat()
 
                             input_tokens = int(usage.get("input_tokens") or 0)
                             cache_read = int(usage.get("cached_input_tokens") or 0)
@@ -93,10 +103,10 @@ class CodexCollector(BaseCollector):
                                 new_events += 1
 
                         elif event_type == "event_msg" and payload.get("type") == "token_count":
-                            # Check for rate limit info if available
                             info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
                             rate_limits = info.get("rate_limits")
                             if isinstance(rate_limits, dict) and "utilization_pct" in rate_limits:
+                                obs = str(data.get("timestamp") or "").strip() or datetime.now(timezone.utc).isoformat()
                                 self.ledger.record_quota_snapshot(
                                     provider="codex",
                                     model_family=current_model,
@@ -104,10 +114,10 @@ class CodexCollector(BaseCollector):
                                     utilization_pct=str(rate_limits["utilization_pct"]),
                                     reset_at=rate_limits.get("reset_at"),
                                     source="codex_rollout",
-                                    observed_at=str(data.get("timestamp") or ""),
+                                    observed_at=obs,
                                 )
 
-                    self.set_cursor(str_path, f.tell())
+                    self.set_cursor(str_path, last_valid_offset)
             except OSError:
                 continue
 

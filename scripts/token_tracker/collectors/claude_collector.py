@@ -1,6 +1,7 @@
 """Collector for Claude Code JSONL logs (~/.claude/projects/*/*.jsonl)."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -33,20 +34,27 @@ class ClaudeCollector(BaseCollector):
                     # File was truncated or rotated
                     offset = 0
 
+                last_valid_offset = offset
                 with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                     f.seek(offset)
                     line_no = 0
                     while True:
+                        line_start = f.tell()
                         line = f.readline()
                         if not line:
                             break
+                        if not line.endswith("\n"):
+                            # Unterminated trailing line (partially written); stop and resume later
+                            f.seek(line_start)
+                            break
+                        last_valid_offset = f.tell()
                         line_no += 1
-                        line = line.strip()
-                        if not line:
+                        line_str = line.strip()
+                        if not line_str:
                             continue
 
                         try:
-                            data = json.loads(line)
+                            data = json.loads(line_str)
                         except json.JSONDecodeError:
                             continue
 
@@ -58,9 +66,18 @@ class ClaudeCollector(BaseCollector):
                             continue
 
                         session_id = str(data.get("sessionId") or file_path.stem)
-                        uuid_val = str(data.get("uuid") or f"line_{line_no}_{f.tell()}")
-                        source_key = f"claude:{session_id}:{uuid_val}"
-                        timestamp = str(data.get("timestamp") or "")
+                        # Key on message.id (or requestId) to avoid duplicate counting of multi-block turns
+                        msg_id = msg.get("id") or data.get("requestId")
+                        if msg_id:
+                            source_key = f"claude:{session_id}:{msg_id}"
+                        else:
+                            uuid_val = str(data.get("uuid") or f"line_{line_no}_{line_start}")
+                            source_key = f"claude:{session_id}:{uuid_val}"
+
+                        timestamp = str(data.get("timestamp") or "").strip()
+                        if not timestamp:
+                            timestamp = datetime.now(timezone.utc).isoformat()
+
                         model = str(msg.get("model") or "claude-sonnet-5-5")
 
                         input_tokens = int(usage.get("input_tokens") or 0)
@@ -88,7 +105,7 @@ class ClaudeCollector(BaseCollector):
                         if inserted:
                             new_events += 1
 
-                    self.set_cursor(str_path, f.tell())
+                    self.set_cursor(str_path, last_valid_offset)
             except OSError:
                 continue
 

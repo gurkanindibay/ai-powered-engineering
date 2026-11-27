@@ -39,6 +39,7 @@ class TestCollectors(unittest.TestCase):
                 "uuid": "msg-1",
                 "timestamp": "2026-11-27T10:00:05Z",
                 "message": {
+                    "id": "msg_001",
                     "model": "claude-sonnet-5-5",
                     "usage": {
                         "input_tokens": 1200,
@@ -58,7 +59,6 @@ class TestCollectors(unittest.TestCase):
         res = collector.collect(source_override=project_dir)
         self.assertEqual(res["new_events"], 1)
 
-        # Verify cursor moved
         offset1 = collector.get_cursor(str(log_file))
         self.assertGreater(offset1, 0)
 
@@ -73,6 +73,7 @@ class TestCollectors(unittest.TestCase):
             "uuid": "msg-2",
             "timestamp": "2026-11-27T10:01:00Z",
             "message": {
+                "id": "msg_002",
                 "model": "claude-sonnet-5-5",
                 "usage": {
                     "input_tokens": 500,
@@ -85,6 +86,82 @@ class TestCollectors(unittest.TestCase):
 
         res3 = collector.collect(source_override=project_dir)
         self.assertEqual(res3["new_events"], 1)
+
+    def test_claude_collector_deduplicates_multi_block_messages(self):
+        project_dir = self.root / "claude_multi"
+        project_dir.mkdir(parents=True)
+        log_file = project_dir / "session-multi.jsonl"
+
+        # Two JSONL lines sharing the same message.id (multi-block output / tool use)
+        line_a = {
+            "type": "assistant",
+            "sessionId": "sess-cm",
+            "uuid": "u-block-1",
+            "timestamp": "2026-11-27T10:00:00Z",
+            "message": {
+                "id": "msg_turn_123",
+                "model": "claude-sonnet-5-5",
+                "usage": {"input_tokens": 3000, "output_tokens": 200}
+            }
+        }
+        line_b = {
+            "type": "assistant",
+            "sessionId": "sess-cm",
+            "uuid": "u-block-2",
+            "timestamp": "2026-11-27T10:00:02Z",
+            "message": {
+                "id": "msg_turn_123",
+                "model": "claude-sonnet-5-5",
+                "usage": {"input_tokens": 3000, "output_tokens": 200}
+            }
+        }
+        with open(log_file, "w") as f:
+            f.write(json.dumps(line_a) + "\n" + json.dumps(line_b) + "\n")
+
+        collector = ClaudeCollector(self.ledger)
+        res = collector.collect(source_override=project_dir)
+        # Deduplicated to exactly 1 event
+        self.assertEqual(res["new_events"], 1)
+
+    def test_collector_partial_trailing_line_safety(self):
+        project_dir = self.root / "claude_partial"
+        project_dir.mkdir(parents=True)
+        log_file = project_dir / "session-partial.jsonl"
+
+        complete_line = {
+            "type": "assistant",
+            "sessionId": "sess-p1",
+            "uuid": "u-1",
+            "timestamp": "2026-11-27T10:00:00Z",
+            "message": {
+                "id": "msg_p1",
+                "model": "claude-sonnet-5-5",
+                "usage": {"input_tokens": 1000, "output_tokens": 100}
+            }
+        }
+        partial_json_fragment = '{"type": "assistant", "sessionId": "sess-p1", "mess'
+
+        # Write 1 complete line + 1 unterminated fragment
+        with open(log_file, "w") as f:
+            f.write(json.dumps(complete_line) + "\n")
+            f.write(partial_json_fragment)
+
+        collector = ClaudeCollector(self.ledger)
+        res1 = collector.collect(source_override=project_dir)
+        self.assertEqual(res1["new_events"], 1)
+
+        # Append the rest of the second line and newline
+        rest_of_line = 'age": {"id": "msg_p2", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 500, "output_tokens": 50}}}\n'
+        with open(log_file, "a") as f:
+            f.write(rest_of_line)
+
+        # Ingest again -> the second line must be read and NOT lost
+        res2 = collector.collect(source_override=project_dir)
+        self.assertEqual(res2["new_events"], 1)
+
+        # Total events in DB is 2
+        rows = self.ledger.db.execute("SELECT id FROM usage_events WHERE session_id='sess-p1'").fetchall()
+        self.assertEqual(len(rows), 2)
 
     def test_codex_collector_synthetic(self):
         codex_dir = self.root / "codex_sessions" / "2026" / "11" / "27"
