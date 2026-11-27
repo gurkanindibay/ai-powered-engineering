@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Harness Control Console</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #161d26;
+      --border: #263241;
+      --text: #e6edf3;
+      --muted: #8b9bb0;
+      --ok: #2ea043;
+      --warn: #d29922;
+      --bad: #f85149;
+      --accent: #58a6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    header h1 { margin: 0; font-size: 1.1rem; }
+    .meta { color: var(--muted); font-size: 0.85rem; }
+    main { padding: 16px 20px; display: grid; gap: 16px; }
+    .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .card h2 { margin: 0 0 10px 0; font-size: 0.95rem; color: var(--accent); }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .HEALTHY, .alive, .READY_FOR_REVIEW { background: rgba(46, 160, 67, 0.2); color: #56d364; }
+    .THROTTLED, .stale, .REPAIRING { background: rgba(210, 153, 34, 0.2); color: #e3b341; }
+    .EXHAUSTED, .expired, .BLOCKED, .CANCELLED { background: rgba(248, 81, 73, 0.2); color: #ff7b72; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input, select, button, textarea {
+      background: #0d1117;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+    }
+    button { cursor: pointer; background: #1f2a38; }
+    button:hover { border-color: var(--accent); }
+    button.danger { border-color: var(--bad); color: #ff7b72; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+    pre {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 0.8rem;
+      overflow: auto;
+      max-height: 280px;
+      margin: 0;
+      white-space: pre-wrap;
+    }
+    .status-banner { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Harness Control Console (Loopback Only)</h1>
+      <div class="meta" id="header-meta">Loading status...</div>
+    </div>
+    <div class="controls">
+      <button type="button" onclick="postAction('/api/pause', {all: true})">Pause All</button>
+      <button type="button" onclick="postAction('/api/resume', {all: true})">Resume All</button>
+      <button type="button" onclick="refreshAll()">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="status-banner" id="action-status"></div>
+
+    <section>
+      <div class="strip" id="provider-strip"></div>
+    </section>
+
+    <section class="card">
+      <h2>Operator Intervention &amp; Overrides</h2>
+      <div class="controls" style="margin-bottom: 10px;">
+        <input id="ctl-issue" type="number" min="1" placeholder="Issue #">
+        <input id="ctl-run" type="text" placeholder="Run ID">
+        <input id="ctl-target" type="text" placeholder="Provider / T3 Instance">
+        <input id="ctl-note" type="text" placeholder="Steering note..." style="min-width: 240px;">
+        <button type="button" onclick="doSteer()">Steer</button>
+        <button type="button" onclick="doHandover()">Handover / Pin</button>
+        <button type="button" onclick="doTakeover()">Takeover</button>
+        <button type="button" class="danger" onclick="doKill()">Kill</button>
+      </div>
+      <div class="controls">
+        <label>DeepSeek USD Cap: <input id="ctl-usd" type="text" value="25.00" style="width: 90px;"></label>
+        <button type="button" onclick="doBudget()">Set Budget</button>
+        <label>Gate Tier:
+          <select id="ctl-tier">
+            <option value="critical">critical</option>
+            <option value="high">high</option>
+            <option value="medium">medium</option>
+            <option value="low">low</option>
+          </select>
+        </label>
+        <button type="button" onclick="postAction('/api/set-gate', {tier: val('ctl-tier'), require_approval: true})">Require Approval</button>
+        <button type="button" onclick="postAction('/api/set-gate', {tier: val('ctl-tier'), require_approval: false})">Clear Gate</button>
+        <button type="button" onclick="doApprove()">Approve Issue/Run</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Active Work, T3 Runs &amp; Handover Board</h2>
+      <div id="board-body"></div>
+    </section>
+
+    <div class="grid-2">
+      <section class="card">
+        <h2>Real-Time Stream &amp; Tail</h2>
+        <pre id="tail-log">Connecting to /api/stream...</pre>
+      </section>
+      <section class="card">
+        <h2>IDE Pickup Queue &amp; Command Queue</h2>
+        <div id="pickups-body"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    function val(id) { return document.getElementById(id).value.trim(); }
+    function intVal(id) { const v = val(id); return v ? parseInt(v, 10) : null; }
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    }
+    function setBanner(msg) { document.getElementById('action-status').textContent = msg; }
+
+    async function postAction(path, body) {
+      setBanner('Submitting ' + path + '...');
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBanner('Error: ' + (data.error || res.statusText));
+        return;
+      }
+      setBanner('Applied: ' + path + ' (' + ((data.command || {}).command_id || 'ok') + ')');
+      await refreshAll();
+    }
+
+    function doSteer() {
+      postAction('/api/steer', {issue: intVal('ctl-issue'), run_id: val('ctl-run') || null, note: val('ctl-note')});
+    }
+    function doHandover() {
+      postAction('/api/handover', {issue: intVal('ctl-issue'), run_id: val('ctl-run') || null, to: val('ctl-target')});
+    }
+    function doTakeover() {
+      postAction('/api/takeover', {issue: intVal('ctl-issue'), run_id: val('ctl-run') || null});
+    }
+    function doKill() {
+      postAction('/api/kill', {issue: intVal('ctl-issue'), run_id: val('ctl-run') || null});
+    }
+    function doBudget() {
+      postAction('/api/set-budget', {provider: 'copilot-deepseek', usd: val('ctl-usd')});
+    }
+    function doApprove() {
+      postAction('/api/approve', {issue: intVal('ctl-issue'), run_id: val('ctl-run') || null});
+    }
+
+    async function copyPickup(text) {
+      if (navigator.clipboard) await navigator.clipboard.writeText(text);
+      setBanner('Copied handover brief to clipboard.');
+    }
+
+    async function refreshAll() {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+      document.getElementById('header-meta').textContent =
+        'Checked: ' + data.checked_at + ' | Overall Health: ' + data.provider_health.status +
+        ' | Active Pauses: ' + data.controls.pauses.length;
+
+      const strip = document.getElementById('provider-strip');
+      strip.innerHTML = '';
+      for (const [name, info] of Object.entries(data.provider_health.providers || {})) {
+        const cap = info.budget_usd ? (' / $' + esc(info.budget_usd) + ' cap') : '';
+        const t3Count = (info.t3_instances || []).length;
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML =
+          '<div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<strong>' + esc(name.toUpperCase()) + '</strong>' +
+          '<span class="pill ' + esc(info.status) + '">' + esc(info.status) + '</span></div>' +
+          '<div class="meta" style="margin-top:6px;">Util: ' + esc(info.utilization_pct ?? 'N/A') + '%' + cap + '</div>' +
+          '<div class="meta">Tokens: ' + esc(info.burn.total_tokens) + ' | Cost: $' + esc(info.burn.estimated_cost_usd) + '</div>' +
+          '<div class="meta">T3 instances: ' + t3Count + ' | CLI: ' + (info.has_cli_launcher ? 'yes' : 'no') + '</div>';
+        strip.appendChild(card);
+      }
+
+      const boardEl = document.getElementById('board-body');
+      const items = data.board.items || [];
+      const runs = data.board.runs || [];
+      let html = '<table><thead><tr><th>Issue</th><th>Agent / Model</th><th>Context / Heartbeat</th><th>Handovers</th><th>Flags</th></tr></thead><tbody>';
+      for (const item of items) {
+        html += '<tr>' +
+          '<td>#' + esc(item.issue) + (item.pr ? ' (PR #' + esc(item.pr) + ')' : '') + '</td>' +
+          '<td>' + esc(item.agent_name || '-') + ' / ' + esc(item.model || '-') + ' (' + esc(item.transport || '-') + ')</td>' +
+          '<td>' + esc(item.context_pct ?? '-') + '% | <span class="pill ' + esc(item.lease_state || '') + '">' + esc(item.lease_state || 'none') + '</span> (' + esc(item.heartbeat_age_seconds ?? '-') + 's)</td>' +
+          '<td>' + esc(item.handover_count) + ' (esc: ' + esc(item.escalation_count) + ')</td>' +
+          '<td>' + (item.paused ? 'PAUSED ' : '') + (item.pinned_to ? 'PIN:' + esc(item.pinned_to) : '') + '</td>' +
+          '</tr>';
+      }
+      if (!items.length) html += '<tr><td colspan="5" class="meta">No active issues or leases.</td></tr>';
+      html += '</tbody></table>';
+
+      if (runs.length) {
+        html += '<h3 style="margin:12px 0 6px;font-size:0.9rem;">Durable / T3 Runs</h3><table><thead><tr><th>Run ID</th><th>Status</th><th>Candidate</th><th>Reserved vs Correlated Tokens</th></tr></thead><tbody>';
+        for (const r of runs) {
+          html += '<tr><td>' + esc(r.run_id.slice(0, 12)) + '</td><td><span class="pill ' + esc(r.status) + '">' + esc(r.status) + '</span></td>' +
+            '<td><code>' + esc((r.candidate || '').slice(0, 10)) + '</code></td>' +
+            '<td>' + esc(r.reserved_tokens) + ' reserved / ' + esc(r.correlated_tokens) + ' correlated</td></tr>';
+        }
+        html += '</tbody></table>';
+      }
+      boardEl.innerHTML = html;
+
+      const pickupsEl = document.getElementById('pickups-body');
+      let phtml = '';
+      for (const p of (data.pickups || [])) {
+        phtml += '<div style="margin-bottom:8px;"><strong>' + esc(p.handover_id) + '</strong> ' +
+          '<button type="button" onclick=\'copyPickup(' + JSON.stringify(p.brief) + ')\'>Copy Brief</button></div>';
+      }
+      if (!(data.pickups || []).length) phtml = '<div class="meta">No pending IDE pickup briefs.</div>';
+      phtml += '<h3 style="margin:12px 0 6px;font-size:0.85rem;">Recent Operator Commands</h3><pre>' +
+        esc(JSON.stringify((data.recent_commands || []).slice(0, 10), null, 2)) + '</pre>';
+      pickupsEl.innerHTML = phtml;
+    }
+
+    function connectStream() {
+      const logEl = document.getElementById('tail-log');
+      const lines = [];
+      const es = new EventSource('/api/stream');
+      es.addEventListener('log', (ev) => {
+        const item = JSON.parse(ev.data);
+        lines.push('[' + item.timestamp + '] [' + item.source + '] ' + item.message);
+        if (lines.length > 80) lines.shift();
+        logEl.textContent = lines.join('\n');
+      });
+      es.addEventListener('status', () => { /* keepalive */ });
+    }
+
+    refreshAll();
+    connectStream();
+  </script>
+</body>
+</html>

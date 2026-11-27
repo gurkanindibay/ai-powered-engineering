@@ -358,6 +358,7 @@ class DispatchOptions:
     spawn_timeout: int = 1800
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
     capture_fn: Callable[..., dict] | None = None
+    steering_notes: tuple[str, ...] = ()
 
     def directories(self) -> dict[str, Path]:
         return {"dispatch": self.root / "dispatch", "pickup": self.root / "handovers" / "pickup",
@@ -387,14 +388,19 @@ def incoming_identity(decision: Decision, handover_id: str,
     return {"harness": harness, "session": session, "model": (decision.target or {}).get("model", "unknown")}
 
 
-def _prompt(envelope: dict, target: dict) -> str:
+def _prompt(envelope: dict, target: dict, steering_notes: Sequence[str] = ()) -> str:
     from scripts import handover as handover_tool
 
+    steering_block = ""
+    if steering_notes:
+        bullets = "\n".join(f"- {note}" for note in steering_notes)
+        steering_block = f"\n\n## Operator Steering Notes\n{bullets}\n"
     return (f"You are taking over issue #{envelope['git_state']['issue']} as "
             f"{target.get('model')} ({canonical_provider(target)}). Read the checkpoint below, "
             "check out the branch in a worktree, finish the remaining work, run the gates, then "
             "send the PR for review. Do not force-remove worktrees or replay the old transcript.\n\n"
-            + handover_tool.render(envelope))
+            + handover_tool.render(envelope)
+            + steering_block)
 
 
 def _pickup_brief(envelope: dict, target: dict, options: DispatchOptions) -> str:
@@ -405,6 +411,9 @@ def _pickup_brief(envelope: dict, target: dict, options: DispatchOptions) -> str
     pr = options.pr or envelope["git_state"].get("pr")
     accept = (f"python3 scripts/issue_claim.py accept {issue} --harness <harness> --session <session>"
               + (f" --pr {pr}" if pr else ""))
+    steering_lines: list[str] = []
+    if options.steering_notes:
+        steering_lines = ["", "## Operator Steering Notes", *[f"- {note}" for note in options.steering_notes]]
     lines = [
         f"# Handover pickup: issue #{issue}",
         "",
@@ -419,6 +428,7 @@ def _pickup_brief(envelope: dict, target: dict, options: DispatchOptions) -> str
         f"git worktree add --detach <path> {branch}",
         accept,
         "```",
+        *steering_lines,
         "",
         handover_tool.render(envelope),
     ]
@@ -450,7 +460,7 @@ def dispatch(decision: Decision, envelope: dict, options: DispatchOptions) -> di
     handover_id = envelope["handover_id"]
     issue = envelope["git_state"]["issue"]
     identity = incoming_identity(decision, handover_id, options)
-    prompt = _prompt(envelope, decision.target)
+    prompt = _prompt(envelope, decision.target, options.steering_notes)
     record: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION, "handover_id": handover_id, "issue": issue,
         "pr": options.pr or envelope["git_state"].get("pr"),

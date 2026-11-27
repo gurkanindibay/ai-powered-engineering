@@ -68,8 +68,17 @@ def load_health(args: argparse.Namespace) -> dict:
             return json.loads(Path(args.health_file).read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise coordinator.CoordinatorError(f"cannot read health file {args.health_file}: {exc}") from exc
-    ledger = Path(getattr(args, "ledger", None) or (local_root(getattr(args, "state_root", None))
-                                                     / "token_ledger.sqlite3"))
+    local = local_root(getattr(args, "state_root", None))
+    ledger = Path(getattr(args, "ledger", None) or (local / "token_ledger.sqlite3"))
+    console_db = local / "harness_console.sqlite3"
+    if console_db.is_file():
+        from scripts.harness_console.service import ConsoleService
+
+        svc = ConsoleService(local_root=local, console_db=console_db, ledger_db=ledger, offline=True)
+        try:
+            return svc.provider_health()
+        finally:
+            svc.close()
     if not ledger.is_file():
         return {"status": "HEALTHY", "providers": {}}
     from scripts.token_tracker.ledger import TokenLedger
@@ -226,7 +235,8 @@ def execute(signal: coordinator.Signal, envelope: dict, path: Path | None,
         branch=args.branch, pr=signal.pr, envelope_path=path, dry_run=args.dry_run,
         launchers=coordinator.load_launchers(Path(args.launchers)),
         incoming_harness=args.to_harness, incoming_session=args.to_session,
-        spawn_timeout=args.spawn_timeout)
+        spawn_timeout=args.spawn_timeout,
+        steering_notes=tuple(getattr(args, "_steering_notes", ()) or ()))
     record: dict[str, Any] = {"decision": decision.to_dict(),
                               "envelope_path": str(path) if path else None}
     if decision.action == "park":
@@ -347,11 +357,37 @@ def pending_label_issues() -> list[int]:
     return [int(item["number"]) for item in json.loads(out or "[]") if isinstance(item, dict)]
 
 
+def _open_console_store(local: Path):
+    console_db = local / "harness_console.sqlite3"
+    if not console_db.is_file():
+        return None
+    from scripts.harness_console.store import ConsoleStore
+
+    return ConsoleStore(console_db)
+
+
+def _ack_console_commands(local: Path, *, dry_run: bool) -> list[dict]:
+    if dry_run:
+        return []
+    cstore = _open_console_store(local)
+    if cstore is None:
+        return []
+    acked = []
+    try:
+        for cmd in cstore.list_commands(limit=100, unacked_only=True):
+            if cmd["command"] in ("pause", "resume", "set_budget", "mark_status", "set_gate", "approve", "unpin", "takeover", "kill"):
+                acked.append(cstore.acknowledge(cmd["command_id"], status="applied", result={"observed_by": "coordinator"}))
+    finally:
+        cstore.close()
+    return acked
+
+
 def handle_pending(item: dict, *, args: argparse.Namespace, local: Path, repo: Path,
                    registry: dict, launchers: dict, health: dict,
                    catalog: dict | None) -> tuple[dict, int]:
     """Decide and dispatch one pending envelope; returns (record, escalation count)."""
     from scripts import handover as handover_tool
+    from scripts.engineering_harness.routing import canonical_provider
 
     if item.get("errors") or "handover_id" not in item:
         return {"envelope": item.get("handover_id"), "status": "invalid_checkpoint"}, 1
@@ -374,19 +410,71 @@ def handle_pending(item: dict, *, args: argparse.Namespace, local: Path, repo: P
             coordinator.write_escalation(local, escalation, key=envelope["handover_id"])
         return {"envelope": envelope["handover_id"], "status": "invalid_checkpoint",
                 "escalation": escalation}, 1
+
+    cstore = _open_console_store(local)
+    steering_rows: list[dict] = []
+    pin_target: str | None = None
+    try:
+        if cstore is not None:
+            pause = cstore.is_paused(issue=signal.issue)
+            if pause is not None:
+                return {"envelope": envelope["handover_id"], "issue": signal.issue,
+                        "status": "paused", "pause": pause}, 0
+            if cstore.gate_requires_approval(signal.tier) and not cstore.is_approved(
+                    issue=signal.issue, handover_id=envelope["handover_id"]):
+                return {"envelope": envelope["handover_id"], "issue": signal.issue,
+                        "status": "awaiting_approval", "tier": signal.tier}, 0
+            pin = cstore.get_pin(issue=signal.issue)
+            if pin:
+                pin_target = str(pin["provider"]).strip().lower()
+            steering_rows = cstore.pending_steering(issue=signal.issue)
+    finally:
+        if cstore is not None:
+            cstore.close()
+
     labels: list[str] = []
     if not args.offline:
         from scripts import issue_claim as claim_tool
 
         labels = claim_tool.read_labels(gh_runner, repo_slug(), signal.issue)
     count = claim_tool_handover_count(labels) if labels else 0
+    targets = coordinator.targets_from_registry(registry, catalog, health, launchers)
+    if cstore_check := _open_console_store(local):
+        try:
+            targets = [t for t in targets if cstore_check.is_paused(provider=canonical_provider(t)) is None]
+        finally:
+            cstore_check.close()
+    if pin_target:
+        targets = [
+            t for t in targets
+            if str(t.get("provider", "")).lower() == pin_target or canonical_provider(t) == pin_target
+        ]
     decision = coordinator.decide(
-        signal, targets=coordinator.targets_from_registry(registry, catalog, health, launchers),
+        signal, targets=targets,
         health=health, handover_count=count, transport="auto",
         available_t3=(None if catalog is None else
                       {p.get("providerInstanceId") for p in catalog.get("providers", [])
                        if p.get("canRunChildTask")}))
-    record = execute(signal, envelope, Path(item["path"]), decision, args, local, repo)
+    args._steering_notes = tuple(r["note"] for r in steering_rows)
+    try:
+        record = execute(signal, envelope, Path(item["path"]), decision, args, local, repo)
+    finally:
+        args._steering_notes = ()
+    if not args.dry_run and record.get("status") in ("dispatched", "completed"):
+        cstore_ack = _open_console_store(local)
+        if cstore_ack is not None:
+            try:
+                if steering_rows:
+                    cstore_ack.mark_steering_consumed([int(r["id"]) for r in steering_rows])
+                for cmd in cstore_ack.list_commands(limit=50, unacked_only=True, target_type="issue", target_id=str(signal.issue)):
+                    if cmd["command"] in ("handover", "pin", "steer"):
+                        cstore_ack.acknowledge(
+                            cmd["command_id"],
+                            status="applied",
+                            result={"handover_id": envelope["handover_id"], "status": record.get("status")},
+                        )
+            finally:
+                cstore_ack.close()
     escalate = decision.action == "park" or record["status"] in ("transfer_failed", "failed")
     return record, int(escalate)
 
@@ -448,6 +536,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 count_escalations = 1
             handled.append(record)
             escalated += count_escalations
+        _ack_console_commands(local, dry_run=args.dry_run)
         if args.json:
             print(json.dumps({"schema_version": 1, "pass": completed, "recover": report,
                               "handled": handled}, indent=2, sort_keys=True))
