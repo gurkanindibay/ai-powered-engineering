@@ -387,5 +387,103 @@ class AgentNameTests(unittest.TestCase):
         self.assertEqual(len(title), agent_names.TITLE_MAX)
 
 
+class HandoverTransferTests(unittest.TestCase):
+    def owned(self, *extra, session="s1", harness="claude"):
+        return FakeGh(["in progress", f"claim:{harness}/{session}", "agent:Alparslan", *extra])
+
+    def transfer(self, fake, *extra, model="gpt-6.2-sol", **kw):
+        return run_cli(fake, "transfer", "7", "--harness", "claude", "--session", "s1",
+                       "--to-harness", "codex", "--to-session", "c9", "--to-model", model, *extra, **kw)
+
+    def test_transfer_swaps_claim_and_agent_and_records_count(self):
+        fake = self.owned()
+        code, out = self.transfer(fake)
+        self.assertEqual(code, 0, out)
+        self.assertIn("claim:codex/c9", fake.labels)
+        self.assertNotIn("claim:claude/s1", fake.labels)
+        self.assertNotIn("agent:Alparslan", fake.labels)
+        self.assertTrue(any(l.startswith("agent:") for l in fake.labels))
+        self.assertIn("in progress", fake.labels)
+        self.assertIn("handover:count-1", fake.labels)
+        self.assertIn("handover:pending", fake.labels)
+        self.assertEqual(out["handover_count"], 1)
+
+    def test_new_claim_lands_before_old_is_removed(self):
+        fake = self.owned()
+        order = []
+        real_add, real_remove = ic.add_labels, ic.remove_label
+        ic.add_labels = lambda run, repo, n, names: (order.append(("add", list(names))), real_add(run, repo, n, names))[1]
+        ic.remove_label = lambda run, repo, n, name: (order.append(("remove", name)), real_remove(run, repo, n, name))[1]
+        self.addCleanup(setattr, ic, "add_labels", real_add)
+        self.addCleanup(setattr, ic, "remove_label", real_remove)
+        self.assertEqual(self.transfer(fake)[0], 0)
+        first_add = next(i for i, (k, v) in enumerate(order) if k == "add" and "claim:codex/c9" in v)
+        old_removed = next(i for i, (k, v) in enumerate(order) if k == "remove" and v == "claim:claude/s1")
+        self.assertLess(first_add, old_removed)
+
+    def test_non_owner_cannot_transfer_without_force(self):
+        fake = self.owned(session="other")
+        code, out = self.transfer(fake)
+        self.assertEqual(code, 1)
+        self.assertIn("claim:claude/other", fake.labels)
+        self.assertNotIn("claim:codex/c9", fake.labels)
+
+    def test_unclaimed_issue_cannot_be_transferred(self):
+        self.assertEqual(self.transfer(FakeGh())[0], 1)
+
+    def test_max_handovers_is_enforced(self):
+        fake = self.owned("handover:count-3")
+        code, out = self.transfer(fake)
+        self.assertEqual(code, 1)
+        self.assertIn("MAX_HANDOVERS", out["message"])
+        self.assertIn("claim:claude/s1", fake.labels)
+        self.assertEqual(out["handover_count"], 3)
+
+    def test_count_increments_and_old_count_label_is_replaced(self):
+        fake = self.owned("handover:count-1")
+        self.assertEqual(self.transfer(fake)[0], 0)
+        self.assertIn("handover:count-2", fake.labels)
+        self.assertNotIn("handover:count-1", fake.labels)
+
+    def test_unlisted_model_fails_before_touching_github(self):
+        fake = self.owned()
+        err = io.StringIO()
+        with redirect_stderr(err), redirect_stdout(io.StringIO()):
+            code = ic.main(["transfer", "7", "--harness", "claude", "--session", "s1", "--to-harness", "codex",
+                            "--to-session", "c9", "--to-model", "mystery-model", "--json"],
+                           run=fake, env={"AGENT_NAMES_STATE": str(Path(STATE_DIR.name) / "unlisted.json")})
+        self.assertEqual(code, 2)
+        self.assertEqual(sorted(fake.labels), ["agent:Alparslan", "claim:claude/s1", "in progress"])
+
+    def test_pr_is_transferred_too(self):
+        issue = self.owned()
+        pr = self.owned()
+        fake = FakeRepo(i7=issue, p8=pr)
+        fake.state_path = Path(STATE_DIR.name) / "transfer-pr.json"
+        code, _ = run_cli(fake, "transfer", "7", "--harness", "claude", "--session", "s1", "--to-harness", "codex",
+                          "--to-session", "c9", "--to-model", "gpt-6.2-sol", "--pr", "8", state=fake.state_path)
+        self.assertEqual(code, 0)
+        for target in (issue, pr):
+            self.assertIn("claim:codex/c9", target.labels)
+            self.assertNotIn("claim:claude/s1", target.labels)
+            self.assertIn("handover:count-1", target.labels)
+
+    def test_accept_clears_pending_for_new_owner_only(self):
+        fake = FakeGh(["in progress", "claim:codex/c9", "handover:pending", "handover:count-1"])
+        code, _ = run_cli(fake, "accept", "7", "--harness", "claude", "--session", "s1")
+        self.assertEqual(code, 1)
+        self.assertIn("handover:pending", fake.labels)
+        code, _ = run_cli(fake, "accept", "7", "--harness", "codex", "--session", "c9")
+        self.assertEqual(code, 0)
+        self.assertNotIn("handover:pending", fake.labels)
+        self.assertIn("handover:count-1", fake.labels)
+
+    def test_release_clears_handover_labels(self):
+        fake = FakeGh(["in progress", "claim:codex/c9", "agent:Melikşah", "handover:pending", "handover:count-2"])
+        code, _ = run_cli(fake, "release", "7", "--harness", "codex", "--session", "c9")
+        self.assertEqual(code, 0)
+        self.assertEqual(fake.labels, [])
+
+
 if __name__ == "__main__":
     unittest.main()
