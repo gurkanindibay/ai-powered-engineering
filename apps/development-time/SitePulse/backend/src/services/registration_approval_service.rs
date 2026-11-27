@@ -119,29 +119,38 @@ impl RegistrationApprovalService {
         site_id: &str,
     ) -> Vec<PendingRegistrationResponse> {
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(rows) = crate::db::logged(client
-                    .query(
-                        "SELECT request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at FROM pending_registrations WHERE site_id = $1 AND status = 'PENDING' ORDER BY submitted_at DESC",
-                        &[&crate::db::parse_id_to_i64(site_id).unwrap_or(0)],
-                    )
-                    .await, "registration_approval_service") {
-                    return rows
-                        .into_iter()
-                        .map(|row| PendingRegistrationResponse {
-                            request_id: row.get(0),
-                            site_id: row.get::<_, i64>(1).to_string(),
-                            block: row.get(2),
-                            unit_no: row.get(3),
-                            floor: row.get(4),
-                            full_name: row.get(5),
-                            email: row.get(6),
-                            phone: row.get(7),
-                            is_resident: row.get(8),
-                            status: row.get(9),
-                            submitted_at: row.get::<_, Option<chrono::DateTime<chrono::Utc>>>(10).unwrap_or_else(chrono::Utc::now),
-                        })
-                        .collect();
+            if let (Some(site_num), Ok(mut conn)) = (
+                crate::db::parse_id_to_i64(site_id).filter(|id| *id > 0),
+                pool.get().await,
+            ) {
+                if let Ok(client) = crate::db::begin_tenant_read(&mut conn, site_num).await {
+                    let rows_res = client
+                        .query(
+                            "SELECT request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at FROM pending_registrations WHERE site_id = $1 AND status = 'PENDING' ORDER BY submitted_at DESC",
+                            &[&site_num],
+                        )
+                        .await;
+                    if let Some(rows) = crate::db::logged(rows_res, "registration_approval_service")
+                    {
+                        return rows
+                            .into_iter()
+                            .map(|row| PendingRegistrationResponse {
+                                request_id: row.get(0),
+                                site_id: row.get::<_, i64>(1).to_string(),
+                                block: row.get(2),
+                                unit_no: row.get(3),
+                                floor: row.get(4),
+                                full_name: row.get(5),
+                                email: row.get(6),
+                                phone: row.get(7),
+                                is_resident: row.get(8),
+                                status: row.get(9),
+                                submitted_at: row
+                                    .get::<_, Option<chrono::DateTime<chrono::Utc>>>(10)
+                                    .unwrap_or_else(chrono::Utc::now),
+                            })
+                            .collect();
+                    }
                 }
             }
         }
@@ -245,6 +254,7 @@ impl RegistrationApprovalService {
                     .ok_or(SecurityError::NotFound)?;
                 let has_login = tx
                     .query_opt(
+                        // person-scope: person — the person id is the registration's person, resolved within the site
                         "SELECT 1 FROM users WHERE person_id=$1 AND is_active",
                         &[&chosen],
                     )
@@ -268,6 +278,7 @@ impl RegistrationApprovalService {
                 .await
                 .map_err(|_| SecurityError::Conflict)?
             };
+            // person-scope: site — registers the approved person's login for the site
             let user_id:i64=tx.query_one("INSERT INTO users(site_id,person_id,email,password_hash,role,must_change_password) VALUES ($1,$2,$3,$4,$5,true) RETURNING id",&[&site,&person,&email,&hash,&role.as_str()]).await.map_err(|_|SecurityError::Conflict)?.get(0);
             let existing=tx.query_opt("SELECT id FROM units WHERE block_id=$1 AND unit_number=$2 AND site_id=$3 FOR UPDATE",&[&block_id,&number,&site]).await.map_err(|_|SecurityError::Unavailable)?;
             let unit_id: i64 = if let Some(row) = existing {
@@ -276,6 +287,7 @@ impl RegistrationApprovalService {
                 tx.query_one("INSERT INTO units(block_id,site_id,unit_number,floor,land_share) VALUES ($1,$2,$3,$4,1) RETURNING id",&[&block_id,&site,&number,&floor]).await.map_err(|_|SecurityError::Unavailable)?.get(0)
             };
             tx.execute(
+                // person-scope: site — role row for the approved person's site
                 "INSERT INTO user_site_roles(user_id,site_id,role) VALUES ($1,$2,$3)",
                 &[&user_id, &site, &role.as_str()],
             )

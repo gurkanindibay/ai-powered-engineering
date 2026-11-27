@@ -63,8 +63,9 @@ pub async fn save_dues_period(
     pool: &Pool,
     period: &crate::models::DuesPeriod,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let site_id_num = require_id("entity", &period.site_id)?;
+    let client = super::tenant_guard::begin_tenant_tx(&mut conn, site_id_num).await?;
     let maybe_id = parse_id_to_i64(&period.id);
     let period_key = crate::domain::billing_period::BillingPeriod::parse(&period.period_name)
         .ok()
@@ -131,6 +132,7 @@ pub async fn save_dues_period(
             );
         }
     }
+    client.commit().await?;
     Ok(())
 }
 
@@ -139,14 +141,16 @@ pub async fn get_dues_periods_for_site_from_db(
     pool: &Pool,
     site_id: &str,
 ) -> Result<Vec<crate::models::DuesPeriod>, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let site_id_num = require_id("entity", site_id)?;
+    let client = super::tenant_guard::begin_tenant_read(&mut conn, site_id_num).await?;
     let rows = client
         .query(
             "SELECT id, site_id, period_name, due_date, status, created_at FROM dues_periods WHERE site_id = $1 ORDER BY due_date ASC",
             &[&site_id_num],
         )
         .await?;
+    client.commit().await?;
     let mut list = Vec::new();
     for row in rows {
         let id: i64 = row.get(0);
@@ -171,7 +175,9 @@ pub async fn save_due_liability(
     pool: &Pool,
     due: &DuesLiability,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — DuesLiability carries unit_id only; upsert keyed by id.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_tx(&mut conn).await?;
     let status_str = match due.status {
         DebtStatus::Paid => "PAID",
         DebtStatus::Overdue => "OVERDUE",
@@ -207,6 +213,7 @@ pub async fn save_due_liability(
             ],
         )
         .await?;
+    client.commit().await?;
     info!(
         "Saved due liability {} (numeric ID: {}) for unit {} to PostgreSQL",
         due.id, due_id_num, unit_id_num
@@ -220,7 +227,9 @@ pub async fn update_due_liability(
     status: &str,
     paid_amount: Decimal,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — update keyed by due_id.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_tx(&mut conn).await?;
     let due_id_num = require_id("entity", due_id)?;
     client
         .execute(
@@ -243,6 +252,7 @@ pub async fn update_due_liability(
             &[&due_id_num, &status, &paid_amount],
         )
         .await?;
+    client.commit().await?;
     info!(
         "Updated dues liability {} (numeric ID: {}) to status {} in PostgreSQL",
         due_id, due_id_num, status
@@ -256,7 +266,9 @@ pub async fn record_due_allocation(
     allocated_principal: Decimal,
     allocated_penalty: Decimal,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — allocation update keyed by due_id.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_tx(&mut conn).await?;
     client
         .execute(
             r#"
@@ -274,6 +286,7 @@ pub async fn record_due_allocation(
             &[&due_id_num, &allocated_principal, &allocated_penalty],
         )
         .await?;
+    client.commit().await?;
     Ok(())
 }
 
@@ -792,13 +805,29 @@ pub async fn tenanted_unit_ids(
     } else {
         require_id("site", site_id)?
     };
-    let client = pool.get().await?;
-    let rows = client
-        .query(
-            "SELECT id FROM units WHERE ($1::bigint = 0 OR site_id = $1) AND tenant_person_id IS NOT NULL AND deleted_at IS NULL",
-            &[&site],
-        )
-        .await?;
+    let mut conn = pool.get().await?;
+    let rows = if site > 0 {
+        let client = super::tenant_guard::begin_tenant_read(&mut conn, site).await?;
+        let rows = client
+            .query(
+                "SELECT id FROM units WHERE ($1::bigint = 0 OR site_id = $1) AND tenant_person_id IS NOT NULL AND deleted_at IS NULL",
+                &[&site],
+            )
+            .await?;
+        client.commit().await?;
+        rows
+    } else {
+        // tenant-guard: platform — empty site_id means every site.
+        let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
+        let rows = client
+            .query(
+                "SELECT id FROM units WHERE ($1::bigint = 0 OR site_id = $1) AND tenant_person_id IS NOT NULL AND deleted_at IS NULL",
+                &[&site],
+            )
+            .await?;
+        client.commit().await?;
+        rows
+    };
     Ok(rows
         .iter()
         .map(|r| r.get::<_, i64>(0).to_string())
@@ -816,13 +845,29 @@ pub async fn owned_unit_ids(
     } else {
         require_id("site", site_id)?
     };
-    let client = pool.get().await?;
-    let rows = client
-        .query(
-            "SELECT id FROM units WHERE ($1::bigint = 0 OR site_id = $1) AND owner_person_id IS NOT NULL AND deleted_at IS NULL",
-            &[&site],
-        )
-        .await?;
+    let mut conn = pool.get().await?;
+    let rows = if site > 0 {
+        let client = super::tenant_guard::begin_tenant_read(&mut conn, site).await?;
+        let rows = client
+            .query(
+                "SELECT id FROM units WHERE ($1::bigint = 0 OR site_id = $1) AND owner_person_id IS NOT NULL AND deleted_at IS NULL",
+                &[&site],
+            )
+            .await?;
+        client.commit().await?;
+        rows
+    } else {
+        // tenant-guard: platform — empty site_id means every site.
+        let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
+        let rows = client
+            .query(
+                "SELECT id FROM units WHERE ($1::bigint = 0 OR site_id = $1) AND owner_person_id IS NOT NULL AND deleted_at IS NULL",
+                &[&site],
+            )
+            .await?;
+        client.commit().await?;
+        rows
+    };
     Ok(rows
         .iter()
         .map(|r| r.get::<_, i64>(0).to_string())
@@ -834,13 +879,17 @@ pub async fn fetch_debt_aging_report_from_db(
     site_id: &str,
     today: chrono::NaiveDate,
 ) -> DbResult<crate::models::DebtAgingReport> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
 
     let rows = if site_id != "all" && !site_id.is_empty() {
         let site_num = parse_id_to_i64(site_id).unwrap_or(0);
-        client
-            .query(
-                r#"
+        if site_num <= 0 {
+            Vec::new()
+        } else {
+            let client = super::tenant_guard::begin_tenant_read(&mut conn, site_num).await?;
+            let rows = client
+                .query(
+                    r#"
                 SELECT
                     dl.id::text,
                     dl.unit_id::text,
@@ -871,12 +920,18 @@ pub async fn fetch_debt_aging_report_from_db(
                 LEFT JOIN persons tp ON u.tenant_person_id = tp.id
                 WHERE dl.status != 'PAID' AND dl.status != 'CANCELLED' AND u.site_id = $1
                 "#,
-                &[&site_num],
-            )
-            .await?
+                    &[&site_num],
+                )
+                .await?;
+            client.commit().await?;
+            rows
+        }
     } else {
-        client
+        // tenant-guard: platform — site_id "all" or empty reads across all sites.
+        let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
+        let rows = client
             .query(
+                // person-scope: platform — site_id 'all' reads every site in a platform-bound transaction
                 r#"
                 SELECT
                     dl.id::text,
@@ -910,7 +965,9 @@ pub async fn fetch_debt_aging_report_from_db(
                 "#,
                 &[],
             )
-            .await?
+            .await?;
+        client.commit().await?;
+        rows
     };
 
     let calc = crate::services::DuesCalculationService::new();

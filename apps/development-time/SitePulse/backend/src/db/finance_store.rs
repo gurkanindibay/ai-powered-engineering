@@ -62,8 +62,11 @@ impl FinanceStore {
     pub async fn insert<T: Record>(&self, mut record: T, collection: Collection<T>) -> DbResult<T> {
         match self.pool() {
             Some(pool) => {
-                let client = pool.get().await?;
-                let id = rec::insert(&**client, &record).await?;
+                // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
+                let mut client = pool.get().await?;
+                let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+                let id = rec::insert(&*tx, &record).await?;
+                tx.commit().await?;
                 record.set_id(id);
                 let mut inner = self.state.inner.write().await;
                 collection(&mut inner.finance).push(record.clone());
@@ -90,8 +93,10 @@ impl FinanceStore {
     ) -> DbResult<(P, Vec<C>)> {
         match self.pool() {
             Some(pool) => {
+                // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
                 let mut client = pool.get().await?;
                 let tx = client.transaction().await?;
+                super::tenant_guard::tx_bind_platform(&tx).await?;
                 let id = rec::insert(&*tx, &parent).await?;
                 parent.set_id(id);
                 for child in children.iter_mut() {
@@ -125,8 +130,11 @@ impl FinanceStore {
     /// Replaces a stored record (matched by id).
     pub async fn update<T: Record>(&self, record: T, collection: Collection<T>) -> DbResult<T> {
         if let Some(p) = self.pool() {
-            let client = p.get().await?;
-            rec::update(&**client, &record).await?;
+            // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
+            let mut client = p.get().await?;
+            let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+            rec::update(&*tx, &record).await?;
+            tx.commit().await?;
         }
         let mut inner = self.state.inner.write().await;
         let items = collection(&mut inner.finance);
@@ -149,10 +157,13 @@ impl FinanceStore {
     /// Deletes records by id.
     pub async fn delete<T: Record>(&self, ids: &[i64], collection: Collection<T>) -> DbResult<()> {
         if let Some(p) = self.pool() {
-            let client = p.get().await?;
+            // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
+            let mut client = p.get().await?;
+            let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
             for id in ids {
-                rec::delete::<T>(&**client, *id).await?;
+                rec::delete::<T>(&*tx, *id).await?;
             }
+            tx.commit().await?;
         }
         let mut inner = self.state.inner.write().await;
         collection(&mut inner.finance).retain(|r| !ids.contains(&r.id()));
@@ -168,8 +179,11 @@ impl FinanceStore {
         penalty: rust_decimal::Decimal,
     ) -> DbResult<()> {
         if let Some(p) = self.pool() {
-            let client = p.get().await?;
-            rec::apply_due_adjustment(&**client, due_id, principal, penalty).await?;
+            // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
+            let mut client = p.get().await?;
+            let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+            rec::apply_due_adjustment(&*tx, due_id, principal, penalty).await?;
+            tx.commit().await?;
         }
         let mut inner = self.state.inner.write().await;
         let due = inner
@@ -194,8 +208,11 @@ impl FinanceStore {
         until: Option<chrono::NaiveDate>,
     ) -> DbResult<()> {
         if let Some(p) = self.pool() {
-            let client = p.get().await?;
-            rec::set_site_budget_transition(&**client, site_id, until).await?;
+            // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
+            let mut client = p.get().await?;
+            let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+            rec::set_site_budget_transition(&*tx, site_id, until).await?;
+            tx.commit().await?;
         }
         let mut inner = self.state.inner.write().await;
         let key = inner
@@ -224,8 +241,12 @@ impl FinanceStore {
     ) -> DbResult<Vec<String>> {
         match self.pool() {
             Some(pool) => {
-                let client = pool.get().await?;
-                rec::units_by_national_id(&**client, site_id, national_id).await
+                let site = super::require_id("site", site_id)?;
+                let mut client = pool.get().await?;
+                let tx = super::tenant_guard::begin_tenant_read(&mut client, site).await?;
+                let units = rec::units_by_national_id(&*tx, site_id, national_id).await?;
+                tx.commit().await?;
+                Ok(units)
             }
             None => Ok(Vec::new()),
         }
@@ -359,8 +380,11 @@ impl FinanceStore {
 
     pub async fn set_budget_decision(&self, budget_id: &str, decision_id: i64) -> DbResult<()> {
         if let Some(p) = self.pool() {
-            let client = p.get().await?;
-            rec::set_budget_decision(&**client, budget_id, decision_id).await?;
+            // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
+            let mut client = p.get().await?;
+            let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+            rec::set_budget_decision(&*tx, budget_id, decision_id).await?;
+            tx.commit().await?;
         }
         self.state
             .inner
@@ -379,8 +403,11 @@ impl FinanceStore {
         save_card: bool,
     ) -> DbResult<()> {
         if let Some(p) = self.pool() {
-            let client = p.get().await?;
-            rec::set_intent_options(&**client, intent_id, installments, save_card).await?;
+            // tenant-guard: platform — FinanceStore callers pin site_id; Record covers both tenant and platform tables.
+            let mut client = p.get().await?;
+            let tx = super::tenant_guard::begin_platform_tx(&mut client).await?;
+            rec::set_intent_options(&*tx, intent_id, installments, save_card).await?;
+            tx.commit().await?;
         }
         self.state
             .inner
@@ -395,8 +422,10 @@ impl FinanceStore {
 
 /// Loads every SPEC-009 table at boot.
 pub async fn load_finance_book(pool: &Pool) -> DbResult<FinanceBook> {
-    let client = pool.get().await?;
-    let c = &**client;
+    // tenant-guard: platform — startup load of all SPEC-009 tables.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_read(&mut client).await?;
+    let c = &*tx;
     let mut book = FinanceBook {
         privacy_notices: rec::load_all(c).await?,
         privacy_acknowledgements: rec::load_all(c).await?,
@@ -459,5 +488,6 @@ pub async fn load_finance_book(pool: &Pool) -> DbResult<FinanceBook> {
         .iter()
         .map(|r| (r.get::<_, i64>(0).to_string(), r.get::<_, i64>(1)))
         .collect();
+    tx.commit().await?;
     Ok(book)
 }

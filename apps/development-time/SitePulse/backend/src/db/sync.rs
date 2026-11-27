@@ -22,7 +22,10 @@ fn upsert_by_id<T>(items: &mut Vec<T>, item: T, id: impl Fn(&T) -> &String) {
 }
 
 pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResult<()> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — startup load of all sites and tenant tables.
+    let mut conn = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_read(&mut conn).await?;
+    let client = &tx;
 
     // 1. Load Sites
     {
@@ -92,6 +95,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 2. Load Users
     {
+        // person-scope: platform — startup load of every site
         let rows = client.query("SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
              FROM users u
              LEFT JOIN persons p ON u.person_id = p.id
@@ -145,6 +149,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
         let rows = client
             .query(
                 // F6: the current role is derived from what the person holds now (V23).
+                // person-scope: platform — startup load of every person
                 "SELECT p.id, p.full_name, p.email, p.phone, COALESCE(r.derived_role, 'HOME_RESIDENT'), COALESCE(p.site_id::text, '') \
                  FROM persons p JOIN v_person_roles r ON r.person_id = p.id \
                  WHERE p.deleted_at IS NULL AND (p.site_id IS NULL OR EXISTS (SELECT 1 FROM sites s WHERE s.id = p.site_id AND s.deleted_at IS NULL))",
@@ -776,6 +781,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
     {
         let rows = client
             .query(
+                // person-scope: platform — startup load of occupancy history
                 r#"
             SELECT uo.id, uo.unit_id, uo.person_id, p.full_name, p.phone, p.email,
                    uo.occupancy_type, uo.start_date, uo.end_date, uo.is_active,
@@ -1063,6 +1069,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             state.reconciliation_queue.len()
         );
     }
+
+    tx.commit().await?;
+    drop(conn);
 
     // SPEC-007: operating budgets, revaluation rates, liabilities' legal basis, card payment intents.
     {

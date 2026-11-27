@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import configparser
+import re
 import unittest
 from pathlib import Path
 
@@ -38,6 +39,26 @@ class E2ETimeoutConfigTest(unittest.TestCase):
             any(item.startswith("pytest-timeout") for item in required),
             "pytest.ini must list pytest-timeout under required_plugins",
         )
+
+    def test_hang_guard_ends_a_wedged_run_before_the_job_limit(self) -> None:
+        # The signal limit covers only the test body; a wedged browser or teardown has none (#520).
+        self.assertIn('"support.hang_guard"', (E2E / "conftest.py").read_text())
+        guard = (E2E / "support" / "hang_guard.py").read_text()
+        grace = float(re.search(r"^GRACE_S = ([0-9.]+)$", guard, re.MULTILINE).group(1))
+        self.assertGreaterEqual(grace, 60, "pytest-timeout and teardown need time to finish first")
+        self.assertLessEqual(grace, 600)
+        setup = float(re.search(r"^SETUP_S = ([0-9.]+)$", guard, re.MULTILINE).group(1))
+        self.assertGreaterEqual(setup, 60, "the first setup of a lane builds the whole stack")
+        self.assertLessEqual(setup, 900)
+        collect = float(re.search(r"^COLLECT_S = ([0-9.]+)$", guard, re.MULTILINE).group(1))
+        self.assertGreaterEqual(collect, 60, "collection imports the suite before any test exists")
+        self.assertLessEqual(collect, 900)
+        self.assertIn("os._exit(1)", guard)
+        self.assertNotRegex(guard, r"faulthandler\.dump_traceback_later\(")
+        # Armed for the whole protocol: a hang in setup or teardown left the job at its limit
+        # while a call-phase guard never fired (#520).
+        self.assertIn("def pytest_runtest_protocol(", guard)
+        self.assertNotIn("def pytest_runtest_call(", guard)
 
     def test_plugin_is_pinned_with_the_other_test_dependencies(self) -> None:
         lines = (E2E / "requirements.txt").read_text().splitlines()

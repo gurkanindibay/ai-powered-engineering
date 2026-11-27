@@ -120,6 +120,21 @@ extension DashboardControllerPayments on DashboardController {
   }
 
 
+  /// True when [requestSeq] is not the newest payment-stream request, so its
+  /// response must not write the stream state (loading, error or data).
+  bool _isStalePaymentStreamRequest(int requestSeq) =>
+      requestSeq != _paymentStreamRequestSeq;
+
+  PaymentStreamResponseDto _currentPaymentStream() =>
+      _paymentStream ??
+      PaymentStreamResponseDto(
+        entries: const [],
+        totalVolume: Decimal.zero,
+        settledVolume: Decimal.zero,
+        unmatchedVolume: Decimal.zero,
+        totalCount: 0,
+      );
+
   Future<PaymentStreamResponseDto> fetchPaymentStream({
     String? channel,
     String? payerRole,
@@ -128,6 +143,7 @@ extension DashboardControllerPayments on DashboardController {
     String? search,
     String? siteId,
   }) async {
+    final requestSeq = ++_paymentStreamRequestSeq;
     _isPaymentStreamLoading = true;
     _paymentStreamError = null;
     notify();
@@ -146,6 +162,7 @@ extension DashboardControllerPayments on DashboardController {
       try {
         final uri = ApiClient.uri('/api/v1/payments/stream', queryParams);
         final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
+        if (_isStalePaymentStreamRequest(requestSeq)) return _currentPaymentStream();
         if (response.statusCode == 200) {
           final jsonMap = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           _paymentStream = PaymentStreamResponseDto.fromJson(jsonMap);
@@ -157,9 +174,12 @@ extension DashboardControllerPayments on DashboardController {
         _paymentStreamError = Exception('Tahsilat akışı yüklenemedi. Lütfen tekrar deneyin.');
       } catch (e) {
         AppLogger.warn('fetchPaymentStream error', tag: 'PaymentsController', error: e);
+        if (_isStalePaymentStreamRequest(requestSeq)) return _currentPaymentStream();
         _paymentStreamError = e;
       }
     }
+
+    if (_isStalePaymentStreamRequest(requestSeq)) return _currentPaymentStream();
 
     if (isTestMode) {
       final mockEntries = [
@@ -225,13 +245,7 @@ extension DashboardControllerPayments on DashboardController {
 
     _isPaymentStreamLoading = false;
     notify();
-    return _paymentStream ?? PaymentStreamResponseDto(
-      entries: const [],
-      totalVolume: Decimal.zero,
-      settledVolume: Decimal.zero,
-      unmatchedVolume: Decimal.zero,
-      totalCount: 0,
-    );
+    return _currentPaymentStream();
   }
 
   Future<DebtAgingReportDto> fetchDebtAgingReport({String? siteId}) async {

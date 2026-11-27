@@ -64,8 +64,11 @@ impl AuthService {
         if !matches!(user.role, Role::HomeOwner | Role::HomeResident) {
             return Ok(None);
         }
-        if let Some(client) = crate::db::security_connection(&self.state).await.map_err(|e| e.to_string())? {
+        if let Some(mut conn) = crate::db::security_connection(&self.state).await.map_err(|e| e.to_string())? {
             let site = crate::db::require_id("site", &user.site_id)?;
+            let client = crate::db::begin_tenant_read(&mut conn, site)
+                .await
+                .map_err(|_| "Identity storage unavailable".to_string())?;
             // A former resident whose charge is still open keeps the unit, so the
             // statement they must settle stays reachable; a current tie wins the pick.
             let row=client.query_opt("SELECT u.id FROM units u WHERE u.site_id=$1 AND u.deleted_at IS NULL AND (u.owner_person_id=$2 OR u.tenant_person_id=$2 OR EXISTS(SELECT 1 FROM occupancy_members m JOIN unit_occupancies o ON o.id=m.occupancy_id WHERE o.unit_id=u.id AND o.is_active AND o.end_date IS NULL AND m.person_id=$2) OR EXISTS(SELECT 1 FROM dues_liabilities d WHERE d.unit_id=u.id AND d.liable_person_id=$2 AND d.status NOT IN ('PAID','CANCELLED'))) ORDER BY (CASE WHEN u.owner_person_id=$2 OR u.tenant_person_id=$2 THEN 0 ELSE 1 END), u.id LIMIT 1",&[&site,&user.person_id]).await.map_err(|_|"Identity storage unavailable".to_string())?;
@@ -220,6 +223,7 @@ impl AuthService {
                 .await
                 .map_err(|_| "Identity storage unavailable")?;
             let id = client
+                // person-scope: identity — sign-in by global identity (google_sub) before a site is known
                 .query_opt("SELECT id FROM users WHERE google_sub=$1", &[&payload.sub])
                 .await
                 .map_err(|_| "Identity storage unavailable")?
@@ -357,6 +361,7 @@ impl AuthService {
             if let Ok(client) = pool.get().await {
                 if let Ok(Some(row)) = client
                     .query_opt(
+                        // person-scope: identity — sign-in by globally unique email
                         "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                         &[&crate::domain::email::NormalizedEmail::normalize(
                             &user.email,
@@ -462,6 +467,7 @@ impl AuthService {
             if let Ok(client) = pool.get().await {
                 if let Ok(Some(row)) = client
                     .query_opt(
+                        // person-scope: identity — registration checks that the email is globally unique
                         "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                         &[&crate::domain::email::NormalizedEmail::normalize(
                             &new_user.email,
@@ -503,6 +509,7 @@ impl AuthService {
             .map_err(|e| e.to_string())?
         {
             let id = crate::db::require_id("user", &user.id)?;
+            // person-scope: identity — links google_sub to the authenticated user
             let n=client.execute("UPDATE users SET google_sub=$1,auth_provider='HYBRID' WHERE id=$2 AND (google_sub IS NULL OR google_sub=$1)",&[&payload.sub,&id]).await.map_err(|_|"Google identity cannot be linked".to_string())?;
             if n != 1 {
                 return Err("Google identity cannot be linked".to_string());
@@ -552,12 +559,16 @@ impl AuthService {
             .await
             .map_err(|_| "Identity storage unavailable")?;
         let digest = auth::token_digest(raw_token.trim());
+        // The site is unknown until the invitation is consumed, and `invitation_tokens`
+        // is tenant-isolated: resolve it as an explicit platform step, then bind the
+        // invitation's tenant for every write below (RLS, V21).
+        crate::db::tx_bind_platform(&tx)
+            .await
+            .map_err(|_| "Identity storage unavailable")?;
         let row=tx.query_opt("DELETE FROM invitation_tokens invite USING units unit,sites site WHERE invite.token=$1 AND invite.token_type='UNIT' AND invite.expires_at>now() AND invite.unit_id=unit.id AND unit.site_id=site.id AND unit.deleted_at IS NULL AND site.deleted_at IS NULL AND site.status IN ('ACTIVE','TRIAL') RETURNING invite.unit_id,unit.site_id,invite.relationship",&[&digest]).await.map_err(|_|"Invitation storage unavailable")?.ok_or("Invitation token is invalid or has already been used.")?;
         let unit: i64 = row.get(0);
         let site: i64 = row.get(1);
         let relationship: Option<String> = row.get(2);
-        // The tenant is known once the invitation is consumed: bind it (RLS, V21)
-        // so every write below is confined to the invitation's site.
         crate::db::tx_bind_tenant(&tx, site)
             .await
             .map_err(|_| "Identity storage unavailable")?;
@@ -585,6 +596,7 @@ impl AuthService {
         )
         .await
         .map_err(|_| "This identity cannot be registered; ask your site manager for assistance")?;
+        // person-scope: site — registers the invited user for the invitation's site
         let id:i64=tx.query_one("INSERT INTO users(site_id,person_id,email,password_hash,role,must_change_password,auth_provider,google_sub,avatar_url) VALUES ($1,$2,$3,$4,'HOME_RESIDENT',$5,$6,$7,$8) RETURNING id",&[&site,&person,&user.email,&user.password_hash,&user.must_change_password,&user.auth_provider,&user.google_sub,&user.avatar_url]).await.map_err(|_|"This identity cannot be registered")?.get(0);
         let occupancy=tx.query_opt("SELECT id FROM unit_occupancies WHERE unit_id=$1 AND is_active AND end_date IS NULL ORDER BY start_date DESC,id DESC LIMIT 1 FOR UPDATE",&[&unit]).await.map_err(|_|"Household storage unavailable")?;
         // Invariant 6 (EPIC-08 §3.4): joining a household never opens a session.
@@ -593,6 +605,7 @@ impl AuthService {
             .ok_or("The unit has no active household; contact your site manager")?;
         tx.execute("INSERT INTO occupancy_members(occupancy_id,person_id,resident_user_id,full_name,email,phone,relationship) VALUES ($1,$2,$3,$4,$5,$6,$7)",&[&occupancy,&person,&id,&user.full_name,&user.email,&user.phone,&crate::domain::household_relationship::HouseholdRelationship::from_input(relationship.as_deref().unwrap_or("")).unwrap_or(crate::domain::household_relationship::HouseholdRelationship::Other).as_str()]).await.map_err(|_|"Household storage unavailable")?;
         tx.execute(
+            // person-scope: site — role row for the invitation's site
             "INSERT INTO user_site_roles(user_id,site_id,role) VALUES ($1,$2,'HOME_RESIDENT')",
             &[&id, &site],
         )
@@ -683,6 +696,7 @@ impl AuthService {
             let client = pool.get().await.map_err(|e| e.to_string())?;
             client
                 .execute(
+                    // person-scope: identity — password change by the globally unique email before sign-in
                     "UPDATE users SET password_hash = $1, must_change_password = false WHERE LOWER(email) = $2 AND is_active",
                     &[&new_hash, &email_norm],
                 )

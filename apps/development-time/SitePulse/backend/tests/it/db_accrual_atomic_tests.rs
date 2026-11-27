@@ -38,6 +38,7 @@ fn manager_password() -> &'static str {
 struct Env {
     name: String,
     admin: Pool,
+    owner: Pool,
     pool: Pool,
     state: AppState,
     app: Router,
@@ -49,9 +50,15 @@ struct Env {
 
 impl Env {
     async fn new(tag: &str) -> Self {
-        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
+        let crate::test_db::TestDatabase {
+            name,
+            admin,
+            owner,
+            pool,
+        } = crate::test_db::create(tag).await;
         let hash = auth::hash_password(manager_password()).expect("hash");
-        pool.get()
+        owner
+            .get()
             .await
             .expect("connection")
             .execute(
@@ -66,7 +73,7 @@ impl Env {
             )
             .await
             .expect("seed site manager");
-        let site: i64 = pool
+        let site: i64 = owner
             .get()
             .await
             .expect("connection")
@@ -74,7 +81,7 @@ impl Env {
             .await
             .expect("site")
             .get(0);
-        let other_site: i64 = pool
+        let other_site: i64 = owner
             .get()
             .await
             .expect("connection")
@@ -90,6 +97,7 @@ impl Env {
         Self {
             name,
             admin,
+            owner,
             pool,
             state,
             app,
@@ -113,12 +121,12 @@ impl Env {
     }
 
     async fn int(&self, sql: &str) -> i64 {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn exec(&self, sql: &str) {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.batch_execute(sql).await.expect(sql);
     }
 
@@ -385,7 +393,7 @@ async fn another_spelling_of_an_accrued_month_creates_nothing_in_the_database() 
     );
     // The database refuses a second operational liability for the same key.
     let duplicate = env
-        .pool
+        .owner
         .get()
         .await
         .expect("connection")
@@ -531,7 +539,7 @@ async fn a_tenant_inside_the_month_stores_rows_that_sum_to_the_tariff() {
     .await
     .expect("store the period's liabilities");
 
-    let client = env.pool.get().await.expect("connection");
+    let client = env.owner.get().await.expect("connection");
     let row = client
         .query_one(
             "SELECT count(*), COALESCE(SUM(principal_amount), 0)
@@ -578,7 +586,7 @@ async fn empty_accrual_with_skipped_units_still_records_a_run() {
         .await
         .expect("skipped-only accrual is recorded");
 
-    let client = env.pool.get().await.expect("connection");
+    let client = env.owner.get().await.expect("connection");
     let row = client
         .query_one(
             "SELECT accrued_count, skipped_units FROM dues_accrual_runs WHERE site_id = $1 AND period_key = $2",
@@ -863,7 +871,7 @@ async fn joint_liability_owner_intervals_do_not_overlap_on_transfer_day_and_excl
     // 1. Owner who sold on day 1 (2026-12-01) -> 0 days in Dec 2026
     // 2. Seller who owned from 2026-12-01 until 2026-12-15 (transferred on day 15) -> 14 days
     // 3. Buyer who acquired on 2026-12-15 -> 17 days
-    let client = env.pool.get().await.expect("connection");
+    let client = env.owner.get().await.expect("connection");
     let p1: i64 = client
         .query_one(
             "INSERT INTO persons (full_name, email, person_type, site_id) VALUES ('Day1 Seller', 'p1@test.local', 'HOME_OWNER', $1) RETURNING id",

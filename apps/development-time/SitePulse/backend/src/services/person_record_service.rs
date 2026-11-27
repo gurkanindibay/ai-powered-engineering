@@ -270,7 +270,10 @@ impl PersonRecordService {
         site: i64,
         person_id: i64,
     ) -> Result<PersonRecord, PersonRecordError> {
-        let client = self.pool()?.get().await.map_err(storage)?;
+        let mut conn = self.pool()?.get().await.map_err(storage)?;
+        let client = crate::db::begin_tenant_read(&mut conn, site)
+            .await
+            .map_err(storage)?;
         let row = client
             .query_opt(
                 "SELECT p.national_id_masked, p.preferred_channel, p.preferred_language, \
@@ -396,8 +399,12 @@ impl PersonRecordService {
     ) -> Result<ContactPreferences, PersonRecordError> {
         let site = crate::db::parse_id_to_i64(site_id).ok_or(PersonRecordError::NotFound)?;
         let p = preferences.validated()?;
-        let client = self.pool()?.get().await.map_err(storage)?;
-        let changed = client
+        let mut conn = self.pool()?.get().await.map_err(storage)?;
+        // The audit trigger re-checks the caller's authorization, which needs the site.
+        let tx = crate::db::begin_tenant_tx(&mut conn, site)
+            .await
+            .map_err(storage)?;
+        let changed = tx
             .execute(
                 "UPDATE persons SET preferred_channel = $1, preferred_language = $2, \
                         emergency_contact_name = $3, emergency_contact_phone = $4 \
@@ -416,6 +423,7 @@ impl PersonRecordService {
         if changed == 0 {
             return Err(PersonRecordError::NotFound);
         }
+        tx.commit().await.map_err(storage)?;
         Ok(p)
     }
 

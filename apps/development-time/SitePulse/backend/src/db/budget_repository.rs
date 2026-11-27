@@ -20,6 +20,7 @@ pub async fn insert_operating_budget(pool: &Pool, budget: &mut OperatingBudget) 
         .transpose()?;
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
     let id: i64 = tx
         .query_one(
             r#"
@@ -82,8 +83,13 @@ pub async fn insert_operating_budget(pool: &Pool, budget: &mut OperatingBudget) 
 /// coming into force and the one it supersedes change together). Superseded
 /// budgets are written first so the one-in-force index never sees two.
 pub async fn update_budget_headers(pool: &Pool, budgets: &[OperatingBudget]) -> DbResult<()> {
+    let Some(first) = budgets.first() else {
+        return Ok(());
+    };
+    let site = require_id("site", &first.site_id)?;
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
     let mut ordered: Vec<&OperatingBudget> = budgets.iter().collect();
     ordered.sort_by_key(|b| !matches!(b.status.as_str(), "SUPERSEDED" | "REJECTED"));
     for b in ordered {
@@ -117,10 +123,12 @@ pub async fn update_budget_headers(pool: &Pool, budgets: &[OperatingBudget]) -> 
     Ok(())
 }
 
-pub async fn delete_draft_budget(pool: &Pool, budget_id: &str) -> DbResult<()> {
+pub async fn delete_draft_budget(pool: &Pool, site_id: &str, budget_id: &str) -> DbResult<()> {
+    let site = require_id("site", site_id)?;
     let id = require_id("operating budget", budget_id)?;
-    let client = pool.get().await?;
-    let n = client
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site).await?;
+    let n = tx
         .execute(
             "DELETE FROM operating_budgets WHERE id = $1 AND status = 'DRAFT'",
             &[&id],
@@ -129,18 +137,22 @@ pub async fn delete_draft_budget(pool: &Pool, budget_id: &str) -> DbResult<()> {
     if n != 1 {
         return Err(format!("draft budget {} not found", budget_id).into());
     }
+    tx.commit().await?;
     Ok(())
 }
 
 pub async fn upsert_budget_service(
     pool: &Pool,
+    site_id: &str,
     budget_id: &str,
     r: &BudgetServiceRecord,
 ) -> DbResult<i64> {
+    let site = require_id("site", site_id)?;
     let id = require_id("operating budget", budget_id)?;
     let unit = require_id("unit", &r.unit_id)?;
-    let client = pool.get().await?;
-    let row = client
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site).await?;
+    let row = tx
         .query_one(
             r#"
             INSERT INTO budget_service_records (budget_id, unit_id, recipient_name, method, served_on)
@@ -152,35 +164,42 @@ pub async fn upsert_budget_service(
             &[&id, &unit, &r.recipient_name, &r.method, &r.served_on],
         )
         .await?;
-    Ok(row.get(0))
+    let record_id: i64 = row.get(0);
+    tx.commit().await?;
+    Ok(record_id)
 }
 
 /// Inserts an objection (empty id) or updates its resolution.
 pub async fn save_budget_objection(
     pool: &Pool,
+    site_id: &str,
     budget_id: &str,
     o: &BudgetObjection,
 ) -> DbResult<i64> {
+    let site = require_id("site", site_id)?;
     let id = require_id("operating budget", budget_id)?;
-    let client = pool.get().await?;
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site).await?;
     if o.id.is_empty() {
         let unit = require_id("unit", &o.unit_id)?;
-        let row = client
+        let row = tx
             .query_one(
                 "INSERT INTO budget_objections (budget_id, unit_id, objector_name, filed_on, reason, status)
                  VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
                 &[&id, &unit, &o.objector_name, &o.filed_on, &o.reason, &o.status],
             )
             .await?;
-        return Ok(row.get(0));
+        let obj_id: i64 = row.get(0);
+        tx.commit().await?;
+        return Ok(obj_id);
     }
     let oid = require_id("objection", &o.id)?;
-    client
-        .execute(
-            "UPDATE budget_objections SET status = $3, resolved_on = $4, resolution_note = $5 WHERE id = $1 AND budget_id = $2",
-            &[&oid, &id, &o.status, &o.resolved_on, &o.resolution_note],
-        )
-        .await?;
+    tx.execute(
+        "UPDATE budget_objections SET status = $3, resolved_on = $4, resolution_note = $5 WHERE id = $1 AND budget_id = $2",
+        &[&oid, &id, &o.status, &o.resolved_on, &o.resolution_note],
+    )
+    .await?;
+    tx.commit().await?;
     Ok(oid)
 }
 
@@ -198,8 +217,9 @@ pub async fn upsert_revaluation_rate(pool: &Pool, r: &RevaluationRate) -> DbResu
 
 pub async fn set_site_budget_policy(pool: &Pool, site_id: &str, require: bool) -> DbResult<()> {
     let site = require_id("site", site_id)?;
-    let client = pool.get().await?;
-    let n = client
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site).await?;
+    let n = tx
         .execute(
             "UPDATE sites SET require_operating_budget = $2 WHERE id = $1",
             &[&site, &require],
@@ -208,20 +228,28 @@ pub async fn set_site_budget_policy(pool: &Pool, site_id: &str, require: bool) -
     if n != 1 {
         return Err(format!("site {} not found", site_id).into());
     }
+    tx.commit().await?;
     Ok(())
 }
 
 /// Records the operating budget a dues liability was accrued from.
-pub async fn set_due_budget_basis(pool: &Pool, due_id: &str, budget_id: &str) -> DbResult<()> {
+pub async fn set_due_budget_basis(
+    pool: &Pool,
+    site_id: &str,
+    due_id: &str,
+    budget_id: &str,
+) -> DbResult<()> {
+    let site = require_id("site", site_id)?;
     let due = require_id("dues liability", due_id)?;
     let budget = require_id("operating budget", budget_id)?;
-    let client = pool.get().await?;
-    client
-        .execute(
-            "UPDATE dues_liabilities SET operating_budget_id = $2 WHERE id = $1",
-            &[&due, &budget],
-        )
-        .await?;
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site).await?;
+    tx.execute(
+        "UPDATE dues_liabilities SET operating_budget_id = $2 WHERE id = $1",
+        &[&due, &budget],
+    )
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -239,8 +267,10 @@ pub async fn load_budget_snapshot(
     pool: &Pool,
     unit_label: impl Fn(i64) -> String,
 ) -> DbResult<BudgetSnapshot> {
-    let client = pool.get().await?;
-    let mut budgets: Vec<OperatingBudget> = client
+    // tenant-guard: platform — startup load of all operating budgets.
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_platform_read(&mut client).await?;
+    let mut budgets: Vec<OperatingBudget> = tx
         .query(
             r#"
             SELECT id, site_id, fiscal_year, period_start, period_end, status, previous_budget_id,
@@ -283,7 +313,7 @@ pub async fn load_budget_snapshot(
         budgets.iter().position(|b| b.id == id.to_string())
     };
 
-    for r in client
+    for r in tx
         .query("SELECT id, budget_id, category, description, annual_amount, allocation_key, unit_weights FROM operating_budget_lines ORDER BY id", &[])
         .await?
     {
@@ -302,7 +332,7 @@ pub async fn load_budget_snapshot(
             });
         }
     }
-    for r in client
+    for r in tx
         .query(
             "SELECT budget_id, unit_id, land_share, annual_amount, monthly_amount FROM operating_budget_unit_shares ORDER BY budget_id, unit_id",
             &[],
@@ -320,7 +350,7 @@ pub async fn load_budget_snapshot(
             });
         }
     }
-    for r in client
+    for r in tx
         .query("SELECT id, budget_id, unit_id, recipient_name, method, served_on FROM budget_service_records ORDER BY id", &[])
         .await?
     {
@@ -334,7 +364,7 @@ pub async fn load_budget_snapshot(
             });
         }
     }
-    for r in client
+    for r in tx
         .query(
             "SELECT id, budget_id, unit_id, objector_name, filed_on, reason, status, resolved_on, resolution_note FROM budget_objections ORDER BY id",
             &[],
@@ -354,7 +384,7 @@ pub async fn load_budget_snapshot(
             });
         }
     }
-    let rates = client
+    let rates = tx
         .query(
             "SELECT year, rate, source FROM revaluation_rates ORDER BY year",
             &[],
@@ -367,18 +397,19 @@ pub async fn load_budget_snapshot(
             source: r.get(2),
         })
         .collect();
-    let required_sites = client
+    let required_sites = tx
         .query("SELECT id FROM sites WHERE require_operating_budget", &[])
         .await?
         .iter()
         .map(|r| r.get::<_, i64>(0).to_string())
         .collect();
-    let due_basis = client
+    let due_basis = tx
         .query("SELECT id, operating_budget_id FROM dues_liabilities WHERE operating_budget_id IS NOT NULL", &[])
         .await?
         .iter()
         .map(|r| (r.get::<_, i64>(0).to_string(), r.get::<_, i64>(1).to_string()))
         .collect();
+    tx.commit().await?;
     Ok(BudgetSnapshot {
         budgets,
         rates,

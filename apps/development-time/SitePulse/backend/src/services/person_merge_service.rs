@@ -158,6 +158,7 @@ impl PersonMergeService {
 
         // Login: the target's login wins; otherwise the source's login follows the card.
         tx.execute(
+            // person-scope: person — both person ids are locked with site_id = $2 before the merge
             "UPDATE users SET is_active = FALSE WHERE person_id = $1 AND is_active \
                AND EXISTS (SELECT 1 FROM users t WHERE t.person_id = $2 AND t.is_active)",
             &[&source_id, &target_id],
@@ -165,6 +166,7 @@ impl PersonMergeService {
         .await
         .map_err(storage)?;
         tx.execute(
+            // person-scope: person — both ids are locked with site_id = $2 before the merge
             "UPDATE users SET person_id = $2 WHERE person_id = $1 AND is_active",
             &[&source_id, &target_id],
         )
@@ -203,6 +205,7 @@ impl PersonMergeService {
         // The tombstone first: the unique e-mail index must release the address
         // before the surviving card takes it. Payment tables are not updated.
         tx.execute(
+            // person-scope: person — both ids are locked with site_id = $2 before the merge
             "UPDATE persons SET merged_into_person_id = $2, deleted_at = CURRENT_TIMESTAMP, \
                     version = version + 1, \
                     email = CASE WHEN $3 THEN NULL ELSE email END \
@@ -213,6 +216,7 @@ impl PersonMergeService {
         .map_err(storage)?;
         let merged = tx
             .query_one(
+                // person-scope: person — both ids are locked with site_id = $2 before the merge
                 "UPDATE persons SET version = version + 1, \
                         email = CASE WHEN $2 THEN $3 ELSE email END, \
                         phone = CASE WHEN $4 THEN $5 ELSE phone END \

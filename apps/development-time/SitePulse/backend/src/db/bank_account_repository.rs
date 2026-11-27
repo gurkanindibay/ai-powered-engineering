@@ -8,14 +8,15 @@ pub async fn save_site_bank_account(
     pool: &Pool,
     account: &SiteBankAccount,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut client = pool.get().await?;
     let maybe_id = parse_id_to_i64(&account.id);
     let site_id_num = require_id("entity", &account.site_id)?;
     let config_by_num = account.configured_by.as_deref().and_then(parse_id_to_i64);
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site_id_num).await?;
 
     match maybe_id {
         Some(id_num) if id_num > 0 => {
-            client
+            tx
                 .execute(
                     r#"
                     INSERT INTO site_bank_accounts (id, site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at)
@@ -52,7 +53,7 @@ pub async fn save_site_bank_account(
             );
         }
         _ => {
-            let row = client
+            let row = tx
                 .query_one(
                     r#"
                     INSERT INTO site_bank_accounts (site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at)
@@ -80,6 +81,7 @@ pub async fn save_site_bank_account(
             );
         }
     }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -87,14 +89,16 @@ pub async fn get_active_site_bank_account(
     pool: &Pool,
     site_id: &str,
 ) -> Result<Option<SiteBankAccount>, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut client = pool.get().await?;
     let site_id_num = require_id("entity", site_id)?;
-    let row = client
+    let tx = super::tenant_guard::begin_tenant_read(&mut client, site_id_num).await?;
+    let row = tx
         .query_opt(
             "SELECT id, site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at FROM site_bank_accounts WHERE site_id = $1 AND is_active = TRUE ORDER BY updated_at DESC LIMIT 1",
             &[&site_id_num],
         )
         .await?;
+    tx.commit().await?;
 
     if let Some(row) = row {
         let id: i64 = row.get(0);

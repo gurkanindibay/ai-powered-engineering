@@ -40,7 +40,12 @@ fn date(month: u32, day: u32) -> NaiveDate {
 }
 
 async fn drop_db(database: crate::test_db::TestDatabase) {
-    let crate::test_db::TestDatabase { name, admin, pool } = database;
+    let crate::test_db::TestDatabase {
+        name,
+        admin,
+        owner: _,
+        pool,
+    } = database;
     drop(pool);
     if let Ok(client) = admin.get().await {
         let _ = client
@@ -93,7 +98,7 @@ async fn when_a_payment_is_reversed_late_in_the_istanbul_evening_then_overdue_us
     assert_eq!(clock.now().date_naive(), date(11, 30));
 
     let database = crate::test_db::create("site_local_overdue").await;
-    let mut client = database.pool.get().await.expect("connection");
+    let mut client = database.owner.get().await.expect("connection");
     let tx = client.transaction().await.expect("transaction");
     let row = tx
         .query_one(
@@ -139,7 +144,7 @@ async fn when_a_unit_is_archived_late_in_the_istanbul_evening_then_end_dates_use
     let today = clock.today_in(SITE_TIMEZONE);
 
     let database = crate::test_db::create("site_local_end_date").await;
-    let mut client = database.pool.get().await.expect("connection");
+    let mut client = database.owner.get().await.expect("connection");
     let tx = client.transaction().await.expect("transaction");
     let row = tx
         .query_one(
@@ -195,7 +200,7 @@ async fn when_payment_recorded_late_in_istanbul_evening_then_payment_history_pri
 ) {
     let clock = late_istanbul_evening();
     let database = crate::test_db::create("site_local_payment_history").await;
-    let mut client = database.pool.get().await.expect("connection");
+    let mut client = database.owner.get().await.expect("connection");
     let tx = client.transaction().await.expect("transaction");
     let row = tx
         .query_one(
@@ -255,7 +260,7 @@ async fn when_payment_recorded_late_in_istanbul_evening_then_tx_load_payments_fo
 ) {
     let clock = late_istanbul_evening();
     let database = crate::test_db::create("site_local_load_payments").await;
-    let client = database.pool.get().await.expect("connection");
+    let client = database.owner.get().await.expect("connection");
     let row = client
         .query_one(
             "SELECT id, site_id FROM units WHERE deleted_at IS NULL ORDER BY id LIMIT 1",

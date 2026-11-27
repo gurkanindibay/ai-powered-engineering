@@ -236,6 +236,7 @@ impl HomeResidentInvitationService {
             if let Ok(client) = pool.get().await {
                 if let Ok(Some(row)) = client
                     .query_opt(
+                        // person-scope: identity — invitation checks that the email is globally unique
                         "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                         &[&email_norm],
                     )
@@ -272,10 +273,12 @@ impl HomeResidentInvitationService {
 
     pub async fn get_unit_members(&self, unit_id: &str) -> Vec<UnitMemberDto> {
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(rows) = crate::db::logged(client
-                    .query(
-                        r#"
+            // tenant-guard: platform — unit_id already verified by handler scope.
+            if let Ok(mut conn) = pool.get().await {
+                if let Ok(client) = crate::db::begin_platform_read(&mut conn).await {
+                    let rows_res = client
+                        .query(
+                            r#"
                         SELECT om.id, om.full_name, om.relationship, om.phone, om.email,
                                COALESCE(om.person_id = unit.owner_person_id, false), om.occupancy_id, om.person_id, om.resident_user_id
                         FROM occupancy_members om
@@ -284,23 +287,27 @@ impl HomeResidentInvitationService {
                         WHERE uo.unit_id = $1 AND uo.is_active = true
                         ORDER BY om.id ASC
                         "#,
-                        &[&crate::db::parse_id_to_i64(unit_id).unwrap_or(0)],
-                    )
-                    .await, "home_resident_invitation_service") {
-                    return rows
-                        .into_iter()
-                        .map(|r| UnitMemberDto {
-                            resident_id: r.get::<_, i64>(0).to_string(),
-                            full_name: r.get(1),
-                            relationship: r.get(2),
-                            phone: r.get::<_, Option<String>>(3).unwrap_or_default(),
-                            email: r.get::<_, Option<String>>(4).unwrap_or_default(),
-                            is_owner: r.get(5),
-                            occupancy_id: r.try_get(6).ok().flatten(),
-                            person_id: r.try_get(7).ok().flatten(),
-                            resident_user_id: r.try_get(8).ok().flatten(),
-                        })
-                        .collect();
+                            &[&crate::db::parse_id_to_i64(unit_id).unwrap_or(0)],
+                        )
+                        .await;
+                    if let Some(rows) =
+                        crate::db::logged(rows_res, "home_resident_invitation_service")
+                    {
+                        return rows
+                            .into_iter()
+                            .map(|r| UnitMemberDto {
+                                resident_id: r.get::<_, i64>(0).to_string(),
+                                full_name: r.get(1),
+                                relationship: r.get(2),
+                                phone: r.get::<_, Option<String>>(3).unwrap_or_default(),
+                                email: r.get::<_, Option<String>>(4).unwrap_or_default(),
+                                is_owner: r.get(5),
+                                occupancy_id: r.try_get(6).ok().flatten(),
+                                person_id: r.try_get(7).ok().flatten(),
+                                resident_user_id: r.try_get(8).ok().flatten(),
+                            })
+                            .collect();
+                    }
                 }
             }
         }

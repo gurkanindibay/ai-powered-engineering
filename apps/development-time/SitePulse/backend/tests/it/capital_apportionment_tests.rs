@@ -208,7 +208,7 @@ async fn when_units_have_negative_land_share_then_apportionment_is_rejected() {
 #[ignore = "requires PostgreSQL"]
 async fn when_site_has_archived_unit_then_capital_accrual_excludes_it_and_shares_sum_to_budget() {
     let test_db = crate::test_db::create("cap_archived_unit").await;
-    let client = test_db.pool.get().await.expect("db connection");
+    let client = test_db.owner.get().await.expect("db connection");
 
     let site_row = client
         .query_one("SELECT id FROM sites WHERE slug = 'begonya-sitesi'", &[])

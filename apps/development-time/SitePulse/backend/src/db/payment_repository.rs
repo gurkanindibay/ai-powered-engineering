@@ -57,10 +57,11 @@ pub async fn save_payment_receipt(
     pool: &Pool,
     receipt: &PaymentReceipt,
 ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let site_id_num = require_id("entity", &receipt.site_id)?;
     let unit_id_num = require_id("entity", &receipt.unit_id)?;
     let breakdown_json_str = serde_json::to_string(&receipt.allocation_breakdown)?;
+    let client = super::tenant_guard::begin_tenant_tx(&mut conn, site_id_num).await?;
     let row = client
         .query_opt(
             r#"
@@ -118,6 +119,7 @@ pub async fn save_payment_receipt(
             .await?
             .get(0),
     };
+    client.commit().await?;
     info!(
         "Saved payment receipt {} (id: {}) to PostgreSQL",
         receipt.receipt_number, receipt_id
@@ -129,14 +131,16 @@ pub async fn get_next_receipt_sequence(
     pool: &Pool,
     site_id: &str,
 ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
     let site_id_num = require_id("entity", site_id)?;
+    let client = super::tenant_guard::begin_tenant_read(&mut conn, site_id_num).await?;
     let row = client
         .query_one(
             "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM payment_receipts WHERE site_id = $1 AND receipt_type = 'COLLECTION'",
             &[&site_id_num],
         )
         .await?;
+    client.commit().await?;
     let next_seq: i64 = row.get(0);
     Ok(next_seq)
 }
@@ -170,7 +174,13 @@ pub async fn claim_bank_webhook_transaction(
     transaction_id: &str,
     payload_hash: &str,
 ) -> DbResult<WebhookClaim> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
+    let client = if let Some(site) = scope.site_id {
+        super::tenant_guard::begin_tenant_tx(&mut conn, site).await?
+    } else {
+        // tenant-guard: platform — bank-level webhook claim without site_id.
+        super::tenant_guard::begin_platform_tx(&mut conn).await?
+    };
     let inserted = client
         .query_opt(
             r#"
@@ -183,7 +193,9 @@ pub async fn claim_bank_webhook_transaction(
         )
         .await?;
     if let Some(r) = inserted {
-        return Ok(WebhookClaim::Claimed(r.get(0)));
+        let id: i64 = r.get(0);
+        client.commit().await?;
+        return Ok(WebhookClaim::Claimed(id));
     }
     let existing = client
         .query_one(
@@ -194,6 +206,7 @@ pub async fn claim_bank_webhook_transaction(
             &[&scope.site_bank_account_id, &scope.site_id, &transaction_id],
         )
         .await?;
+    client.commit().await?;
     let stored_hash: Option<String> = existing.get(1);
     Ok(WebhookClaim::Duplicate {
         receipt_id: existing.get(0),
@@ -211,13 +224,16 @@ pub async fn attach_bank_webhook_receipt(
     claim_id: i64,
     receipt_id: i64,
 ) -> DbResult<()> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — webhook claim update keyed by claim_id.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_tx(&mut conn).await?;
     client
         .execute(
             "UPDATE processed_bank_webhooks SET receipt_id = $2 WHERE id = $1",
             &[&claim_id, &receipt_id],
         )
         .await?;
+    client.commit().await?;
     Ok(())
 }
 
@@ -225,20 +241,25 @@ pub async fn attach_bank_webhook_receipt(
 /// payment committed, so the bank's retry is applied instead of being ignored.
 /// (The payment itself is idempotent on its `BANK:` key.)
 pub async fn release_bank_webhook_transaction(pool: &Pool, claim_id: i64) -> DbResult<()> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — webhook claim release keyed by claim_id.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_tx(&mut conn).await?;
     client
         .execute(
             "DELETE FROM processed_bank_webhooks WHERE id = $1 AND receipt_id IS NULL",
             &[&claim_id],
         )
         .await?;
+    client.commit().await?;
     Ok(())
 }
 
 /// Resolves the receiving site and bank account of a destination IBAN: a site
 /// account's IBAN, or a unit's virtual IBAN (then the site's active account).
 pub async fn resolve_webhook_scope(pool: &Pool, destination_iban: &str) -> DbResult<WebhookScope> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — resolves receiving site from destination IBAN.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
     let row = client
         .query_opt(
             r#"
@@ -252,6 +273,7 @@ pub async fn resolve_webhook_scope(pool: &Pool, destination_iban: &str) -> DbRes
             &[&destination_iban],
         )
         .await?;
+    client.commit().await?;
     Ok(row
         .map(|r| WebhookScope {
             site_id: Some(r.get(0)),
@@ -261,13 +283,17 @@ pub async fn resolve_webhook_scope(pool: &Pool, destination_iban: &str) -> DbRes
 }
 
 pub async fn load_idempotency_keys(pool: &Pool) -> DbResult<Vec<(String, String, i64)>> {
-    let client = pool.get().await?;
-    Ok(client
+    // tenant-guard: platform — startup load of payment idempotency keys.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
+    let rows = client
         .query(
             "SELECT site_id, idempotency_key, receipt_id FROM payment_idempotency_keys",
             &[],
         )
-        .await?
+        .await?;
+    client.commit().await?;
+    Ok(rows
         .into_iter()
         .map(|r| (r.get::<_, i64>(0).to_string(), r.get(1), r.get(2)))
         .collect())
@@ -622,7 +648,9 @@ pub async fn get_payment_receipt_by_id(
     pool: &Pool,
     receipt_id: i64,
 ) -> DbResult<Option<PaymentReceipt>> {
-    let client = pool.get().await?;
+    // tenant-guard: platform — lookup by global receipt_id.
+    let mut conn = pool.get().await?;
+    let client = super::tenant_guard::begin_platform_read(&mut conn).await?;
     let row = client
         .query_opt(
             &format!(
@@ -632,6 +660,7 @@ pub async fn get_payment_receipt_by_id(
             &[&receipt_id],
         )
         .await?;
+    client.commit().await?;
     Ok(row.as_ref().map(receipt_from_row))
 }
 
@@ -641,7 +670,13 @@ pub async fn find_payment_receipt(
     site_id: i64,
     identifier: &str,
 ) -> DbResult<Option<PaymentReceipt>> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
+    let client = if site_id > 0 {
+        super::tenant_guard::begin_tenant_read(&mut conn, site_id).await?
+    } else {
+        // tenant-guard: platform — site_id 0 searches across all sites.
+        super::tenant_guard::begin_platform_read(&mut conn).await?
+    };
     let num: Option<i64> = identifier.parse().ok();
     let row = client
         .query_opt(
@@ -653,6 +688,7 @@ pub async fn find_payment_receipt(
             &[&site_id, &identifier, &num.unwrap_or(-1)],
         )
         .await?;
+    client.commit().await?;
     Ok(row.as_ref().map(receipt_from_row))
 }
 
@@ -844,6 +880,7 @@ pub async fn save_debt_aging_snapshot(
     let site = require_id("site", site_id)?;
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
     tx.execute(
         "DELETE FROM debt_aging_snapshots WHERE site_id = $1 AND as_of_date = $2",
         &[&site, &report.as_of_date],
@@ -913,12 +950,16 @@ pub async fn fetch_payment_entries_from_db(
         tx.commit().await?;
         rows
     } else {
-        client
+        // tenant-guard: platform — site_id None or "all" reads across all sites.
+        let tx = super::tenant_guard::begin_platform_read(&mut client).await?;
+        let rows = tx
             .query(
                 &format!("{} ORDER BY pe.payment_date ASC, pe.id ASC", SELECT),
                 &[],
             )
-            .await?
+            .await?;
+        tx.commit().await?;
+        rows
     };
 
     let mut entries = Vec::new();
@@ -1034,21 +1075,26 @@ pub async fn fetch_site_payments_from_db(
     pool: &Pool,
     site_id_opt: Option<&str>,
 ) -> DbResult<serde_json::Value> {
-    let client = pool.get().await?;
+    let mut conn = pool.get().await?;
+    let explicit_site = site_id_opt
+        .filter(|sid| *sid != "undefined" && !sid.is_empty())
+        .and_then(parse_id_to_i64)
+        .filter(|id| *id > 0);
+    let client = if let Some(s_num) = explicit_site {
+        super::tenant_guard::begin_tenant_read(&mut conn, s_num).await?
+    } else {
+        // tenant-guard: platform — fallback to first active site when site_id_opt is None.
+        super::tenant_guard::begin_platform_read(&mut conn).await?
+    };
 
     // 1. Resolve site
-    let site_row = if let Some(sid) = site_id_opt {
-        if sid != "undefined" && !sid.is_empty() {
-            let s_num = parse_id_to_i64(sid).unwrap_or(0);
-            client
-                .query_opt(
-                    "SELECT id, name, timezone FROM sites WHERE id = $1 AND deleted_at IS NULL",
-                    &[&s_num],
-                )
-                .await?
-        } else {
-            None
-        }
+    let site_row = if let Some(s_num) = explicit_site {
+        client
+            .query_opt(
+                "SELECT id, name, timezone FROM sites WHERE id = $1 AND deleted_at IS NULL",
+                &[&s_num],
+            )
+            .await?
     } else {
         None
     };
@@ -1065,6 +1111,7 @@ pub async fn fetch_site_payments_from_db(
         };
 
     let Some(srow) = site_row else {
+        client.commit().await?;
         return Ok(serde_json::json!({
             "site_id": "",
             "site_name": "",
@@ -1250,6 +1297,7 @@ pub async fn fetch_site_payments_from_db(
             &[&site_id_num],
         )
         .await?;
+    client.commit().await?;
 
     for row in pe_rows {
         let pe_id: String = row.get(0);

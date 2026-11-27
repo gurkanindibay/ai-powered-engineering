@@ -16,3 +16,10 @@ Feature: Unified payment inflow stream and multi-channel ledger
     Given the unit has overdue dues in several delay ranges
     When the site manager opens the debt aging report
     Then the aging buckets add up to the total overdue sum
+
+  @SC-09-01-03 @GUI-09-08 @layer:gui @edge @role_manager @linked
+  Scenario: Opening payment tracking requests the payment stream once
+    Given the site manager is in the dues management view
+    When the site manager opens the payment tracking module
+    Then exactly one payment stream request is sent
+    And the stream shows the data of that request, not a superseded response

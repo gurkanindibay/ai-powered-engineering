@@ -43,7 +43,7 @@ def expected_suites(e2e_enabled: bool | None = None) -> list[dict[str, object]]:
 def expected_gates(e2e_enabled: bool | None = None) -> dict[str, list[str]]:
     """Mirror CI's group partition so absent gate artifacts are visible in reports."""
     gates = {
-        "lint": ["harness-selftest", "persistence-lint", "rust-standards-lint", "test-quality-lint", "tenant-lint", "lock-lint",
+        "lint": ["harness-selftest", "persistence-lint", "rust-standards-lint", "test-quality-lint", "tenant-lint", "person-scope-lint", "lock-lint",
                  "testid-lint", "feature-traceability", "ui-style-lint", "flutter-reuse", "logging-standards-lint", "security-lint"],
         "rust": ["rust-build", "rust-clippy", "rust-test", "schema-integrity", "rust-db-test", "api-system"],
         "flutter": ["money-fixtures", "flutter-analyze", "flutter-test"],

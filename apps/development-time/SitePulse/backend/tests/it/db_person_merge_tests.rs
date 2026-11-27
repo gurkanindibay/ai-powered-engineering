@@ -20,14 +20,20 @@ use sitepulse_backend::{auth, state::AppState};
 struct TestDb {
     name: String,
     admin: Pool,
+    owner: Pool,
     pool: Pool,
     site: i64,
 }
 
 impl TestDb {
     async fn create(tag: &str) -> Self {
-        let crate::test_db::TestDatabase { name, admin, pool } = crate::test_db::create(tag).await;
-        let site: i64 = pool
+        let crate::test_db::TestDatabase {
+            name,
+            admin,
+            owner,
+            pool,
+        } = crate::test_db::create(tag).await;
+        let site: i64 = owner
             .get()
             .await
             .expect("connection")
@@ -38,6 +44,7 @@ impl TestDb {
         Self {
             name,
             admin,
+            owner,
             pool,
             site,
         }
@@ -56,17 +63,17 @@ impl TestDb {
     }
 
     async fn exec(&self, sql: &str) {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.batch_execute(sql).await.expect(sql);
     }
 
     async fn int(&self, sql: &str) -> i64 {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client.query_one(sql, &[]).await.expect(sql).get(0)
     }
 
     async fn person(&self, name: &str, email: Option<&str>) -> i64 {
-        let client = self.pool.get().await.expect("connection");
+        let client = self.owner.get().await.expect("connection");
         client
             .query_one(
                 "INSERT INTO persons (full_name, email, person_type, site_id) \

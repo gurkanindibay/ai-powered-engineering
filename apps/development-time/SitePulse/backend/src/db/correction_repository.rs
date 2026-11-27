@@ -47,8 +47,10 @@ pub async fn reject_accrual_correction(
     pool: &Pool,
     correction: &AccrualCorrection,
 ) -> DbResult<bool> {
-    let client = pool.get().await?;
-    let changed = client
+    let site = require_id("site", &correction.site_id)?;
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_tx(&mut client, site).await?;
+    let changed = tx
         .execute(
             "UPDATE accrual_corrections
              SET status = 'REJECTED', decided_by = $2, decided_at = $3, decision_note = $4
@@ -61,6 +63,7 @@ pub async fn reject_accrual_correction(
             ],
         )
         .await?;
+    tx.commit().await?;
     Ok(changed == 1)
 }
 

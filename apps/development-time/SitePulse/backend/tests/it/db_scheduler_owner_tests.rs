@@ -9,9 +9,13 @@ use sitepulse_backend::{scheduler::run_accrual_with_report, state::AppState};
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 // covers: SC-13-01-08
 async fn scheduled_accrual_reads_unit_ownership_from_the_database() {
-    let crate::test_db::TestDatabase { name, admin, pool } =
-        crate::test_db::create("scheduler_owner").await;
-    let client = pool.get().await.expect("test connection");
+    let crate::test_db::TestDatabase {
+        name,
+        admin,
+        owner,
+        pool,
+    } = crate::test_db::create("scheduler_owner").await;
+    let client = owner.get().await.expect("test connection");
     let rows = client
         .query(
             "SELECT u.id, u.site_id FROM units u JOIN blocks b ON b.id = u.block_id
