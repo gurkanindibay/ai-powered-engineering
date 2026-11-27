@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 
 from .contracts import canonical, digest, role_artifacts
-from .routing import TIERS, HarnessError, validate_capabilities
+from .routing import TIERS, HarnessError, canonical_provider, earliest_iso_timestamp, get_provider_health_status, validate_capabilities
 
 DEFAULT_REGISTRY = Path(__file__).resolve().parents[2] / "config" / "engineering-harness" / "t3-registry.json"
 RESULT_BEGIN = "<<<HARNESS_RESULT"
@@ -49,10 +49,10 @@ def validate_registry(data: dict) -> list[dict]:
     return targets
 
 
-def capabilities_from_catalog(registry: dict, catalog: dict) -> dict:
-    """Intersect the operator registry with a live ``orchestrator_capabilities`` result.
+def capabilities_from_catalog(registry: dict, catalog: dict, health: dict | None = None) -> dict:
+    """Intersect the operator registry with a live ``orchestrator_capabilities`` result and Track B ``provider_health``.
 
-    A target survives only if its provider can run child tasks and lists the model.
+    A target survives only if its provider can run child tasks, lists the model, and is not EXHAUSTED.
     Option values the live catalog does not offer are dropped; a tier whose default
     options are no longer offered is dropped rather than silently re-tuned.
     """
@@ -62,11 +62,19 @@ def capabilities_from_catalog(registry: dict, catalog: dict) -> dict:
     providers = {p.get("providerInstanceId"): p for p in catalog["providers"]
                  if isinstance(p, dict) and p.get("canRunChildTask") is True}
     live = []
+    exhausted_providers: list[str] = []
+    exhausted_resets: list[str] = []
     for target in targets:
         provider = providers.get(target["provider"])
         models = provider.get("models", []) if provider else []
         model = next((m for m in models if isinstance(m, dict) and m.get("id") == target["model"]), None)
         if model is None:
+            continue
+        p_status, reset_at = get_provider_health_status(target, health)
+        if p_status == "EXHAUSTED":
+            exhausted_providers.append(canonical_provider(target))
+            if reset_at:
+                exhausted_resets.append(reset_at)
             continue
         offered = {o.get("id"): o.get("values", []) for o in model.get("options", []) if isinstance(o, dict)}
         options = {k: [v for v in values if v in offered.get(k, [])] for k, values in target.get("options", {}).items()}
@@ -76,7 +84,17 @@ def capabilities_from_catalog(registry: dict, catalog: dict) -> dict:
         tiers = [t for t in target["tiers"] if t not in target.get("tier_options", {}) or t in tier_options]
         if tiers:
             live.append({**target, "tiers": tiers, "options": options, "tier_options": tier_options})
-    return {"schema_version": 1, "targets": live, "catalog_hash": digest(catalog)}
+    out: dict = {
+        "schema_version": 1,
+        "targets": live,
+        "catalog_hash": digest(catalog),
+        "handover_required": bool(exhausted_providers) and len(live) == 0,
+    }
+    if exhausted_providers:
+        out["exhausted_providers"] = sorted(set(exhausted_providers))
+    if exhausted_resets:
+        out["resume_after"] = earliest_iso_timestamp(exhausted_resets)
+    return out
 
 
 def with_tier_options(target: dict, tier: str) -> dict:

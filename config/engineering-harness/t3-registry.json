@@ -1,9 +1,12 @@
 {
   "schema_version": 1,
-  "_comment": "T3 child-agent routing. provider = T3 providerInstanceId. Prices are relative cost units for budget ordering, not billed currency; replace them and benchmark_id after a held-out pilot. Lowest input+output price wins among eligible targets.",
+  "_comment": "Unified provider and T3 child-agent routing registry. canonical_provider maps T3 providerInstanceId to Track B provider health keys. priority=1 is subscription pools (Claude, Codex, Gemini); priority=2 is budget-capped DeepSeek overflow via Copilot CLI. Prices are relative cost units for budget ordering, not billed currency; replace them and benchmark_id after a held-out pilot.",
   "targets": [
     {
       "provider": "claudeAgent",
+      "canonical_provider": "claude",
+      "priority": 1,
+      "transport": "t3",
       "model": "claude-haiku-5-5",
       "roles": [
         "coordinator",
@@ -32,11 +35,14 @@
       "input_per_million": "1",
       "output_per_million": "5",
       "max_tokens": 200000,
-      "price_date": "2026-11-09",
+      "price_date": "2026-11-27",
       "benchmark_id": "t3-default-unevaluated-2026-11"
     },
     {
       "provider": "claudeAgent",
+      "canonical_provider": "claude",
+      "priority": 1,
+      "transport": "t3",
       "model": "claude-sonnet-5-5",
       "roles": [
         "coordinator",
@@ -74,11 +80,14 @@
       "input_per_million": "3",
       "output_per_million": "15",
       "max_tokens": 200000,
-      "price_date": "2026-11-09",
+      "price_date": "2026-11-27",
       "benchmark_id": "t3-default-unevaluated-2026-11"
     },
     {
       "provider": "claudeAgent",
+      "canonical_provider": "claude",
+      "priority": 1,
+      "transport": "t3",
       "model": "claude-opus-5-5",
       "roles": [
         "coordinator",
@@ -112,11 +121,14 @@
       "input_per_million": "5",
       "output_per_million": "25",
       "max_tokens": 200000,
-      "price_date": "2026-11-09",
+      "price_date": "2026-11-27",
       "benchmark_id": "t3-default-unevaluated-2026-11"
     },
     {
       "provider": "codex",
+      "canonical_provider": "codex",
+      "priority": 1,
+      "transport": "t3",
       "model": "gpt-6.1-sol",
       "roles": [
         "architect",
@@ -150,8 +162,215 @@
       "input_per_million": "5",
       "output_per_million": "30",
       "max_tokens": 200000,
-      "price_date": "2026-11-09",
+      "price_date": "2026-11-27",
       "benchmark_id": "t3-default-unevaluated-2026-11"
+    },
+    {
+      "provider": "codex",
+      "canonical_provider": "codex",
+      "priority": 1,
+      "transport": "t3",
+      "model": "gpt-6.2-sol",
+      "roles": [
+        "coordinator",
+        "product_owner",
+        "business_analyst",
+        "architect",
+        "backend_developer",
+        "frontend_developer",
+        "developer",
+        "tester"
+      ],
+      "tiers": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "options": {
+        "reasoningEffort": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "tier_options": {
+        "low": {
+          "reasoningEffort": "medium"
+        },
+        "medium": {
+          "reasoningEffort": "high"
+        },
+        "high": {
+          "reasoningEffort": "high"
+        }
+      },
+      "input_per_million": "4",
+      "output_per_million": "20",
+      "max_tokens": 200000,
+      "price_date": "2026-11-27",
+      "benchmark_id": "codex-sol-2026-11"
+    },
+    {
+      "provider": "codex",
+      "canonical_provider": "codex",
+      "priority": 1,
+      "transport": "t3",
+      "model": "gpt-6.2-astra",
+      "roles": [
+        "coordinator",
+        "product_owner",
+        "business_analyst",
+        "architect",
+        "backend_developer",
+        "frontend_developer",
+        "developer",
+        "tester"
+      ],
+      "tiers": [
+        "high",
+        "critical"
+      ],
+      "options": {
+        "reasoningEffort": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "tier_options": {
+        "high": {
+          "reasoningEffort": "high"
+        },
+        "critical": {
+          "reasoningEffort": "high"
+        }
+      },
+      "input_per_million": "10",
+      "output_per_million": "30",
+      "max_tokens": 200000,
+      "price_date": "2026-11-27",
+      "benchmark_id": "codex-astra-2026-11"
+    },
+    {
+      "provider": "gemini",
+      "canonical_provider": "gemini",
+      "priority": 1,
+      "transport": "cli",
+      "model": "gemini-3.8-flash",
+      "roles": [
+        "coordinator",
+        "product_owner",
+        "business_analyst",
+        "backend_developer",
+        "frontend_developer",
+        "developer",
+        "tester"
+      ],
+      "tiers": [
+        "low",
+        "medium"
+      ],
+      "options": {
+        "effort": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "tier_options": {
+        "low": {
+          "effort": "medium"
+        },
+        "medium": {
+          "effort": "high"
+        }
+      },
+      "input_per_million": "2",
+      "output_per_million": "8",
+      "max_tokens": 200000,
+      "price_date": "2026-11-27",
+      "benchmark_id": "gemini-flash-2026-11"
+    },
+    {
+      "provider": "gemini",
+      "canonical_provider": "gemini",
+      "priority": 1,
+      "transport": "cli",
+      "model": "gemini-2.5-pro",
+      "roles": [
+        "coordinator",
+        "product_owner",
+        "business_analyst",
+        "architect",
+        "backend_developer",
+        "frontend_developer",
+        "developer",
+        "tester"
+      ],
+      "tiers": [
+        "medium",
+        "high",
+        "critical"
+      ],
+      "options": {
+        "effort": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "tier_options": {
+        "medium": {
+          "effort": "high"
+        },
+        "high": {
+          "effort": "high"
+        },
+        "critical": {
+          "effort": "high"
+        }
+      },
+      "input_per_million": "4",
+      "output_per_million": "16",
+      "max_tokens": 200000,
+      "price_date": "2026-11-27",
+      "benchmark_id": "gemini-pro-2026-11"
+    },
+    {
+      "provider": "copilot",
+      "canonical_provider": "copilot",
+      "priority": 2,
+      "transport": "copilot_cli",
+      "model": "deepseek-chat",
+      "roles": [
+        "backend_developer",
+        "frontend_developer",
+        "developer",
+        "tester"
+      ],
+      "tiers": [
+        "low",
+        "medium"
+      ],
+      "options": {
+        "effort": [
+          "medium",
+          "high"
+        ]
+      },
+      "tier_options": {
+        "low": {
+          "effort": "medium"
+        },
+        "medium": {
+          "effort": "high"
+        }
+      },
+      "input_per_million": "0.14",
+      "output_per_million": "0.28",
+      "max_tokens": 128000,
+      "price_date": "2026-11-27",
+      "benchmark_id": "copilot-deepseek-overflow-2026-11"
     }
   ]
 }

@@ -54,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("run_id")
     p.add_argument("--catalog", type=Path, required=True, help="Fresh T3 orchestrator_capabilities result")
     p.add_argument("--registry", type=Path, default=t3.DEFAULT_REGISTRY)
+    p.add_argument("--health", type=Path, default=None, help="Optional Track B provider_health JSON (from token_tracker.py health --json)")
     p = sub.add_parser("t3-submit", help="Record a T3 child's final message for a claimed attempt")
     p.add_argument("run_id")
     p.add_argument("attempt_id")
@@ -122,8 +123,9 @@ def main(argv=None) -> int:
             elif args.command == "captures":
                 value = engine.captures(args.run_id, args.output)
             elif args.command == "t3-dispatch":
-                capabilities = t3.capabilities_from_catalog(read_json(args.registry), read_json(args.catalog))
-                value = engine.t3_dispatch(args.run_id, capabilities)
+                health_data = read_json(args.health) if args.health else None
+                capabilities = t3.capabilities_from_catalog(read_json(args.registry), read_json(args.catalog), health=health_data)
+                value = engine.t3_dispatch(args.run_id, capabilities, health=health_data)
             elif args.command == "t3-submit":
                 output = sys.stdin.read() if str(args.output) == "-" else args.output.read_text()
                 value = {"run_id": args.run_id, "status": engine.t3_submit(args.run_id, args.attempt_id, output)}

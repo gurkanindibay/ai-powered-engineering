@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 import re
 from typing import Any
@@ -26,8 +26,70 @@ class HarnessError(ValueError):
     """An actionable configuration, policy or lifecycle error."""
 
 
+class QuotaParkedError(HarnessError):
+    """All qualified healthy providers are exhausted; run must park awaiting quota reset."""
+    def __init__(self, message: str, resume_after: str | None = None, exhausted_providers: list[str] | None = None):
+        super().__init__(message)
+        self.status = "PARKED_AWAITING_QUOTA"
+        self.resume_after = resume_after
+        self.exhausted_providers = exhausted_providers or []
+
+
 class BusyError(HarnessError):
     """A different controller owns this runnable unit of work."""
+
+
+CANONICAL_PROVIDER_MAP = {
+    "claudeagent": "claude",
+    "claude": "claude",
+    "codex": "codex",
+    "gemini": "gemini",
+    "copilot": "copilot",
+}
+
+
+def canonical_provider(target: dict) -> str:
+    """Resolve T3/CLI target provider to canonical Track B provider key."""
+    explicit = target.get("canonical_provider")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip().lower()
+    raw = str(target.get("provider", "")).strip().lower()
+    if raw in CANONICAL_PROVIDER_MAP:
+        return CANONICAL_PROVIDER_MAP[raw]
+    if raw.startswith("claude"):
+        return "claude"
+    return raw
+
+
+def get_provider_health_status(target: dict, health: dict | None) -> tuple[str, str | None]:
+    """Return (status, reset_at) for target from Track B provider_health payload."""
+    if not health or not isinstance(health, dict):
+        return ("HEALTHY", None)
+    providers = health.get("providers")
+    if not isinstance(providers, dict):
+        return ("HEALTHY", None)
+    canon = canonical_provider(target)
+    info = providers.get(canon)
+    if not isinstance(info, dict):
+        return ("HEALTHY", None)
+    return (str(info.get("status", "HEALTHY")).upper(), info.get("reset_at"))
+
+
+def earliest_iso_timestamp(timestamps: list[str]) -> str | None:
+    """Return the earliest ISO-8601 timestamp string, parsing offsets properly."""
+    if not timestamps:
+        return None
+    def _parse(ts: str) -> tuple[int, datetime | str]:
+        try:
+            dt = datetime.fromisoformat(ts.strip().replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return (0, dt)
+        except Exception:
+            return (1, ts)
+    return min(timestamps, key=_parse)
 
 
 def money(value: Any) -> Decimal:
@@ -121,12 +183,20 @@ def validate_capabilities(data: dict) -> list[dict]:
         if not isinstance(target.get("options", {}), dict) or any(not isinstance(v, list) or not v for v in target.get("options", {}).values()):
             raise HarnessError("Supported options must map names to nonempty allowed-value lists")
         positive_int(target.get("max_tokens"), "max_tokens")
+        if "priority" in target:
+            positive_int(target["priority"], "priority")
         money(target.get("input_per_million"))
         money(target.get("output_per_million"))
     return data["targets"]
 
 
-def route(capabilities: dict, role: str, tier: str, preference: dict | None = None) -> dict:
+def route(capabilities: dict, role: str, tier: str, preference: dict | None = None, *, health: dict | None = None) -> dict:
+    """Select the lowest-cost qualified target matching role, tier, and Track B provider health.
+
+    Priority-1 subscription pools (even if THROTTLED) are always exhausted before
+    spilling over to Priority-2 paid/overflow pools (even if HEALTHY). Within the
+    active priority tier, HEALTHY targets strictly beat THROTTLED ones.
+    """
     if role not in ROLES or tier not in TIERS:
         raise HarnessError("Unknown routing role or tier")
     preference = preference or {}
@@ -141,21 +211,69 @@ def route(capabilities: dict, role: str, tier: str, preference: dict | None = No
     candidates = [t for t in candidates if all(k in t.get("options", {}) and v in t["options"][k] for k, v in options.items())]
     if not candidates:
         raise HarnessError(f"No eligible available target for {role}/{tier}; requested target/options will not be substituted")
-    selected = min(candidates, key=lambda t: (money(t["input_per_million"]) + money(t["output_per_million"]), t["provider"], t["model"]))
+
+    healthy_or_throttled: list[tuple[dict, str]] = []
+    exhausted_resets: list[str] = []
+    exhausted_providers: list[str] = []
+    for t in candidates:
+        p_status, reset_at = get_provider_health_status(t, health)
+        if p_status == "EXHAUSTED":
+            exhausted_providers.append(canonical_provider(t))
+            if reset_at:
+                exhausted_resets.append(reset_at)
+        else:
+            healthy_or_throttled.append((t, p_status))
+
+    if not healthy_or_throttled:
+        resume_after = earliest_iso_timestamp(exhausted_resets)
+        raise QuotaParkedError(
+            f"PARKED_AWAITING_QUOTA: All qualified targets for {role}/{tier} are exhausted ({sorted(set(exhausted_providers))})",
+            resume_after=resume_after,
+            exhausted_providers=sorted(set(exhausted_providers)),
+        )
+
+    # Priority 1: weekly-limited subscription pools first; Priority 2: budget-capped DeepSeek overflow only when P1 exhausted
+    p1 = [pair for pair in healthy_or_throttled if int(pair[0].get("priority", 1)) == 1]
+    p2 = [pair for pair in healthy_or_throttled if int(pair[0].get("priority", 1)) > 1]
+    pool = p1 if p1 else p2
+
+    selected, _ = min(
+        pool,
+        key=lambda pair: (
+            0 if pair[1] == "HEALTHY" else 1,
+            int(pair[0].get("priority", 1)),
+            money(pair[0]["input_per_million"]) + money(pair[0]["output_per_million"]),
+            pair[0]["provider"],
+            pair[0]["model"],
+        ),
+    )
     return {**selected, "selected_options": options}
 
 
 def plan(task: str, *, capabilities: dict | None = None, roles: list[str] | None = None,
-         scope: str = "fullstack", preferences: dict | None = None, **risk: Any) -> dict:
+         scope: str = "fullstack", preferences: dict | None = None, health: dict | None = None, **risk: Any) -> dict:
     assessment = assess(task, **risk)
     stages = []
     previous = []
-    for index, role in enumerate(select_roles(assessment.tier, roles, scope), 1):
-        task_id = f"stage-{index:02d}"
-        target = route(capabilities, role, assessment.tier, (preferences or {}).get(role)) if capabilities is not None else None
-        stages.append({"id": task_id, "role": role, "depends_on": previous,
-                       "instruction": PROMPTS[role], "target": target})
-        previous = [task_id]
+    try:
+        for index, role in enumerate(select_roles(assessment.tier, roles, scope), 1):
+            task_id = f"stage-{index:02d}"
+            target = route(capabilities, role, assessment.tier, (preferences or {}).get(role), health=health) if capabilities is not None else None
+            stages.append({"id": task_id, "role": role, "depends_on": previous,
+                           "instruction": PROMPTS[role], "target": target})
+            previous = [task_id]
+    except QuotaParkedError as exc:
+        return {
+            "schema_version": 1,
+            "task": task.strip(),
+            "complexity": assessment.tier,
+            "assessment": asdict(assessment),
+            "stages": stages,
+            "execution_ready": False,
+            "status": "PARKED_AWAITING_QUOTA",
+            "resume_after": exc.resume_after,
+            "exhausted_providers": exc.exhausted_providers,
+        }
     return {"schema_version": 1, "task": task.strip(), "complexity": assessment.tier,
             "assessment": asdict(assessment), "stages": stages,
             "execution_ready": capabilities is not None}
