@@ -98,6 +98,36 @@ def _optional_int(value: Any, name: str, *, positive: bool = False) -> int | Non
     return value
 
 
+def process_start_ticks(pid: int) -> int | None:
+    """Return process start time in clock ticks from /proc/<pid>/stat (field 22), or None."""
+    if pid <= 1:
+        return None
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    rparen = raw.rfind(")")
+    if rparen == -1:
+        return None
+    fields = raw[rparen + 2 :].split()
+    if len(fields) <= 19:
+        return None
+    try:
+        return int(fields[19])
+    except ValueError:
+        return None
+
+
+def process_cwd(pid: int) -> Path | None:
+    """Return the live working directory of pid from /proc/<pid>/cwd, or None."""
+    if pid <= 1:
+        return None
+    try:
+        return Path(os.readlink(f"/proc/{pid}/cwd")).resolve()
+    except OSError:
+        return None
+
+
 @dataclass(frozen=True)
 class Lease:
     """One worker's heartbeat. ``ttl_seconds`` is the liveness window."""
@@ -116,6 +146,7 @@ class Lease:
     updated_at: str = field(default_factory=lambda: isoformat(utc_now()))
     ttl_seconds: int = DEFAULT_TTL_SECONDS
     pid: int | None = None
+    pid_start_ticks: int | None = None
     schema_version: int = SCHEMA_VERSION
 
     def validate(self) -> "Lease":
@@ -128,7 +159,7 @@ class Lease:
         if self.ttl_seconds <= 0:
             raise LeaseError("ttl_seconds must be a positive integer")
         parse_timestamp(self.updated_at)
-        for name in ("issue", "pr", "pid"):
+        for name in ("issue", "pr", "pid", "pid_start_ticks"):
             _optional_int(getattr(self, name), name)
         # Percent counters are stored as normalised decimal strings, never floats.
         return Lease(**{**asdict(self), "harness": str(self.harness).strip(),
@@ -218,7 +249,10 @@ class LeaseStore:
 
     def heartbeat(self, lease: Lease) -> Path:
         """Refresh ``updated_at`` (and the given counters) of a lease."""
-        return self.write(Lease(**{**asdict(lease), "updated_at": isoformat(self._now())}))
+        ticks = lease.pid_start_ticks
+        if lease.pid is not None and ticks is None:
+            ticks = process_start_ticks(lease.pid)
+        return self.write(Lease(**{**asdict(lease), "pid_start_ticks": ticks, "updated_at": isoformat(self._now())}))
 
     def read(self, path: Path) -> Lease:
         try:

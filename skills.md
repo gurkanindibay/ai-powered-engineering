@@ -731,3 +731,38 @@ python3 scripts/token_tracker.py report --by provider --since 7d
 python3 scripts/token_tracker.py report --by issue --since 7d --json
 ```
 
+---
+
+## 8. Unified Local Control Console & Desktop MCP Adapter (`harness_console.py` + `harness_mcp.py`)
+
+- **Executable Scripts:** [scripts/harness_console.py](file:///scripts/harness_console.py) (Web + CLI) and [scripts/harness_mcp.py](file:///scripts/harness_mcp.py) (stdio JSON-RPC 2.0 MCP server)
+- **Database Queue:** `.agents/local/harness_console.sqlite3` (SQLite WAL mode `0600`, append-only `operator_commands` with SHA-256 hash chain and UPDATE/DELETE triggers)
+- **Purpose:** Loopback-only (`127.0.0.1`) live control plane and synchronized CLI/MCP surface for provider health & DeepSeek USD cap visibility, active leases & T3/durable runs (reserved vs. correlated tokens), SSE log/event streaming (`tail`), correlated timelines, IDE pickup briefs, and anytime operator interventions (`dispatch`, `pause`, `resume`, `kill`, `steer`, `handover`, `pin`, `unpin`, `takeover`, `set-budget`, `mark-status`, `set-gate`, `approve`, `pickups`) consumed deterministically by `harness_coordinator.py`.
+- **MCP Tools:** `dispatch_task`, `steer_task`, `handover_task`, `pause_task`, `kill_task`, `get_status`, `list_pickups`.
+- **Privacy & Security:** Strictly loopback-only with Host/Origin/Referer/Sec-Fetch-Site/JSON Content-Type CSRF protection; never exposes provider/GitHub App keys or raw Track B transcript message content.
+
+### Quick Usage Examples:
+```bash
+# Start loopback web dashboard (http://127.0.0.1:9096)
+python3 scripts/harness_console.py serve
+
+# Inspect unified provider health, active board, and controls
+python3 scripts/harness_console.py status --json
+
+# Stream redacted operational logs and correlated timeline
+python3 scripts/harness_console.py tail --issue 550 --lines 50
+python3 scripts/harness_console.py timeline --issue 550 --json
+
+# Operator interventions
+python3 scripts/harness_console.py pause --issue 550 --json
+python3 scripts/harness_console.py steer --issue 550 --note "Keep Decimal precision" --json
+python3 scripts/harness_console.py handover --issue 550 --to codex --json
+python3 scripts/harness_console.py set-budget --provider copilot-deepseek --usd 30.00 --json
+python3 scripts/harness_console.py pickups --json
+
+# Run stdio MCP adapter for Desktop/IDE clients
+python3 scripts/harness_mcp.py --list-tools --json
+python3 scripts/harness_mcp.py
+```
+
+
