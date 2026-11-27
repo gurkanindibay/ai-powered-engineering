@@ -6,6 +6,9 @@ only about one load in 70, so a single green E2E run proves little. This tool lo
 many times, in parallel, and counts CanvasKit errors, dead renderers and failed loads. No
 backend or database is needed: the sign-in page is enough.
 
+Run it when Playwright is upgraded, and when the Flutter SDK moves (CI and local builds ship
+different CanvasKit wasm): either can change how the launch workarounds behave.
+
 Build the bundle first, then run in the Playwright container (works on any Linux host):
 
     flutter build web --dart-define=E2E=true --output /tmp/sitepulse-web

@@ -652,7 +652,7 @@ pm_workbench.py down
 
 ## 5b-8. WebKit Load Soak (`webkit_load_soak.py`)
 
-Counts rare WebKit crashes (CanvasKit "Out of bounds memory access", dead renderers) over hundreds of page loads. No backend needed. Use it when upgrading Playwright to see whether the launch workarounds in `e2e/conftest.py` are still needed (issue #527).
+Counts rare WebKit crashes (CanvasKit "Out of bounds memory access", dead renderers) over hundreds of page loads. No backend needed. Use it when upgrading Playwright, or the Flutter SDK that ships CanvasKit, to see whether the launch workarounds in `e2e/conftest.py` are still needed (issue #527).
 
 ```bash
 python3 apps/development-time/SitePulse/scripts/webkit_load_soak.py --web <built-web-dir> --docker --loads 800

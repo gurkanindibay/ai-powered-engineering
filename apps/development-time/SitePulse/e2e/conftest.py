@@ -107,7 +107,7 @@ def fresh_data(stack):
 # a paragraph (the screen then stays blank), or a dead renderer process (issue #527). Playwright
 # 1.55.0 (WebKit 26.0) failed about 1 load in 70; with concurrent JIT off, none did. All JIT
 # tiers stay on, so CanvasKit keeps its speed. Re-check with scripts/webkit_load_soak.py when
-# Playwright is upgraded.
+# Playwright or the Flutter SDK (which ships the CanvasKit wasm) is upgraded.
 WEBKIT_LAUNCH_ENV = {
     "WEBKIT_SKIA_ENABLE_CPU_RENDERING": "1",
     "JSC_useConcurrentJIT": "0",
