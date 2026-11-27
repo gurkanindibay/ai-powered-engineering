@@ -363,18 +363,55 @@ flowchart TB
 
 ---
 
-## 6. Phased Implementation Roadmap
+## 6. Unified Control Surface: Live Observability & Anytime Operator Intervention
 
-| Phase | Track | Deliverables | Verification |
-|---|---|---|---|
-| **Phase 1: Standalone Token Tracker** | Track B | `scripts/token_tracker.py` + SQLite ledger + `claude_collector`, `codex_collector`, `gemini_collector`, `copilot_collector`, `harness_collector` + `config/provider-quotas.json` (pricing & soft/hard caps). | Unit tests with synthetic JSONL fixtures for all 4 providers; verify idempotent re-ingestion & `Decimal` arithmetic. |
-| **Phase 2: Unified Registry & Token-Aware Routing** | Track A | Expand `config/engineering-harness/t3-registry.json` (or new `provider-registry.json`) to include Gemini & Copilot CLI; wire `provider_health` into `routing.py` with strict risk-floor preservation and `PARKED_AWAITING_QUOTA` state. | Extend `tests/engineering_harness` + `routing-cases.json` with quota-exhausted and risk-floor-no-downgrade scenarios. |
-| **Phase 3: Handover Protocol & Atomic Claim Transfer** | Track A | `scripts/handover.py` (envelope capture/validate/render, WIP commit helper, 64 KiB cap) + `issue_claim.py transfer` + `handover:*` GitHub labels. | End-to-end test transferring a mock issue/PR between two harness identities with clean and dirty worktrees. |
-| **Phase 4: Reviewer-Coordinated Auto-Handover** | Track A | Extend `pr_review_watch.py` (or add `scripts/harness_coordinator.py`) with 0-token handover dispatch loop + Hybrid launchers (auto-spawn Claude/Codex/Gemini/Copilot CLI + IDE pickup queue) + Reviewer LLM escalation trigger for thrash/ambiguous handovers. | Dry-run simulation with synthetic 429s + live pilot on a non-critical issue. |
+**Non-Negotiable Requirement:** Full visibility, live observability, and the ability to manage or intervene **at any moment** are first-class requirements—never an afterthought. No agent runs as an opaque black box, and an operator command from the Control Console **always preempts** automated Coordinator decisions (matching rule 15: *"the user wins"*).
+
+Both tracks converge into **one local Control Surface** (`scripts/harness_console.py`) backed by the same SQLite WAL state (`.agents/local/token_ledger.sqlite3`, `.agents/local/agent-names.json`, and coordinator state), following the repository's existing loopback web workbench pattern (`scripts/pm_workbench.py`).
+
+### 6.1 Live Visibility & Observability
+
+1. **Provider Health & Quota Strip**: Real-time `HEALTHY / THROTTLED / EXHAUSTED` status, weekly rolling window % and reset countdown for **Claude, Codex, and Gemini**, plus cumulative `Decimal` USD spend vs. budget cap for **DeepSeek on Copilot CLI**.
+2. **Active Work & Handover Board**: Every claimed issue/PR, active agent name & provider, model/effort tier, branch/worktree path, live context-window fill %, CI check status, review round state, handover count, and heartbeat age.
+3. **Real-Time Streaming Output**: Live log/transcript stream (SSE in the web console; `harness_console.py tail <issue|run>` in CLI) for every running CLI worker so you can watch what an agent is doing in real time without switching terminals.
+4. **Correlated Timeline & Cost Attribution**: End-to-end chronological trace per issue/PR linking commits, handover envelopes (full inspectable JSON + diff stat), CI runs, review verdicts, and per-provider token/USD burn.
+
+### 6.2 Anytime Intervention & Management Controls
+
+Available identically via the **Local Web Dashboard** (`python3 scripts/harness_console.py serve` on `127.0.0.1`) and the **Unified CLI** (`python3 scripts/harness_console.py <command> [--json]`):
+
+| Intervention | Action | Safety Guarantee |
+|---|---|---|
+| **Global / Task / Provider Pause** | `pause --all \| --issue N \| --provider P` | Freezes new dispatches immediately; active workers checkpoint at the next safe boundary. |
+| **Instant Stop / Kill** | `kill --issue N` | Immediately terminates a runaway/looping worker (`cancel` / process kill) and snapshots dirty edits into a `wip/interrupted-<ts>` commit or patch—never loses work. |
+| **Soft Steering (Mid-Run Note)** | `steer --issue N --note "..."` | Injects operator instructions into the active session's next checkpoint or handover envelope without discarding progress. |
+| **Force Handover / Provider Pin** | `handover --issue N --to <provider>` / `pin` | Overrides automatic routing immediately (e.g., force a switch to Codex, Gemini, or DeepSeek-on-Copilot CLI). |
+| **Manual Takeover** | `takeover --issue N` | Pauses automation, releases the agent claim cleanly, and prints the exact worktree path & branch so you can take over yourself. |
+| **Budget & Quota Override** | `set-budget --provider copilot-deepseek --usd 25.00` / `mark-status` | Adjust DeepSeek USD ceiling or manually flip a provider's `HEALTHY`/`EXHAUSTED` state on the fly. |
+| **Optional Approval Gates** | `set-gate --tier critical --require-approval` | Require explicit one-click confirmation before handovers, DeepSeek overflow spend, or auto-merge on sensitive tasks. |
+| **IDE Pickup Queue** | `pickups` / one-click copy in UI | Copy a ready-to-paste handover brief for interactive IDE sessions (e.g., Antigravity). |
+
+### 6.3 Security & Integrity Boundaries
+
+- Binds strictly to `127.0.0.1` (loopback only) with origin/CSRF protection (mirroring `pm_workbench.py`).
+- Never stores or exposes provider API keys or GitHub App private keys.
+- Every operator command is written to an append-only SQLite command queue with timestamp and actor, then executed deterministically by the 0-token Coordinator Daemon (never rewriting git history or silently bypassing risk floors without explicit operator override).
 
 ---
 
-## 7. Confirmed Architectural Decisions
+## 7. Phased Implementation Roadmap
+
+| Phase | Track | Deliverables | Verification |
+|---|---|---|---|
+| **Phase 1: Standalone Token Tracker** | Track B | `scripts/token_tracker.py` + SQLite ledger + `claude_collector`, `codex_collector`, `gemini_collector`, `copilot_collector`, `harness_collector` + `config/provider-quotas.json` (weekly limits + DeepSeek USD budget cap). | Unit tests with synthetic JSONL fixtures for all 4 providers; verify idempotent re-ingestion & `Decimal` arithmetic. |
+| **Phase 2: Unified Registry & Token-Aware Routing** | Track A | Expand `config/engineering-harness/t3-registry.json` (or new `provider-registry.json`) to include Gemini & Copilot CLI (DeepSeek overflow); wire `provider_health` into `routing.py` with strict risk-floor preservation and `PARKED_AWAITING_QUOTA` state. | Extend `tests/engineering_harness` + `routing-cases.json` with weekly-exhausted → DeepSeek-overflow and risk-floor-no-downgrade scenarios. |
+| **Phase 3: Handover Protocol & Atomic Claim Transfer** | Track A | `scripts/handover.py` (envelope capture/validate/render, WIP commit helper, 64 KiB cap) + `issue_claim.py transfer` + `handover:*` GitHub labels. | End-to-end test transferring a mock issue/PR between two harness identities with clean and dirty worktrees. |
+| **Phase 4: Reviewer-Coordinated Auto-Handover** | Track A | Extend `pr_review_watch.py` (or add `scripts/harness_coordinator.py`) with 0-token handover dispatch loop + Hybrid launchers (auto-spawn Claude/Codex/Gemini/Copilot CLI + IDE pickup queue) + Reviewer LLM escalation trigger for thrash/ambiguous handovers. | Dry-run simulation with synthetic 429s + live pilot on a non-critical issue. |
+| **Phase 5: Unified Status & Command Console** | Track A + B | `scripts/harness_console.py` (local `127.0.0.1` web dashboard + unified `--json` CLI) wired to the Coordinator command queue, `token_tracker` health/reports, `issue_claim`, and `pr_review_queue`. | HTTP endpoint & CSRF/origin tests + CLI integration tests against fixture SQLite state. |
+
+---
+
+## 8. Confirmed Architectural Decisions
 
 The following design decisions are locked for implementation:
 
@@ -382,3 +419,4 @@ The following design decisions are locked for implementation:
 2. **Reviewer coordination boundary**: **Two-tier split** — a 0-token Python Coordinator Daemon handles routine handovers automatically; the always-online Reviewer LLM (`local-reviewer-agent[bot]`) is woken only for normal PR review rounds, invalid checkpoints, or thrash/quota escalations (2+ handovers).
 3. **GitHub Copilot & DeepSeek overflow**: **Local GitHub Copilot CLI** targeting **DeepSeek** serves as the **Priority-2 overflow provider** when the weekly-limited subscription pools (**Claude, Codex, Gemini**) are exhausted. Because DeepSeek has no rolling time-window lockout, Track B tracks it against a configurable `Decimal` monetary budget ceiling (alongside Copilot CLI usage), while Track A enforces risk-floor qualifications before routing overflow work to it.
 4. **Requirement decoupling**: Track B (Cross-Provider Token Consumption Tracker) is built as a standalone, independently verifiable tool first (Phase 1) and feeds Track A via the read-only `token_tracker.py health --json` contract.
+5. **Single-place status & command surface**: A loopback-only local Control Console (`scripts/harness_console.py` — web dashboard + synchronized CLI) provides one place to monitor provider quotas, active sessions, handovers, and PR reviews, and to issue operator commands (`dispatch`, `handover`, `pause/resume`, `set-budget`).
