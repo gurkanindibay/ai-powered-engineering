@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "_comment": "Synthetic Phase-4 handover triggers evaluated deterministically by `harness_coordinator.py simulate`. Each case feeds the decision engine (no network, no git) and asserts the routing outcome, so a regression in failover, DeepSeek overflow, risk-floor parking or reviewer escalation fails CI.",
+  "scenarios": [
+    {
+      "id": "context-ceiling-stays-on-t3",
+      "signal": {
+        "issue": 549,
+        "reason": "context_ceiling",
+        "role": "developer",
+        "tier": "medium",
+        "from_provider": "claudeAgent",
+        "from_harness": "t3",
+        "from_session": "ses_outgoing",
+        "excluded_providers": ["claude"]
+      },
+      "handover_count": 0,
+      "expect": {"action": "dispatch", "transport": "t3", "canonical_provider": "codex", "escalation": null}
+    },
+    {
+      "id": "t3-429-fails-over-intra-t3",
+      "signal": {
+        "issue": 549,
+        "reason": "provider_quota_exhausted",
+        "role": "developer",
+        "tier": "medium",
+        "from_provider": "claudeAgent",
+        "from_harness": "t3",
+        "from_session": "ses_outgoing",
+        "excluded_providers": ["claude"]
+      },
+      "handover_count": 0,
+      "health": {
+        "status": "THROTTLED",
+        "providers": {
+          "claude": {"status": "EXHAUSTED", "reset_at": "2026-11-28T00:00:00Z"},
+          "codex": {"status": "HEALTHY"},
+          "gemini": {"status": "HEALTHY"},
+          "copilot": {"status": "HEALTHY"}
+        }
+      },
+      "expect": {"action": "dispatch", "transport": "t3", "canonical_provider": "codex"}
+    },
+    {
+      "id": "t3-unavailable-spills-to-headless-cli",
+      "signal": {
+        "issue": 549,
+        "reason": "provider_quota_exhausted",
+        "role": "developer",
+        "tier": "medium",
+        "from_provider": "claudeAgent",
+        "from_harness": "t3",
+        "from_session": "ses_outgoing",
+        "excluded_providers": ["claude"]
+      },
+      "available_t3": [],
+      "handover_count": 0,
+      "expect": {"action": "dispatch", "transport": "cli"}
+    },
+    {
+      "id": "all-subscriptions-exhausted-deepseek-overflow",
+      "signal": {
+        "issue": 549,
+        "reason": "provider_quota_exhausted",
+        "role": "developer",
+        "tier": "low",
+        "from_provider": "claudeAgent",
+        "from_harness": "t3",
+        "from_session": "ses_outgoing",
+        "excluded_providers": ["claude"]
+      },
+      "available_t3": [],
+      "handover_count": 0,
+      "health": {
+        "status": "EXHAUSTED",
+        "providers": {
+          "claude": {"status": "EXHAUSTED", "reset_at": "2026-11-28T00:00:00Z"},
+          "codex": {"status": "EXHAUSTED", "reset_at": "2026-11-28T01:00:00Z"},
+          "gemini": {"status": "EXHAUSTED", "reset_at": "2026-11-28T02:00:00Z"},
+          "copilot": {"status": "HEALTHY"}
+        }
+      },
+      "expect": {"action": "dispatch", "transport": "copilot_cli", "canonical_provider": "copilot"}
+    },
+    {
+      "id": "critical-risk-floor-never-downgrades",
+      "signal": {
+        "issue": 549,
+        "reason": "provider_quota_exhausted",
+        "role": "architect",
+        "tier": "critical",
+        "from_provider": "claudeAgent",
+        "from_harness": "t3",
+        "from_session": "ses_outgoing",
+        "excluded_providers": ["claude"]
+      },
+      "available_t3": [],
+      "handover_count": 0,
+      "health": {
+        "status": "EXHAUSTED",
+        "providers": {
+          "claude": {"status": "EXHAUSTED", "reset_at": "2026-11-28T04:00:00Z"},
+          "codex": {"status": "EXHAUSTED", "reset_at": "2026-11-28T02:00:00Z"},
+          "gemini": {"status": "EXHAUSTED", "reset_at": "2026-11-28T05:00:00Z"},
+          "copilot": {"status": "HEALTHY"}
+        }
+      },
+      "expect": {"action": "park", "escalation": "no_healthy_provider",
+                 "resume_after": "2026-11-28T02:00:00Z"}
+    },
+    {
+      "id": "second-handover-wakes-reviewer",
+      "signal": {
+        "issue": 549,
+        "reason": "provider_quota_exhausted",
+        "role": "developer",
+        "tier": "medium",
+        "from_provider": "claudeAgent",
+        "from_harness": "t3",
+        "from_session": "ses_outgoing",
+        "excluded_providers": ["claude"]
+      },
+      "handover_count": 1,
+      "expect": {"action": "dispatch", "transport": "t3", "escalation": "thrash",
+                 "handover_count": 2}
+    },
+    {
+      "id": "two-failed-repairs-wake-reviewer",
+      "signal": {
+        "issue": 549,
+        "reason": "tier_escalation",
+        "role": "developer",
+        "tier": "high",
+        "from_provider": "codex",
+        "from_harness": "t3",
+        "from_session": "ses_outgoing",
+        "excluded_providers": ["codex"],
+        "failed_repairs": 2
+      },
+      "handover_count": 0,
+      "expect": {"action": "dispatch", "escalation": "thrash"}
+    },
+    {
+      "id": "handover-cap-parks-task",
+      "signal": {
+        "issue": 549,
+        "reason": "provider_quota_exhausted",
+        "role": "developer",
+        "tier": "medium",
+        "from_provider": "claudeAgent",
+        "from_harness": "t3",
+        "from_session": "ses_outgoing"
+      },
+      "handover_count": 3,
+      "expect": {"action": "park", "escalation": "handover_cap"}
+    }
+  ]
+}

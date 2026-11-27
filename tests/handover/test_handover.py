@@ -265,6 +265,24 @@ class ExportT3Test(unittest.TestCase):
         self.assertEqual(git(self.repo, "show", "feature/handover:src/app.py").stdout, "VALUE = 2\n")
         self.assertEqual(git(self.repo, "rev-parse", "feature/handover").stdout.strip(), result["head_sha"])
 
+    def test_export_uses_the_pr_branch_base_when_the_candidate_root_differs(self):
+        candidate = self.base / "candidate-different"
+        candidate.mkdir()
+        git(candidate, "init", "--quiet", "-b", "main")
+        (candidate / "README.md").write_text("different candidate base\n")
+        git(candidate, "add", ".")
+        git(candidate, "commit", "--quiet", "-m", "candidate root")
+        (candidate / "src").mkdir()
+        (candidate / "src" / "app.py").write_text("VALUE = 3\n")
+        branch_base = git(self.repo, "rev-parse", "feature/handover").stdout.strip()
+        self.assertNotEqual(git(candidate, "rev-list", "--max-parents=0", "HEAD").stdout.strip(),
+                            git(self.repo, "rev-list", "--max-parents=0", "HEAD").stdout.strip())
+        result = self.export(candidate=candidate, push=False)
+        envelope, errors = ho.validate_file(Path(result["path"]))
+        self.assertEqual(errors, [])
+        self.assertEqual(envelope["git_state"]["base_sha"], branch_base)
+        self.assertEqual(envelope["git_state"]["head_sha"], result["head_sha"])
+
 
 if __name__ == "__main__":
     unittest.main()
