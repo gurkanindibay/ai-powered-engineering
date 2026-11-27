@@ -239,6 +239,52 @@ class T3EngineTests(unittest.TestCase):
         self.assertEqual(res["status"], "BLOCKED")
         self.assertEqual(self.store.run(self.run_id)["status"], "BLOCKED")
 
+    def test_handover_requested_parks_and_preserves_the_candidate(self):
+        value, envelope = self.dispatch()
+        (self.workspace / "src" / "value.py").write_text("VALUE = 1\n")
+        message = child_message(envelope, status="handover_requested",
+                                summary="context at 82%, quota nearly exhausted")
+        self.assertEqual(self.engine.t3_submit(self.run_id, value["attempt_id"], message), "BLOCKED")
+        self.assertEqual(self.store.run(self.run_id)["status"], "BLOCKED")
+        # The checkpoint stays exactly as the child left it for handover.py export-t3.
+        self.assertEqual((self.workspace / "src" / "value.py").read_text(), "VALUE = 1\n")
+        self.assertEqual(git(self.workspace, "show", "HEAD:src/value.py"), "VALUE = 0")
+        self.assertIn("handover", json.dumps(self.store.events(self.run_id)))
+        evidence = (self.store.directory / "evidence" / self.run_id /
+                    f"{value['attempt_id']}-handover.json").read_text()
+        self.assertIn("context at 82%", evidence)
+
+
+def prompt_envelope(**overrides):
+    return {
+        "run_id": "run", "task_id": "task", "attempt_id": "attempt", "candidate": "c0ffee",
+        "role": "developer", "objective": "Adjust value", "instruction": "Do the work.",
+        "acceptance": ["Value is adjusted"], "allowed_paths": ["src"],
+        "handoffs": [], "previous_failure": None, **overrides,
+    }
+
+
+class IncomingHandoverPromptTests(unittest.TestCase):
+    def test_prompt_carries_the_incoming_handover_envelope(self):
+        handover = {"schema_version": 1, "handover_id": "ho-548-001",
+                    "progress": {"remaining": ["Update the money input handler"]}}
+        text = t3.prompt(prompt_envelope(handover=handover), Path("/tmp/candidate"))
+        self.assertIn("resumes a handover from another provider", text)
+        self.assertIn("ho-548-001", text)
+        self.assertIn("Update the money input handler", text)
+        self.assertIn("handover_requested", text)
+
+    def test_prompt_rejects_an_unversioned_handover(self):
+        with self.assertRaises(HarnessError):
+            t3.prompt(prompt_envelope(handover={"schema_version": 2}), Path("/tmp/candidate"))
+
+    def test_parse_result_accepts_handover_requested(self):
+        envelope = prompt_envelope()
+        body = {"status": "handover_requested", "summary": "out of context", "artifacts": {},
+                "issues": []}
+        text = f"{t3.RESULT_BEGIN}\n{json.dumps(body)}\n{t3.RESULT_END}\n"
+        self.assertEqual(t3.parse_result(text, envelope)["status"], "handover_requested")
+
 
 if __name__ == "__main__":
     unittest.main()

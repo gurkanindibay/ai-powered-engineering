@@ -118,6 +118,21 @@ class Engine:
             return run["status"]
         if workspace.head() != run["candidate"]:
             raise HarnessError("Worker changed Git history")
+        if result["status"] == "handover_requested":
+            # A checkpoint, not a failure: keep the candidate exactly as the child left it so
+            # handover.py export-t3 captures it, and settle the attempt before the run parks.
+            self.record(run_id, f"{envelope['attempt_id']}-handover",
+                        {"summary": result["summary"], "issues": result["issues"],
+                         "candidate": run["candidate"]})
+            if usage_reported:
+                usage = result["usage"]
+                cost = (money(target["input_per_million"]) * usage["input_tokens"]
+                        + money(target["output_per_million"]) * usage["output_tokens"]) / 1000000
+                tokens = sum(usage.values())
+            else:
+                cost, tokens = money(envelope["max_cost"]), envelope["max_tokens"]
+            self.store.finish(envelope["attempt_id"], result, run["candidate"], str(cost), tokens)
+            return self.store.run(run_id)["status"]
         # Failed implementations are retained for inspection, never silently integrated.
         if result["status"] != "completed" and not workspace.clean():
             raise HarnessError("Failed worker left changes; preserved candidate requires manual inspection")

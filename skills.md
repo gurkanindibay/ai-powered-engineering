@@ -427,15 +427,33 @@ python3 -m unittest discover -s tests/token_guard
 ## 5c-3. Issue Claim Labels (`issue_claim.py`)
 
 - **Executable Script:** [scripts/issue_claim.py](file:///scripts/issue_claim.py)
-- **Purpose:** Lets different agent harnesses identify each other. A claim is `in progress`, an `agent:<name>` label (see 5c-3a; `claim` needs `--model` or `$AGENT_MODEL`) and one owner label `claim:<harness>/<session-id>` (harness: codex, claude, antigravity), so harness and session can't drift apart. Concurrent claims are settled by GitHub's labeled-event order: the first claim wins and the loser removes only its own label. `claim` refuses an issue owned by another session (or a legacy bare `in progress`), `release` only removes the caller's own claim, `status` reports the owner. Session id: `--session`, else `$AGENT_SESSION_ID`, else `$<HARNESS>_SESSION_ID`, else generated and printed.
+- **Purpose:** Lets different agent harnesses identify each other. A claim is `in progress`, an `agent:<name>` label (see 5c-3a; `claim` needs `--model` or `$AGENT_MODEL`) and one owner label `claim:<harness>/<session-id>` (harness: codex, claude, antigravity, t3), so harness and session can't drift apart. Concurrent claims are settled by GitHub's labeled-event order: the first claim wins and the loser removes only its own label. `claim` refuses an issue owned by another session (or a legacy bare `in progress`), `release` only removes the caller's own claim, `status` reports the owner. For a handover, `transfer` adds the incoming claim before removing the outgoing one (no unclaimed gap), records `handover:count-N` and `handover:pending`, and refuses at `MAX_HANDOVERS = 3`; the incoming owner clears `handover:pending` with `accept`. Session id: `--session`, else `$AGENT_SESSION_ID`, else `$<HARNESS>_SESSION_ID`, else generated and printed.
 
 ```bash
 python3 scripts/issue_claim.py claim 123 --harness claude --session <id> --model claude-sonnet-5-5
 python3 scripts/issue_claim.py sync 123 --pr 130   # copy the issue labels to its PR
 python3 scripts/issue_claim.py claim 123 --harness claude --session <id> --model opus --pr 130   # claim + label PR
 python3 scripts/issue_claim.py status 123 --json
+python3 scripts/issue_claim.py transfer 123 --harness claude --session <old-id> --to-harness t3 \
+    --to-session <new-id> --to-model deepseek-flash --pr 130
+python3 scripts/issue_claim.py accept 123 --harness t3 --session <new-id> --pr 130
 python3 scripts/issue_claim.py release 123 --harness claude --session <id> --pr 130   # clears issue and PR
 python3 -m unittest discover -s tests/issue_claim
+```
+
+## 5c-3c. Handover Protocol (`handover.py`)
+
+- **Executable Script:** [scripts/handover.py](file:///scripts/handover.py); contract: [token-aware-harness-and-handover-analysis.md §4.3, §4.6](file:///apps/development-time/SitePulse/docs/engineering-process/token-aware-harness-and-handover-analysis.md)
+- **Purpose:** Moves work between providers without replaying the transcript. `capture` builds the canonical `<= 64 KiB` envelope (`schema_version: 1`, `from`, `target_constraints`, `git_state`, `progress`, `decisions`, `key_pointers`, `checksum_sha256`) at `.agents/local/handovers/<issue>-<seq>.json`; when the worktree is dirty it commits exactly the safe paths to `wip/handover-<seq>` (pushing when an upstream exists) or, if the commit is refused, saves a replayable `.patch`. Credential-looking paths (`.env`, keys, `.agents/local`, ...) are never committed or referenced. The capture is deterministic: no LLM call, so a hard 429, quota cutoff or crash still checkpoints, and a mid-edit capture records `last_verification.status: unverified`. `validate` checks the schema, checksum and size; `render` prints (or posts with `--post-pr`) the collapsed Draft PR summary; `export-t3` moves a T3 candidate checkout onto the PR branch and refuses until `task_cancel` is confirmed with `--child-cancelled`. `t3.py` accepts the envelope in the incoming prompt context and children may report `handover_requested`.
+
+```bash
+python3 scripts/handover.py capture --issue 548 --reason provider_quota_exhausted \
+    --from-provider claude --from-harness claude_code --from-model claude-sonnet-5-5 --json
+python3 scripts/handover.py validate .agents/local/handovers/548-001.json --json
+python3 scripts/handover.py render .agents/local/handovers/548-001.json --post-pr 553
+python3 scripts/handover.py export-t3 --candidate /tmp/candidate --branch feature/x \
+    --issue 548 --pr 553 --child-cancelled --json
+python3 -m unittest discover -s tests/handover
 ```
 
 ## 5c-3a. Agent Names (`agent_names.py`)
