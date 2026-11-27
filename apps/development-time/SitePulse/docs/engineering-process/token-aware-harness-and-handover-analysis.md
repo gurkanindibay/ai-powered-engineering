@@ -67,21 +67,20 @@ Today, `route()` selects the cheapest eligible target by static `(input_per_mill
 3. **Health & Quota Gate**: Intersect with live `provider_health` (from Track B or local circuit-breaker state):
    - Drop `EXHAUSTED` targets.
    - Rank `HEALTHY` ahead of `THROTTLED`.
-4. **Effective Cost & Headroom Scoring**: Among eligible healthy targets, prefer:
-   - Configured preference / subscription-first priority (subscription seats before pay-per-token API fallback such as DeepSeek, matching workspace rule 9).
-   - Lowest effective cost per tier (accounting for prompt-cache hit ratios where known).
-   - Highest remaining quota headroom when two targets tie on tier and cost.
+4. **Two-Tier Quota Priority & Effective Cost Scoring**: Among eligible healthy targets, prefer:
+   - **Priority Tier 1 — Weekly-limited subscription pool** (**Claude**, **Codex**, **Gemini**): Use subscription seats first while their weekly/rolling windows are `HEALTHY`. Among healthy subscription providers, pick lowest effective cost per tier and highest remaining weekly headroom.
+   - **Priority Tier 2 — Budget-capped, time-unlimited overflow** (**DeepSeek via local GitHub Copilot CLI**): When all qualified Tier-1 weekly limits are `EXHAUSTED`, automatically route overflow work to **DeepSeek on Copilot CLI**, which has no rolling time-window lockouts and is governed instead by a configurable `Decimal` monetary budget ceiling (matching workspace rule 9's DeepSeek-as-last-fallback directive).
 5. **Hard Safety Invariant (No Silent Downgrade)**:
-   - If **no** qualified target for a `critical` or `high` task is `HEALTHY`/`THROTTLED`, the router **MUST NOT** silently downgrade to an unqualified model (e.g., running a financial ledger migration on a low-tier model). Instead, it enters `PARKED_AWAITING_QUOTA` with an explicit `resume_after` timestamp and notifies the coordinator.
+   - If **no** qualified target for a `critical` or `high` task is `HEALTHY`/`THROTTLED` (e.g., all weekly pools are exhausted *and* either DeepSeek is not qualified for that risk tier or its monetary budget ceiling is reached), the router **MUST NOT** silently downgrade to an unqualified model. Instead, it enters `PARKED_AWAITING_QUOTA` with an explicit `resume_after` timestamp (or budget-top-up alert) and notifies the coordinator.
 
 ### 3.3 Provider Capability & Dispatch Matrix
 
-| Provider | Harness Transport(s) | Typical Qualified Tiers | Effort / Thinking Controls | Auto-Handover Dispatch Mode (Confirmed: Hybrid) |
-|---|---|---|---|---|
-| **Claude** | Claude Code CLI (`claude -p`), T3 (`claudeAgent`), API Gateway | Haiku (`low`), Sonnet (`low`–`high`), Opus (`high`–`critical`, Reviewer) | `effort`: `low` / `medium` / `high` | **Auto-spawn** via `claude -p --output-format json` + hooks |
-| **Codex** | Codex CLI (`codex exec`), T3 (`codex`), API Gateway | GPT Sol (`low`–`high`), GPT Astra (`high`–`critical`) | `reasoningEffort`: `low` / `medium` / `high` | **Auto-spawn** via `codex exec --json` |
-| **Gemini** | Gemini CLI (`gemini -p`), Antigravity IDE, API Gateway | Flash (`low`–`medium`), Pro / Neon (`medium`–`critical`) | Thinking toggle / thinking budget | **Auto-spawn** via `gemini -p`; **Pickup queue** for interactive Antigravity IDE sessions |
-| **Copilot** | **GitHub Copilot CLI (local)** | Backing model selected in Copilot CLI | Model selection; premium-request multiplier | **Auto-spawn / CLI adapter** via local Copilot CLI |
+| Provider | Quota Model | Harness Transport(s) | Typical Qualified Tiers | Effort / Thinking Controls | Auto-Handover Dispatch Mode (Confirmed: Hybrid) |
+|---|---|---|---|---|---|
+| **Claude** | **Weekly / rolling limit** (Priority 1) | Claude Code CLI (`claude -p`), T3 (`claudeAgent`), API Gateway | Haiku (`low`), Sonnet (`low`–`high`), Opus (`high`–`critical`, Reviewer) | `effort`: `low` / `medium` / `high` | **Auto-spawn** via `claude -p --output-format json` + hooks |
+| **Codex** | **Weekly / rolling limit** (Priority 1) | Codex CLI (`codex exec`), T3 (`codex`), API Gateway | GPT Sol (`low`–`high`), GPT Astra (`high`–`critical`) | `reasoningEffort`: `low` / `medium` / `high` | **Auto-spawn** via `codex exec --json` |
+| **Gemini** | **Weekly / rolling limit** (Priority 1) | Gemini CLI (`gemini -p`), Antigravity IDE, API Gateway | Flash (`low`–`medium`), Pro / Neon (`medium`–`critical`) | Thinking toggle / thinking budget | **Auto-spawn** via `gemini -p`; **Pickup queue** for interactive Antigravity IDE sessions |
+| **Copilot (DeepSeek)** | **No time limit; monetary budget cap** (Priority 2 overflow) | **GitHub Copilot CLI (local)** targeting **DeepSeek** | Qualified DeepSeek tiers (configured in registry) | DeepSeek thinking controls; spend ceiling (`Decimal` USD) | **Auto-spawn / CLI adapter** via local Copilot CLI when Claude/Codex/Gemini weekly pools exhaust |
 
 > [!IMPORTANT]
 > **Cross-Provider Context Guardrail**: `token_guard.py` currently only hooks Claude Code. Context-discipline rules (no raw large `cat`, no `ls -R`, bounded reads, compact test summaries) should be enforced uniformly across providers via Claude hooks, CLI wrappers/MCP guards for Codex/Gemini/Copilot CLI, and `gateway_bridge.py`'s existing caps (`TOOL_RESULT_CHARS = 16384`, `HISTORY_CHARS = 49152`).
@@ -381,5 +380,5 @@ The following design decisions are locked for implementation:
 
 1. **Auto-handover dispatch mode**: **Hybrid** — Coordinator auto-spawns headless CLIs (`claude -p`, `codex exec`, `gemini -p`, local Copilot CLI) in a fresh worktree on the PR branch, and uses a structured pickup queue for interactive IDE sessions (e.g., Antigravity IDE).
 2. **Reviewer coordination boundary**: **Two-tier split** — a 0-token Python Coordinator Daemon handles routine handovers automatically; the always-online Reviewer LLM (`local-reviewer-agent[bot]`) is woken only for normal PR review rounds, invalid checkpoints, or thrash/quota escalations (2+ handovers).
-3. **GitHub Copilot integration**: **Local GitHub Copilot CLI** for both Track A handover dispatch and Track B consumption tracking (request-metered + estimated tokens).
+3. **GitHub Copilot & DeepSeek overflow**: **Local GitHub Copilot CLI** targeting **DeepSeek** serves as the **Priority-2 overflow provider** when the weekly-limited subscription pools (**Claude, Codex, Gemini**) are exhausted. Because DeepSeek has no rolling time-window lockout, Track B tracks it against a configurable `Decimal` monetary budget ceiling (alongside Copilot CLI usage), while Track A enforces risk-floor qualifications before routing overflow work to it.
 4. **Requirement decoupling**: Track B (Cross-Provider Token Consumption Tracker) is built as a standalone, independently verifiable tool first (Phase 1) and feeds Track A via the read-only `token_tracker.py health --json` contract.
