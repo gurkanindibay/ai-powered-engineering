@@ -193,6 +193,33 @@ class SnapshotTest(unittest.TestCase):
         self.assertIn("Decimal apportionment preserves kuruş", page)
         self.assertIn('data-ne-story-count>1 scenario', page)
 
+    def test_named_evidence_handles_null_story_details_and_unique_other_captions(self):
+        snap = {
+            "schema": 1, "generated_at": "2026-11-27T12:00:00Z", "status": "PASS",
+            "catalogue_history": [],
+            "junit": {"tests": 2, "passed": 2, "failures": 0, "errors": 0, "skipped": 0},
+            "totals": {"epics": 2, "epics_verified": 2, "epics_failing": 0, "stories": 0,
+                       "stories_with_scenarios": 0, "stories_passing": 0, "scenarios": 2,
+                       "automated": 2, "passing": 2, "failing": 0, "no_result": 0, "planned": 0},
+            "epics": [
+                {"id": "EPIC-01", "title": "First", "stories": 0, "stories_with_scenarios": 0,
+                 "stories_passing": 0, "scenarios": 1, "automated": 1, "passing": 1,
+                 "failing": 0, "no_result": 0, "planned": 0, "health": "verified", "story_details": None},
+                {"id": "EPIC-02", "title": "Second", "stories": 0, "stories_with_scenarios": 0,
+                 "stories_passing": 0, "scenarios": 1, "automated": 1, "passing": 1,
+                 "failing": 0, "no_result": 0, "planned": 0, "health": "verified", "story_details": None},
+            ],
+            "scenarios": {
+                "CUSTOM-1": {"epic": "EPIC-01", "story": "", "name": "One", "state": "passing",
+                             "evidence_cases": [{"test_name": "t1", "status": "passing"}]},
+                "CUSTOM-2": {"epic": "EPIC-02", "story": "", "name": "Two", "state": "passing",
+                             "evidence_cases": [{"test_name": "t2", "status": "passing"}]},
+            },
+        }
+        page = ps.render_html([snap])
+        self.assertIn('id="ne-cap-EPIC-01-Other"', page)
+        self.assertIn('id="ne-cap-EPIC-02-Other"', page)
+
     def test_summary_fallback_reads_the_time_from_the_run_id(self):
         snap = ps.snapshot_from_summary({"run_id": "20261115T203425Z-c3318fa", "status": "PASS", "junit": {"tests": 3}})
         self.assertEqual((snap["generated_at"], snap["junit"]["tests"]), ("2026-11-15T20:34:25Z", 3))

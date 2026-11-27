@@ -422,7 +422,7 @@ def _epic_row(row: dict) -> str:
     counts = " · ".join(f"{row[state]} {STATE_LABELS[state].split(' ')[0].lower().rstrip(',')}"
                              for state in STATES if row[state]) or "no scenarios"
     health = row["health"]
-    story_details = row.get("story_details", [])
+    story_details = row.get("story_details") or []
     story_rows = ""
     for story in story_details:
         scenario_rows = "".join(
@@ -593,7 +593,7 @@ def _named_evidence_html(latest: dict) -> str:
         if not isinstance(epic_obj, dict) or not epic_obj.get("id"):
             continue
         epic_titles[epic_obj["id"]] = epic_obj.get("title", epic_obj["id"])
-        for story_obj in epic_obj.get("story_details", []):
+        for story_obj in epic_obj.get("story_details") or []:
             if isinstance(story_obj, dict) and story_obj.get("id"):
                 story_titles[story_obj["id"]] = story_obj.get("title", story_obj["id"])
 
@@ -722,7 +722,7 @@ def _named_evidence_html(latest: dict) -> str:
                                 if story_issues else '<span class="chip good">all passing</span>')
             sc_word = "scenario" if len(story_entries) == 1 else "scenarios"
             table_html = _evidence_table_html(
-                story_entries, primary_prov, f"ne-cap-{story_id}",
+                story_entries, primary_prov, f"ne-cap-{epic_id}-{story_id}",
                 f"{story_id} {story_title or 'named scenario evidence'}")
             story_blocks.append(
                 f'<details class="evidence-story" data-story="{_esc(story_id)}" data-total="{len(story_entries)}">'

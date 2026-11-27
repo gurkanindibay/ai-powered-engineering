@@ -175,7 +175,7 @@ def _safe_snapshot(raw: object, summary: dict) -> dict | None:
                     if not isinstance(tested_commit, str) or not re.fullmatch(r"[0-9a-f]{7,40}", tested_commit):
                         tested_commit = ""
                     public_cases.append({
-                        "test_name": _safe_label(case.get("test_name"), "test case"),
+                        "test_name": _safe_title(case.get("test_name"), "test case"),
                         "status": status,
                         "test_status": test_status,
                         "workflow_run": (case.get("workflow_run") if isinstance(case.get("workflow_run"), str)

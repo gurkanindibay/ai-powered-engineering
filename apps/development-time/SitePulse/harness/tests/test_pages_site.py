@@ -57,7 +57,13 @@ class PagesSiteTests(unittest.TestCase):
                 "story_details": [],
             }],
             "scenarios": {
-                "SC-10-01-01": {"state": "passing", "name": scenario_name, "epic": "EPIC-10", "story": "STORY-10-01"},
+                "SC-10-01-01": {
+                    "state": "passing", "name": scenario_name, "epic": "EPIC-10", "story": "STORY-10-01",
+                    "evidence_cases": [{
+                        "test_name": "DashboardController Unit & Integration Tests when login with Google, then authenticates as homeOwner with Google provider",
+                        "status": "passing", "test_status": "passing",
+                    }],
+                },
             },
         }
         public = pages._safe_snapshot(raw, summary)
@@ -65,6 +71,10 @@ class PagesSiteTests(unittest.TestCase):
         self.assertEqual(public["epics"][0]["story_details"][0]["title"], story_title)
         self.assertEqual(public["epics"][0]["story_details"][0]["scenarios"][0]["name"], scenario_name)
         self.assertEqual(public["scenarios"]["SC-10-01-01"]["name"], scenario_name)
+        self.assertEqual(
+            public["scenarios"]["SC-10-01-01"]["evidence_cases"][0]["test_name"],
+            "DashboardController Unit & Integration Tests when login with Google, then authenticates as homeOwner with Google provider",
+        )
         self.assertEqual(public["epics"][1]["title"], "EPIC-99")
 
     def test_build_keeps_git_pointer_of_gh_pages_worktree(self):
