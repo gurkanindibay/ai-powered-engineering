@@ -234,6 +234,11 @@ def execute(signal: coordinator.Signal, envelope: dict, path: Path | None,
     else:
         record["status"] = "dry_run" if args.dry_run else "dispatched"
         identity = coordinator.incoming_identity(decision, envelope["handover_id"], options)
+        if decision.transport in ("cli", "copilot_cli") and not args.dry_run:
+            # Preflight before transfer: a missing branch or unusable worktree must
+            # not move the claim to a session that cannot start.
+            options.worktree = incoming_worktree(args, envelope, local, create=False)
+            record["incoming_worktree"] = str(options.worktree)
         # Transfer before creating a worktree: a failed transfer must not leave a
         # coordinator-owned worktree behind for the retry to trip over.
         if not args.dry_run and not args.no_transfer:
@@ -248,7 +253,7 @@ def execute(signal: coordinator.Signal, envelope: dict, path: Path | None,
                 record["status"] = "transfer_failed"
         if record["status"] in ("dispatched", "dry_run") and decision.transport in ("cli", "copilot_cli") \
                 and not args.dry_run:
-            options.worktree = incoming_worktree(args, envelope, local)
+            options.worktree = incoming_worktree(args, envelope, local, create=True)
             record["incoming_worktree"] = str(options.worktree)
         if record["status"] in ("dispatched", "dry_run") and (
                 not args.dry_run or bool(envelope.get("checksum_sha256"))):
@@ -280,35 +285,47 @@ def claim_tool_handover_count(labels: list[str]) -> int:
     return claim_tool.handover_count(labels)
 
 
-def incoming_worktree(args: argparse.Namespace, envelope: dict, local: Path) -> Path:
+def incoming_worktree(args: argparse.Namespace, envelope: dict, local: Path,
+                      create: bool = True) -> Path:
     """The isolated worktree an auto-spawned CLI worker runs in.
 
-    Idempotent across daemon passes: a worktree this coordinator created for the
-    handover is reused only when it is clean and still at the branch tip.
+    ``create=False`` is the pre-transfer check: it verifies the branch exists and
+    that an existing path is a reusable coordinator worktree, without creating
+    anything. The claim is therefore never transferred for a dispatch that cannot
+    start. Idempotent across daemon passes: a worktree this coordinator created is
+    reused only when it is clean and still at the branch tip.
     """
     if args.incoming_worktree:
-        return Path(args.incoming_worktree).resolve()
+        path = Path(args.incoming_worktree).resolve()
+        if not path.is_dir():
+            raise coordinator.CoordinatorError(f"--incoming-worktree does not exist: {path}")
+        return path
     branch = args.branch or envelope["git_state"]["branch"]
     if not branch or branch == "(detached)":
         raise coordinator.CoordinatorError(
             "a CLI dispatch needs --branch (or a branch in the envelope) for its fresh worktree")
     repo = Path(args.repo).resolve()
     path = local / "coordinator" / "worktrees" / envelope["handover_id"]
+    tip = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", f"{branch}^{{commit}}"],
+                         capture_output=True, text=True, check=False)
+    if tip.returncode != 0:
+        raise coordinator.CoordinatorError(
+            f"branch {branch} does not exist in {repo}; push the draft branch before dispatching a CLI")
     if path.exists():
         def git(*argv: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(["git", "-C", str(path), *argv], capture_output=True, text=True,
                                   check=False)
 
         head = git("rev-parse", "HEAD")
-        tip = subprocess.run(["git", "-C", str(repo), "rev-parse", branch],
-                             capture_output=True, text=True, check=False)
         dirty = git("status", "--porcelain")
-        if head.returncode == 0 and tip.returncode == 0 and dirty.returncode == 0 \
-                and head.stdout.strip() == tip.stdout.strip() and not dirty.stdout.strip():
+        if head.returncode == 0 and dirty.returncode == 0 and not dirty.stdout.strip() \
+                and head.stdout.strip() == tip.stdout.strip():
             return path
         raise coordinator.CoordinatorError(
             f"coordinator worktree {path} exists but is not clean at {branch}; refusing to reuse it "
             "(inspect or remove it by hand after preserving any work)")
+    if not create:
+        return path
     return coordinator.prepare_worktree(repo, branch, path)
 
 

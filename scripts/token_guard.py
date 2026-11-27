@@ -219,8 +219,8 @@ def _checkpoint_bash(command: str) -> bool:
         if sub == "branch" and any(part in {"-d", "-D", "--delete"} or part.startswith(("-D", "-d"))
                                    for part in rest):
             return False  # never let the gate delete or rewrite branches
-        if sub == "push" and any(part.startswith(("--force", "-f")) for part in rest):
-            return False  # force-push is not checkpointing
+        if sub == "push" and any(part.startswith(("--force", "-f", "+")) for part in rest):
+            return False  # force-push (including a + refspec) is not checkpointing
         return True
     if program in ("python", "python3", "py"):
         for index, part in enumerate(rest):

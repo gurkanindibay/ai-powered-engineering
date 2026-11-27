@@ -120,6 +120,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("--to-session", recorded["args"])
 
     def test_cli_dispatch_uses_a_fresh_incoming_worktree(self):
+        repo = git_repo(Path(self.tmp.name) / "repo", "feature/issue-549")
         prepared = Path(self.tmp.name) / "incoming"
         with mock.patch.object(cli.coordinator, "prepare_worktree", return_value=prepared) as prepare, \
                 mock.patch.object(cli.coordinator, "dispatch",
@@ -127,12 +128,32 @@ class CliTests(unittest.TestCase):
             code, _, _ = call(["handover", "--issue", "549", "--reason", "context_ceiling",
                                "--from-harness", "t3", "--from-session", "ses_outgoing",
                                "--envelope", str(self.envelope_path), "--transport", "cli",
-                               "--offline", "--no-transfer", "--state-root", str(self.state),
-                               "--json"])
+                               "--offline", "--no-transfer", "--repo", str(repo),
+                               "--state-root", str(self.state), "--json"])
         self.assertEqual(code, 0)
         prepare.assert_called_once()
         self.assertEqual(prepare.call_args[0][1], "feature/issue-549")
         self.assertEqual(dispatch.call_args[0][2].worktree, prepared)
+
+    def test_cli_preflight_does_not_transfer_when_the_branch_is_missing(self):
+        from scripts import handover
+
+        repo = git_repo(Path(self.tmp.name) / "repo", "feature/issue-549")
+        data = envelope()
+        data["git_state"]["branch"] = "feature/missing"
+        data["checksum_sha256"] = handover.checksum(data)
+        missing = Path(self.tmp.name) / "missing.json"
+        missing.write_text(json.dumps(data))
+        transferred = mock.Mock()
+        with mock.patch.object(cli, "run_issue_claim", transferred):
+            code, _, err = call(["handover", "--issue", "549", "--reason", "context_ceiling",
+                                 "--from-harness", "t3", "--from-session", "ses_outgoing",
+                                 "--envelope", str(missing), "--transport", "cli",
+                                 "--offline", "--repo", str(repo),
+                                 "--state-root", str(self.state), "--json"])
+        self.assertEqual(code, 2)
+        self.assertIn("does not exist", err)
+        transferred.assert_not_called()
 
     def test_serve_escalates_a_pending_label_without_a_local_envelope(self):
         with mock.patch.object(cli, "pending_label_issues", return_value=[999]):

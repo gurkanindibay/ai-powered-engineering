@@ -102,7 +102,7 @@ class CheckpointGateTests(unittest.TestCase):
             self.assertIsNone(self.gate("Bash", {"command": command}, context_pct="90"), command)
         for command in ("python3 scripts/run_tests.py", "rg TODO src", "git checkout main",
                         "git stash", "git branch -D old-branch", "git push --force",
-                        "git push -f origin main"):
+                        "git push -f origin main", "git push origin +main"):
             self.assertIsNotNone(self.gate("Bash", {"command": command}, context_pct="90"), command)
         self.assertIsNone(self.gate("Bash", {"command": "git push origin HEAD"}, context_pct="90"))
         self.assertIsNone(self.gate("Bash", {"command": "git branch new-branch"}, context_pct="90"))
