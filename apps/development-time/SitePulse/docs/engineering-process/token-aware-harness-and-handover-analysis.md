@@ -271,6 +271,19 @@ sequenceDiagram
    - Never force-remove a dirty worktree. If the outgoing agent crashed with dirty edits, `handover.py` commits them to a `wip/handover-<seq>` commit on the PR branch (squashed on final merge) before releasing the worktree.
 5. **No Silent Risk-Floor Downgrade**: Enforced identically to `routing.py` and `t3.capabilities_from_catalog()`.
 
+### 4.6 WIP Commit & Zero-Data-Loss Assurance (3-Layer Defense)
+
+An LLM cannot be trusted on its own to commit before hard exhaustion: once a provider returns an abrupt HTTP 429, hits a hard usage cap, or crashes mid-turn, the agent can no longer invoke another tool call. The design therefore guarantees work preservation through **three defense-in-depth layers**:
+
+| Layer | Trigger / Timing | Who Executes | Guarantee |
+|---|---|---|---|
+| **1. Proactive Soft-Gate (Before the Wall)** | Context `> 80%` (`RED`) or quota `> 85%` | Outgoing agent + pre-tool hook (`token_guard.py` / planned `token_tracker.py budget-check`) | Leaves ~15–20% runway before hard exhaustion. Once triggered, the hook blocks new feature edits and wide reads, allowing only checkpointing (`git commit` + handover summary). Combined with incremental sub-step commits, minimal work is ever uncommitted. |
+| **2. Deterministic Supervisor Wrapper / T3 Controller (0 LLM Tokens)** | Hard 429, quota cutoff, timeout, or non-zero exit | Planned `scripts/handover.py capture` wrapper (for headless CLIs) or `development_harness.py` controller (for T3 after `task_cancel` / `t3-submit`) | Because file-write tools persist edits to disk immediately inside the isolated worktree or T3 candidate checkout, the wrapper captures them deterministically with **zero LLM calls**: checks `git status --porcelain`, filters out ignored/protected/credential-looking paths, commits a `wip/handover-<seq>` commit to the Draft PR branch (or saves a `.patch` in `.agents/local/handovers/` if the index is conflicted), pushes, and synthesizes a fallback Canonical Handover Envelope from `git diff --stat`, recent commits, and the last test log. *(Note: T3 children are already forbidden from running `git commit` in `t3.py`; the controller always owns candidate commits/exports.)* |
+| **3. Watchdog Lease-Expiry Recovery** | Stalled or killed interactive IDE session (missed heartbeat `> TTL`) | 0-token Coordinator Daemon | For interactive IDE sessions (e.g., Antigravity IDE) that do not run inside a parent CLI wrapper, the Coordinator monitors the session's heartbeat lease and recorded worktree path. On TTL expiry with dirty edits, it never force-deletes the worktree (Rule 11); it snapshots the uncommitted diff into `.agents/local/handovers/` (or a `wip/handover-<seq>` commit on the Draft PR branch) and wakes the Reviewer/Operator before transferring the claim. |
+
+> [!NOTE]
+> **Mid-Edit Integrity:** If a deterministic capture triggers mid-edit on non-compiling code, the `wip/handover-<seq>` commit still preserves the raw changes safely on the Draft PR branch with `last_verification.status = "unverified"` (never falsely marked passing). The incoming worker immediately sees the exact diff, completes or cleans up the partial edit, and `wip/*` commits are squashed on final merge.
+
 ---
 
 ## 5. Track B (Separate Requirement): Cross-Provider Token Consumption Tracker
@@ -421,11 +434,22 @@ Available identically via the **Local Web Dashboard** (`python3 scripts/harness_
 | **Optional Approval Gates** | `set-gate --tier critical --require-approval` | Require explicit one-click confirmation before handovers, DeepSeek overflow spend, or auto-merge on sensitive tasks. |
 | **IDE Pickup Queue** | `pickups` / one-click copy in UI | Copy a ready-to-paste handover brief for interactive IDE sessions (e.g., Antigravity). |
 
-### 6.3 Security & Integrity Boundaries
+### 6.3 Desktop App Control & Local MCP Adapter
 
-- Binds strictly to `127.0.0.1` (loopback only) with origin/CSRF protection (mirroring `pm_workbench.py`).
+Operators can also send commands and prompts **to** the harness directly from **Claude Desktop, Codex Desktop, Copilot Desktop, T3 Code Desktop, or Antigravity IDE** — without switching to the web dashboard or terminal:
+
+- **Operator → Harness (Command Ingress):**
+  - Desktop apps with shell access (T3 Code Desktop, Codex Desktop, Claude Code, Copilot) can invoke `python3 scripts/harness_console.py <command> --json` directly.
+  - A planned thin **local MCP server** (`scripts/harness_mcp.py`, stdio / loopback-only, wrapping the same SQLite command queue as `harness_console.py`) exposes structured tools (`dispatch_task`, `steer_task`, `handover_task`, `pause_task`, `kill_task`, `get_status`, `list_pickups`) so any MCP-capable desktop app—including GUI-only chat apps like Claude Desktop—can drive the harness via natural language.
+- **Harness → Worker (Why Auto-Dispatch Uses T3 / Headless CLIs Instead of Desktop GUIs):**
+  - **T3 Code Desktop** supports programmatic child delegation when an active T3 Orchestrator session runs `t3-dispatch` → `delegate_task`.
+  - **Claude Desktop, Codex Desktop, and Copilot Desktop** do not expose reliable external APIs for injecting prompts into their GUI chat windows (and fragile OS UI automation is explicitly avoided). Automated dispatch therefore runs via their **headless CLIs** (`claude -p`, `codex exec`, `gemini -p`, local Copilot CLI), which share the **same provider subscriptions/seats**, while the **Pickup Queue** (`pickups` / one-click copy) bridges interactive Desktop/IDE GUI sessions cleanly whenever the operator wants to take over inside a desktop UI.
+
+### 6.4 Security & Integrity Boundaries
+
+- Binds strictly to `127.0.0.1` (loopback only) with origin/CSRF protection (mirroring `pm_workbench.py`); the local MCP adapter uses stdio or loopback-only transport with no network exposure.
 - Never stores or exposes provider API keys or GitHub App private keys.
-- Every operator command is written to an append-only SQLite command queue with timestamp and actor, then executed deterministically by the 0-token Coordinator Daemon (never rewriting git history or silently bypassing risk floors without explicit operator override).
+- Every operator command (from Web UI, CLI, or MCP) is written to an append-only SQLite command queue with timestamp and actor, then executed deterministically by the 0-token Coordinator Daemon (never rewriting git history or silently bypassing risk floors without explicit operator override).
 
 ---
 
@@ -437,7 +461,7 @@ Available identically via the **Local Web Dashboard** (`python3 scripts/harness_
 | **Phase 2: Unified Registry & Token-Aware Routing** | Track A | Expand `config/engineering-harness/t3-registry.json` (or unified `provider-registry.json`) to include current Codex/Gemini/Copilot entries and `providerInstanceId -> provider` mappings; wire `provider_health` into `routing.py` and `t3.capabilities_from_catalog()` / `t3-dispatch` with strict risk-floor preservation and `PARKED_AWAITING_QUOTA` / `handover_required` states. | Extend `tests/engineering_harness` + `routing-cases.json` with intra-T3 failover (`claudeAgent` -> `codex`), weekly-exhausted → DeepSeek-overflow, and risk-floor-no-downgrade scenarios. |
 | **Phase 3: Handover Protocol & Atomic Claim Transfer** | Track A | `scripts/handover.py` (envelope capture/validate/render with optional `t3_context`, WIP commit / T3 candidate export helper, 64 KiB cap) + `t3.py` `handover_requested` child status + `issue_claim.py transfer` + `handover:*` GitHub labels. | End-to-end test transferring a mock issue/PR between two harness identities (including T3 <-> CLI) with clean and dirty worktrees/candidates. |
 | **Phase 4: Reviewer-Coordinated Auto-Handover** | Track A | Extend `pr_review_watch.py` (or add `scripts/harness_coordinator.py`) with 0-token handover dispatch loop + Hybrid launchers (intra-T3 `t3-dispatch`, auto-spawn Claude/Codex/Gemini/Copilot CLI, and IDE pickup queue) + Reviewer LLM escalation trigger for thrash/ambiguous handovers. | Dry-run simulation with synthetic 429s (CLI and T3 child) + live pilot on a non-critical issue. |
-| **Phase 5: Unified Status & Command Console** | Track A + B | `scripts/harness_console.py` (local `127.0.0.1` web dashboard + unified `--json` CLI) wired to the Coordinator command queue, `token_tracker` health/reports, `runs.sqlite3` T3 runs/heartbeats, `issue_claim`, and `pr_review_queue`. | HTTP endpoint & CSRF/origin tests + CLI integration tests against fixture SQLite state (including T3 run cancellation and cross-transport handover commands). |
+| **Phase 5: Unified Status & Command Console** | Track A + B | `scripts/harness_console.py` (local `127.0.0.1` web dashboard + unified `--json` CLI) + thin local MCP adapter (`scripts/harness_mcp.py`) for desktop app control (Claude/Codex/Copilot/T3 Desktop), wired to the Coordinator command queue, `token_tracker` health/reports, `runs.sqlite3` T3 runs/heartbeats, `issue_claim`, and `pr_review_queue`. | HTTP endpoint & CSRF/origin tests + CLI and MCP tool integration tests against fixture SQLite state (including T3 run cancellation and cross-transport handover commands). |
 
 ---
 
@@ -445,9 +469,9 @@ Available identically via the **Local Web Dashboard** (`python3 scripts/harness_
 
 The following design decisions are locked for implementation:
 
-1. **Auto-handover dispatch mode**: **Hybrid (Three-Transport)** — Coordinator routes via **T3 Code child delegation** (`t3-dispatch` / `delegate_task` with intra-T3 `providerInstanceId` failover) when running inside T3, **auto-spawns headless CLIs** (`claude -p`, `codex exec`, `gemini -p`, local Copilot CLI) in a fresh worktree on the PR branch (including cross-transport overflow from T3), and uses a **structured pickup queue** for interactive IDE sessions (e.g., Antigravity IDE).
+1. **Auto-handover dispatch mode**: **Hybrid (Three-Transport)** — Coordinator routes via **T3 Code child delegation** (`t3-dispatch` / `delegate_task` with intra-T3 `providerInstanceId` failover) when running inside T3, **auto-spawns headless CLIs** (`claude -p`, `codex exec`, `gemini -p`, local Copilot CLI) in a fresh worktree on the PR branch (including cross-transport overflow from T3), and uses a **structured pickup queue** for interactive IDE/Desktop GUI sessions (e.g., Antigravity IDE, Claude/Codex/Copilot Desktop).
 2. **T3 Code as a first-class transport**: `t3-registry.json` maps T3 `providerInstanceId`s to canonical Track B providers so quota/health state is shared across T3 and standalone CLIs. `t3.capabilities_from_catalog()` intersects `orchestrator_capabilities` with live `provider_health`, `t3.py` adds `handover_requested` and `task_cancel`-guarded candidate handoff, and `harness_collector.py` correlates T3 attempts with underlying provider JSONL logs to avoid premature reservation exhaustion.
 3. **Reviewer coordination boundary**: **Two-tier split** — a 0-token Python Coordinator Daemon handles routine handovers automatically; the always-online Reviewer LLM (`local-reviewer-agent[bot]`) is woken only for normal PR review rounds, invalid checkpoints, or thrash/quota escalations (2+ handovers).
 4. **GitHub Copilot & DeepSeek overflow**: **Local GitHub Copilot CLI** targeting **DeepSeek** serves as the **Priority-2 overflow provider** when the weekly-limited subscription pools (**Claude, Codex, Gemini**, whether accessed via T3 Code or standalone CLIs) are exhausted. Because DeepSeek has no rolling time-window lockout, Track B tracks it against a configurable `Decimal` monetary budget ceiling (alongside Copilot CLI usage), while Track A enforces risk-floor qualifications before routing overflow work to it.
 5. **Requirement decoupling**: Track B (Cross-Provider Token Consumption Tracker) is built as a standalone, independently verifiable tool first (Phase 1) and feeds Track A via the read-only `token_tracker.py health --json` contract.
-6. **Single-place status & command surface**: A loopback-only local Control Console (`scripts/harness_console.py` — web dashboard + synchronized CLI) provides one place to monitor provider quotas, active interactive sessions and T3 runs, handovers, and PR reviews, and to issue operator commands (`dispatch`, `handover`, `pause/resume`, `kill`/`cancel`, `set-budget`).
+6. **Single-place status & command surface**: A loopback-only local Control Console (`scripts/harness_console.py` — web dashboard + synchronized CLI) plus a thin local MCP adapter (`scripts/harness_mcp.py` for Claude/Codex/Copilot/T3 Desktop) provides one place to monitor provider quotas, active interactive sessions and T3 runs, handovers, and PR reviews, and to issue operator commands (`dispatch`, `handover`, `pause/resume`, `kill`/`cancel`, `set-budget`).
