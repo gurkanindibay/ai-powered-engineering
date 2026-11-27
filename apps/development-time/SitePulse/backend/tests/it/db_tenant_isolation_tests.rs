@@ -1641,3 +1641,85 @@ async fn invitations_record_their_site_and_stay_in_their_tenant() {
     drop(client);
     t.drop_db().await;
 }
+
+/// V57's backfill must see the rows it changes. The policies are FORCEd, so they
+/// apply to a schema owner that is not a superuser too: without an explicit platform
+/// transaction the `UPDATE ... FROM units` matches nothing and commits as applied.
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn the_invitation_backfill_updates_rows_for_a_non_superuser_owner() {
+    let t = TestDb::create("invite_backfill").await;
+    let admin = t.admin.clone();
+    let site = t.site_id("begonya-sitesi").await;
+    let unit = t.unit_of(site).await;
+    t.exec(&format!(
+        "INSERT INTO invitation_tokens (token, token_type, unit_id, invite_url, expires_at) \
+         VALUES ('legacy-backfill', 'UNIT', {unit}, 'https://app.sitepulse.test/legacy', \
+                 now() + interval '1 day');"
+    ))
+    .await;
+    // A login-less role that owns the two tables the backfill reads and writes.
+    let probe = format!("sp_v57_probe_{}", uuid::Uuid::new_v4().simple());
+    // The audit trigger reads `sites` and appends to `audit_events`; a real migration
+    // identity owns those too, so grant what ownership would imply.
+    t.exec(&format!(
+        "CREATE ROLE {probe} NOLOGIN; \
+         ALTER TABLE invitation_tokens OWNER TO {probe}; \
+         ALTER TABLE units OWNER TO {probe}; \
+         GRANT SELECT ON sites TO {probe}; \
+         GRANT INSERT ON audit_events TO {probe};"
+    ))
+    .await;
+    let mut client = t.pool.get().await.expect("connection");
+    let runtime: String = client
+        .query_one("SELECT current_user", &[])
+        .await
+        .expect("runtime identity")
+        .get(0);
+    t.exec(&format!("GRANT {probe} TO {runtime};")).await;
+    let backfill = include_str!("../../migrations/V57__invitation_token_site.sql");
+
+    let tx = client.transaction().await.expect("transaction");
+    tx.batch_execute(&format!("SET LOCAL ROLE {probe}"))
+        .await
+        .expect("act as the schema owner");
+    tx.batch_execute(backfill)
+        .await
+        .expect("run the backfill unbound");
+    tx.commit().await.expect("commit");
+    let unbound_site = t.scalar_text(
+        "SELECT COALESCE(site_id::text, '') FROM invitation_tokens WHERE token = 'legacy-backfill'",
+    );
+    let unbound_site = unbound_site.await;
+    assert_eq!(
+        unbound_site, "",
+        "an unbound backfill must be the no-op the platform bind prevents"
+    );
+
+    let tx = client.transaction().await.expect("transaction");
+    tx.batch_execute(&format!("SET LOCAL ROLE {probe}"))
+        .await
+        .expect("act as the schema owner");
+    db::tx_bind_platform(&tx).await.expect("bind platform");
+    tx.batch_execute(backfill)
+        .await
+        .expect("run the bound backfill");
+    tx.commit().await.expect("commit");
+    drop(client);
+    let bound_site = t
+        .scalar_text(
+            "SELECT COALESCE(site_id::text, '') FROM invitation_tokens WHERE token = 'legacy-backfill'",
+        )
+        .await;
+    assert_eq!(
+        bound_site,
+        site.to_string(),
+        "the platform bind backfills it"
+    );
+
+    t.drop_db().await;
+    let cleanup = admin.get().await.expect("admin connection");
+    let _ = cleanup
+        .batch_execute(&format!("DROP ROLE IF EXISTS {probe};"))
+        .await;
+}

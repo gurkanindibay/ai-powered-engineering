@@ -159,6 +159,11 @@ async fn apply_pending(client: &mut deadpool_postgres::Object) -> crate::db::DbR
         }
         // tenant-guard: platform — DDL migration runner.
         let tx = client.transaction().await?;
+        // Data migrations touch tenant tables whose policies also apply to the owner
+        // (FORCE ROW LEVEL SECURITY), so the run is an explicit platform transaction.
+        // The GUC only takes effect once `sp_is_platform()` exists (V54); before that
+        // the policies are still permissive, so binding early is harmless.
+        crate::db::tenant_guard::tx_bind_platform(&tx).await?;
         tx.batch_execute(m.sql).await.map_err(|e| {
             let detail = e
                 .as_db_error()
