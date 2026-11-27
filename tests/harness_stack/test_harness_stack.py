@@ -198,6 +198,80 @@ class HarnessStackTests(unittest.TestCase):
             proc.terminate()
             proc.wait(timeout=3)
 
+    def test_up_refuses_alive_but_unhealthy_console(self) -> None:
+        port = _free_port()
+        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(10)"])
+        try:
+            state_path = self.state_root / stack.STATE_FILENAME
+            stack._write_private_json(state_path, {
+                "schema_version": 1,
+                "started_at": "2026-11-27T19:00:00Z",
+                "host": "127.0.0.1",
+                "port": port,
+                "url": f"http://127.0.0.1:{port}",
+                "services": {
+                    "console": {"pid": proc.pid, "pid_start_ticks": stack.process_start_ticks(proc.pid)},
+                    "coordinator": {"pid": proc.pid, "pid_start_ticks": stack.process_start_ticks(proc.pid)},
+                },
+            })
+            code, out, _ = _run_cli([
+                "up", "--port", str(port), "--no-ingest",
+                "--state-root", str(self.state_root), "--repo", str(self.repo_root), "--json",
+            ], specs=self.specs)
+            self.assertEqual(code, 1)
+            payload = json.loads(out)
+            self.assertFalse(payload["ok"])
+            self.assertIn("/healthz failed", payload["error"])
+            # Original started_at was not overwritten.
+            self.assertEqual(stack._read_state(state_path)["started_at"], "2026-11-27T19:00:00Z")
+        finally:
+            proc.terminate()
+            proc.wait(timeout=3)
+
+    def test_down_does_not_sigkill_if_pid_recycled_during_sigterm_wait(self) -> None:
+        proc = subprocess.Popen([sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, lambda *_: None); time.sleep(10)"])
+        try:
+            entry = {"pid": proc.pid, "pid_start_ticks": 111}
+            with mock.patch("scripts.harness_stack.process_start_ticks", side_effect=[111, 222]):
+                with mock.patch("scripts.harness_stack.os.kill", wraps=os.kill) as kill_spy:
+                    res = stack._terminate_entry(entry, timeout=0.5)
+            self.assertTrue(res["stopped"])
+            self.assertEqual(res["signal"], "pid_reused")
+            signals_sent = [call.args[1] for call in kill_spy.call_args_list if len(call.args) >= 2]
+            self.assertIn(stack.signal.SIGTERM, signals_sent)
+            self.assertNotIn(stack.signal.SIGKILL, signals_sent)
+        finally:
+            proc.kill()
+            proc.wait(timeout=3)
+
+    def test_state_write_failure_rolls_back_spawned_daemons(self) -> None:
+        port = _free_port()
+        with mock.patch("scripts.harness_stack._write_private_json", side_effect=OSError("disk full")):
+            code, out, _ = _run_cli([
+                "up", "--port", str(port), "--no-ingest",
+                "--state-root", str(self.state_root), "--repo", str(self.repo_root), "--json",
+            ], specs=self.specs)
+        self.assertEqual(code, 1)
+        self.assertIn("disk full", out)
+        ok, _ = stack._probe_healthz(f"http://127.0.0.1:{port}", timeout=0.3)
+        self.assertFalse(ok)
+
+    def test_ingest_output_is_redacted(self) -> None:
+        port = _free_port()
+        secret_specs = stack.CommandSpecs(
+            ingest_cmd=lambda _r, _s, _l: [sys.executable, "-c", "print('ingest token=sk-secret-ingest-99999999')"],
+            console_cmd=self.specs.console_cmd,
+            coordinator_cmd=self.specs.coordinator_cmd,
+        )
+        code, out, _ = _run_cli([
+            "up", "--port", str(port),
+            "--state-root", str(self.state_root), "--repo", str(self.repo_root), "--json",
+        ], specs=secret_specs)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("sk-secret-ingest-99999999", out)
+        state_text = (self.state_root / stack.STATE_FILENAME).read_text(encoding="utf-8")
+        self.assertNotIn("sk-secret-ingest-99999999", state_text)
+
 
 if __name__ == "__main__":
     unittest.main()

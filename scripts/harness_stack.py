@@ -53,6 +53,8 @@ DEFAULT_INTERVAL_SECONDS = 60.0
 DEFAULT_WAIT_SECONDS = 10.0
 DEFAULT_STOP_TIMEOUT_SECONDS = 5.0
 COORDINATOR_STARTUP_CHECK_SECONDS = 0.35
+MAX_TAIL_BYTES = 256 * 1024
+_DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 class StackError(ValueError):
@@ -115,9 +117,19 @@ def _tail_file(path: Path, lines: int) -> list[str]:
     if not path.is_file():
         return []
     try:
-        raw = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        with path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            offset = max(0, size - MAX_TAIL_BYTES)
+            handle.seek(offset, os.SEEK_SET)
+            chunk = handle.read()
     except OSError:
         return []
+    if offset > 0:
+        newline_idx = chunk.find(b"\n")
+        if newline_idx != -1:
+            chunk = chunk[newline_idx + 1 :]
+    raw = chunk.decode("utf-8", errors="replace").splitlines()
     return [redact(line) for line in raw[-lines:]]
 
 
@@ -178,9 +190,16 @@ def _terminate_entry(entry: dict[str, Any] | None, *, timeout: float) -> dict[st
 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if not _pid_alive(pid):
-            return {"stopped": True, "was_running": True, "pid": pid, "signal": "SIGTERM"}
+        alive_now, reason_now = _service_alive(entry)
+        if not alive_now:
+            sig = "SIGTERM" if reason_now == "not_running" else reason_now
+            return {"stopped": True, "was_running": True, "pid": pid, "signal": sig}
         time.sleep(0.05)
+
+    alive_now, reason_now = _service_alive(entry)
+    if not alive_now:
+        sig = "SIGTERM" if reason_now == "not_running" else reason_now
+        return {"stopped": True, "was_running": True, "pid": pid, "signal": sig}
 
     try:
         os.kill(pid, signal.SIGKILL)
@@ -191,10 +210,11 @@ def _terminate_entry(entry: dict[str, Any] | None, *, timeout: float) -> dict[st
 
     kill_deadline = time.monotonic() + 1.0
     while time.monotonic() < kill_deadline:
-        if not _pid_alive(pid):
+        if not _service_alive(entry)[0]:
             break
         time.sleep(0.05)
-    return {"stopped": not _pid_alive(pid), "was_running": True, "pid": pid, "signal": "SIGKILL"}
+    still_alive = _service_alive(entry)[0]
+    return {"stopped": not still_alive, "was_running": True, "pid": pid, "signal": "SIGKILL"}
 
 
 def _terminate_proc(proc: subprocess.Popen[Any] | None, timeout: float = 3.0) -> None:
@@ -220,7 +240,7 @@ def _probe_healthz(url: str, *, timeout: float = 1.0) -> tuple[bool, str]:
     health_url = url.rstrip("/") + "/healthz"
     req = urllib.request.Request(health_url, method="GET")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _DIRECT_OPENER.open(req, timeout=timeout) as resp:
             body = resp.read().decode("utf-8", errors="replace")
             if 200 <= resp.status < 300:
                 return True, body.strip()
@@ -381,14 +401,18 @@ def run_up(args: argparse.Namespace, *, specs: CommandSpecs | None = None) -> di
     console_alive, _ = _service_alive(existing_console)
     coord_alive, _ = _service_alive(existing_coord)
 
-    if console_alive and (existing.get("host") != args.host or existing.get("port") != args.port):
-        raise StackError(
-            f"harness-console is already running at {existing.get('url')}; run `down` before changing host/port"
-        )
-
-    if console_alive and coord_alive:
-        healthy, _ = _probe_healthz(url, timeout=1.0)
-        if healthy:
+    if console_alive:
+        if existing.get("host") != args.host or existing.get("port") != args.port:
+            raise StackError(
+                f"harness-console is already running at {existing.get('url')}; run `down` before changing host/port"
+            )
+        healthy, health_detail = _probe_healthz(url, timeout=1.0)
+        if not healthy:
+            raise StackRuntimeError(
+                f"harness-console (pid={existing_console.get('pid')}) is running at {url} "
+                f"but /healthz failed ({health_detail}); run `down` before restarting"
+            )
+        if coord_alive:
             if args.open:
                 webbrowser.open(url)
             return {
@@ -413,12 +437,12 @@ def run_up(args: argparse.Namespace, *, specs: CommandSpecs | None = None) -> di
         )
         done = subprocess.run(ingest_cmd, cwd=str(repo_root), capture_output=True, text=True, check=False)
         if done.returncode != 0:
-            detail = (done.stderr or done.stdout).strip()[:400]
+            detail = redact((done.stderr or done.stdout).strip()[:400])
             raise StackRuntimeError(f"token_tracker ingest failed (exit {done.returncode}): {detail}")
         try:
             ingest_result = json.loads(done.stdout) if done.stdout.strip() else {"status": "ok"}
         except ValueError:
-            ingest_result = {"status": "ok", "raw": done.stdout.strip()[:200]}
+            ingest_result = {"status": "ok", "raw": redact(done.stdout.strip()[:200])}
 
     started_procs: list[subprocess.Popen[Any]] = []
     try:
@@ -463,26 +487,29 @@ def run_up(args: argparse.Namespace, *, specs: CommandSpecs | None = None) -> di
                 "log": str(coordinator_log),
                 "command": coord_cmd,
             }
+
+        state_payload: dict[str, Any] = {
+            "schema_version": SCHEMA_VERSION,
+            "started_at": existing.get("started_at") if console_alive and existing.get("started_at") else utc_now_iso(),
+            "host": args.host,
+            "port": args.port,
+            "url": url,
+            "repo_root": str(repo_root),
+            "state_root": str(state_root),
+            "services": {
+                "console": console_entry,
+                "coordinator": coord_entry,
+            },
+            "last_ingest": ingest_result,
+        }
+        try:
+            _write_private_json(state_path, state_payload)
+        except OSError as exc:
+            raise StackRuntimeError(f"Failed to write stack state {state_path}: {exc}") from exc
     except Exception:
         for proc in reversed(started_procs):
             _terminate_proc(proc)
         raise
-
-    state_payload: dict[str, Any] = {
-        "schema_version": SCHEMA_VERSION,
-        "started_at": utc_now_iso(),
-        "host": args.host,
-        "port": args.port,
-        "url": url,
-        "repo_root": str(repo_root),
-        "state_root": str(state_root),
-        "services": {
-            "console": console_entry,
-            "coordinator": coord_entry,
-        },
-        "last_ingest": ingest_result,
-    }
-    _write_private_json(state_path, state_payload)
 
     if args.open:
         webbrowser.open(url)
