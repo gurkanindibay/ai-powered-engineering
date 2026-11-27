@@ -743,6 +743,14 @@ python3 scripts/token_tracker.py report --by issue --since 7d --json
 
 ### Quick Usage Examples:
 ```bash
+# Single command: ingest telemetry + start loopback web console + start coordinator
+python3 scripts/harness_stack.py up
+python3 scripts/harness_stack.py up --open
+python3 scripts/harness_stack.py status --json
+python3 scripts/harness_stack.py logs --lines 50
+python3 scripts/harness_stack.py down
+
+# Or start individual components manually:
 # Start loopback web dashboard (http://127.0.0.1:9096)
 python3 scripts/harness_console.py serve
 

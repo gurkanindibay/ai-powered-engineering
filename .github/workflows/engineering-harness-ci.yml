@@ -20,9 +20,11 @@ on:
       - 'scripts/harness_console.py'
       - 'scripts/harness_console/**'
       - 'scripts/harness_mcp.py'
+      - 'scripts/harness_stack.py'
       - 'scripts/token_guard.py'
       - 'tests/harness_coordinator/**'
       - 'tests/harness_console/**'
+      - 'tests/harness_stack/**'
       - 'tests/token_guard/**'
       - 'config/engineering-harness/**'
       - 'scripts/cleanup_unused_worktrees.py'
@@ -51,9 +53,11 @@ on:
       - 'scripts/harness_console.py'
       - 'scripts/harness_console/**'
       - 'scripts/harness_mcp.py'
+      - 'scripts/harness_stack.py'
       - 'scripts/token_guard.py'
       - 'tests/harness_coordinator/**'
       - 'tests/harness_console/**'
+      - 'tests/harness_stack/**'
       - 'tests/token_guard/**'
       - 'config/engineering-harness/**'
       - 'scripts/engineering_harness/**'
@@ -100,6 +104,8 @@ jobs:
         run: python3 -m unittest discover -s tests/harness_coordinator -v
       - name: Unified Control Console and MCP adapter tests
         run: python3 -m unittest discover -s tests/harness_console -v
+      - name: Harness stack launcher tests
+        run: python3 -m unittest discover -s tests/harness_stack -v
       - name: Token guard checkpoint gate tests
         run: python3 -m unittest discover -s tests/token_guard -v
       - name: Phase 4 failover simulation (synthetic 429, context ceiling, thrash)
