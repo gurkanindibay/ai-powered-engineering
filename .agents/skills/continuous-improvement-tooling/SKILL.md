@@ -153,6 +153,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `pr_review_watch.py` | `scripts/pr_review_watch.py` | GitHub webhook or quiet `gh` watcher for reviewer and author sessions. Reviewer uses `--seen` and `--seen-activity`; author uses `--author-pr N --snapshot` and `--after FILE`. Supports `--json` and `--timeout`. |
 | `pr_review_queue.py` | `scripts/pr_review_queue.py` | Reviewer's one-shot check: lists PRs the author sent for review that the bot has not answered (not draft, CI finished) with the reason (`new`, `new_head`, `requested`, `unfinished`); `--any-change` ignores review rounds; `--json` for all buckets |
 | `review_bot.py` | `scripts/review_bot.py` | Post PR reviews (approve / request changes / comment) as the `local-reviewer-agent` GitHub App, pinned to the reviewed head SHA; config from the untracked `.env` (`REVIEW_BOT_*`) |
+| `webkit_load_soak.py` | `apps/development-time/SitePulse/scripts/webkit_load_soak.py` | Loads the web bundle hundreds of times in Playwright WebKit and counts CanvasKit errors and renderer deaths (`--web DIR --docker`, `--env KEY=VAL`, `--json`); re-check the WebKit launch workarounds on Playwright or Flutter upgrades |
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
 | `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |
 
