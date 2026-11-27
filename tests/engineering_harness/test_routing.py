@@ -1,9 +1,13 @@
+import json
+from pathlib import Path
 import unittest
 
 from scripts.engineering_harness.contracts import validate_policy
-from scripts.engineering_harness.routing import HarnessError, assess, money, plan, route, select_roles
+from scripts.engineering_harness.routing import HarnessError, QuotaParkedError, assess, money, plan, route, select_roles
 from scripts.team_orchestrator import build_iteration_pipeline
 from support import capabilities, policy
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class RoutingTests(unittest.TestCase):
@@ -66,3 +70,75 @@ class RoutingTests(unittest.TestCase):
         for value in [0.1, "NaN", "Infinity", "-1", True, None]:
             with self.assertRaises(HarnessError):
                 money(value)
+
+    def test_health_intersection_prefers_healthy_over_throttled(self):
+        registry = json.loads((ROOT / "config" / "engineering-harness" / "t3-registry.json").read_text())
+        health = {
+            "status": "THROTTLED",
+            "providers": {
+                "claude": {"status": "THROTTLED"},
+                "codex": {"status": "HEALTHY"},
+                "gemini": {"status": "HEALTHY"},
+                "copilot": {"status": "HEALTHY"},
+            },
+        }
+        # Claude is cheaper, but THROTTLED; healthy Priority-1 Gemini/Codex wins
+        chosen = route(registry, "developer", "low", health=health)
+        self.assertNotEqual(chosen["provider"], "claudeAgent")
+        self.assertEqual(chosen["provider"], "gemini")
+
+    def test_priority_1_exhausted_spills_to_deepseek_overflow(self):
+        registry = json.loads((ROOT / "config" / "engineering-harness" / "t3-registry.json").read_text())
+        # Even though deepseek-chat is cheapest (0.14+0.28), healthy P1 wins when P1 is available
+        healthy_all = {
+            "status": "HEALTHY",
+            "providers": {
+                "claude": {"status": "HEALTHY"},
+                "codex": {"status": "HEALTHY"},
+                "gemini": {"status": "HEALTHY"},
+                "copilot": {"status": "HEALTHY"},
+            },
+        }
+        chosen_p1 = route(registry, "developer", "medium", health=healthy_all)
+        self.assertEqual(chosen_p1["priority"], 1)
+        self.assertNotEqual(chosen_p1["provider"], "copilot")
+
+        # When all Priority-1 subscription pools are EXHAUSTED, Priority-2 DeepSeek-on-Copilot CLI is used
+        p1_exhausted = {
+            "status": "EXHAUSTED",
+            "providers": {
+                "claude": {"status": "EXHAUSTED", "reset_at": "2026-11-28T00:00:00+00:00"},
+                "codex": {"status": "EXHAUSTED", "reset_at": "2026-11-28T01:00:00+00:00"},
+                "gemini": {"status": "EXHAUSTED", "reset_at": "2026-11-28T02:00:00+00:00"},
+                "copilot": {"status": "HEALTHY"},
+            },
+        }
+        overflow = route(registry, "developer", "medium", health=p1_exhausted)
+        self.assertEqual(overflow["provider"], "copilot")
+        self.assertEqual(overflow["model"], "deepseek-chat")
+        self.assertEqual(overflow["priority"], 2)
+
+    def test_strict_risk_floor_never_downgrades_on_exhaustion(self):
+        registry = json.loads((ROOT / "config" / "engineering-harness" / "t3-registry.json").read_text())
+        # P1 exhausted, Copilot DeepSeek healthy (qualified only for low/medium)
+        p1_exhausted = {
+            "status": "EXHAUSTED",
+            "providers": {
+                "claude": {"status": "EXHAUSTED", "reset_at": "2026-11-28T04:00:00+00:00"},
+                "codex": {"status": "EXHAUSTED", "reset_at": "2026-11-28T02:00:00+00:00"},
+                "gemini": {"status": "EXHAUSTED", "reset_at": "2026-11-28T05:00:00+00:00"},
+                "copilot": {"status": "HEALTHY"},
+            },
+        }
+        # High/critical tasks must NEVER downgrade to DeepSeek or low-tier models; must park with earliest reset_at
+        with self.assertRaises(QuotaParkedError) as ctx:
+            route(registry, "architect", "critical", health=p1_exhausted)
+        self.assertEqual(ctx.exception.status, "PARKED_AWAITING_QUOTA")
+        self.assertEqual(ctx.exception.resume_after, "2026-11-28T02:00:00+00:00")
+
+        # plan() must return PARKED_AWAITING_QUOTA without downgrading tier
+        parked_plan = plan("Ledger payment reconciliation", capabilities=registry, health=p1_exhausted, financial=True)
+        self.assertEqual(parked_plan["complexity"], "critical")
+        self.assertFalse(parked_plan["execution_ready"])
+        self.assertEqual(parked_plan["status"], "PARKED_AWAITING_QUOTA")
+        self.assertEqual(parked_plan["resume_after"], "2026-11-28T02:00:00+00:00")

@@ -71,6 +71,36 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaises(HarnessError):
             t3.validate_registry(bad)
 
+    def test_intra_t3_failover_when_claude_exhausted(self):
+        health = {
+            "status": "THROTTLED",
+            "providers": {
+                "claude": {"status": "EXHAUSTED", "reset_at": "2026-11-28T00:00:00+00:00"},
+                "codex": {"status": "HEALTHY"},
+            },
+        }
+        live = t3.capabilities_from_catalog(self.registry, catalog(), health=health)
+        self.assertFalse(live["handover_required"])
+        self.assertIn("claude", live["exhausted_providers"])
+        self.assertTrue(all(t["provider"] == "codex" for t in live["targets"]))
+        chosen = route(live, "developer", "medium", health=health)
+        self.assertEqual(chosen["provider"], "codex")
+        self.assertEqual(chosen["model"], "gpt-6.1-sol")
+
+    def test_t3_handover_required_when_all_t3_providers_exhausted(self):
+        health = {
+            "status": "EXHAUSTED",
+            "providers": {
+                "claude": {"status": "EXHAUSTED", "reset_at": "2026-11-28T03:00:00+00:00"},
+                "codex": {"status": "EXHAUSTED", "reset_at": "2026-11-28T01:00:00+00:00"},
+            },
+        }
+        live = t3.capabilities_from_catalog(self.registry, catalog(), health=health)
+        self.assertTrue(live["handover_required"])
+        self.assertEqual(live["targets"], [])
+        self.assertEqual(live["resume_after"], "2026-11-28T01:00:00+00:00")
+        self.assertEqual(live["exhausted_providers"], ["claude", "codex"])
+
 
 class T3EngineTests(unittest.TestCase):
     def setUp(self):
@@ -180,6 +210,25 @@ class T3EngineTests(unittest.TestCase):
         self.dispatch()
         self.assertEqual(self.engine.cancel(self.run_id), "CANCELLED")
         self.assertEqual(self.backend.stopped, [])
+
+    def test_t3_dispatch_emits_handover_required_and_parked_awaiting_quota(self):
+        # 1. When capabilities indicate handover_required (all T3 instances exhausted)
+        exhausted_caps = {"schema_version": 1, "targets": [], "handover_required": True, "resume_after": "2026-11-28T00:00:00+00:00"}
+        res = self.engine.t3_dispatch(self.run_id, exhausted_caps)
+        self.assertEqual(res["status"], "HANDOVER_REQUIRED")
+        self.assertTrue(res["handover_required"])
+        self.assertEqual(res["resume_after"], "2026-11-28T00:00:00+00:00")
+        # Run remains QUEUED (not BLOCKED) so cross-transport handover can pick it up
+        self.assertEqual(self.store.run(self.run_id)["status"], "QUEUED")
+
+        # 2. When capabilities have a target whose canonical provider is EXHAUSTED in health
+        caps = capabilities()
+        canon_prov = caps["targets"][0]["provider"]
+        health = {"status": "EXHAUSTED", "providers": {canon_prov: {"status": "EXHAUSTED", "reset_at": "2026-11-28T01:00:00+00:00"}}}
+        res_parked = self.engine.t3_dispatch(self.run_id, caps, health=health)
+        self.assertEqual(res_parked["status"], "PARKED_AWAITING_QUOTA")
+        self.assertTrue(res_parked["handover_required"])
+        self.assertEqual(res_parked["resume_after"], "2026-11-28T01:00:00+00:00")
 
 
 if __name__ == "__main__":

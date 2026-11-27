@@ -11,7 +11,7 @@ import uuid
 from . import t3
 from .backend import DockerBackend
 from .contracts import canonical, digest, redact, safe_path, validate_policy, validate_result
-from .routing import BusyError, HarnessError, TIERS, assess, money, plan, route
+from .routing import BusyError, HarnessError, QuotaParkedError, TIERS, assess, money, plan, route
 from .store import Store, TERMINAL
 from .workspace import Workspace, git
 
@@ -75,13 +75,13 @@ class Engine:
         return run, tasks, (pending[0] if pending else None)
 
     def _claim(self, run: dict, tasks: list[dict], task: dict, capabilities: dict,
-               attempt_id: str, transport: str) -> tuple[dict, dict]:
+               attempt_id: str, transport: str, *, health: dict | None = None) -> tuple[dict, dict]:
         """Route, build the bounded envelope, reserve budget and record input evidence."""
         run_id = run["id"]
         tier = run["plan"]["complexity"]
         if task["repairs"] >= 2:
             tier = TIERS[min(TIERS.index(tier) + 1, len(TIERS) - 1)]
-        target = route(capabilities, task["role"], tier, run["policy"]["preferences"].get(task["role"]))
+        target = route(capabilities, task["role"], tier, run["policy"]["preferences"].get(task["role"]), health=health)
         if transport == "t3":
             target = t3.with_tier_options(target, tier)
         limits = run["policy"]["limits"]
@@ -168,10 +168,11 @@ class Engine:
             self.store.stop(run_id, "BLOCKED", str(exc))
             return self.store.run(run_id)["status"]
 
-    def t3_dispatch(self, run_id: str, capabilities: dict) -> dict:
+    def t3_dispatch(self, run_id: str, capabilities: dict, *, health: dict | None = None) -> dict:
         """Claim the next stage and return the delegate_task payload for a T3 orchestrator.
 
         When no stage is pending, trusted gates run (Docker) and the resulting status is returned.
+        When no qualified T3 target remains healthy, emits handover_required so work can spill cross-transport.
         """
         state = self._runnable(run_id)
         if isinstance(state, str):
@@ -179,12 +180,28 @@ class Engine:
         run, tasks, task = state
         if task is None:
             return {"run_id": run_id, "status": self.verify(run_id)}
+        if capabilities.get("handover_required") or not capabilities.get("targets"):
+            return {
+                "run_id": run_id,
+                "status": "HANDOVER_REQUIRED",
+                "handover_required": True,
+                "resume_after": capabilities.get("resume_after"),
+                "exhausted_providers": capabilities.get("exhausted_providers", []),
+            }
         attempt_id = uuid.uuid4().hex
         try:
             self.workspace(run_id).writable(run["policy"]["role_paths"][task["role"]])
-            envelope, target = self._claim(run, tasks, task, capabilities, attempt_id, "t3")
+            envelope, target = self._claim(run, tasks, task, capabilities, attempt_id, "t3", health=health)
         except BusyError:
             raise
+        except QuotaParkedError as exc:
+            return {
+                "run_id": run_id,
+                "status": "PARKED_AWAITING_QUOTA",
+                "handover_required": True,
+                "resume_after": exc.resume_after,
+                "exhausted_providers": exc.exhausted_providers,
+            }
         except (HarnessError, OSError) as exc:
             self.store.stop(run_id, "BLOCKED", str(exc))
             return {"run_id": run_id, "status": self.store.run(run_id)["status"]}
